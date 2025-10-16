@@ -106,10 +106,11 @@
         knot-unwrapped = self.callPackage ./nix/pkgs/knot-unwrapped.nix {};
         knot = self.callPackage ./nix/pkgs/knot.nix {};
         dolly = self.callPackage ./nix/pkgs/dolly.nix {};
+        tap = self.callPackage ./nix/pkgs/tap.nix {};
       });
   in {
     overlays.default = final: prev: {
-      inherit (mkPackageSet final) lexgen goat sqlite-lib spindle knot-unwrapped knot appview docs dolly;
+      inherit (mkPackageSet final) lexgen goat sqlite-lib spindle knot-unwrapped knot appview docs dolly tap;
     };
 
     packages = forAllSystems (system: let
@@ -130,6 +131,7 @@
         sqlite-lib
         docs
         dolly
+        tap
         ;
 
       pkgsStatic-appview = staticPackages.appview;
