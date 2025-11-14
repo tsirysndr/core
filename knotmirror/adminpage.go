@@ -87,10 +87,12 @@ func (s *AdminServer) handleRepos() http.HandlerFunc {
 		repos, err := db.ListRepos(r.Context(), s.db, page, did, knot, state)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 		counts, err := db.GetRepoCountsByState(r.Context(), s.db)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 		err = tpl.ExecuteTemplate(w, "base", map[string]any{
 			"Repos":         repos,
@@ -117,6 +119,7 @@ func (s *AdminServer) handleHosts() http.HandlerFunc {
 		hosts, err := db.ListHosts(r.Context(), s.db, status)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 		err = tpl.ExecuteTemplate(w, "base", map[string]any{
 			"Hosts":          hosts,
