@@ -15,6 +15,7 @@ func main() {
 		"api/tangled/cbor_gen.go",
 		"tangled",
 		tangled.ActorProfile{},
+		tangled.Comment{},
 		tangled.FeedReaction{},
 		tangled.FeedStar{},
 		tangled.FeedStar_Repo{},
