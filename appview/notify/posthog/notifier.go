@@ -108,13 +108,12 @@ func (n *posthogNotifier) NewPull(ctx context.Context, pull *models.Pull) {
 	}
 }
 
-func (n *posthogNotifier) NewPullComment(ctx context.Context, comment *models.PullComment, mentions []syntax.DID) {
+func (n *posthogNotifier) NewPullComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
 	err := n.client.Enqueue(posthog.Capture{
-		DistinctId: comment.OwnerDid,
+		DistinctId: comment.Did.String(),
 		Event:      "new_pull_comment",
 		Properties: posthog.Properties{
-			"repo_did": comment.RepoDid,
-			"pull_id":  comment.PullId,
+			"pull_at":  comment.Subject,
 			"mentions": mentions,
 		},
 	})

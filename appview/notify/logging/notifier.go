@@ -91,7 +91,7 @@ func (l *loggingNotifier) NewPull(ctx context.Context, pull *models.Pull) {
 	l.inner.NewPull(ctx, pull)
 }
 
-func (l *loggingNotifier) NewPullComment(ctx context.Context, comment *models.PullComment, mentions []syntax.DID) {
+func (l *loggingNotifier) NewPullComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
 	ctx = tlog.IntoContext(ctx, tlog.SubLogger(l.logger, "NewPullComment"))
 	l.inner.NewPullComment(ctx, comment, mentions)
 }

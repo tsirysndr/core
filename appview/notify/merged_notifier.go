@@ -86,7 +86,7 @@ func (m *mergedNotifier) NewPull(ctx context.Context, pull *models.Pull) {
 	m.fanout(func(n Notifier) { n.NewPull(ctx, pull) })
 }
 
-func (m *mergedNotifier) NewPullComment(ctx context.Context, comment *models.PullComment, mentions []syntax.DID) {
+func (m *mergedNotifier) NewPullComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
 	m.fanout(func(n Notifier) { n.NewPullComment(ctx, comment, mentions) })
 }
 

@@ -1977,6 +1977,102 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "add-comments-table", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			drop table if exists comments;
+
+			create table comments (
+				-- identifiers
+				id integer primary key autoincrement,
+
+				did        text not null,
+				collection text not null default 'sh.tangled.feed.comment',
+				rkey       text not null,
+				at_uri     text generated always as ('at://' || did || '/' || collection || '/' || rkey) stored,
+				cid        text,
+
+				-- content
+				subject_uri text not null, -- at_uri of subject (issue, pr, string)
+				subject_cid text not null, -- cid of subject
+
+				body_text     text not null,
+				body_original text,
+				body_blobs    text, -- json
+
+				created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+
+				reply_to_uri text, -- at_uri of parent comment
+				reply_to_cid text, -- cid of parent comment
+
+				pull_round_idx integer, -- pull round index. required when subject is sh.tangled.repo.pull
+
+				-- appview-local information
+				edited text,
+				deleted text,
+
+				unique(did, collection, rkey)
+			);
+
+			insert into comments (
+				did,
+				collection,
+				rkey,
+				subject_uri,
+				subject_cid, -- we need to know cid
+				body_text,
+				created,
+				reply_to_uri,
+				reply_to_cid, -- we need to know cid
+				edited,
+				deleted
+			)
+			select
+				did,
+				'sh.tangled.repo.issue.comment',
+				rkey,
+				issue_at,
+				'',
+				body,
+				created,
+				reply_to,
+				'',
+				edited,
+				deleted
+			from issue_comments
+			where rkey is not null;
+
+			insert into comments (
+				did,
+				collection,
+				rkey,
+				subject_uri,
+				subject_cid, -- we need to know cid
+				body_text,
+				created,
+				pull_round_idx
+			)
+			select
+				c.owner_did,
+				'sh.tangled.repo.pull.comment',
+				substr(
+					substr(c.comment_at, 6 + instr(substr(c.comment_at, 6), '/')), -- nsid/rkey
+					instr(
+						substr(c.comment_at, 6 + instr(substr(c.comment_at, 6), '/')), -- nsid/rkey
+						'/'
+					) + 1
+				), -- rkey
+				p.at_uri,
+				'',
+				c.body,
+				c.created,
+				s.round_number
+			from pull_comments c
+			join pulls p on c.repo_did = p.repo_did and c.pull_id = p.pull_id
+			join pull_submissions s on s.id = c.submission_id;
+		`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,

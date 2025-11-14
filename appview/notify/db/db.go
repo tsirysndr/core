@@ -282,19 +282,20 @@ func (n *databaseNotifier) NewPull(ctx context.Context, pull *models.Pull) {
 	)
 }
 
-func (n *databaseNotifier) NewPullComment(ctx context.Context, comment *models.PullComment, mentions []syntax.DID) {
+func (n *databaseNotifier) NewPullComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
 	l := log.FromContext(ctx)
 
+	subjectAt := syntax.ATURI(comment.Subject.Uri)
 	pull, err := db.GetPull(n.db,
-		orm.FilterEq("repo_did", comment.RepoDid),
-		orm.FilterEq("pull_id", comment.PullId),
+		orm.FilterEq("owner_did", subjectAt.Authority()),
+		orm.FilterEq("rkey", subjectAt.RecordKey()),
 	)
 	if err != nil {
-		l.Error("failed to get pulls", "err", err)
+		l.Error("failed to get pull", "err", err)
 		return
 	}
 
-	repo, err := db.GetRepo(n.db, orm.FilterEq("repo_did", comment.RepoDid))
+	repo, err := db.GetRepo(n.db, orm.FilterEq("repo_did", pull.RepoDid))
 	if err != nil {
 		l.Error("failed to get repos", "err", err)
 		return
@@ -312,7 +313,7 @@ func (n *databaseNotifier) NewPullComment(ctx context.Context, comment *models.P
 		recipients.Remove(m)
 	}
 
-	actorDid := syntax.DID(comment.OwnerDid)
+	actorDid := comment.Did
 	eventType := models.NotificationTypePullCommented
 	entityType := "pull"
 	entityId := pull.AtUri().String()

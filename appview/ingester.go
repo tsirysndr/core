@@ -27,6 +27,7 @@ import (
 	"tangled.org/core/appview/cache"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
+	"tangled.org/core/appview/mentions"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
 	"tangled.org/core/appview/repoverify"
@@ -38,16 +39,17 @@ import (
 )
 
 type Ingester struct {
-	Ctx        context.Context
-	Db         *db.DB
-	Enforcer   *rbac.Enforcer
-	IdResolver *idresolver.Resolver
-	Cache      *cache.Cache
-	Config     *config.Config
-	Logger     *slog.Logger
-	Validator  *validator.Validator
-	Notifier   notify.Notifier
-	Verifier   repoverify.Verifier
+	Ctx              context.Context
+	Db               *db.DB
+	Enforcer         *rbac.Enforcer
+	IdResolver       *idresolver.Resolver
+	Cache            *cache.Cache
+	Config           *config.Config
+	Logger           *slog.Logger
+	Validator        *validator.Validator
+	MentionsResolver *mentions.Resolver
+	Notifier         notify.Notifier
+	Verifier         repoverify.Verifier
 }
 
 type processFunc func(ctx context.Context, e *jmodels.Event) error
@@ -97,8 +99,12 @@ func (i *Ingester) Ingest() processFunc {
 				err = i.ingestIssue(ctx, e)
 			case tangled.RepoPullNSID:
 				err = i.ingestPull(ctx, e)
+			case tangled.FeedCommentNSID:
+				err = i.ingestComment(e)
 			case tangled.RepoIssueCommentNSID:
 				err = i.ingestIssueComment(e)
+			case tangled.RepoPullCommentNSID:
+				err = i.ingestPullComment(e)
 			case tangled.LabelDefinitionNSID:
 				err = i.ingestLabelDefinition(e)
 			case tangled.LabelOpNSID:
@@ -1586,6 +1592,95 @@ func (i *Ingester) ingestIssueComment(e *jmodels.Event) error {
 			orm.FilterEq("rkey", rkey),
 		); err != nil {
 			return fmt.Errorf("failed to delete issue comment record: %w", err)
+		}
+
+		return nil
+	}
+
+	return nil
+}
+
+// ingestPullComment ingests legacy sh.tangled.repo.pull.comment deletions
+func (i *Ingester) ingestPullComment(e *jmodels.Event) error {
+	l := i.Logger.With("handler", "ingestPullComment", "nsid", e.Commit.Collection, "did", e.Did, "rkey", e.Commit.RKey)
+	l.Info("ingesting record")
+
+	switch e.Commit.Operation {
+	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
+		// no-op. sh.tangled.repo.pull.comment is deprecated
+
+	case jmodels.CommitOperationDelete:
+		if err := db.PurgeComments(
+			i.Db,
+			orm.FilterEq("did", e.Did),
+			orm.FilterEq("collection", e.Commit.Collection),
+			orm.FilterEq("rkey", e.Commit.RKey),
+		); err != nil {
+			return fmt.Errorf("failed to delete comment record: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (i *Ingester) ingestComment(e *jmodels.Event) error {
+	did := e.Did
+	rkey := e.Commit.RKey
+	cid := e.Commit.CID
+
+	var err error
+
+	l := i.Logger.With("handler", "ingestComment", "nsid", e.Commit.Collection, "did", did, "rkey", rkey)
+	l.Info("ingesting record")
+
+	ctx := context.Background()
+
+	switch e.Commit.Operation {
+	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
+		raw := json.RawMessage(e.Commit.Record)
+		record := tangled.FeedComment{}
+		err = json.Unmarshal(raw, &record)
+		if err != nil {
+			return fmt.Errorf("invalid record: %w", err)
+		}
+
+		comment, err := models.CommentFromRecord(syntax.DID(did), syntax.RecordKey(rkey), syntax.CID(cid), record)
+		if err != nil {
+			return fmt.Errorf("failed to parse comment from record: %w", err)
+		}
+
+		if err := comment.Validate(); err != nil {
+			return fmt.Errorf("failed to validate comment: %w", err)
+		}
+
+		var references []syntax.ATURI
+		if comment.Body.Original != nil {
+			_, references = i.MentionsResolver.Resolve(ctx, *comment.Body.Original)
+		}
+
+		tx, err := i.Db.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to start transaction: %w", err)
+		}
+		defer tx.Rollback()
+
+		err = db.PutComment(tx, comment, references)
+		if err != nil {
+			return fmt.Errorf("failed to create comment: %w", err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+
+	case jmodels.CommitOperationDelete:
+		if err := db.DeleteComments(
+			i.Db,
+			orm.FilterEq("did", did),
+			orm.FilterEq("collection", e.Commit.Collection),
+			orm.FilterEq("rkey", rkey),
+		); err != nil {
+			return fmt.Errorf("failed to delete comment record: %w", err)
 		}
 
 		return nil

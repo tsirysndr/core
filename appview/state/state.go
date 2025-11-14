@@ -124,6 +124,7 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 		[]string{
 			tangled.ActorProfileNSID,
 			tangled.FeedStarNSID,
+			tangled.FeedCommentNSID,
 			tangled.GraphFollowNSID,
 			tangled.GraphVouchNSID,
 			tangled.KnotMemberNSID,
@@ -136,6 +137,7 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 			tangled.RepoIssueNSID,
 			tangled.RepoNSID,
 			tangled.RepoPullNSID,
+			tangled.RepoPullCommentNSID,
 			tangled.SpindleMemberNSID,
 			tangled.SpindleNSID,
 			tangled.StringNSID,
@@ -174,16 +176,17 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 	notifier = lognotify.NewLoggingNotifier(notifier, tlog.SubLogger(logger, "notify"))
 
 	ingester := appview.Ingester{
-		Ctx:        ctx,
-		Db:         d,
-		Enforcer:   enforcer,
-		IdResolver: res,
-		Cache:      rdb,
-		Config:     config,
-		Logger:     log.SubLogger(logger, "ingester"),
-		Validator:  validator,
-		Notifier:   notifier,
-		Verifier:   repoverify.New(res, config.Core.Dev),
+		Ctx:              ctx,
+		Db:               d,
+		Enforcer:         enforcer,
+		IdResolver:       res,
+		Cache:            rdb,
+		Config:           config,
+		Logger:           log.SubLogger(logger, "ingester"),
+		Validator:        validator,
+		MentionsResolver: mentionsResolver,
+		Notifier:         notifier,
+		Verifier:         repoverify.New(res, config.Core.Dev),
 	}
 	err = jc.StartJetstream(ctx, ingester.Ingest())
 	if err != nil {

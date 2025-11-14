@@ -124,8 +124,7 @@ func findPullReferences(e Execer, refLinks []models.ReferenceLink) ([]syntax.ATU
 			values %s
 		)
 		select
-			p.owner_did, p.rkey,
-			c.comment_at
+			p.owner_did, p.rkey, c.at_uri
 		from input inp
 		join repos r
 			on r.did = inp.owner_did
@@ -133,9 +132,9 @@ func findPullReferences(e Execer, refLinks []models.ReferenceLink) ([]syntax.ATU
 		join pulls p
 			on p.repo_did = r.repo_did
 				and p.pull_id = inp.pull_id
-		left join pull_comments c
+		left join comments c
 			on inp.comment_id is not null
-				and c.repo_did = p.repo_did and c.pull_id = p.pull_id
+				and c.subject_uri = ('at://' || p.owner_did || '/' || 'sh.tangled.repo.pull' || '/' || p.rkey)
 				and c.id = inp.comment_id
 		`,
 		strings.Join(vals, ","),
@@ -293,7 +292,7 @@ func GetBacklinks(e Execer, target syntax.ATURI) ([]models.RichReferenceLink, er
 		return nil, fmt.Errorf("get pull backlinks: %w", err)
 	}
 	backlinks = append(backlinks, ls...)
-	ls, err = getPullCommentBacklinks(e, target, backlinksMap[tangled.RepoPullCommentNSID])
+	ls, err = getPullCommentBacklinks(e, target, backlinksMap[tangled.FeedCommentNSID])
 	if err != nil {
 		return nil, fmt.Errorf("get pull_comment backlinks: %w", err)
 	}
@@ -430,7 +429,7 @@ func getPullCommentBacklinks(e Execer, target syntax.ATURI, aturis []syntax.ATUR
 	if len(aturis) == 0 {
 		return nil, nil
 	}
-	filter := orm.FilterIn("c.comment_at", aturis)
+	filter := orm.FilterIn("c.at_uri", aturis)
 	exclude := orm.FilterNotEq("p.at_uri", target)
 	rows, err := e.Query(
 		fmt.Sprintf(
@@ -438,8 +437,8 @@ func getPullCommentBacklinks(e Execer, target syntax.ATURI, aturis []syntax.ATUR
 			from repos r
 			join pulls p
 				on r.repo_did = p.repo_did
-			join pull_comments c
-				on p.repo_did = c.repo_did and p.pull_id = c.pull_id
+			join comments c
+				on ('at://' || p.owner_did || '/' || 'sh.tangled.repo.pull' || '/' || p.rkey) = c.subject_uri
 			where %s and %s`,
 			filter.Condition(),
 			exclude.Condition(),

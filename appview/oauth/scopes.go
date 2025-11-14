@@ -4,6 +4,7 @@ var TangledScopes = []string{
 	"atproto",
 
 	"repo:sh.tangled.actor.profile",
+	"repo:sh.tangled.feed.comment",
 	"repo:sh.tangled.feed.reaction",
 	"repo:sh.tangled.feed.star",
 	"repo:sh.tangled.graph.follow",

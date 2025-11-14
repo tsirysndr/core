@@ -275,37 +275,11 @@ type PullSubmission struct {
 	Blob        lexutil.LexBlob
 	Patch       string
 	Combined    string
-	Comments    []PullComment
+	Comments    []Comment
 	SourceRev   string // include the rev that was used to create this submission: only for branch/fork PRs
 
 	// meta
 	Created time.Time
-}
-
-type PullComment struct {
-	// ids
-	ID           int
-	PullId       int
-	SubmissionId int
-
-	// at ids
-	RepoDid   string
-	OwnerDid  string
-	CommentAt string
-
-	// content
-	Body string
-
-	// meta
-	Mentions   []syntax.DID
-	References []syntax.ATURI
-
-	// meta
-	Created time.Time
-}
-
-func (p *PullComment) AtUri() syntax.ATURI {
-	return syntax.ATURI(p.CommentAt)
 }
 
 func (p *Pull) TotalComments() int {
@@ -426,7 +400,7 @@ func (s *PullSubmission) Participants() []string {
 	addParticipant(s.PullAt.Authority().String())
 
 	for _, c := range s.Comments {
-		addParticipant(c.OwnerDid)
+		addParticipant(c.Did.String())
 	}
 
 	return participants
