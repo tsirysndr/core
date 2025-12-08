@@ -1,5 +1,10 @@
 {{ define "repo/issues/fragments/replyIssueCommentPlaceholder" }}
   <div class="py-2 px-6 border-t flex gap-2 items-center border-gray-300 dark:border-gray-700">
+  {{ if .Comment.IsLegacy }}
+    {{ if .LoggedInUser }}
+      <span class="text-orange-500">Can't reply to legacy comment.</span>
+    {{ end }}
+  {{ else }}
     {{ if .LoggedInUser }}
       {{ template "user/fragments/pic" (list .LoggedInUser.Did "size-8 mr-1") }}
     {{ end }}
@@ -12,5 +17,6 @@
       hx-swap="outerHTML"
       >
     </input>
+  {{ end }}
   </div>
 {{ end }}

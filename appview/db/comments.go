@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -95,11 +96,14 @@ func PutComment(tx *sql.Tx, c *models.Comment, references []syntax.ATURI) error 
 		return err
 	}
 
-	if affected > 0 {
-		// update references when comment is updated
-		if err := putReferences(tx, c.AtUri(), references); err != nil {
-			return fmt.Errorf("put reference_links: %w", err)
-		}
+	if affected < 1 {
+		log.Println("record is already stored. skipping operation")
+		return nil
+	}
+
+	// update references when comment is updated
+	if err := putReferences(tx, c.AtUri(), references); err != nil {
+		return fmt.Errorf("put reference_links: %w", err)
 	}
 
 	return nil

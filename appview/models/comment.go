@@ -61,6 +61,17 @@ func (c *Comment) AsRecord() typegen.CBORMarshaler {
 	}
 }
 
+func (c *Comment) EditableBody() string {
+	if c.Body.Original != nil {
+		return *c.Body.Original
+	}
+	return c.Body.Text
+}
+
+func (c *Comment) IsLegacy() bool {
+	return c.Collection != tangled.FeedCommentNSID
+}
+
 func (c *Comment) IsTopLevel() bool {
 	return c.ReplyTo == nil
 }

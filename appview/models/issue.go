@@ -26,7 +26,7 @@ type Issue struct {
 
 	// optionally, populate this when querying for reverse mappings
 	// like comment counts, parent repo etc.
-	Comments []IssueComment
+	Comments []Comment
 	Labels   LabelState
 	Repo     *Repo
 }
@@ -63,8 +63,8 @@ func (i *Issue) State() string {
 }
 
 type CommentListItem struct {
-	Self    *IssueComment
-	Replies []*IssueComment
+	Self    *Comment
+	Replies []*Comment
 }
 
 func (it *CommentListItem) Participants() []syntax.DID {
@@ -89,13 +89,13 @@ func (it *CommentListItem) Participants() []syntax.DID {
 
 func (i *Issue) CommentList() []CommentListItem {
 	// Create a map to quickly find comments by their aturi
-	toplevel := make(map[string]*CommentListItem)
-	var replies []*IssueComment
+	toplevel := make(map[syntax.ATURI]*CommentListItem)
+	var replies []*Comment
 
 	// collect top level comments into the map
 	for _, comment := range i.Comments {
 		if comment.IsTopLevel() {
-			toplevel[comment.AtUri().String()] = &CommentListItem{
+			toplevel[comment.AtUri()] = &CommentListItem{
 				Self: &comment,
 			}
 		} else {
@@ -104,8 +104,10 @@ func (i *Issue) CommentList() []CommentListItem {
 	}
 
 	for _, r := range replies {
-		parentAt := *r.ReplyTo
-		if parent, exists := toplevel[parentAt]; exists {
+		if r.ReplyTo == nil {
+			continue
+		}
+		if parent, exists := toplevel[syntax.ATURI(r.ReplyTo.Uri)]; exists {
 			parent.Replies = append(parent.Replies, r)
 		}
 	}
@@ -116,7 +118,7 @@ func (i *Issue) CommentList() []CommentListItem {
 	}
 
 	// sort everything
-	sortFunc := func(a, b *IssueComment) bool {
+	sortFunc := func(a, b *Comment) bool {
 		return a.Created.Before(b.Created)
 	}
 	sort.Slice(listing, func(i, j int) bool {
@@ -145,7 +147,7 @@ func (i *Issue) Participants() []syntax.DID {
 	addParticipant(syntax.DID(i.Did))
 
 	for _, c := range i.Comments {
-		addParticipant(syntax.DID(c.Did))
+		addParticipant(c.Did)
 	}
 
 	return participants
@@ -171,85 +173,4 @@ func IssueFromRecord(did, rkey string, record tangled.RepoIssue) Issue {
 		Body:    body,
 		Open:    true, // new issues are open by default
 	}
-}
-
-type IssueComment struct {
-	Id         int64
-	Did        string
-	Rkey       string
-	IssueAt    string
-	ReplyTo    *string
-	Body       string
-	Created    time.Time
-	Edited     *time.Time
-	Deleted    *time.Time
-	Mentions   []syntax.DID
-	References []syntax.ATURI
-}
-
-func (i *IssueComment) AtUri() syntax.ATURI {
-	return syntax.ATURI(fmt.Sprintf("at://%s/%s/%s", i.Did, tangled.RepoIssueCommentNSID, i.Rkey))
-}
-
-func (i *IssueComment) AsRecord() tangled.RepoIssueComment {
-	mentions := make([]string, len(i.Mentions))
-	for i, did := range i.Mentions {
-		mentions[i] = string(did)
-	}
-	references := make([]string, len(i.References))
-	for i, uri := range i.References {
-		references[i] = string(uri)
-	}
-	return tangled.RepoIssueComment{
-		Body:       i.Body,
-		Issue:      i.IssueAt,
-		CreatedAt:  i.Created.Format(time.RFC3339),
-		ReplyTo:    i.ReplyTo,
-		Mentions:   mentions,
-		References: references,
-	}
-}
-
-func (i *IssueComment) IsTopLevel() bool {
-	return i.ReplyTo == nil
-}
-
-func (i *IssueComment) IsReply() bool {
-	return i.ReplyTo != nil
-}
-
-func IssueCommentFromRecord(did, rkey string, record tangled.RepoIssueComment) (*IssueComment, error) {
-	created, err := time.Parse(time.RFC3339, record.CreatedAt)
-	if err != nil {
-		created = time.Now()
-	}
-
-	ownerDid := did
-
-	if _, err = syntax.ParseATURI(record.Issue); err != nil {
-		return nil, err
-	}
-
-	i := record
-	mentions := make([]syntax.DID, len(record.Mentions))
-	for i, did := range record.Mentions {
-		mentions[i] = syntax.DID(did)
-	}
-	references := make([]syntax.ATURI, len(record.References))
-	for i, uri := range i.References {
-		references[i] = syntax.ATURI(uri)
-	}
-
-	comment := IssueComment{
-		Did:        ownerDid,
-		Rkey:       rkey,
-		Body:       record.Body,
-		IssueAt:    record.Issue,
-		ReplyTo:    record.ReplyTo,
-		Created:    created,
-		Mentions:   mentions,
-		References: references,
-	}
-
-	return &comment, nil
 }

@@ -1545,56 +1545,24 @@ func (i *Ingester) ingestPull(ctx context.Context, e *jmodels.Event) error {
 	return nil
 }
 
+// ingestIssueComment ingests legacy sh.tangled.repo.issue.comment deletions
 func (i *Ingester) ingestIssueComment(e *jmodels.Event) error {
-	did := e.Did
-	rkey := e.Commit.RKey
-
-	var err error
-
-	l := i.Logger.With("handler", "ingestIssueComment", "nsid", e.Commit.Collection, "did", did, "rkey", rkey)
+	l := i.Logger.With("handler", "ingestIssueComment", "nsid", e.Commit.Collection, "did", e.Did, "rkey", e.Commit.RKey)
 	l.Info("ingesting record")
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
-		raw := json.RawMessage(e.Commit.Record)
-		record := tangled.RepoIssueComment{}
-		err = json.Unmarshal(raw, &record)
-		if err != nil {
-			return fmt.Errorf("invalid record: %w", err)
-		}
-
-		comment, err := models.IssueCommentFromRecord(did, rkey, record)
-		if err != nil {
-			return fmt.Errorf("failed to parse comment from record: %w", err)
-		}
-
-		if err := i.Validator.ValidateIssueComment(comment); err != nil {
-			return fmt.Errorf("failed to validate comment: %w", err)
-		}
-
-		tx, err := i.Db.Begin()
-		if err != nil {
-			return fmt.Errorf("failed to start transaction: %w", err)
-		}
-		defer tx.Rollback()
-
-		_, err = db.AddIssueComment(tx, *comment)
-		if err != nil {
-			return fmt.Errorf("failed to create issue comment: %w", err)
-		}
-
-		return tx.Commit()
+		// no-op. sh.tangled.repo.issue.comment is deprecated
 
 	case jmodels.CommitOperationDelete:
-		if err := db.DeleteIssueComments(
+		if err := db.PurgeComments(
 			i.Db,
-			orm.FilterEq("did", did),
-			orm.FilterEq("rkey", rkey),
+			orm.FilterEq("did", e.Did),
+			orm.FilterEq("collection", e.Commit.Collection),
+			orm.FilterEq("rkey", e.Commit.RKey),
 		); err != nil {
-			return fmt.Errorf("failed to delete issue comment record: %w", err)
+			return fmt.Errorf("failed to delete comment record: %w", err)
 		}
-
-		return nil
 	}
 
 	return nil

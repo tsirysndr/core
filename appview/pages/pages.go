@@ -1242,7 +1242,7 @@ type EditIssueCommentParams struct {
 	LoggedInUser *oauth.MultiAccountUser
 	RepoInfo     repoinfo.RepoInfo
 	Issue        *models.Issue
-	Comment      *models.IssueComment
+	Comment      *models.Comment
 }
 
 func (p *Pages) EditIssueCommentFragment(w io.Writer, params EditIssueCommentParams) error {
@@ -1253,7 +1253,7 @@ type ReplyIssueCommentPlaceholderParams struct {
 	LoggedInUser *oauth.MultiAccountUser
 	RepoInfo     repoinfo.RepoInfo
 	Issue        *models.Issue
-	Comment      *models.IssueComment
+	Comment      *models.Comment
 }
 
 func (p *Pages) ReplyIssueCommentPlaceholderFragment(w io.Writer, params ReplyIssueCommentPlaceholderParams) error {
@@ -1264,7 +1264,7 @@ type ReplyIssueCommentParams struct {
 	LoggedInUser *oauth.MultiAccountUser
 	RepoInfo     repoinfo.RepoInfo
 	Issue        *models.Issue
-	Comment      *models.IssueComment
+	Comment      *models.Comment
 }
 
 func (p *Pages) ReplyIssueCommentFragment(w io.Writer, params ReplyIssueCommentParams) error {
@@ -1275,7 +1275,7 @@ type IssueCommentBodyParams struct {
 	LoggedInUser *oauth.MultiAccountUser
 	RepoInfo     repoinfo.RepoInfo
 	Issue        *models.Issue
-	Comment      *models.IssueComment
+	Comment      *models.Comment
 }
 
 func (p *Pages) IssueCommentBodyFragment(w io.Writer, params IssueCommentBodyParams) error {

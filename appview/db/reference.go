@@ -11,7 +11,7 @@ import (
 	"tangled.org/core/orm"
 )
 
-// ValidateReferenceLinks resolves refLinks to Issue/PR/IssueComment/PullComment ATURIs.
+// ValidateReferenceLinks resolves refLinks to Issue/PR/Comment ATURIs.
 // It will ignore missing refLinks.
 func ValidateReferenceLinks(e Execer, refLinks []models.ReferenceLink) ([]syntax.ATURI, error) {
 	var (
@@ -53,8 +53,7 @@ func findIssueReferences(e Execer, refLinks []models.ReferenceLink) ([]syntax.AT
 			values %s
 		)
 		select
-			i.did, i.rkey,
-			c.did, c.rkey
+			i.at_uri, c.at_uri
 		from input inp
 		join repos r
 			on r.did = inp.owner_did
@@ -62,9 +61,9 @@ func findIssueReferences(e Execer, refLinks []models.ReferenceLink) ([]syntax.AT
 		join issues i
 			on i.repo_did = r.repo_did
 				and i.issue_id = inp.issue_id
-		left join issue_comments c
+		left join comments c
 			on inp.comment_id is not null
-				and c.issue_at = i.at_uri
+				and c.subject_uri = i.at_uri
 				and c.id = inp.comment_id
 		`,
 		strings.Join(vals, ","),
@@ -79,26 +78,16 @@ func findIssueReferences(e Execer, refLinks []models.ReferenceLink) ([]syntax.AT
 
 	for rows.Next() {
 		// Scan rows
-		var issueOwner, issueRkey string
-		var commentOwner, commentRkey sql.NullString
+		var issueUri string
+		var commentUri sql.NullString
 		var uri syntax.ATURI
-		if err := rows.Scan(&issueOwner, &issueRkey, &commentOwner, &commentRkey); err != nil {
+		if err := rows.Scan(&issueUri, &commentUri); err != nil {
 			return nil, err
 		}
-		if commentOwner.Valid && commentRkey.Valid {
-			uri = syntax.ATURI(fmt.Sprintf(
-				"at://%s/%s/%s",
-				commentOwner.String,
-				tangled.RepoIssueCommentNSID,
-				commentRkey.String,
-			))
+		if commentUri.Valid {
+			uri = syntax.ATURI(commentUri.String)
 		} else {
-			uri = syntax.ATURI(fmt.Sprintf(
-				"at://%s/%s/%s",
-				issueOwner,
-				tangled.RepoIssueNSID,
-				issueRkey,
-			))
+			uri = syntax.ATURI(issueUri)
 		}
 		uris = append(uris, uri)
 	}
@@ -282,7 +271,7 @@ func GetBacklinks(e Execer, target syntax.ATURI) ([]models.RichReferenceLink, er
 		return nil, fmt.Errorf("get issue backlinks: %w", err)
 	}
 	backlinks = append(backlinks, ls...)
-	ls, err = getIssueCommentBacklinks(e, target, backlinksMap[tangled.RepoIssueCommentNSID])
+	ls, err = getIssueCommentBacklinks(e, target, backlinksMap[tangled.FeedCommentNSID])
 	if err != nil {
 		return nil, fmt.Errorf("get issue_comment backlinks: %w", err)
 	}
@@ -352,9 +341,9 @@ func getIssueCommentBacklinks(e Execer, target syntax.ATURI, aturis []syntax.ATU
 	rows, err := e.Query(
 		fmt.Sprintf(
 			`select r.did, r.name, i.issue_id, c.id, i.title, i.open
-			from issue_comments c
+			from comments c
 			join issues i
-				on i.at_uri = c.issue_at
+				on i.at_uri = c.subject_uri
 			join repos r
 				on r.repo_did = i.repo_did
 			where %s and %s`,

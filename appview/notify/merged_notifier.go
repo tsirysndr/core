@@ -54,7 +54,7 @@ func (m *mergedNotifier) NewIssue(ctx context.Context, issue *models.Issue, ment
 	m.fanout(func(n Notifier) { n.NewIssue(ctx, issue, mentions) })
 }
 
-func (m *mergedNotifier) NewIssueComment(ctx context.Context, comment *models.IssueComment, mentions []syntax.DID) {
+func (m *mergedNotifier) NewIssueComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
 	m.fanout(func(n Notifier) { n.NewIssueComment(ctx, comment, mentions) })
 }
 

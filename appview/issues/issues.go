@@ -14,6 +14,7 @@ import (
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
+	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-chi/chi/v5"
 
 	"tangled.org/core/api/tangled"
@@ -420,34 +421,91 @@ func (rp *Issues) NewIssueComment(w http.ResponseWriter, r *http.Request) {
 
 	body := r.FormValue("body")
 	if body == "" {
-		rp.pages.Notice(w, "issue", "Body is required")
+		rp.pages.Notice(w, "issue-comment", "Body is required")
 		return
 	}
 
-	replyToUri := r.FormValue("reply-to")
-	var replyTo *string
-	if replyToUri != "" {
-		replyTo = &replyToUri
+	// TODO(boltless): normalize markdown body
+	normalizedBody := body
+	_, references := rp.mentionsResolver.Resolve(r.Context(), body)
+
+	markdownBody := tangled.MarkupMarkdown{
+		Text:     normalizedBody,
+		Original: &body,
+		Blobs:    nil,
+	}
+
+	// ingest CID of issue record on-demand.
+	// TODO(boltless): appview should ingest CID of atproto records
+	cid, err := func() (syntax.CID, error) {
+		ident, err := rp.idResolver.ResolveIdent(r.Context(), issue.Did)
+		if err != nil {
+			return "", err
+		}
+
+		xrpcc := indigoxrpc.Client{Host: ident.PDSEndpoint()}
+		out, err := comatproto.RepoGetRecord(r.Context(), &xrpcc, "", tangled.RepoIssueNSID, issue.Did, issue.Rkey)
+		if err != nil {
+			return "", err
+		}
+		if out.Cid == nil {
+			return "", fmt.Errorf("record CID is empty")
+		}
+
+		cid, err := syntax.ParseCID(*out.Cid)
+		if err != nil {
+			return "", err
+		}
+
+		return cid, nil
+	}()
+	if err != nil {
+		rp.logger.Error("failed to backfill subject PR record", "err", err)
+		rp.pages.Notice(w, "issue-comment", "failed to backfill subject record")
+		return
+	}
+	issueStrongRef := comatproto.RepoStrongRef{
+		Uri: issue.AtUri().String(),
+		Cid: cid.String(),
+	}
+
+	var replyTo *comatproto.RepoStrongRef
+	replyToUriRaw := r.FormValue("reply-to-uri")
+	replyToCidRaw := r.FormValue("reply-to-cid")
+	if replyToUriRaw != "" && replyToCidRaw != "" {
+		uri, err := syntax.ParseATURI(replyToUriRaw)
+		if err != nil {
+			rp.pages.Notice(w, "issue-comment", "reply-to-uri should be valid AT-URI")
+			return
+		}
+		cid, err := syntax.ParseCID(replyToCidRaw)
+		if err != nil {
+			rp.pages.Notice(w, "issue-comment", "reply-to-cid should be valid CID")
+			return
+		}
+		replyTo = &comatproto.RepoStrongRef{
+			Uri: uri.String(),
+			Cid: cid.String(),
+		}
 	}
 
 	mentions, references := rp.mentionsResolver.Resolve(r.Context(), body)
 
-	comment := models.IssueComment{
-		Did:        user.Did,
-		Rkey:       tid.TID(),
-		IssueAt:    issue.AtUri().String(),
-		ReplyTo:    replyTo,
-		Body:       body,
-		Created:    time.Now(),
-		Mentions:   mentions,
-		References: references,
+	comment := models.Comment{
+		Did:        syntax.DID(user.Did),
+		Collection: tangled.FeedCommentNSID,
+		Rkey:       syntax.RecordKey(tid.TID()),
+
+		Subject: issueStrongRef,
+		Body:    markdownBody,
+		Created: time.Now(),
+		ReplyTo: replyTo,
 	}
-	if err = rp.validator.ValidateIssueComment(&comment); err != nil {
+	if err = comment.Validate(); err != nil {
 		l.Error("failed to validate comment", "err", err)
 		rp.pages.Notice(w, "issue-comment", "Failed to create comment.")
 		return
 	}
-	record := comment.AsRecord()
 
 	client, err := rp.oauth.AuthorizedClient(r)
 	if err != nil {
@@ -457,25 +515,19 @@ func (rp *Issues) NewIssueComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// create a record first
-	resp, err := comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
-		Collection: tangled.RepoIssueCommentNSID,
-		Repo:       comment.Did,
-		Rkey:       comment.Rkey,
-		Record: &lexutil.LexiconTypeDecoder{
-			Val: &record,
-		},
+	out, err := comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
+		Collection: comment.Collection.String(),
+		Repo:       comment.Did.String(),
+		Rkey:       comment.Rkey.String(),
+		Record:     &lexutil.LexiconTypeDecoder{Val: comment.AsRecord()},
 	})
 	if err != nil {
 		l.Error("failed to create comment", "err", err)
 		rp.pages.Notice(w, "issue-comment", "Failed to create comment.")
 		return
 	}
-	atUri := resp.Uri
-	defer func() {
-		if err := rollbackRecord(context.Background(), atUri, client); err != nil {
-			l.Error("rollback failed", "err", err)
-		}
-	}()
+
+	comment.Cid = syntax.CID(out.Cid)
 
 	tx, err := rp.db.Begin()
 	if err != nil {
@@ -485,12 +537,13 @@ func (rp *Issues) NewIssueComment(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	commentId, err := db.AddIssueComment(tx, comment)
+	err = db.PutComment(tx, &comment, references)
 	if err != nil {
 		l.Error("failed to create comment", "err", err)
 		rp.pages.Notice(w, "issue-comment", "Failed to create comment.")
 		return
 	}
+
 	err = tx.Commit()
 	if err != nil {
 		l.Error("failed to commit transaction", "err", err)
@@ -498,16 +551,10 @@ func (rp *Issues) NewIssueComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// reset atUri to make rollback a no-op
-	atUri = ""
-
-	// notify about the new comment
-	comment.Id = commentId
-
 	rp.notifier.NewIssueComment(r.Context(), &comment, mentions)
 
 	ownerSlashRepo := reporesolver.GetBaseRepoPath(r, f)
-	rp.pages.HxLocation(w, fmt.Sprintf("/%s/issues/%d#comment-%d", ownerSlashRepo, issue.IssueId, commentId))
+	rp.pages.HxLocation(w, fmt.Sprintf("/%s/issues/%d#comment-%d", ownerSlashRepo, issue.IssueId, comment.Id))
 }
 
 func (rp *Issues) IssueComment(w http.ResponseWriter, r *http.Request) {
@@ -522,7 +569,7 @@ func (rp *Issues) IssueComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	commentId := chi.URLParam(r, "commentId")
-	comments, err := db.GetIssueComments(
+	comments, err := db.GetComments(
 		rp.db,
 		orm.FilterEq("id", commentId),
 	)
@@ -558,7 +605,7 @@ func (rp *Issues) EditIssueComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	commentId := chi.URLParam(r, "commentId")
-	comments, err := db.GetIssueComments(
+	comments, err := db.GetComments(
 		rp.db,
 		orm.FilterEq("id", commentId),
 	)
@@ -574,7 +621,7 @@ func (rp *Issues) EditIssueComment(w http.ResponseWriter, r *http.Request) {
 	}
 	comment := comments[0]
 
-	if comment.Did != user.Did {
+	if comment.Did.String() != user.Did {
 		l.Error("unauthorized comment edit", "expectedDid", comment.Did, "gotDid", user.Did)
 		http.Error(w, "you are not the author of this comment", http.StatusUnauthorized)
 		return
@@ -590,7 +637,25 @@ func (rp *Issues) EditIssueComment(w http.ResponseWriter, r *http.Request) {
 		})
 	case http.MethodPost:
 		// extract form value
-		newBody := r.FormValue("body")
+		body := r.FormValue("body")
+		if body == "" {
+			rp.pages.Notice(w, "issue-comment", "Body is required")
+			return
+		}
+
+		// TODO(boltless): normalize markdown body
+		normalizedBody := body
+		_, references := rp.mentionsResolver.Resolve(r.Context(), body)
+
+		now := time.Now()
+		newComment := comment
+		newComment.Body = tangled.MarkupMarkdown{
+			Text:     normalizedBody,
+			Original: &body,
+			Blobs:    nil,
+		}
+		newComment.Edited = &now
+
 		client, err := rp.oauth.AuthorizedClient(r)
 		if err != nil {
 			l.Error("failed to get authorized client", "err", err)
@@ -598,13 +663,24 @@ func (rp *Issues) EditIssueComment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		now := time.Now()
-		newComment := comment
-		newComment.Body = newBody
-		newComment.Edited = &now
-		newComment.Mentions, newComment.References = rp.mentionsResolver.Resolve(r.Context(), newBody)
+		// update a record first
+		exCid := comment.Cid.String()
+		resp, err := comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
+			Collection: newComment.Collection.String(),
+			Repo:       newComment.Did.String(),
+			Rkey:       newComment.Rkey.String(),
+			SwapRecord: &exCid,
+			Record: &lexutil.LexiconTypeDecoder{
+				Val: newComment.AsRecord(),
+			},
+		})
+		if err != nil {
+			l.Error("failed to update comment", "err", err)
+			rp.pages.Notice(w, "issue-comment", "Failed to update comment, try again later.")
+			return
+		}
 
-		record := newComment.AsRecord()
+		newComment.Cid = syntax.CID(resp.Cid)
 
 		tx, err := rp.db.Begin()
 		if err != nil {
@@ -614,36 +690,17 @@ func (rp *Issues) EditIssueComment(w http.ResponseWriter, r *http.Request) {
 		}
 		defer tx.Rollback()
 
-		_, err = db.AddIssueComment(tx, newComment)
+		err = db.PutComment(tx, &newComment, references)
 		if err != nil {
 			l.Error("failed to perform update-description query", "err", err)
 			rp.pages.Notice(w, "repo-notice", "Failed to update description, try again later.")
 			return
 		}
-		tx.Commit()
-
-		// rkey is optional, it was introduced later
-		if newComment.Rkey != "" {
-			// update the record on pds
-			ex, err := comatproto.RepoGetRecord(r.Context(), client, "", tangled.RepoIssueCommentNSID, user.Did, comment.Rkey)
-			if err != nil {
-				l.Error("failed to get record", "err", err, "did", newComment.Did, "rkey", newComment.Rkey)
-				rp.pages.Notice(w, fmt.Sprintf("comment-%s-status", commentId), "Failed to update description, no record found on PDS.")
-				return
-			}
-
-			_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
-				Collection: tangled.RepoIssueCommentNSID,
-				Repo:       user.Did,
-				Rkey:       newComment.Rkey,
-				SwapRecord: ex.Cid,
-				Record: &lexutil.LexiconTypeDecoder{
-					Val: &record,
-				},
-			})
-			if err != nil {
-				l.Error("failed to update record on PDS", "err", err)
-			}
+		err = tx.Commit()
+		if err != nil {
+			l.Error("failed to commit transaction", "err", err)
+			rp.pages.Notice(w, "issue-comment", "Failed to update comment, try again later.")
+			return
 		}
 
 		// return new comment body with htmx
@@ -668,7 +725,7 @@ func (rp *Issues) ReplyIssueCommentPlaceholder(w http.ResponseWriter, r *http.Re
 	}
 
 	commentId := chi.URLParam(r, "commentId")
-	comments, err := db.GetIssueComments(
+	comments, err := db.GetComments(
 		rp.db,
 		orm.FilterEq("id", commentId),
 	)
@@ -704,7 +761,7 @@ func (rp *Issues) ReplyIssueComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	commentId := chi.URLParam(r, "commentId")
-	comments, err := db.GetIssueComments(
+	comments, err := db.GetComments(
 		rp.db,
 		orm.FilterEq("id", commentId),
 	)
@@ -740,7 +797,7 @@ func (rp *Issues) DeleteIssueComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	commentId := chi.URLParam(r, "commentId")
-	comments, err := db.GetIssueComments(
+	comments, err := db.GetComments(
 		rp.db,
 		orm.FilterEq("id", commentId),
 	)
@@ -756,7 +813,7 @@ func (rp *Issues) DeleteIssueComment(w http.ResponseWriter, r *http.Request) {
 	}
 	comment := comments[0]
 
-	if comment.Did != user.Did {
+	if comment.Did.String() != user.Did {
 		l.Error("unauthorized action", "expectedDid", comment.Did, "gotDid", user.Did)
 		http.Error(w, "you are not the author of this comment", http.StatusUnauthorized)
 		return
@@ -769,7 +826,7 @@ func (rp *Issues) DeleteIssueComment(w http.ResponseWriter, r *http.Request) {
 
 	// optimistic deletion
 	deleted := time.Now()
-	err = db.DeleteIssueComments(rp.db, orm.FilterEq("id", comment.Id))
+	err = db.DeleteComments(rp.db, orm.FilterEq("id", comment.Id))
 	if err != nil {
 		l.Error("failed to delete comment", "err", err)
 		rp.pages.Notice(w, fmt.Sprintf("comment-%s-status", commentId), "failed to delete comment")
@@ -785,9 +842,9 @@ func (rp *Issues) DeleteIssueComment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_, err = comatproto.RepoDeleteRecord(r.Context(), client, &comatproto.RepoDeleteRecord_Input{
-			Collection: tangled.RepoIssueCommentNSID,
-			Repo:       user.Did,
-			Rkey:       comment.Rkey,
+			Collection: comment.Collection.String(),
+			Repo:       comment.Did.String(),
+			Rkey:       comment.Rkey.String(),
 		})
 		if err != nil {
 			l.Error("failed to delete from PDS", "err", err)
@@ -795,7 +852,7 @@ func (rp *Issues) DeleteIssueComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// optimistic update for htmx
-	comment.Body = ""
+	comment.Body = tangled.MarkupMarkdown{}
 	comment.Deleted = &deleted
 
 	// htmx fragment of comment after deletion

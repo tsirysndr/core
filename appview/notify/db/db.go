@@ -133,16 +133,16 @@ func (n *databaseNotifier) NewIssue(ctx context.Context, issue *models.Issue, me
 	)
 }
 
-func (n *databaseNotifier) NewIssueComment(ctx context.Context, comment *models.IssueComment, mentions []syntax.DID) {
+func (n *databaseNotifier) NewIssueComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
 	l := log.FromContext(ctx)
 
-	issues, err := db.GetIssues(n.db, orm.FilterEq("at_uri", comment.IssueAt))
+	issues, err := db.GetIssues(n.db, orm.FilterEq("at_uri", comment.Subject))
 	if err != nil {
 		l.Error("failed to get issues", "err", err)
 		return
 	}
 	if len(issues) == 0 {
-		l.Error("no issue found for", "err", comment.IssueAt)
+		l.Error("no issue found for", "err", comment.Subject)
 		return
 	}
 	issue := issues[0]
@@ -156,11 +156,11 @@ func (n *databaseNotifier) NewIssueComment(ctx context.Context, comment *models.
 
 	if comment.IsReply() {
 		// if this comment is a reply, then notify everybody in that thread
-		parentAtUri := *comment.ReplyTo
+		parent := *comment.ReplyTo
 
 		// find the parent thread, and add all DIDs from here to the recipient list
 		for _, t := range issue.CommentList() {
-			if t.Self.AtUri().String() == parentAtUri {
+			if t.Self.AtUri() == syntax.ATURI(parent.Uri) {
 				for _, p := range t.Participants() {
 					recipients.Insert(p)
 				}

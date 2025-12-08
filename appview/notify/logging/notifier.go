@@ -51,7 +51,7 @@ func (l *loggingNotifier) NewIssue(ctx context.Context, issue *models.Issue, men
 	l.inner.NewIssue(ctx, issue, mentions)
 }
 
-func (l *loggingNotifier) NewIssueComment(ctx context.Context, comment *models.IssueComment, mentions []syntax.DID) {
+func (l *loggingNotifier) NewIssueComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
 	ctx = tlog.IntoContext(ctx, tlog.SubLogger(l.logger, "NewIssueComment"))
 	l.inner.NewIssueComment(ctx, comment, mentions)
 }

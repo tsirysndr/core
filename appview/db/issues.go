@@ -100,7 +100,7 @@ func updateIssue(tx *sql.Tx, issue *models.Issue) error {
 }
 
 func GetIssuesPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([]models.Issue, error) {
-	issueMap := make(map[string]*models.Issue) // at-uri -> issue
+	issueMap := make(map[syntax.ATURI]*models.Issue) // at-uri -> issue
 
 	var conditions []string
 	var args []any
@@ -196,8 +196,7 @@ func GetIssuesPaginated(e Execer, page pagination.Page, filters ...orm.Filter) (
 			}
 		}
 
-		atUri := issue.AtUri().String()
-		issueMap[atUri] = &issue
+		issueMap[issue.AtUri()] = &issue
 	}
 
 	// collect reverse repos
@@ -229,12 +228,12 @@ func GetIssuesPaginated(e Execer, page pagination.Page, filters ...orm.Filter) (
 	// collect comments
 	issueAts := slices.Collect(maps.Keys(issueMap))
 
-	comments, err := GetIssueComments(e, orm.FilterIn("issue_at", issueAts))
+	comments, err := GetComments(e, orm.FilterIn("subject_uri", issueAts))
 	if err != nil {
 		return nil, fmt.Errorf("failed to query comments: %w", err)
 	}
 	for i := range comments {
-		issueAt := comments[i].IssueAt
+		issueAt := syntax.ATURI(comments[i].Subject.Uri)
 		if issue, ok := issueMap[issueAt]; ok {
 			issue.Comments = append(issue.Comments, comments[i])
 		}
@@ -246,7 +245,7 @@ func GetIssuesPaginated(e Execer, page pagination.Page, filters ...orm.Filter) (
 		return nil, fmt.Errorf("failed to query labels: %w", err)
 	}
 	for issueAt, labels := range allLabels {
-		if issue, ok := issueMap[issueAt.String()]; ok {
+		if issue, ok := issueMap[issueAt]; ok {
 			issue.Labels = labels
 		}
 	}
@@ -257,7 +256,7 @@ func GetIssuesPaginated(e Execer, page pagination.Page, filters ...orm.Filter) (
 		return nil, fmt.Errorf("failed to query reference_links: %w", err)
 	}
 	for issueAt, references := range allReferences {
-		if issue, ok := issueMap[issueAt.String()]; ok {
+		if issue, ok := issueMap[issueAt]; ok {
 			issue.References = references
 		}
 	}
@@ -293,185 +292,6 @@ func GetIssue(e Execer, repoDid string, issueId int) (*models.Issue, error) {
 
 func GetIssues(e Execer, filters ...orm.Filter) ([]models.Issue, error) {
 	return GetIssuesPaginated(e, pagination.Page{}, filters...)
-}
-
-func AddIssueComment(tx *sql.Tx, c models.IssueComment) (int64, error) {
-	result, err := tx.Exec(
-		`insert into issue_comments (
-			did,
-			rkey,
-			issue_at,
-			body,
-			reply_to,
-			created,
-			edited
-		)
-		values (?, ?, ?, ?, ?, ?, null)
-		on conflict(did, rkey) do update set
-			issue_at = excluded.issue_at,
-			body = excluded.body,
-			edited = case
-				when
-					issue_comments.issue_at != excluded.issue_at
-					or issue_comments.body != excluded.body
-					or issue_comments.reply_to != excluded.reply_to
-				then ?
-				else issue_comments.edited
-			end`,
-		c.Did,
-		c.Rkey,
-		c.IssueAt,
-		c.Body,
-		c.ReplyTo,
-		c.Created.Format(time.RFC3339),
-		time.Now().Format(time.RFC3339),
-	)
-	if err != nil {
-		return 0, err
-	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		return 0, err
-	}
-
-	if err := putReferences(tx, c.AtUri(), c.References); err != nil {
-		return 0, fmt.Errorf("put reference_links: %w", err)
-	}
-
-	return id, nil
-}
-
-func DeleteIssueComments(e Execer, filters ...orm.Filter) error {
-	var conditions []string
-	var args []any
-	for _, filter := range filters {
-		conditions = append(conditions, filter.Condition())
-		args = append(args, filter.Arg()...)
-	}
-
-	whereClause := ""
-	if conditions != nil {
-		whereClause = " where " + strings.Join(conditions, " and ")
-	}
-
-	query := fmt.Sprintf(`update issue_comments set body = "", deleted = strftime('%%Y-%%m-%%dT%%H:%%M:%%SZ', 'now') %s`, whereClause)
-
-	_, err := e.Exec(query, args...)
-	return err
-}
-
-func GetIssueComments(e Execer, filters ...orm.Filter) ([]models.IssueComment, error) {
-	commentMap := make(map[string]*models.IssueComment)
-
-	var conditions []string
-	var args []any
-	for _, filter := range filters {
-		conditions = append(conditions, filter.Condition())
-		args = append(args, filter.Arg()...)
-	}
-
-	whereClause := ""
-	if conditions != nil {
-		whereClause = " where " + strings.Join(conditions, " and ")
-	}
-
-	query := fmt.Sprintf(`
-		select
-			id,
-			did,
-			rkey,
-			issue_at,
-			reply_to,
-			body,
-			created,
-			edited,
-			deleted
-		from
-			issue_comments
-		%s
-		`, whereClause)
-
-	rows, err := e.Query(query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var comment models.IssueComment
-		var created string
-		var rkey, edited, deleted, replyTo sql.Null[string]
-		err := rows.Scan(
-			&comment.Id,
-			&comment.Did,
-			&rkey,
-			&comment.IssueAt,
-			&replyTo,
-			&comment.Body,
-			&created,
-			&edited,
-			&deleted,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		// this is a remnant from old times, newer comments always have rkey
-		if rkey.Valid {
-			comment.Rkey = rkey.V
-		}
-
-		if t, err := time.Parse(time.RFC3339, created); err == nil {
-			comment.Created = t
-		}
-
-		if edited.Valid {
-			if t, err := time.Parse(time.RFC3339, edited.V); err == nil {
-				comment.Edited = &t
-			}
-		}
-
-		if deleted.Valid {
-			if t, err := time.Parse(time.RFC3339, deleted.V); err == nil {
-				comment.Deleted = &t
-			}
-		}
-
-		if replyTo.Valid {
-			comment.ReplyTo = &replyTo.V
-		}
-
-		atUri := comment.AtUri().String()
-		commentMap[atUri] = &comment
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-
-	// collect references for each comments
-	commentAts := slices.Collect(maps.Keys(commentMap))
-	allReferences, err := GetReferencesAll(e, orm.FilterIn("from_at", commentAts))
-	if err != nil {
-		return nil, fmt.Errorf("failed to query reference_links: %w", err)
-	}
-	for commentAt, references := range allReferences {
-		if comment, ok := commentMap[commentAt.String()]; ok {
-			comment.References = references
-		}
-	}
-
-	var comments []models.IssueComment
-	for _, c := range commentMap {
-		comments = append(comments, *c)
-	}
-
-	sort.Slice(comments, func(i, j int) bool {
-		return comments[i].Created.After(comments[j].Created)
-	})
-
-	return comments, nil
 }
 
 func DeleteIssues(tx *sql.Tx, did, rkey string) error {

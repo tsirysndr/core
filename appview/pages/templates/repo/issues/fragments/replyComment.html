@@ -18,10 +18,18 @@
 
       <input
           type="text"
-          id="reply-to"
-          name="reply-to"
+          id="reply-to-uri"
+          name="reply-to-uri"
           required
           value="{{ .Comment.AtUri }}"
+          class="hidden"
+          />
+      <input
+          type="text"
+          id="reply-to-cid"
+          name="reply-to-cid"
+          required
+          value="{{ .Comment.Cid }}"
           class="hidden"
           />
       {{ template "replyActions" . }}

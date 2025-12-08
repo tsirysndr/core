@@ -212,12 +212,12 @@ func (n *posthogNotifier) Clone(ctx context.Context, repo *models.Repo) {
 	}
 }
 
-func (n *posthogNotifier) NewIssueComment(ctx context.Context, comment *models.IssueComment, mentions []syntax.DID) {
+func (n *posthogNotifier) NewIssueComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
 	err := n.client.Enqueue(posthog.Capture{
-		DistinctId: comment.Did,
+		DistinctId: comment.Did.String(),
 		Event:      "new_issue_comment",
 		Properties: posthog.Properties{
-			"issue_at": comment.IssueAt,
+			"issue_at": comment.Subject.Uri,
 			"mentions": mentions,
 		},
 	})
