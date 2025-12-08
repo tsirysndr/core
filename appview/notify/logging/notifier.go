@@ -46,14 +46,18 @@ func (l *loggingNotifier) DeleteStar(ctx context.Context, star *models.Star) {
 	l.inner.DeleteStar(ctx, star)
 }
 
+func (l *loggingNotifier) NewComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
+	ctx = tlog.IntoContext(ctx, tlog.SubLogger(l.logger, "NewComment"))
+	l.inner.NewComment(ctx, comment, mentions)
+}
+func (l *loggingNotifier) DeleteComment(ctx context.Context, comment *models.Comment) {
+	ctx = tlog.IntoContext(ctx, tlog.SubLogger(l.logger, "DeleteComment"))
+	l.inner.DeleteComment(ctx, comment)
+}
+
 func (l *loggingNotifier) NewIssue(ctx context.Context, issue *models.Issue, mentions []syntax.DID) {
 	ctx = tlog.IntoContext(ctx, tlog.SubLogger(l.logger, "NewIssue"))
 	l.inner.NewIssue(ctx, issue, mentions)
-}
-
-func (l *loggingNotifier) NewIssueComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
-	ctx = tlog.IntoContext(ctx, tlog.SubLogger(l.logger, "NewIssueComment"))
-	l.inner.NewIssueComment(ctx, comment, mentions)
 }
 
 func (l *loggingNotifier) NewIssueState(ctx context.Context, actor syntax.DID, issue *models.Issue) {
@@ -89,11 +93,6 @@ func (l *loggingNotifier) DeleteFollow(ctx context.Context, follow *models.Follo
 func (l *loggingNotifier) NewPull(ctx context.Context, pull *models.Pull) {
 	ctx = tlog.IntoContext(ctx, tlog.SubLogger(l.logger, "NewPull"))
 	l.inner.NewPull(ctx, pull)
-}
-
-func (l *loggingNotifier) NewPullComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
-	ctx = tlog.IntoContext(ctx, tlog.SubLogger(l.logger, "NewPullComment"))
-	l.inner.NewPullComment(ctx, comment, mentions)
 }
 
 func (l *loggingNotifier) NewPullState(ctx context.Context, actor syntax.DID, pull *models.Pull) {

@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
@@ -81,6 +82,144 @@ func (n *databaseNotifier) DeleteStar(ctx context.Context, star *models.Star) {
 	// no-op
 }
 
+func (n *databaseNotifier) NewComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
+	l := log.FromContext(ctx)
+
+	var (
+		// built the recipients list:
+		// - the owner of the repo
+		// - | if the comment is a reply -> everybody on that thread
+		//   | if the comment is a top level -> just the issue owner
+		// - remove mentioned users from the recipients list
+		recipients = sets.New[syntax.DID]()
+		entityType string
+		entityId   string
+		repoId     *int64
+		issueId    *int64
+		pullId     *int64
+	)
+
+	subjectAt := syntax.ATURI(comment.Subject.Uri)
+
+	switch subjectAt.Collection() {
+	case tangled.RepoIssueNSID:
+		issues, err := db.GetIssues(
+			n.db,
+			orm.FilterEq("at_uri", subjectAt),
+		)
+		if err != nil {
+			l.Error("failed to get issues", "err", err)
+			return
+		}
+		if len(issues) == 0 {
+			l.Error("no issue found", "subject", comment.Subject)
+			return
+		}
+		issue := issues[0]
+
+		recipients.Insert(syntax.DID(issue.Repo.Did))
+		if comment.IsReply() {
+			// if this comment is a reply, then notify everybody in that thread
+			parent := *comment.ReplyTo
+
+			// find the parent thread, and add all DIDs from here to the recipient list
+			for _, t := range issue.CommentList() {
+				if t.Self.AtUri() == syntax.ATURI(parent.Uri) {
+					for _, p := range t.Participants() {
+						recipients.Insert(p)
+					}
+				}
+			}
+		} else {
+			// not a reply, notify just the issue author
+			recipients.Insert(syntax.DID(issue.Did))
+		}
+
+		entityType = "issue"
+		entityId = issue.AtUri().String()
+		repoId = &issue.Repo.Id
+		issueId = &issue.Id
+
+		for _, m := range mentions {
+			recipients.Remove(m)
+		}
+
+		n.notifyEvent(
+			ctx,
+			comment.Did,
+			recipients,
+			models.NotificationTypeIssueCommented,
+			entityType,
+			entityId,
+			repoId,
+			issueId,
+			pullId,
+		)
+
+	case tangled.RepoPullNSID:
+		pull, err := db.GetPull(
+			n.db,
+			orm.FilterEq("owner_did", subjectAt.Authority()),
+			orm.FilterEq("rkey", subjectAt.RecordKey()),
+		)
+		if err != nil {
+			l.Error("NewComment: failed to get pull", "err", err)
+			return
+		}
+
+		pull.Repo, err = db.GetRepo(n.db, orm.FilterEq("repo_did", pull.RepoDid))
+		if err != nil {
+			l.Error("NewComment: failed to get repo", "err", err)
+			return
+		}
+
+		recipients.Insert(syntax.DID(pull.Repo.Did))
+		for _, p := range pull.Participants() {
+			recipients.Insert(syntax.DID(p))
+		}
+
+		entityType = "pull"
+		entityId = pull.AtUri().String()
+		repoId = &pull.Repo.Id
+		p := int64(pull.ID)
+		pullId = &p
+
+		for _, m := range mentions {
+			recipients.Remove(m)
+		}
+
+		n.notifyEvent(
+			ctx,
+			comment.Did,
+			recipients,
+			models.NotificationTypePullCommented,
+			entityType,
+			entityId,
+			repoId,
+			issueId,
+			pullId,
+		)
+	default:
+		return // no-op
+	}
+
+	n.notifyEvent(
+		ctx,
+		comment.Did,
+		sets.Collect(slices.Values(mentions)),
+		models.NotificationTypeUserMentioned,
+		entityType,
+		entityId,
+		repoId,
+		issueId,
+		pullId,
+	)
+}
+
+func (n *databaseNotifier) DeleteComment(ctx context.Context, comment *models.Comment) {
+	// no-op
+}
+
 func (n *databaseNotifier) NewIssue(ctx context.Context, issue *models.Issue, mentions []syntax.DID) {
 	l := log.FromContext(ctx)
 
@@ -114,79 +253,6 @@ func (n *databaseNotifier) NewIssue(ctx context.Context, issue *models.Issue, me
 		actorDid,
 		recipients,
 		models.NotificationTypeIssueCreated,
-		entityType,
-		entityId,
-		repoId,
-		issueId,
-		pullId,
-	)
-	n.notifyEvent(
-		ctx,
-		actorDid,
-		sets.Collect(slices.Values(mentions)),
-		models.NotificationTypeUserMentioned,
-		entityType,
-		entityId,
-		repoId,
-		issueId,
-		pullId,
-	)
-}
-
-func (n *databaseNotifier) NewIssueComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
-	l := log.FromContext(ctx)
-
-	issues, err := db.GetIssues(n.db, orm.FilterEq("at_uri", comment.Subject))
-	if err != nil {
-		l.Error("failed to get issues", "err", err)
-		return
-	}
-	if len(issues) == 0 {
-		l.Error("no issue found for", "err", comment.Subject)
-		return
-	}
-	issue := issues[0]
-
-	// built the recipients list:
-	// - the owner of the repo
-	// - | if the comment is a reply -> everybody on that thread
-	//   | if the comment is a top level -> just the issue owner
-	// - remove mentioned users from the recipients list
-	recipients := sets.Singleton(syntax.DID(issue.Repo.Did))
-
-	if comment.IsReply() {
-		// if this comment is a reply, then notify everybody in that thread
-		parent := *comment.ReplyTo
-
-		// find the parent thread, and add all DIDs from here to the recipient list
-		for _, t := range issue.CommentList() {
-			if t.Self.AtUri() == syntax.ATURI(parent.Uri) {
-				for _, p := range t.Participants() {
-					recipients.Insert(p)
-				}
-			}
-		}
-	} else {
-		// not a reply, notify just the issue author
-		recipients.Insert(syntax.DID(issue.Did))
-	}
-
-	for _, m := range mentions {
-		recipients.Remove(m)
-	}
-
-	actorDid := syntax.DID(comment.Did)
-	entityType := "issue"
-	entityId := issue.AtUri().String()
-	repoId := &issue.Repo.Id
-	issueId := &issue.Id
-	var pullId *int64
-
-	n.notifyEvent(
-		ctx,
-		actorDid,
-		recipients,
-		models.NotificationTypeIssueCommented,
 		entityType,
 		entityId,
 		repoId,
@@ -274,70 +340,6 @@ func (n *databaseNotifier) NewPull(ctx context.Context, pull *models.Pull) {
 		actorDid,
 		recipients,
 		eventType,
-		entityType,
-		entityId,
-		repoId,
-		issueId,
-		pullId,
-	)
-}
-
-func (n *databaseNotifier) NewPullComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
-	l := log.FromContext(ctx)
-
-	subjectAt := syntax.ATURI(comment.Subject.Uri)
-	pull, err := db.GetPull(n.db,
-		orm.FilterEq("owner_did", subjectAt.Authority()),
-		orm.FilterEq("rkey", subjectAt.RecordKey()),
-	)
-	if err != nil {
-		l.Error("failed to get pull", "err", err)
-		return
-	}
-
-	repo, err := db.GetRepo(n.db, orm.FilterEq("repo_did", pull.RepoDid))
-	if err != nil {
-		l.Error("failed to get repos", "err", err)
-		return
-	}
-
-	// build up the recipients list:
-	// - repo owner
-	// - all pull participants
-	// - remove those already mentioned
-	recipients := sets.Singleton(syntax.DID(repo.Did))
-	for _, p := range pull.Participants() {
-		recipients.Insert(p)
-	}
-	for _, m := range mentions {
-		recipients.Remove(m)
-	}
-
-	actorDid := comment.Did
-	eventType := models.NotificationTypePullCommented
-	entityType := "pull"
-	entityId := pull.AtUri().String()
-	repoId := &repo.Id
-	var issueId *int64
-	p := int64(pull.ID)
-	pullId := &p
-
-	n.notifyEvent(
-		ctx,
-		actorDid,
-		recipients,
-		eventType,
-		entityType,
-		entityId,
-		repoId,
-		issueId,
-		pullId,
-	)
-	n.notifyEvent(
-		ctx,
-		actorDid,
-		sets.Collect(slices.Values(mentions)),
-		models.NotificationTypeUserMentioned,
 		entityType,
 		entityId,
 		repoId,

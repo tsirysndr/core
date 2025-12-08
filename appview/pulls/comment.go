@@ -172,7 +172,7 @@ func (s *Pulls) PullComment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		s.notifier.NewPullComment(r.Context(), &comment, mentions)
+		s.notifier.NewComment(r.Context(), &comment, mentions)
 
 		ownerSlashRepo := reporesolver.GetBaseRepoPath(r, f)
 		s.pages.HxLocation(w, fmt.Sprintf("/%s/pulls/%d#comment-%d", ownerSlashRepo, pull.PullId, comment.Id))

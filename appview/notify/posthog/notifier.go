@@ -108,20 +108,6 @@ func (n *posthogNotifier) NewPull(ctx context.Context, pull *models.Pull) {
 	}
 }
 
-func (n *posthogNotifier) NewPullComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
-	err := n.client.Enqueue(posthog.Capture{
-		DistinctId: comment.Did.String(),
-		Event:      "new_pull_comment",
-		Properties: posthog.Properties{
-			"pull_at":  comment.Subject,
-			"mentions": mentions,
-		},
-	})
-	if err != nil {
-		log.Println("failed to enqueue posthog event:", err)
-	}
-}
-
 func (n *posthogNotifier) NewPullClosed(ctx context.Context, pull *models.Pull) {
 	err := n.client.Enqueue(posthog.Capture{
 		DistinctId: pull.OwnerDid,
@@ -212,13 +198,13 @@ func (n *posthogNotifier) Clone(ctx context.Context, repo *models.Repo) {
 	}
 }
 
-func (n *posthogNotifier) NewIssueComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
+func (n *posthogNotifier) NewComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
 	err := n.client.Enqueue(posthog.Capture{
 		DistinctId: comment.Did.String(),
-		Event:      "new_issue_comment",
+		Event:      "new_comment",
 		Properties: posthog.Properties{
-			"issue_at": comment.Subject.Uri,
-			"mentions": mentions,
+			"subject_at": comment.Subject.Uri,
+			"mentions":   mentions,
 		},
 	})
 	if err != nil {

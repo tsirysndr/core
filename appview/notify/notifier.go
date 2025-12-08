@@ -15,8 +15,10 @@ type Notifier interface {
 	NewStar(ctx context.Context, star *models.Star)
 	DeleteStar(ctx context.Context, star *models.Star)
 
+	NewComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID)
+	DeleteComment(ctx context.Context, comment *models.Comment)
+
 	NewIssue(ctx context.Context, issue *models.Issue, mentions []syntax.DID)
-	NewIssueComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID)
 	NewIssueState(ctx context.Context, actor syntax.DID, issue *models.Issue)
 	DeleteIssue(ctx context.Context, issue *models.Issue)
 
@@ -24,7 +26,6 @@ type Notifier interface {
 	DeleteFollow(ctx context.Context, follow *models.Follow)
 
 	NewPull(ctx context.Context, pull *models.Pull)
-	NewPullComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID)
 	NewPullState(ctx context.Context, actor syntax.DID, pull *models.Pull)
 
 	NewIssueLabelOp(ctx context.Context, issue *models.Issue)
@@ -54,9 +55,11 @@ func (m *BaseNotifier) RenameRepo(ctx context.Context, actor syntax.DID, oldRepo
 func (m *BaseNotifier) NewStar(ctx context.Context, star *models.Star)    {}
 func (m *BaseNotifier) DeleteStar(ctx context.Context, star *models.Star) {}
 
-func (m *BaseNotifier) NewIssue(ctx context.Context, issue *models.Issue, mentions []syntax.DID) {}
-func (m *BaseNotifier) NewIssueComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
+func (m *BaseNotifier) NewComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
 }
+func (m *BaseNotifier) DeleteComment(ctx context.Context, comment *models.Comment) {}
+
+func (m *BaseNotifier) NewIssue(ctx context.Context, issue *models.Issue, mentions []syntax.DID) {}
 func (m *BaseNotifier) NewIssueState(ctx context.Context, actor syntax.DID, issue *models.Issue) {}
 func (m *BaseNotifier) DeleteIssue(ctx context.Context, issue *models.Issue)                     {}
 
@@ -66,9 +69,7 @@ func (m *BaseNotifier) NewPullLabelOp(ctx context.Context, pull *models.Pull)   
 func (m *BaseNotifier) NewFollow(ctx context.Context, follow *models.Follow)    {}
 func (m *BaseNotifier) DeleteFollow(ctx context.Context, follow *models.Follow) {}
 
-func (m *BaseNotifier) NewPull(ctx context.Context, pull *models.Pull) {}
-func (m *BaseNotifier) NewPullComment(ctx context.Context, models *models.Comment, mentions []syntax.DID) {
-}
+func (m *BaseNotifier) NewPull(ctx context.Context, pull *models.Pull)                        {}
 func (m *BaseNotifier) NewPullState(ctx context.Context, actor syntax.DID, pull *models.Pull) {}
 
 func (m *BaseNotifier) UpdateProfile(ctx context.Context, profile *models.Profile) {}

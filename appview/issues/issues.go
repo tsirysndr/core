@@ -551,7 +551,7 @@ func (rp *Issues) NewIssueComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rp.notifier.NewIssueComment(r.Context(), &comment, mentions)
+	rp.notifier.NewComment(r.Context(), &comment, mentions)
 
 	ownerSlashRepo := reporesolver.GetBaseRepoPath(r, f)
 	rp.pages.HxLocation(w, fmt.Sprintf("/%s/issues/%d#comment-%d", ownerSlashRepo, issue.IssueId, comment.Id))

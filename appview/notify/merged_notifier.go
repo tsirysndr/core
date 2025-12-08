@@ -50,12 +50,16 @@ func (m *mergedNotifier) DeleteStar(ctx context.Context, star *models.Star) {
 	m.fanout(func(n Notifier) { n.DeleteStar(ctx, star) })
 }
 
-func (m *mergedNotifier) NewIssue(ctx context.Context, issue *models.Issue, mentions []syntax.DID) {
-	m.fanout(func(n Notifier) { n.NewIssue(ctx, issue, mentions) })
+func (m *mergedNotifier) NewComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
+	m.fanout(func(n Notifier) { n.NewComment(ctx, comment, mentions) })
 }
 
-func (m *mergedNotifier) NewIssueComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
-	m.fanout(func(n Notifier) { n.NewIssueComment(ctx, comment, mentions) })
+func (m *mergedNotifier) DeleteComment(ctx context.Context, comment *models.Comment) {
+	m.fanout(func(n Notifier) { n.DeleteComment(ctx, comment) })
+}
+
+func (m *mergedNotifier) NewIssue(ctx context.Context, issue *models.Issue, mentions []syntax.DID) {
+	m.fanout(func(n Notifier) { n.NewIssue(ctx, issue, mentions) })
 }
 
 func (m *mergedNotifier) NewIssueState(ctx context.Context, actor syntax.DID, issue *models.Issue) {
@@ -84,10 +88,6 @@ func (m *mergedNotifier) DeleteFollow(ctx context.Context, follow *models.Follow
 
 func (m *mergedNotifier) NewPull(ctx context.Context, pull *models.Pull) {
 	m.fanout(func(n Notifier) { n.NewPull(ctx, pull) })
-}
-
-func (m *mergedNotifier) NewPullComment(ctx context.Context, comment *models.Comment, mentions []syntax.DID) {
-	m.fanout(func(n Notifier) { n.NewPullComment(ctx, comment, mentions) })
 }
 
 func (m *mergedNotifier) NewPullState(ctx context.Context, actor syntax.DID, pull *models.Pull) {
