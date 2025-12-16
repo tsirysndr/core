@@ -32,6 +32,12 @@ in
             description = "Path to the database file";
           };
 
+          repoDir = mkOption {
+            type = types.path;
+            default = "/var/lib/spindle/repos";
+            description = "Path where synced git repositories live";
+          };
+
           hostname = mkOption {
             type = types.str;
             example = "my.spindle.com";
@@ -301,6 +307,7 @@ in
 
     config = let
       deps = [
+        pkgs.git
         pkgs.qemu
         pkgs.e2fsprogs
         pkgs.slirp4netns
@@ -341,6 +348,7 @@ in
             Environment = [
               "SPINDLE_SERVER_LISTEN_ADDR=${cfg.server.listenAddr}"
               "SPINDLE_SERVER_DB_PATH=${cfg.server.dbPath}"
+              "SPINDLE_SERVER_REPO_DIR=${cfg.server.repoDir}"
               "SPINDLE_SERVER_HOSTNAME=${cfg.server.hostname}"
               "SPINDLE_SERVER_PLC_URL=${cfg.server.plcUrl}"
               "SPINDLE_SERVER_JETSTREAM_ENDPOINT=${cfg.server.jetstreamEndpoint}"

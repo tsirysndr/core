@@ -8,11 +8,13 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/go-chi/chi/v5"
+	"github.com/hashicorp/go-version"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/eventconsumer"
 	"tangled.org/core/eventconsumer/cursor"
@@ -28,6 +30,7 @@ import (
 	"tangled.org/core/spindle/engines/dummy"
 	"tangled.org/core/spindle/engines/microvm"
 	"tangled.org/core/spindle/engines/nixery"
+	"tangled.org/core/spindle/git"
 	"tangled.org/core/spindle/models"
 	"tangled.org/core/spindle/queue"
 	"tangled.org/core/spindle/secrets"
@@ -328,6 +331,10 @@ func Run(ctx context.Context) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	if err := ensureGitVersion(); err != nil {
+		return fmt.Errorf("ensuring git version: %w", err)
+	}
+
 	d, err := db.Make(ctx, cfg.Server.DBPath)
 	if err != nil {
 		return fmt.Errorf("failed to setup db: %w", err)
@@ -389,7 +396,10 @@ func (s *Spindle) XrpcRouter() http.Handler {
 }
 
 func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source, msg eventstream.Event) error {
+	l := log.FromContext(ctx).With("handler", "processKnotStream")
+	l = l.With("src", src.Key(), "msg.Nsid", msg.Nsid, "msg.Rkey", msg.Rkey)
 	if msg.Nsid == tangled.PipelineNSID {
+		return nil
 		tpl := tangled.Pipeline{}
 		err := json.Unmarshal(msg.EventJson, &tpl)
 		if err != nil {
@@ -497,8 +507,58 @@ func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source,
 		} else {
 			s.l.Error("failed to enqueue pipeline: queue is full")
 		}
+	} else if msg.Nsid == tangled.GitRefUpdateNSID {
+		event := tangled.GitRefUpdate{}
+		if err := json.Unmarshal(msg.EventJson, &event); err != nil {
+			l.Error("error unmarshalling", "err", err)
+			return err
+		}
+		l = l.With("repo", event.Repo, "ref", event.Ref, "newSha", event.NewSha)
+		l.Debug("debug")
+
+		repoDid := syntax.DID(event.Repo)
+		if _, err := s.db.GetRepoByDid(repoDid); err != nil {
+			return fmt.Errorf("unknown repoDid %s: %w", repoDid, err)
+		}
+
+		// NOTE: we are blindly trusting the knot that it will return only repos it own
+		repoCloneUri := s.newRepoCloneUrl(src.Key(), syntax.DID(event.Repo))
+		repoPath := s.newRepoPath(syntax.DID(event.Repo))
+		if err := git.SparseSyncGitRepo(ctx, repoCloneUri, repoPath, event.NewSha); err != nil {
+			return fmt.Errorf("sync git repo: %w", err)
+		}
+		l.Info("synced git repo")
+
+		// TODO: plan the pipeline
 	}
 
+	return nil
+}
+
+// newRepoPath creates a path to store repository by its did and rkey.
+// The path format would be: `/data/repos/did:plc:foo/sh.tangled.repo/repo-rkey
+func (s *Spindle) newRepoPath(repo syntax.DID) string {
+	return filepath.Join(s.cfg.Server.RepoDir, repo.String())
+}
+
+func (s *Spindle) newRepoCloneUrl(knot string, did syntax.DID) string {
+	scheme := "https://"
+	if s.cfg.Server.Dev {
+		scheme = "http://"
+	}
+	return fmt.Sprintf("%s%s/%s", scheme, knot, did)
+}
+
+const RequiredVersion = "2.49.0"
+
+func ensureGitVersion() error {
+	v, err := git.Version()
+	if err != nil {
+		return fmt.Errorf("fetching git version: %w", err)
+	}
+	if v.LessThan(version.Must(version.NewVersion(RequiredVersion))) {
+		return fmt.Errorf("installed git version %q is not supported, Spindle requires git version >= %q", v, RequiredVersion)
+	}
 	return nil
 }
 

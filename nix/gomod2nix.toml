@@ -479,6 +479,9 @@ schema = 3
   [mod."github.com/hashicorp/go-sockaddr"]
     version = "v1.0.7"
     hash = "sha256-p6eDOrGzN1jMmT/F/f/VJMq0cKNFhUcEuVVwTE6vSrs="
+  [mod."github.com/hashicorp/go-version"]
+    version = "v1.8.0"
+    hash = "sha256-KXtqERmYrWdpqPCViWcHbe6jnuH7k16bvBIcuJuevj8="
   [mod."github.com/hashicorp/golang-lru"]
     version = "v1.0.2"
     hash = "sha256-yy+5botc6T5wXgOe2mfNXJP3wr+MkVlUZ2JBkmmrA48="

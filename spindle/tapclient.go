@@ -16,6 +16,7 @@ import (
 	"tangled.org/core/log"
 	"tangled.org/core/rbac"
 	"tangled.org/core/spindle/db"
+	"tangled.org/core/spindle/git"
 	"tangled.org/core/tapc"
 )
 
@@ -122,15 +123,24 @@ func (t *Tap) processRepo(ctx context.Context, evt *tapc.RecordEventData) error 
 		src := eventconsumer.NewKnotSource(record.Knot)
 		t.spindle.ks.AddSource(t.spindle.rootCtx, src)
 
-		if err := t.spindle.db.AddRepo(db.Repo{
+		repo := db.Repo{
 			Knot:      record.Knot,
 			Owner:     ownerDid,
 			Rkey:      rkey,
 			RepoDid:   repoDid,
 			CreatedAt: record.CreatedAt,
-		}); err != nil {
+		}
+
+		if err := t.spindle.db.AddRepo(repo); err != nil {
 			l.Error("failed to add repo row", "err", err)
 			return fmt.Errorf("add repo: %w", err)
+		}
+
+		// setup sparse sync
+		repoCloneUri := t.spindle.newRepoCloneUrl(repo.Knot, repo.RepoDid)
+		repoPath := t.spindle.newRepoPath(repo.RepoDid)
+		if err := git.SparseSyncGitRepo(ctx, repoCloneUri, repoPath, ""); err != nil {
+			return fmt.Errorf("setting up sparse-clone git repo: %w", err)
 		}
 
 		legacyName := ""
@@ -192,6 +202,7 @@ func (t *Tap) teardownRepo(l *slog.Logger, repo *db.Repo, ownerDid syntax.DID, r
 		l.Error("failed to delete repo row", "err", err)
 		return fmt.Errorf("delete repo row: %w", err)
 	}
+	// TODO: clear sparse-synced git repo
 	return nil
 }
 
