@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -13,7 +14,9 @@ import (
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/hashicorp/go-version"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/eventconsumer"
@@ -21,6 +24,7 @@ import (
 	"tangled.org/core/eventstream"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/jetstream"
+	kgit "tangled.org/core/knotserver/git"
 	"tangled.org/core/log"
 	"tangled.org/core/notifier"
 	"tangled.org/core/rbac"
@@ -35,6 +39,8 @@ import (
 	"tangled.org/core/spindle/queue"
 	"tangled.org/core/spindle/secrets"
 	"tangled.org/core/spindle/xrpc"
+	"tangled.org/core/tid"
+	"tangled.org/core/workflow"
 	"tangled.org/core/xrpc/serviceauth"
 )
 
@@ -175,12 +181,12 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB, engines map[string]m
 		return nil, fmt.Errorf("failed to start jetstream consumer: %w", err)
 	}
 
-	// for each incoming sh.tangled.pipeline, we execute
-	// spindle.processPipeline, which in turn enqueues the pipeline
-	// job in the above registered queue.
+	// spindle listen to knot stream for sh.tangled.git.refUpdate
+	// which will sync the local workflow files in spindle and enqueues the
+	// pipeline job for on-push workflows
 	ccfg := eventconsumer.NewConsumerConfig()
 	ccfg.Logger = log.SubLogger(logger, "eventconsumer")
-	ccfg.ProcessFunc = spindle.processPipeline
+	ccfg.ProcessFunc = spindle.processKnotStream
 	ccfg.CursorStore = cursorStore
 	if cfg.Server.Dev {
 		ccfg.RetryInterval = 5 * time.Second
@@ -395,7 +401,7 @@ func (s *Spindle) XrpcRouter() http.Handler {
 	return x.Router()
 }
 
-func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source, msg eventstream.Event) error {
+func (s *Spindle) processKnotStream(ctx context.Context, src eventconsumer.Source, msg eventstream.Event) error {
 	l := log.FromContext(ctx).With("handler", "processKnotStream")
 	l = l.With("src", src.Key(), "msg.Nsid", msg.Nsid, "msg.Rkey", msg.Rkey)
 	if msg.Nsid == tangled.PipelineNSID {
@@ -429,83 +435,9 @@ func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source,
 			Rkey: msg.Rkey,
 		}
 
-		workflows := make(map[models.Engine][]models.Workflow)
-
-		// Build pipeline environment variables once for all workflows
-		pipelineEnv := models.PipelineEnvVars(tpl.TriggerMetadata, pipelineId)
-
-		for _, w := range tpl.Workflows {
-			if w != nil {
-				if _, ok := s.engs[w.Engine]; !ok {
-					s.l.Error("workflow failed: unknown engine",
-						"pipeline", pipelineId, "workflow", w.Name, "engine", w.Engine)
-					err = s.db.StatusFailed(models.WorkflowId{
-						PipelineId: pipelineId,
-						Name:       w.Name,
-					}, fmt.Sprintf("unknown engine %#v", w.Engine), -1, s.n)
-					if err != nil {
-						return fmt.Errorf("db.StatusFailed: %w", err)
-					}
-
-					continue
-				}
-
-				eng := s.engs[w.Engine]
-
-				if _, ok := workflows[eng]; !ok {
-					workflows[eng] = []models.Workflow{}
-				}
-
-				ewf, err := s.engs[w.Engine].InitWorkflow(*w, tpl)
-				if err != nil {
-					s.l.Error("workflow failed: init workflow",
-						"pipeline", pipelineId, "workflow", w.Name, "engine", w.Engine, "err", err)
-					err = s.db.StatusFailed(models.WorkflowId{
-						PipelineId: pipelineId,
-						Name:       w.Name,
-					}, fmt.Sprintf("init workflow: %s", err), -1, s.n)
-					if err != nil {
-						return fmt.Errorf("db.StatusFailed: %w", err)
-					}
-
-					continue
-				}
-
-				// inject TANGLED_* env vars after InitWorkflow
-				// This prevents user-defined env vars from overriding them
-				if ewf.Environment == nil {
-					ewf.Environment = make(map[string]string)
-				}
-				maps.Copy(ewf.Environment, pipelineEnv)
-
-				workflows[eng] = append(workflows[eng], *ewf)
-
-				err = s.db.StatusPending(models.WorkflowId{
-					PipelineId: pipelineId,
-					Name:       w.Name,
-				}, s.n)
-				if err != nil {
-					return fmt.Errorf("db.StatusPending: %w", err)
-				}
-			}
-		}
-
-		ok := s.jq.Enqueue(repoDid, queue.Job{
-			Run: func() error {
-				engine.StartWorkflows(log.SubLogger(s.l, "engine"), s.vault, s.cfg, s.db, s.n, ctx, &models.Pipeline{
-					RepoDid:   repoDid,
-					Workflows: workflows,
-				}, pipelineId)
-				return nil
-			},
-			OnFail: func(jobError error) {
-				s.l.Error("pipeline run failed", "error", jobError)
-			},
-		})
-		if ok {
-			s.l.Info("pipeline enqueued successfully", "id", msg.Rkey)
-		} else {
-			s.l.Error("failed to enqueue pipeline: queue is full")
+		err = s.processPipeline(ctx, repoDid, tpl, pipelineId)
+		if err != nil {
+			return err
 		}
 	} else if msg.Nsid == tangled.GitRefUpdateNSID {
 		event := tangled.GitRefUpdate{}
@@ -517,21 +449,212 @@ func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source,
 		l.Debug("debug")
 
 		repoDid := syntax.DID(event.Repo)
-		if _, err := s.db.GetRepoByDid(repoDid); err != nil {
+		repo, err := s.db.GetRepoByDid(repoDid)
+		if err != nil {
 			return fmt.Errorf("unknown repoDid %s: %w", repoDid, err)
 		}
 
 		// NOTE: we are blindly trusting the knot that it will return only repos it own
-		repoCloneUri := s.newRepoCloneUrl(src.Key(), syntax.DID(event.Repo))
-		repoPath := s.newRepoPath(syntax.DID(event.Repo))
+		repoCloneUri := s.newRepoCloneUrl(src.Key(), repoDid)
+		repoPath := s.newRepoPath(repoDid)
 		if err := git.SparseSyncGitRepo(ctx, repoCloneUri, repoPath, event.NewSha); err != nil {
 			return fmt.Errorf("sync git repo: %w", err)
 		}
 		l.Info("synced git repo")
 
-		// TODO: plan the pipeline
+		scheme := "https"
+		if s.cfg.Server.Dev {
+			scheme = "http"
+		}
+		client := &indigoxrpc.Client{Host: fmt.Sprintf("%s://%s", scheme, repo.Knot)}
+
+		// HACK: fetch current default branch
+		// TODO: this should be included in refUpdate event
+		defaultBranch, _ := func(repo syntax.DID) (string, error) {
+			defaultBranchOut, err := tangled.RepoGetDefaultBranch(ctx, client, repo.String())
+			if err != nil {
+				return "", err
+			}
+			return defaultBranchOut.Name, nil
+		}(repoDid)
+
+		compiler := workflow.Compiler{
+			ChangedFiles: event.ChangedFiles,
+			Trigger: tangled.Pipeline_TriggerMetadata{
+				Kind: string(workflow.TriggerKindPush),
+				Push: &tangled.Pipeline_PushTriggerData{
+					Ref:    event.Ref,
+					OldSha: event.OldSha,
+					NewSha: event.NewSha,
+				},
+				Repo: &tangled.Pipeline_TriggerRepo{
+					Did:           repo.Owner.String(),
+					Knot:          repo.Knot,
+					Repo:          (*string)(&repo.Rkey),
+					RepoDid:       (*string)(&repoDid),
+					DefaultBranch: defaultBranch,
+				},
+			},
+		}
+
+		// load workflow definitions from rev (without spindle context)
+		rawPipeline, err := s.loadPipeline(ctx, repoCloneUri, repoPath, event.NewSha)
+		if err != nil {
+			return fmt.Errorf("loading pipeline: %w", err)
+		}
+		if len(rawPipeline) == 0 {
+			l.Info("no workflow definition find for the repo. skipping the event")
+			return nil
+		}
+		tpl := compiler.Compile(compiler.Parse(rawPipeline))
+		// TODO: pass compile error to workflow log
+		for _, w := range compiler.Diagnostics.Errors {
+			l.Error(w.String())
+		}
+		for _, w := range compiler.Diagnostics.Warnings {
+			l.Warn(w.String())
+		}
+		if len(tpl.Workflows) == 0 {
+			l.Info("no workflow matching trigger 'push'. skipping the event")
+			return nil
+		}
+
+		pipelineId := models.PipelineId{
+			Knot: tpl.TriggerMetadata.Repo.Knot,
+			Rkey: tid.TID(),
+		}
+		if err := s.db.CreatePipelineEvent(pipelineId.Rkey, tpl, s.n); err != nil {
+			l.Error("failed to create pipeline event", "err", err)
+			return nil
+		}
+		err = s.processPipeline(ctx, repoDid, tpl, pipelineId)
+		if err != nil {
+			return err
+		}
 	}
 
+	return nil
+}
+
+func (s *Spindle) loadPipeline(ctx context.Context, repoUri, repoPath, rev string) (workflow.RawPipeline, error) {
+	if err := git.SparseSyncGitRepo(ctx, repoUri, repoPath, rev); err != nil {
+		return nil, fmt.Errorf("syncing git repo: %w", err)
+	}
+	gr, err := kgit.Open(repoPath, rev)
+	if err != nil {
+		return nil, fmt.Errorf("opening git repo: %w", err)
+	}
+
+	workflowDir, err := gr.FileTree(ctx, workflow.WorkflowDir)
+	if errors.Is(err, object.ErrDirectoryNotFound) {
+		// return empty RawPipeline when directory doesn't exist
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("loading file tree: %w", err)
+	}
+
+	var rawPipeline workflow.RawPipeline
+	for _, e := range workflowDir {
+		if !e.IsFile() {
+			continue
+		}
+
+		fpath := filepath.Join(workflow.WorkflowDir, e.Name)
+		contents, err := gr.RawContent(fpath)
+		if err != nil {
+			return nil, fmt.Errorf("reading raw content of '%s': %w", fpath, err)
+		}
+
+		rawPipeline = append(rawPipeline, workflow.RawWorkflow{
+			Name:     e.Name,
+			Contents: contents,
+		})
+	}
+
+	return rawPipeline, nil
+}
+
+func (s *Spindle) processPipeline(ctx context.Context, repoDid syntax.DID, tpl tangled.Pipeline, pipelineId models.PipelineId) error {
+	// Build pipeline environment variables once for all workflows
+	pipelineEnv := models.PipelineEnvVars(tpl.TriggerMetadata, pipelineId)
+
+	// filter & init workflows
+	workflows := make(map[models.Engine][]models.Workflow)
+	for _, w := range tpl.Workflows {
+		if w == nil {
+			continue
+		}
+		if _, ok := s.engs[w.Engine]; !ok {
+			err := s.db.StatusFailed(models.WorkflowId{
+				PipelineId: pipelineId,
+				Name:       w.Name,
+			}, fmt.Sprintf("unknown engine %#v", w.Engine), -1, s.n)
+			if err != nil {
+				return fmt.Errorf("db.StatusFailed: %w", err)
+			}
+
+			continue
+		}
+
+		eng := s.engs[w.Engine]
+
+		if _, ok := workflows[eng]; !ok {
+			workflows[eng] = []models.Workflow{}
+		}
+
+		ewf, err := s.engs[w.Engine].InitWorkflow(*w, tpl)
+		if err != nil {
+			err = s.db.StatusFailed(models.WorkflowId{
+				PipelineId: pipelineId,
+				Name:       w.Name,
+			}, fmt.Sprintf("init workflow: %s", err), -1, s.n)
+			if err != nil {
+				return fmt.Errorf("db.StatusFailed: %w", err)
+			}
+
+			continue
+		}
+
+		// inject TANGLED_* env vars after InitWorkflow
+		// This prevents user-defined env vars from overriding them
+		if ewf.Environment == nil {
+			ewf.Environment = make(map[string]string)
+		}
+		maps.Copy(ewf.Environment, pipelineEnv)
+
+		workflows[eng] = append(workflows[eng], *ewf)
+	}
+
+	// enqueue pipeline
+	ok := s.jq.Enqueue(repoDid, queue.Job{
+		Run: func() error {
+			engine.StartWorkflows(log.SubLogger(s.l, "engine"), s.vault, s.cfg, s.db, s.n, ctx, &models.Pipeline{
+				RepoDid:   repoDid,
+				Workflows: workflows,
+			}, pipelineId)
+			return nil
+		},
+		OnFail: func(jobError error) {
+			s.l.Error("pipeline run failed", "error", jobError)
+		},
+	})
+	if !ok {
+		return fmt.Errorf("failed to enqueue pipeline: queue is full")
+	}
+	s.l.Info("pipeline enqueued successfully", "id", pipelineId)
+
+	// after successful enqueue, emit StatusPending for all workflows
+	for _, ewfs := range workflows {
+		for _, ewf := range ewfs {
+			err := s.db.StatusPending(models.WorkflowId{
+				PipelineId: pipelineId,
+				Name:       ewf.Name,
+			}, s.n)
+			if err != nil {
+				return fmt.Errorf("db.StatusPending: %w", err)
+			}
+		}
+	}
 	return nil
 }
 

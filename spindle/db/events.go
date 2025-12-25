@@ -19,6 +19,19 @@ func (d *DB) GetEvents(cursor int64, limit int) ([]eventstream.Event, error) {
 	return eventstream.List(d, cursor, limit)
 }
 
+func (d *DB) CreatePipelineEvent(rkey string, pipeline tangled.Pipeline, n *notifier.Notifier) error {
+	eventJson, err := json.Marshal(pipeline)
+	if err != nil {
+		return err
+	}
+	event := eventstream.Event{
+		Rkey:      rkey,
+		Nsid:      tangled.PipelineNSID,
+		EventJson: eventJson,
+	}
+	return d.insertEvent(event, n)
+}
+
 func (d *DB) createStatusEvent(
 	workflowId models.WorkflowId,
 	statusKind models.StatusKind,

@@ -6,18 +6,26 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"tangled.org/core/api/tangled"
+	avmodels "tangled.org/core/appview/models"
 	"tangled.org/core/eventconsumer"
 	"tangled.org/core/log"
 	"tangled.org/core/rbac"
 	"tangled.org/core/spindle/db"
 	"tangled.org/core/spindle/git"
+	"tangled.org/core/spindle/models"
 	"tangled.org/core/tapc"
+	"tangled.org/core/tid"
+	"tangled.org/core/workflow"
 )
 
 const (
@@ -75,6 +83,8 @@ func (t *Tap) processEvent(ctx context.Context, evt tapc.Event) error {
 		return t.processRepo(ctx, evt.Record)
 	case tangled.RepoCollaboratorNSID:
 		return t.processCollaborator(ctx, evt.Record)
+	case tangled.RepoPullNSID:
+		return t.processPull(ctx, evt.Record)
 	}
 	return nil
 }
@@ -306,6 +316,135 @@ func (t *Tap) processCollaborator(ctx context.Context, evt *tapc.RecordEventData
 	return nil
 }
 
+func (t *Tap) processPull(ctx context.Context, evt *tapc.RecordEventData) error {
+	l := t.logger.With("collection", evt.Collection, "did", evt.Did, "rkey", evt.Rkey)
+
+	// only listen to live events
+	if !evt.Live {
+		l.Info("skipping backfill event", "event", evt.AtUri())
+		return nil
+	}
+
+	switch evt.Action {
+	case tapc.RecordCreateAction, tapc.RecordUpdateAction:
+		record := tangled.RepoPull{}
+		if err := json.Unmarshal(evt.Record, &record); err != nil {
+			l.Error("invalid record", "err", err)
+			return fmt.Errorf("parsing record: %w", err)
+		}
+
+		// ignore legacy records
+		if record.Target == nil {
+			l.Info("ignoring pull record: target repo is nil")
+			return nil
+		}
+
+		// ignore patch-based and fork-based PRs
+		if record.Source == nil || record.Source.Repo != nil {
+			l.Info("ignoring pull record: not a branch-based pull request")
+			return nil
+		}
+
+		// skip if target repo is unknown
+		repo, err := t.spindle.db.GetRepoByDid(syntax.DID(record.Target.Repo))
+		if err != nil {
+			l.Warn("target repo is not ingested yet", "repo", record.Target.Repo, "err", err)
+			return fmt.Errorf("target repo is unknown")
+		}
+
+		// only accept branch-based PR (excluding patch-based and fork-based)
+		if record.Source == nil || record.Source.Repo != nil {
+			l.Warn("skipping non-branch-based PR")
+			return nil
+		}
+
+		latestSubmission, err := t.fetchLatestSubmission(ctx, evt.Did.String(), evt.Rkey.String(), &record)
+		if err != nil {
+			return err
+		}
+		sourceSha := latestSubmission.SourceRev
+
+		scheme := "https"
+		if t.spindle.cfg.Server.Dev {
+			scheme = "http"
+		}
+		client := &indigoxrpc.Client{Host: fmt.Sprintf("%s://%s", scheme, repo.Knot)}
+
+		// fetch current default branch
+		defaultBranch, _ := func(repo syntax.DID) (string, error) {
+			defaultBranchOut, err := tangled.RepoGetDefaultBranch(ctx, client, repo.String())
+			if err != nil {
+				return "", err
+			}
+			return defaultBranchOut.Name, nil
+		}(repo.RepoDid)
+
+		compiler := workflow.Compiler{
+			Trigger: tangled.Pipeline_TriggerMetadata{
+				Kind: string(workflow.TriggerKindPullRequest),
+				PullRequest: &tangled.Pipeline_PullRequestTriggerData{
+					Action:       "create",
+					SourceBranch: record.Source.Branch,
+					SourceSha:    sourceSha,
+					TargetBranch: record.Target.Branch,
+				},
+				Repo: &tangled.Pipeline_TriggerRepo{
+					Did:           repo.Owner.String(),
+					Knot:          repo.Knot,
+					Repo:          (*string)(&repo.Rkey),
+					RepoDid:       (*string)(&repo.RepoDid),
+					DefaultBranch: defaultBranch,
+				},
+			},
+		}
+
+		repoUri := t.spindle.newRepoCloneUrl(repo.Knot, repo.RepoDid)
+		repoPath := t.spindle.newRepoPath(repo.RepoDid)
+
+		// load workflow definitions from rev (without spindle context)
+		rawPipeline, err := t.spindle.loadPipeline(ctx, repoUri, repoPath, sourceSha)
+		if err != nil {
+			// don't retry
+			l.Error("failed loading pipeline", "err", err)
+			return nil
+		}
+		if len(rawPipeline) == 0 {
+			l.Info("no workflow definition find for the repo. skipping the event")
+			return nil
+		}
+		tpl := compiler.Compile(compiler.Parse(rawPipeline))
+		// TODO: pass compile error to workflow log
+		for _, w := range compiler.Diagnostics.Errors {
+			l.Error(w.String())
+		}
+		for _, w := range compiler.Diagnostics.Warnings {
+			l.Warn(w.String())
+		}
+		if len(tpl.Workflows) == 0 {
+			l.Info("no workflow matching trigger 'pull_request'. skipping the event")
+			return nil
+		}
+
+		pipelineId := models.PipelineId{
+			Knot: tpl.TriggerMetadata.Repo.Knot,
+			Rkey: tid.TID(),
+		}
+		if err := t.spindle.db.CreatePipelineEvent(pipelineId.Rkey, tpl, t.spindle.n); err != nil {
+			l.Error("failed to create pipeline event", "err", err)
+			return nil
+		}
+		err = t.spindle.processPipeline(ctx, repo.RepoDid, tpl, pipelineId)
+		if err != nil {
+			// don't retry
+			l.Error("failed processing pipeline", "err", err)
+			return nil
+		}
+	case tapc.RecordDeleteAction:
+		// no-op
+	}
+	return nil
+}
+
 func (t *Tap) bufferCollab(repoDid syntax.DID, evt *tapc.RecordEventData) {
 	t.pendingMu.Lock()
 	defer t.pendingMu.Unlock()
@@ -372,4 +511,50 @@ func (t *Tap) purgeStalePendingCollabs() {
 	if expired > 0 {
 		t.logger.Warn("expired buffered collaborator events without matching repo arrival", "count", expired, "ttl", pendingCollabTTL)
 	}
+}
+
+func (t *Tap) fetchLatestSubmission(ctx context.Context, did, rkey string, record *tangled.RepoPull) (*avmodels.PullSubmission, error) {
+	// resolve the PR owner's identity to fetch the blob from their PDS
+	prOwnerIdent, err := t.spindle.res.ResolveIdent(ctx, did)
+	if err != nil || prOwnerIdent.Handle.IsInvalidHandle() {
+		return nil, fmt.Errorf("failed to resolve PR owner handle: %w", err)
+	}
+
+	if len(record.Rounds) == 0 {
+		return nil, fmt.Errorf("failed to fetch latest submission, no rounds in record")
+	}
+
+	roundNumber := len(record.Rounds) - 1
+	round := record.Rounds[roundNumber]
+
+	// fetch the blob from the PR owner's PDS
+	prOwnerPds := prOwnerIdent.PDSEndpoint()
+	blobUrl, err := url.Parse(fmt.Sprintf("%s/xrpc/com.atproto.sync.getBlob", prOwnerPds))
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct blob URL: %w", err)
+	}
+	q := blobUrl.Query()
+	q.Set("cid", round.PatchBlob.Ref.String())
+	q.Set("did", did)
+	blobUrl.RawQuery = q.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, blobUrl.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create blob request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	blobResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch blob: %w", err)
+	}
+	defer blobResp.Body.Close()
+
+	blob := io.ReadCloser(blobResp.Body)
+	latestSubmission, err := avmodels.PullSubmissionFromRecord(did, rkey, roundNumber, round, &blob)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse submission: %w", err)
+	}
+
+	return latestSubmission, nil
 }

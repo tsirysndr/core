@@ -67,8 +67,8 @@ func startEmbeddedTap(ctx context.Context, cfg *config.Config, logger *slog.Logg
 		RepoFetchTimeout:           5 * time.Minute,
 		IdentityCacheSize:          50_000,
 		EventCacheSize:             10_000,
-		SignalCollection:           tangled.RepoNSID,
-		CollectionFilters:          []string{tangled.RepoNSID, tangled.RepoCollaboratorNSID},
+		SignalCollection:           tangled.RepoPullNSID, // HACK: to ingest PRs from any users
+		CollectionFilters:          []string{tangled.RepoNSID, tangled.RepoCollaboratorNSID, tangled.RepoPullNSID},
 		AdminPassword:              cfg.Server.Tap.AdminPassword,
 		RetryTimeout:               60 * time.Second,
 	}
