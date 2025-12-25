@@ -27,7 +27,6 @@ import (
 	"tangled.org/core/log"
 	"tangled.org/core/orm"
 	"tangled.org/core/rbac"
-	"tangled.org/core/workflow"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -80,8 +79,6 @@ func knotIngester(d *db.DB, acl aclRoster, enforcer *rbac.Enforcer, posthog post
 		switch msg.Nsid {
 		case tangled.GitRefUpdateNSID:
 			return ingestRefUpdate(ctx, d, enforcer, posthog, notifier, dev, c, cfClient, source, msg)
-		case tangled.PipelineNSID:
-			return ingestPipeline(d, source, msg)
 		case knotdb.RepoDIDAssignNSID:
 			return ingestDIDAssign(d, enforcer, source, msg, ctx)
 		case knotdb.KnotMemberUpdateNSID:
@@ -386,85 +383,6 @@ func updateRepoLanguages(d *db.DB, record tangled.GitRefUpdate) error {
 	}
 
 	return tx.Commit()
-}
-
-func ingestPipeline(d *db.DB, source ec.Source, msg eventstream.Event) error {
-	var record tangled.Pipeline
-	err := json.Unmarshal(msg.EventJson, &record)
-	if err != nil {
-		return err
-	}
-
-	if record.TriggerMetadata == nil {
-		return fmt.Errorf("empty trigger metadata: nsid %s, rkey %s", msg.Nsid, msg.Rkey)
-	}
-
-	if record.TriggerMetadata.Repo == nil {
-		return fmt.Errorf("empty repo: nsid %s, rkey %s", msg.Nsid, msg.Rkey)
-	}
-
-	repoName := ""
-	if record.TriggerMetadata.Repo.Repo != nil {
-		repoName = *record.TriggerMetadata.Repo.Repo
-	}
-
-	repo, lookupErr := resolveRepo(d, record.TriggerMetadata.Repo.RepoDid, record.TriggerMetadata.Repo.Did, repoName)
-	if lookupErr != nil {
-		return fmt.Errorf("failed to look up repo: %w", lookupErr)
-	}
-	if repo.Spindle == "" {
-		return fmt.Errorf("repo does not have a spindle configured yet: nsid %s, rkey %s", msg.Nsid, msg.Rkey)
-	}
-
-	// trigger info
-	var trigger models.Trigger
-	var sha string
-	trigger.Kind = workflow.TriggerKind(record.TriggerMetadata.Kind)
-	switch trigger.Kind {
-	case workflow.TriggerKindPush:
-		trigger.PushRef = &record.TriggerMetadata.Push.Ref
-		trigger.PushNewSha = &record.TriggerMetadata.Push.NewSha
-		trigger.PushOldSha = &record.TriggerMetadata.Push.OldSha
-		sha = *trigger.PushNewSha
-	case workflow.TriggerKindPullRequest:
-		trigger.PRSourceBranch = &record.TriggerMetadata.PullRequest.SourceBranch
-		trigger.PRTargetBranch = &record.TriggerMetadata.PullRequest.TargetBranch
-		trigger.PRSourceSha = &record.TriggerMetadata.PullRequest.SourceSha
-		trigger.PRAction = &record.TriggerMetadata.PullRequest.Action
-		sha = *trigger.PRSourceSha
-	}
-
-	tx, err := d.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to start txn: %w", err)
-	}
-
-	triggerId, err := db.AddTrigger(tx, trigger)
-	if err != nil {
-		return fmt.Errorf("failed to add trigger entry: %w", err)
-	}
-
-	pipeline := models.Pipeline{
-		Rkey:      msg.Rkey,
-		Knot:      source.Host,
-		RepoOwner: syntax.DID(record.TriggerMetadata.Repo.Did),
-		RepoName:  repoName,
-		RepoDid:   repo.RepoDid,
-		TriggerId: int(triggerId),
-		Sha:       sha,
-	}
-
-	err = db.AddPipeline(tx, pipeline)
-	if err != nil {
-		return fmt.Errorf("failed to add pipeline: %w", err)
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return fmt.Errorf("failed to commit txn: %w", err)
-	}
-
-	return nil
 }
 
 func ingestDIDAssign(d *db.DB, enforcer *rbac.Enforcer, source ec.Source, msg eventstream.Event, ctx context.Context) error {

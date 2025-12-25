@@ -15,9 +15,11 @@ import (
 	"tangled.org/core/appview/pipelines"
 	ec "tangled.org/core/eventconsumer"
 	"tangled.org/core/eventstream"
+	"tangled.org/core/log"
 	"tangled.org/core/orm"
 	"tangled.org/core/rbac"
 	spindle "tangled.org/core/spindle/models"
+	"tangled.org/core/workflow"
 )
 
 func Spindlestream(ctx context.Context, c *config.Config, d *db.DB, enforcer *rbac.Enforcer, pn *pipelines.StatusNotifier) (*ec.Consumer, error) {
@@ -41,11 +43,97 @@ func Spindlestream(ctx context.Context, c *config.Config, d *db.DB, enforcer *rb
 func spindleIngester(d *db.DB, pn *pipelines.StatusNotifier) ec.ProcessFunc {
 	return func(ctx context.Context, source ec.Source, msg eventstream.Event) error {
 		switch msg.Nsid {
+		case tangled.PipelineNSID:
+			return ingestPipeline(ctx, d, source, msg)
 		case tangled.PipelineStatusNSID:
 			return ingestPipelineStatus(ctx, d, pn, source, msg)
 		}
 		return nil
 	}
+}
+
+func ingestPipeline(ctx context.Context, d *db.DB, source ec.Source, msg eventstream.Event) error {
+	l := log.FromContext(ctx)
+
+	var record tangled.Pipeline
+	if err := json.Unmarshal(msg.EventJson, &record); err != nil {
+		return fmt.Errorf("unmarshal pipeline: %w", err)
+	}
+
+	if record.TriggerMetadata == nil {
+		return fmt.Errorf("empty trigger metadata: nsid %s, rkey %s", msg.Nsid, msg.Rkey)
+	}
+
+	if record.TriggerMetadata.Repo == nil {
+		return fmt.Errorf("empty repo: nsid %s, rkey %s", msg.Nsid, msg.Rkey)
+	}
+
+	repoName := ""
+	if record.TriggerMetadata.Repo.Repo != nil {
+		repoName = *record.TriggerMetadata.Repo.Repo
+	}
+
+	repo, lookupErr := resolveRepo(d, record.TriggerMetadata.Repo.RepoDid, record.TriggerMetadata.Repo.Did, repoName)
+	if lookupErr != nil {
+		return fmt.Errorf("failed to look up repo: %w", lookupErr)
+	}
+	if repo.Spindle == "" {
+		return fmt.Errorf("repo does not have a spindle configured yet: nsid %s, rkey %s", msg.Nsid, msg.Rkey)
+	}
+
+	// trigger info
+	var trigger models.Trigger
+	var sha string
+	trigger.Kind = workflow.TriggerKind(record.TriggerMetadata.Kind)
+	switch trigger.Kind {
+	case workflow.TriggerKindPush:
+		trigger.PushRef = &record.TriggerMetadata.Push.Ref
+		trigger.PushNewSha = &record.TriggerMetadata.Push.NewSha
+		trigger.PushOldSha = &record.TriggerMetadata.Push.OldSha
+		sha = *trigger.PushNewSha
+	case workflow.TriggerKindPullRequest:
+		trigger.PRSourceBranch = &record.TriggerMetadata.PullRequest.SourceBranch
+		trigger.PRTargetBranch = &record.TriggerMetadata.PullRequest.TargetBranch
+		trigger.PRSourceSha = &record.TriggerMetadata.PullRequest.SourceSha
+		trigger.PRAction = &record.TriggerMetadata.PullRequest.Action
+		sha = *trigger.PRSourceSha
+	}
+
+	tx, err := d.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start txn: %w", err)
+	}
+
+	triggerId, err := db.AddTrigger(tx, trigger)
+	if err != nil {
+		return fmt.Errorf("failed to add trigger entry: %w", err)
+	}
+
+	// TODO: we shouldn't even use knot to identify pipelines
+	knot := record.TriggerMetadata.Repo.Knot
+	pipeline := models.Pipeline{
+		Rkey:      msg.Rkey,
+		Knot:      knot,
+		RepoOwner: syntax.DID(record.TriggerMetadata.Repo.Did),
+		RepoName:  repoName,
+		RepoDid:   repo.RepoDid,
+		TriggerId: int(triggerId),
+		Sha:       sha,
+	}
+
+	err = db.AddPipeline(tx, pipeline)
+	if err != nil {
+		return fmt.Errorf("failed to add pipeline: %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("failed to commit txn: %w", err)
+	}
+
+	l.Info("added pipeline", "pipeline", pipeline)
+
+	return nil
 }
 
 func ingestPipelineStatus(ctx context.Context, d *db.DB, pn *pipelines.StatusNotifier, source ec.Source, msg eventstream.Event) error {
