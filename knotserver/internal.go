@@ -242,16 +242,10 @@ func (h *InternalHandle) PostReceiveHook(w http.ResponseWriter, r *http.Request)
 		// non-fatal
 	}
 
-	// extract any push options
-	pushOptionsRaw := r.Header.Values("X-Git-Push-Option")
-	pushOptions := PushOptions{}
-	for _, option := range pushOptionsRaw {
-		if option == "skip-ci" || option == "ci-skip" {
-			pushOptions.skipCi = true
-		}
-		if option == "verbose-ci" || option == "ci-verbose" {
-			pushOptions.verboseCi = true
-		}
+	// extract max 50 push options
+	pushOptions := r.Header.Values("X-Git-Push-Option")
+	if len(pushOptions) > 50 {
+		pushOptions = pushOptions[:50]
 	}
 
 	resp := hook.HookResponse{
@@ -259,7 +253,7 @@ func (h *InternalHandle) PostReceiveHook(w http.ResponseWriter, r *http.Request)
 	}
 
 	for _, line := range lines {
-		err := h.insertRefUpdate(line, gitUserDid, ownerDid, repoDid)
+		err := h.insertRefUpdate(line, gitUserDid, ownerDid, repoDid, pushOptions)
 		if err != nil {
 			l.Error("failed to insert op", "err", err, "line", line, "did", gitUserDid, "repo", gitRelativeDir)
 		}
@@ -278,7 +272,7 @@ func (h *InternalHandle) PostReceiveHook(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, resp)
 }
 
-func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, ownerDid, repoDid string) error {
+func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, ownerDid, repoDid string, pushOptions []string) error {
 	refUpdate := tangled.GitRefUpdate{
 		OldSha:       line.OldSha.String(),
 		NewSha:       line.NewSha.String(),
@@ -287,6 +281,7 @@ func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, o
 		OwnerDid:     &ownerDid,
 		Repo:         repoDid,
 		Meta:         nil,
+		PushOptions:  pushOptions,
 	}
 
 	if !line.NewSha.IsZero() {
@@ -299,6 +294,12 @@ func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, o
 		if err != nil {
 			return fmt.Errorf("failed to open git repo at ref %s: %w", line.Ref, err)
 		}
+
+		changedFiles, err := gr.ChangedFilesBetween(line.OldSha.String(), line.NewSha.String())
+		if err != nil {
+			return fmt.Errorf("failed to get ref update changed files: %w", err)
+		}
+		refUpdate.ChangedFiles = changedFiles
 
 		meta, err := gr.RefUpdateMeta(line)
 		if err != nil {
@@ -330,8 +331,17 @@ func (h *InternalHandle) triggerPipeline(
 	ownerDid string,
 	repoName string,
 	repoDid string,
-	pushOptions PushOptions,
+	pushOptionsRaw []string,
 ) error {
+	var pushOptions PushOptions
+	for _, option := range pushOptionsRaw {
+		if option == "skip-ci" || option == "ci-skip" {
+			pushOptions.skipCi = true
+		}
+		if option == "verbose-ci" || option == "ci-verbose" {
+			pushOptions.verboseCi = true
+		}
+	}
 	if pushOptions.skipCi {
 		return nil
 	}
