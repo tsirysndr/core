@@ -28,7 +28,6 @@ import (
 	"tangled.org/core/notifier"
 	"tangled.org/core/rbac"
 	"tangled.org/core/tid"
-	"tangled.org/core/workflow"
 )
 
 type InternalHandle struct {
@@ -188,11 +187,6 @@ func (h *InternalHandle) Guard(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, diskRelative)
 }
 
-type PushOptions struct {
-	skipCi    bool
-	verboseCi bool
-}
-
 func (h *InternalHandle) PostReceiveHook(w http.ResponseWriter, r *http.Request) {
 	l := h.l.With("handler", "PostReceiveHook")
 
@@ -263,9 +257,13 @@ func (h *InternalHandle) PostReceiveHook(w http.ResponseWriter, r *http.Request)
 			l.Error("failed to reply with pull request link", "err", err, "line", line, "did", gitUserDid, "repo", gitRelativeDir)
 		}
 
-		err = h.triggerPipeline(&resp.Messages, line, gitUserDid, ownerDid, repoName, repoDid, pushOptions)
-		if err != nil {
-			l.Error("failed to trigger pipeline", "err", err, "line", line, "did", gitUserDid, "repo", gitRelativeDir)
+		// emit pipeline logs link
+		if h.c.LogsAddr != "" {
+			host, port, err := net.SplitHostPort(h.c.LogsAddr)
+			if err == nil {
+				resp.Messages = append(resp.Messages, "→  Browse CI logs in your terminal:")
+				resp.Messages = append(resp.Messages, fmt.Sprintf("   ssh -t -p %s %s %s %s", port, host, repoDid, line.NewSha))
+			}
 		}
 	}
 
@@ -319,133 +317,6 @@ func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, o
 		Rkey:      tid.TID(),
 		Nsid:      tangled.GitRefUpdateNSID,
 		EventJson: eventJson,
-	}
-
-	return h.db.InsertEvent(event, h.n)
-}
-
-func (h *InternalHandle) triggerPipeline(
-	clientMsgs *[]string,
-	line git.PostReceiveLine,
-	gitUserDid string,
-	ownerDid string,
-	repoName string,
-	repoDid string,
-	pushOptionsRaw []string,
-) error {
-	var pushOptions PushOptions
-	for _, option := range pushOptionsRaw {
-		if option == "skip-ci" || option == "ci-skip" {
-			pushOptions.skipCi = true
-		}
-		if option == "verbose-ci" || option == "ci-verbose" {
-			pushOptions.verboseCi = true
-		}
-	}
-	if pushOptions.skipCi {
-		return nil
-	}
-
-	repoPath, _, _, resolveErr := h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
-	if resolveErr != nil {
-		return fmt.Errorf("failed to resolve repo on disk: %w", resolveErr)
-	}
-
-	gr, err := git.Open(repoPath, line.Ref)
-	if err != nil {
-		return err
-	}
-
-	workflowDir, err := gr.FileTree(context.Background(), workflow.WorkflowDir)
-	if err != nil {
-		return err
-	}
-
-	var pipeline workflow.RawPipeline
-	for _, e := range workflowDir {
-		if !e.IsFile() {
-			continue
-		}
-
-		fpath := filepath.Join(workflow.WorkflowDir, e.Name)
-		contents, err := gr.RawContent(fpath)
-		if err != nil {
-			continue
-		}
-
-		pipeline = append(pipeline, workflow.RawWorkflow{
-			Name:     e.Name,
-			Contents: contents,
-		})
-	}
-
-	defaultBranch, _ := gr.FindMainBranch()
-
-	trigger := tangled.Pipeline_PushTriggerData{
-		Ref:    line.Ref,
-		OldSha: line.OldSha.String(),
-		NewSha: line.NewSha.String(),
-	}
-
-	triggerRepo := &tangled.Pipeline_TriggerRepo{
-		Did:           ownerDid,
-		Knot:          h.c.Server.Hostname,
-		Repo:          &repoName,
-		RepoDid:       &repoDid,
-		DefaultBranch: defaultBranch,
-	}
-
-	changedFiles, err := gr.ChangedFilesBetween(line.OldSha.String(), line.NewSha.String())
-	if err != nil {
-		return fmt.Errorf("getting changed files: %w", err)
-	}
-
-	compiler := workflow.Compiler{
-		Trigger: tangled.Pipeline_TriggerMetadata{
-			Kind: string(workflow.TriggerKindPush),
-			Push: &trigger,
-			Repo: triggerRepo,
-		},
-		ChangedFiles: changedFiles,
-	}
-
-	cp := compiler.Compile(compiler.Parse(pipeline))
-	eventJson, err := json.Marshal(cp)
-	if err != nil {
-		return err
-	}
-
-	for _, e := range compiler.Diagnostics.Errors {
-		*clientMsgs = append(*clientMsgs, e.String())
-	}
-
-	if pushOptions.verboseCi {
-		if compiler.Diagnostics.IsEmpty() {
-			*clientMsgs = append(*clientMsgs, "success: pipeline compiled with no diagnostics")
-		}
-
-		for _, w := range compiler.Diagnostics.Warnings {
-			*clientMsgs = append(*clientMsgs, w.String())
-		}
-	}
-
-	// do not run empty pipelines
-	if cp.Workflows == nil {
-		return nil
-	}
-
-	event := eventstream.Event{
-		Rkey:      tid.TID(),
-		Nsid:      tangled.PipelineNSID,
-		EventJson: eventJson,
-	}
-
-	if h.c.LogsAddr != "" {
-		host, port, err := net.SplitHostPort(h.c.LogsAddr)
-		if err == nil {
-			*clientMsgs = append(*clientMsgs, "→  Browse CI logs in your terminal:")
-			*clientMsgs = append(*clientMsgs, fmt.Sprintf("   ssh -t -p %s %s %s %s", port, host, repoDid, line.NewSha))
-		}
 	}
 
 	return h.db.InsertEvent(event, h.n)

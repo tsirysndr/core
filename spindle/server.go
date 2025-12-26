@@ -404,42 +404,7 @@ func (s *Spindle) XrpcRouter() http.Handler {
 func (s *Spindle) processKnotStream(ctx context.Context, src eventconsumer.Source, msg eventstream.Event) error {
 	l := log.FromContext(ctx).With("handler", "processKnotStream")
 	l = l.With("src", src.Key(), "msg.Nsid", msg.Nsid, "msg.Rkey", msg.Rkey)
-	if msg.Nsid == tangled.PipelineNSID {
-		return nil
-		tpl := tangled.Pipeline{}
-		err := json.Unmarshal(msg.EventJson, &tpl)
-		if err != nil {
-			s.l.Error("failed to unmarshal pipeline event", "err", err)
-			return err
-		}
-
-		if tpl.TriggerMetadata == nil {
-			return fmt.Errorf("no trigger metadata found")
-		}
-
-		if tpl.TriggerMetadata.Repo == nil {
-			return fmt.Errorf("no repo data found")
-		}
-
-		if src.Host != tpl.TriggerMetadata.Repo.Knot {
-			return fmt.Errorf("repo knot does not match event source: %s != %s", src.Host, tpl.TriggerMetadata.Repo.Knot)
-		}
-
-		repoDid, err := s.resolvePipelineRepoDid(tpl.TriggerMetadata.Repo)
-		if err != nil {
-			return err
-		}
-
-		pipelineId := models.PipelineId{
-			Knot: src.Host,
-			Rkey: msg.Rkey,
-		}
-
-		err = s.processPipeline(ctx, repoDid, tpl, pipelineId)
-		if err != nil {
-			return err
-		}
-	} else if msg.Nsid == tangled.GitRefUpdateNSID {
+	if msg.Nsid == tangled.GitRefUpdateNSID {
 		event := tangled.GitRefUpdate{}
 		if err := json.Unmarshal(msg.EventJson, &event); err != nil {
 			l.Error("error unmarshalling", "err", err)
@@ -452,6 +417,10 @@ func (s *Spindle) processKnotStream(ctx context.Context, src eventconsumer.Sourc
 		repo, err := s.db.GetRepoByDid(repoDid)
 		if err != nil {
 			return fmt.Errorf("unknown repoDid %s: %w", repoDid, err)
+		}
+
+		if src.Host != repo.Knot {
+			return fmt.Errorf("repo knot does not match event source: %s != %s", src.Host, repo.Knot)
 		}
 
 		// NOTE: we are blindly trusting the knot that it will return only repos it own
