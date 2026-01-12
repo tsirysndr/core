@@ -114,14 +114,11 @@
 {{ define "repoAfter" }}
   <div class="flex flex-col gap-4 mt-4">
   {{
-    template "repo/issues/fragments/commentList"
+    template "fragments/comment/commentList"
     (dict
-      "RepoInfo" $.RepoInfo
-      "LoggedInUser" $.LoggedInUser
-      "Issue" $.Issue
-      "CommentList" $.Issue.CommentList
+      "LoggedInUser"       $.LoggedInUser
       "VouchRelationships" $.VouchRelationships
-      )
+      "CommentList"        $.CommentList)
   }}
 
   {{ template "repo/issues/fragments/newComment" . }}

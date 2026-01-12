@@ -145,7 +145,7 @@ func (rp *Issues) RepoSingleIssue(w http.ResponseWriter, r *http.Request) {
 		LoggedInUser:       user,
 		RepoInfo:           rp.repoResolver.GetRepoInfo(r, user),
 		Issue:              issue,
-		CommentList:        issue.CommentList(),
+		CommentList:        models.NewCommentList(issue.Comments),
 		Backlinks:          backlinks,
 		Reactions:          reactionMap,
 		UserReacted:        userReactions,

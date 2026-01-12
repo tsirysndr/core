@@ -123,7 +123,7 @@ func (n *databaseNotifier) NewComment(ctx context.Context, comment *models.Comme
 			parent := *comment.ReplyTo
 
 			// find the parent thread, and add all DIDs from here to the recipient list
-			for _, t := range issue.CommentList() {
+			for _, t := range models.NewCommentList(issue.Comments) {
 				if t.Self.AtUri() == syntax.ATURI(parent.Uri) {
 					for _, p := range t.Participants() {
 						recipients.Insert(p)

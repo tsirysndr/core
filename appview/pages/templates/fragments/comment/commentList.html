@@ -1,4 +1,4 @@
-{{ define "repo/issues/fragments/commentList" }}
+{{ define "fragments/comment/commentList" }}
   <div class="flex flex-col gap-4">
     {{ range $item := .CommentList }}
       {{ template "commentListItem" (list $ .) }}
@@ -9,20 +9,18 @@
 {{ define "commentListItem" }}
   {{ $root := index . 0 }}
   {{ $item := index . 1 }}
-  {{ $params :=
-        (dict
-          "LoggedInUser"      $root.LoggedInUser
-          "VouchRelationship" (index $root.VouchRelationships $item.Self.Did)
-          "Comment"           $item.Self) }}
 
   <div class="rounded border border-gray-200 dark:border-gray-700 w-full overflow-hidden shadow-sm bg-gray-50 dark:bg-gray-800/50">
-    {{ template "topLevelComment" $params }}
+    {{ template "topLevelComment"
+      (dict
+        "LoggedInUser"      $root.LoggedInUser
+        "VouchRelationship" (index $root.VouchRelationships $item.Self.Did)
+        "Comment"           $item.Self) }}
 
     <div class="relative ml-10 border-l-2 border-gray-200 dark:border-gray-700">
       {{ range $index, $reply := $item.Replies }}
         <div class="-ml-4">
-          {{
-            template "replyComment"
+          {{ template "replyComment"
             (dict
               "LoggedInUser"      $root.LoggedInUser
               "VouchRelationship" (index $root.VouchRelationships $reply.Did)

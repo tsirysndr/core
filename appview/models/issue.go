@@ -2,7 +2,6 @@ package models
 
 import (
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
@@ -60,77 +59,6 @@ func (i *Issue) State() string {
 		return "open"
 	}
 	return "closed"
-}
-
-type CommentListItem struct {
-	Self    *Comment
-	Replies []*Comment
-}
-
-func (it *CommentListItem) Participants() []syntax.DID {
-	participantSet := make(map[syntax.DID]struct{})
-	participants := []syntax.DID{}
-
-	addParticipant := func(did syntax.DID) {
-		if _, exists := participantSet[did]; !exists {
-			participantSet[did] = struct{}{}
-			participants = append(participants, did)
-		}
-	}
-
-	addParticipant(syntax.DID(it.Self.Did))
-
-	for _, c := range it.Replies {
-		addParticipant(syntax.DID(c.Did))
-	}
-
-	return participants
-}
-
-func (i *Issue) CommentList() []CommentListItem {
-	// Create a map to quickly find comments by their aturi
-	toplevel := make(map[syntax.ATURI]*CommentListItem)
-	var replies []*Comment
-
-	// collect top level comments into the map
-	for _, comment := range i.Comments {
-		if comment.IsTopLevel() {
-			toplevel[comment.AtUri()] = &CommentListItem{
-				Self: &comment,
-			}
-		} else {
-			replies = append(replies, &comment)
-		}
-	}
-
-	for _, r := range replies {
-		if r.ReplyTo == nil {
-			continue
-		}
-		if parent, exists := toplevel[syntax.ATURI(r.ReplyTo.Uri)]; exists {
-			parent.Replies = append(parent.Replies, r)
-		}
-	}
-
-	var listing []CommentListItem
-	for _, v := range toplevel {
-		listing = append(listing, *v)
-	}
-
-	// sort everything
-	sortFunc := func(a, b *Comment) bool {
-		return a.Created.Before(b.Created)
-	}
-	sort.Slice(listing, func(i, j int) bool {
-		return sortFunc(listing[i].Self, listing[j].Self)
-	})
-	for _, r := range listing {
-		sort.Slice(r.Replies, func(i, j int) bool {
-			return sortFunc(r.Replies[i], r.Replies[j])
-		})
-	}
-
-	return listing
 }
 
 func (i *Issue) Participants() []syntax.DID {
