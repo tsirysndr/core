@@ -160,14 +160,18 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		m[p.Sha] = p
 	}
 
-	reactionMap, err := db.GetReactionMap(s.db, 20, pull.AtUri())
+	entities := []syntax.ATURI{pull.AtUri()}
+	reactions, err := db.ListReactionDisplayDataMap(s.db, entities, 20)
 	if err != nil {
 		l.Error("failed to get pull reactions", "err", err)
 	}
 
-	userReactions := map[models.ReactionKind]bool{}
+	var userReactions map[syntax.ATURI]map[models.ReactionKind]bool
 	if user != nil {
-		userReactions = db.GetReactionStatusMap(s.db, user.Did, pull.AtUri())
+		userReactions, err = db.ListReactionStatusMap(s.db, entities, syntax.DID(user.Did))
+		if err != nil {
+			s.logger.Error("failed to get user reactions", "err", err)
+		}
 	}
 
 	labelDefs, err := db.GetLabelDefinitions(
@@ -239,7 +243,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		ActiveRound:        roundIdInt,
 		IsInterdiff:        interdiff,
 
-		Reactions:   reactionMap,
+		Reactions:   reactions,
 		UserReacted: userReactions,
 
 		LabelDefs:          defs,

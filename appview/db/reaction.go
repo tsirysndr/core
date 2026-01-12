@@ -1,11 +1,13 @@
 package db
 
 import (
+	"fmt"
 	"log"
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/appview/models"
+	"tangled.org/core/orm"
 )
 
 func AddReaction(e Execer, reactedByDid string, threadAt syntax.ATURI, kind models.ReactionKind, rkey string) error {
@@ -71,58 +73,120 @@ func GetReactionCountByKind(e Execer, threadAt syntax.ATURI, kind models.Reactio
 	return count, nil
 }
 
+// GetReactionDisplayDataMap returns map of [models.ReactionKind]->[models.ReactionDisplayData]
 func GetReactionMap(e Execer, userLimit int, threadAt syntax.ATURI) (map[models.ReactionKind]models.ReactionDisplayData, error) {
-	query := `
-	select kind, reacted_by_did,
-	       row_number() over (partition by kind order by created asc) as rn,
-	       count(*) over (partition by kind) as total
-	from reactions
-	where thread_at = ?
-	order by kind, created asc`
+	reactionMaps, err := ListReactionDisplayDataMap(e, []syntax.ATURI{threadAt}, userLimit)
+	return reactionMaps[threadAt], err
+}
 
-	rows, err := e.Query(query, threadAt)
+// ListReactionDisplayDataMap returns map of [syntax.ATURI]->[models.ReactionKind]->[models.ReactionDisplayData]
+func ListReactionDisplayDataMap(e Execer, threads []syntax.ATURI, userLimit int) (map[syntax.ATURI]map[models.ReactionKind]models.ReactionDisplayData, error) {
+	if len(threads) == 0 {
+		return nil, nil
+	}
+
+	filter := orm.FilterIn("thread_at", threads)
+	args := filter.Arg()
+	args = append(args, userLimit)
+	rows, err := e.Query(
+		fmt.Sprintf(
+			`with ranked_reactions as (
+				select
+					thread_at,
+					kind,
+					reacted_by_did,
+					row_number() over (partition by thread_at, kind order by created asc) as rn,
+					count(*) over (partition by thread_at, kind) as total
+				from reactions
+				where %s
+			)
+			select thread_at, kind, reacted_by_did, total
+			from ranked_reactions
+			where rn <= ?
+			order by thread_at, kind, rn asc`,
+			filter.Condition(),
+		),
+		args...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("querying: %w", err)
+	}
+	defer rows.Close()
+
+	// aturi -> kind -> {count,users}
+	result := make(map[syntax.ATURI]map[models.ReactionKind]models.ReactionDisplayData)
+
+	for rows.Next() {
+		var aturi syntax.ATURI
+		var kind models.ReactionKind
+		var did syntax.DID
+		var count int
+
+		if err := rows.Scan(&aturi, &kind, &did, &count); err != nil {
+			return nil, fmt.Errorf("scanning row: %w", err)
+		}
+
+		if _, ok := result[aturi]; !ok {
+			result[aturi] = make(map[models.ReactionKind]models.ReactionDisplayData)
+		}
+		data := result[aturi][kind]
+		data.Count = count
+		data.Users = append(data.Users, did.String())
+		result[aturi][kind] = data
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate rows: %w", err)
+	}
+
+	return result, nil
+}
+
+// GetReactionStatusMap returns map of [models.ReactionKind]->[bool]
+func GetReactionStatusMap(e Execer, userDid syntax.DID, threadAt syntax.ATURI) (map[models.ReactionKind]bool, error) {
+	reactionMaps, err := ListReactionStatusMap(e, []syntax.ATURI{threadAt}, userDid)
+	return reactionMaps[threadAt], err
+}
+
+// ListReactionStatusMap returns map of [syntax.ATURI]->[models.ReactionKind]->[bool]
+func ListReactionStatusMap(e Execer, threads []syntax.ATURI, userDid syntax.DID) (map[syntax.ATURI]map[models.ReactionKind]bool, error) {
+	if len(threads) == 0 {
+		return nil, nil
+	}
+
+	filter := orm.FilterIn("thread_at", threads)
+	args := []any{userDid}
+	args = append(args, filter.Arg()...)
+	rows, err := e.Query(
+		fmt.Sprintf(
+			`select thread_at, kind from reactions
+			where reacted_by_did = ? and %s`,
+			filter.Condition(),
+		),
+		args...,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	reactionMap := map[models.ReactionKind]models.ReactionDisplayData{}
-	for _, kind := range models.OrderedReactionKinds {
-		reactionMap[kind] = models.ReactionDisplayData{Count: 0, Users: []string{}}
-	}
+	// aturi -> kind -> bool
+	result := make(map[syntax.ATURI]map[models.ReactionKind]bool)
 
 	for rows.Next() {
+		var aturi syntax.ATURI
 		var kind models.ReactionKind
-		var did string
-		var rn, total int
-		if err := rows.Scan(&kind, &did, &rn, &total); err != nil {
-			return nil, err
+
+		if err := rows.Scan(&aturi, &kind); err != nil {
+			return nil, fmt.Errorf("scanning row: %w", err)
 		}
 
-		data := reactionMap[kind]
-		data.Count = total
-		if userLimit > 0 && rn <= userLimit {
-			data.Users = append(data.Users, did)
+		if _, ok := result[aturi]; !ok {
+			result[aturi] = make(map[models.ReactionKind]bool)
 		}
-		reactionMap[kind] = data
+
+		result[aturi][kind] = true
 	}
 
-	return reactionMap, rows.Err()
-}
-
-func GetReactionStatus(e Execer, userDid string, threadAt syntax.ATURI, kind models.ReactionKind) bool {
-	if _, err := GetReaction(e, userDid, threadAt, kind); err != nil {
-		return false
-	} else {
-		return true
-	}
-}
-
-func GetReactionStatusMap(e Execer, userDid string, threadAt syntax.ATURI) map[models.ReactionKind]bool {
-	statusMap := map[models.ReactionKind]bool{}
-	for _, kind := range models.OrderedReactionKinds {
-		count := GetReactionStatus(e, userDid, threadAt, kind)
-		statusMap[kind] = count
-	}
-	return statusMap
+	return result, nil
 }

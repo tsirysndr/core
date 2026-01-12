@@ -1190,8 +1190,8 @@ type RepoSingleIssueParams struct {
 	Backlinks    []models.RichReferenceLink
 	LabelDefs    map[string]*models.LabelDefinition
 
-	Reactions          map[models.ReactionKind]models.ReactionDisplayData
-	UserReacted        map[models.ReactionKind]bool
+	Reactions          map[syntax.ATURI]map[models.ReactionKind]models.ReactionDisplayData
+	UserReacted        map[syntax.ATURI]map[models.ReactionKind]bool
 	VouchRelationships map[syntax.DID]*models.VouchRelationship
 }
 
@@ -1340,8 +1340,8 @@ type RepoSinglePullParams struct {
 	ActiveRound        int
 	IsInterdiff        bool
 
-	Reactions   map[models.ReactionKind]models.ReactionDisplayData
-	UserReacted map[models.ReactionKind]bool
+	Reactions   map[syntax.ATURI]map[models.ReactionKind]models.ReactionDisplayData
+	UserReacted map[syntax.ATURI]map[models.ReactionKind]bool
 
 	LabelDefs          map[string]*models.LabelDefinition
 	VouchRelationships map[syntax.DID]*models.VouchRelationship

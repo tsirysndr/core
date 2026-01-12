@@ -36,10 +36,11 @@
     <article id="body" class="mt-4 prose dark:prose-invert">{{ .Issue.Body | markdown }}</article>
   {{ end }}
   <div class="mt-4">
+    {{ $aturi := .Issue.AtUri }}
     {{ template "repo/fragments/reactions"
-      (dict "Reactions"   .Reactions
-            "UserReacted" .UserReacted
-            "ThreadAt"    .Issue.AtUri) }}
+      (dict "Reactions"   (index .Reactions $aturi)
+            "UserReacted" (index .UserReacted $aturi)
+            "ThreadAt"    $aturi) }}
   </div>
 </section>
 {{ end }}

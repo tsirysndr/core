@@ -99,14 +99,18 @@ func (rp *Issues) RepoSingleIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reactionMap, err := db.GetReactionMap(rp.db, 20, issue.AtUri())
+	entities := []syntax.ATURI{issue.AtUri()}
+	reactions, err := db.ListReactionDisplayDataMap(rp.db, entities, 20)
 	if err != nil {
-		l.Error("failed to get issue reactions", "err", err)
+		l.Error("failed to get reactions", "err", err)
 	}
 
-	userReactions := map[models.ReactionKind]bool{}
+	var userReactions map[syntax.ATURI]map[models.ReactionKind]bool
 	if user != nil {
-		userReactions = db.GetReactionStatusMap(rp.db, user.Did, issue.AtUri())
+		userReactions, err = db.ListReactionStatusMap(rp.db, entities, syntax.DID(user.Did))
+		if err != nil {
+			l.Error("failed to get user reactions", "err", err)
+		}
 	}
 
 	backlinks, err := db.GetBacklinks(rp.db, issue.AtUri())
@@ -147,7 +151,7 @@ func (rp *Issues) RepoSingleIssue(w http.ResponseWriter, r *http.Request) {
 		Issue:              issue,
 		CommentList:        models.NewCommentList(issue.Comments),
 		Backlinks:          backlinks,
-		Reactions:          reactionMap,
+		Reactions:          reactions,
 		UserReacted:        userReactions,
 		LabelDefs:          defs,
 		VouchRelationships: vouchRelationships,
