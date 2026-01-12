@@ -1213,7 +1213,6 @@ func (p *Pages) EditIssueFragment(w io.Writer, params EditIssueParams) error {
 }
 
 type ThreadReactionFragmentParams struct {
-	ThreadAt  syntax.ATURI
 	Kind      models.ReactionKind
 	Count     int
 	Users     []string
@@ -1631,6 +1630,8 @@ type SingleStringParams struct {
 	Owner            identity.Identity
 	CommentList      []models.CommentListItem
 
+	Reactions          map[syntax.ATURI]map[models.ReactionKind]models.ReactionDisplayData
+	UserReacted        map[syntax.ATURI]map[models.ReactionKind]bool
 	VouchRelationships map[syntax.DID]*models.VouchRelationship
 }
 

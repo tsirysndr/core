@@ -162,6 +162,23 @@ func (s *Strings) contents(w http.ResponseWriter, r *http.Request) {
 		l.Error("failed to get comments", "err", err)
 	}
 
+	var entities []syntax.ATURI
+	for _, c := range comments {
+		entities = append(entities, c.AtUri())
+	}
+	reactions, err := db.ListReactionDisplayDataMap(s.Db, entities, 20)
+	if err != nil {
+		l.Error("failed to get reactions", "err", err)
+	}
+
+	var userReactions map[syntax.ATURI]map[models.ReactionKind]bool
+	if user != nil {
+		userReactions, err = db.ListReactionStatusMap(s.Db, entities, syntax.DID(user.Did))
+		if err != nil {
+			l.Error("failed to get user reactions", "err", err)
+		}
+	}
+
 	vouchRelationships := make(map[syntax.DID]*models.VouchRelationship)
 	if user != nil {
 		var participants []syntax.DID
@@ -185,6 +202,8 @@ func (s *Strings) contents(w http.ResponseWriter, r *http.Request) {
 		Owner:        id,
 		CommentList:  models.NewCommentList(comments),
 
+		Reactions:          reactions,
+		UserReacted:        userReactions,
 		VouchRelationships: vouchRelationships,
 	})
 }

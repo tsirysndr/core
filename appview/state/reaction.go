@@ -19,7 +19,7 @@ func (s *State) React(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "React")
 	currentUser := s.oauth.GetMultiAccountUser(r)
 
-	subject := r.URL.Query().Get("subject")
+	subject := r.FormValue("subject-uri")
 	if subject == "" {
 		l.Warn("invalid form")
 		return
@@ -78,7 +78,6 @@ func (s *State) React(w http.ResponseWriter, r *http.Request) {
 		l.Info("created atproto record", "uri", resp.Uri)
 
 		s.pages.ThreadReactionFragment(w, pages.ThreadReactionFragmentParams{
-			ThreadAt:  subjectUri,
 			Kind:      reactionKind,
 			Count:     reactionMap[reactionKind].Count,
 			Users:     reactionMap[reactionKind].Users,
@@ -117,7 +116,6 @@ func (s *State) React(w http.ResponseWriter, r *http.Request) {
 		}
 
 		s.pages.ThreadReactionFragment(w, pages.ThreadReactionFragmentParams{
-			ThreadAt:  subjectUri,
 			Kind:      reactionKind,
 			Count:     reactionMap[reactionKind].Count,
 			Users:     reactionMap[reactionKind].Users,

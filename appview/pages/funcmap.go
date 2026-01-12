@@ -481,6 +481,22 @@ func (p *Pages) funcMap() template.FuncMap {
 		"isGenerated": func(path string) bool {
 			return enry.IsGenerated(path, nil)
 		},
+		// NOTE(boltless): I know... I hate doing this too
+		"asReactionMapMap": func(dict any) map[syntax.ATURI]map[models.ReactionKind]models.ReactionDisplayData {
+			if dict == nil {
+				return make(map[syntax.ATURI]map[models.ReactionKind]models.ReactionDisplayData)
+			}
+			m, _ := dict.(map[syntax.ATURI]map[models.ReactionKind]models.ReactionDisplayData)
+			return m
+		},
+		"asReactionStatusMapMap": func(dict any) map[syntax.ATURI]map[models.ReactionKind]bool {
+			if dict == nil {
+				log.Println("returning empty map")
+				return make(map[syntax.ATURI]map[models.ReactionKind]bool)
+			}
+			m, _ := dict.(map[syntax.ATURI]map[models.ReactionKind]bool)
+			return m
+		},
 		// constant values used to define a template
 		"const": func() map[string]any {
 			return map[string]any{

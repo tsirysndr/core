@@ -597,9 +597,11 @@
       {{ range $item.Comments }}
         {{/* template "submissionComment" . */}}
         {{ template "comment"
-          (dict "LoggedInUser" $root.LoggedInUser
+          (dict "LoggedInUser"      $root.LoggedInUser
+                "Reactions"         (index (asReactionMapMap $root.Reactions) .AtUri)
+                "UserReacted"       (index (asReactionStatusMapMap $root.UserReacted) .AtUri)
                 "VouchRelationship" (index $root.VouchRelationships .Did)
-                "Comment" .) }}
+                "Comment"           .) }}
       {{ end }}
     </div>
     {{ if gt $c 0}}

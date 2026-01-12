@@ -1,6 +1,5 @@
 {{ define "repo/fragments/reaction" }}
     <button
-        id="reactIndi-{{ .Kind }}"
         class="flex justify-center items-center min-w-8 min-h-8 rounded border
             leading-4 px-3 gap-1 relative group
             {{ if eq .Count 0 }}
@@ -26,12 +25,12 @@
           title="{{ .Kind }}"
         {{ end }}
         {{ if .IsReacted }}
-            hx-delete="/react?subject={{ .ThreadAt }}&kind={{ .Kind }}"
+            hx-delete="/react?kind={{ .Kind }}"
         {{ else }}
-            hx-post="/react?subject={{ .ThreadAt }}&kind={{ .Kind }}"
+            hx-post="/react?kind={{ .Kind }}"
         {{ end }}
         hx-swap="outerHTML"
-        hx-trigger="click from:(#reactBtn-{{ .Kind }}, #reactIndi-{{ .Kind }})"
+        hx-trigger="click from:(previous #reactBtn-{{ .Kind }}, closest button)"
         hx-disabled-elt="this"
     >
         <span>{{ .Kind }}</span> <span>{{ .Count }}</span>

@@ -100,6 +100,9 @@ func (rp *Issues) RepoSingleIssue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	entities := []syntax.ATURI{issue.AtUri()}
+	for _, c := range issue.Comments {
+		entities = append(entities, c.AtUri())
+	}
 	reactions, err := db.ListReactionDisplayDataMap(rp.db, entities, 20)
 	if err != nil {
 		l.Error("failed to get reactions", "err", err)

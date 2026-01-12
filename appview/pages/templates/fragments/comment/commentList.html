@@ -14,6 +14,8 @@
     {{ template "topLevelComment"
       (dict
         "LoggedInUser"      $root.LoggedInUser
+        "Reactions"         (index (asReactionMapMap $root.Reactions) $item.Self.AtUri)
+        "UserReacted"       (index (asReactionStatusMapMap $root.UserReacted) $item.Self.AtUri)
         "VouchRelationship" (index $root.VouchRelationships $item.Self.Did)
         "Comment"           $item.Self) }}
 
@@ -23,6 +25,8 @@
           {{ template "replyComment"
             (dict
               "LoggedInUser"      $root.LoggedInUser
+              "Reactions"         (index (asReactionMapMap $root.Reactions) $reply.AtUri)
+              "UserReacted"       (index (asReactionStatusMapMap $root.UserReacted) $reply.AtUri)
               "VouchRelationship" (index $root.VouchRelationships $reply.Did)
               "Comment"           $reply) }}
         </div>
@@ -58,7 +62,7 @@
 {{ end }}
 
 {{ define "replyComment" }}
-<div class="py-4 pr-4 w-full mx-auto overflow-hidden flex gap-2 ">
+<div class="py-4 pr-4 w-full mx-auto flex gap-2 ">
   <div class="flex-shrink-0">
     {{ template "user/fragments/picLink" (list .Comment.Did.String "size-8 mr-1" .VouchRelationship) }}
   </div>

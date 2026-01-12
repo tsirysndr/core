@@ -1,7 +1,11 @@
 {{ define "fragments/comment/commentBody" }}
 <div class="comment-body">
   {{ if not .Comment.Deleted }}
-    <div class="prose dark:prose-invert">{{ .Comment.Body.Text | markdown }}</div>
+    <div class="prose dark:prose-invert mb-1">{{ .Comment.Body.Text | markdown }}</div>
+    {{ template "repo/fragments/reactions"
+      (dict "Reactions"   .Reactions
+            "UserReacted" .UserReacted
+            "ThreadAt"    .Comment.AtUri) }}
   {{ else }}
     <div class="prose dark:prose-invert italic text-gray-500 dark:text-gray-400">[deleted by author]</div>
   {{ end }}

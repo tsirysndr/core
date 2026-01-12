@@ -1,10 +1,13 @@
 {{ define "repo/fragments/reactions" }}
-  <div class="flex flex-wrap items-center gap-2">
+  <div class="reactions flex flex-wrap items-center gap-2" hx-include="this">
     {{- $reactions   := .Reactions -}}
     {{- $userReacted := .UserReacted -}}
     {{- $threadAt    := .ThreadAt -}}
 
+    <input name="subject-uri" type="hidden" value="{{ $threadAt }}">
+
     {{ template "reactionsPopup" }}
+
     {{ range $kind := const.OrderedReactionKinds }}
       {{ $reactionData := index $reactions $kind }}
       {{ template "repo/fragments/reaction"
@@ -12,17 +15,13 @@
           "Kind"      $kind
           "Count"     $reactionData.Count
           "IsReacted" (index $userReacted $kind)
-          "ThreadAt"  $threadAt
           "Users"     $reactionData.Users) }}
     {{ end }}
   </div>
 {{ end }}
 
 {{ define "reactionsPopup" }}
-  <details
-    id="reactionsPopUp"
-    class="relative inline-block"
-  >
+  <details class="relative inline-block">
     <summary
       class="flex justify-center items-center min-w-8 min-h-8 rounded border border-gray-200 dark:border-gray-700
       hover:bg-gray-50
@@ -44,7 +43,7 @@
         >
           {{ $kind }}
         </button>
-          {{ end }}
+        {{ end }}
       </div>
   </details>
 {{ end }}
