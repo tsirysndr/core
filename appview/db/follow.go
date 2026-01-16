@@ -11,9 +11,18 @@ import (
 	"tangled.org/core/orm"
 )
 
-func AddFollow(e Execer, follow *models.Follow) error {
-	query := `insert or ignore into follows (did, subject_did, rkey) values (?, ?, ?)`
-	_, err := e.Exec(query, follow.UserDid, follow.SubjectDid, follow.Rkey)
+func UpsertFollow(e Execer, follow models.Follow) error {
+	_, err := e.Exec(
+		`insert into follows (did, rkey, subject_did, created)
+		values (?, ?, ?, ?)
+		on conflict(did, rkey) do update set
+			subject_did = excluded.subject_did,
+			created     = excluded.created`,
+		follow.UserDid,
+		follow.Rkey,
+		follow.SubjectDid,
+		follow.FollowedAt.Format(time.RFC3339),
+	)
 	return err
 }
 

@@ -77,19 +77,36 @@ func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodPost:
-		createdAt := time.Now().Format(time.RFC3339)
-		rkey := tid.TID()
+		star := models.Star{
+			Did:         currentUser.Did,
+			Rkey:        tid.TID(),
+			SubjectType: subjectType,
+			Subject:     subjectKey,
+			Created:     time.Now(),
+		}
 
-		starRecord := &tangled.FeedStar{
-			CreatedAt: createdAt,
-			Subject:   starSubject,
+		tx, err := s.db.BeginTx(r.Context(), nil)
+		if err != nil {
+			l.Error("failed to start transaction", "err", err)
+			return
+		}
+		defer tx.Rollback()
+
+		if err := db.UpsertStar(tx, star); err != nil {
+			l.Error("failed to star", "err", err)
+			return
 		}
 
 		resp, err := comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 			Collection: tangled.FeedStarNSID,
 			Repo:       currentUser.Did,
-			Rkey:       rkey,
-			Record:     &lexutil.LexiconTypeDecoder{Val: starRecord},
+			Rkey:       star.Rkey,
+			Record: &lexutil.LexiconTypeDecoder{
+				Val: &tangled.FeedStar{
+					CreatedAt: star.Created.Format(time.RFC3339),
+					Subject:   starSubject,
+				},
+			},
 		})
 		if err != nil {
 			l.Error("failed to create atproto record", "err", err)
@@ -97,25 +114,17 @@ func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 		}
 		l.Info("created atproto record", "uri", resp.Uri)
 
-		star := &models.Star{
-			Did:         currentUser.Did,
-			SubjectType: subjectType,
-			Subject:     subjectKey,
-			Rkey:        rkey,
+		if err := tx.Commit(); err != nil {
+			l.Error("failed to commit transaction", "err", err)
+			// DB op failed but record is created in PDS. Ingester will backfill the missed operation
 		}
 
-		err = db.AddStar(s.db, star)
-		if err != nil {
-			l.Error("failed to star", "err", err)
-			return
-		}
+		s.notifier.NewStar(r.Context(), &star)
 
 		starCount, err := db.GetStarCount(s.db, subjectType, subjectKey)
 		if err != nil {
 			l.Error("failed to get star count", "subject", subjectKey, "err", err)
 		}
-
-		s.notifier.NewStar(r.Context(), star)
 
 		s.pages.StarBtnFragment(w, pages.StarBtnFragmentParams{
 			IsStarred: true,
@@ -162,9 +171,9 @@ func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 		}
 
 		s.notifier.DeleteStar(r.Context(), &models.Star{
-			Did:    currentUser.Did,
+			Did:         currentUser.Did,
 			SubjectType: subjectType,
-			Subject: subjectKey,
+			Subject:     subjectKey,
 			// Rkey
 			// Created
 		})

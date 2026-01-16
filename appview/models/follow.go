@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	"tangled.org/core/api/tangled"
 )
 
 type Follow struct {
@@ -9,6 +11,13 @@ type Follow struct {
 	SubjectDid string
 	FollowedAt time.Time
 	Rkey       string
+}
+
+func (f *Follow) AsRecord() tangled.GraphFollow {
+	return tangled.GraphFollow{
+		Subject:   f.SubjectDid,
+		CreatedAt: f.FollowedAt.Format(time.RFC3339),
+	}
 }
 
 type FollowStats struct {

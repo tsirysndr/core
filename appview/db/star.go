@@ -13,14 +13,19 @@ import (
 	"tangled.org/core/orm"
 )
 
-func AddStar(e Execer, star *models.Star) error {
-	query := `insert or ignore into stars (did, subject_type, subject, rkey) values (?, ?, ?, ?)`
+func UpsertStar(e Execer, star models.Star) error {
 	_, err := e.Exec(
-		query,
+		`insert into stars (did, rkey, subject_type, subject, created)
+		values (?, ?, ?, ?, ?)
+		on conflict(did, rkey) do update set
+			subject_type = excluded.subject_type,
+			subject      = excluded.subject,
+			created      = excluded.created`,
 		star.Did,
+		star.Rkey,
 		string(star.SubjectType),
 		star.Subject,
-		star.Rkey,
+		star.Created.Format(time.RFC3339),
 	)
 	return err
 }

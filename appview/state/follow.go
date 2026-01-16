@@ -43,17 +43,33 @@ func (s *State) Follow(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodPost:
-		createdAt := time.Now().Format(time.RFC3339)
-		rkey := tid.TID()
+		follow := models.Follow{
+			UserDid:    currentUser.Did,
+			SubjectDid: subjectIdent.DID.String(),
+			Rkey:       tid.TID(),
+			FollowedAt: time.Now(),
+		}
+
+		tx, err := s.db.BeginTx(r.Context(), nil)
+		if err != nil {
+			s.logger.Error("failed to start transaction", "err", err)
+			return
+		}
+		defer tx.Rollback()
+
+		if err := db.UpsertFollow(tx, follow); err != nil {
+			s.logger.Error("failed to follow", "err", err)
+			return
+		}
+
+		record := follow.AsRecord()
 		resp, err := comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 			Collection: tangled.GraphFollowNSID,
 			Repo:       currentUser.Did,
-			Rkey:       rkey,
+			Rkey:       follow.Rkey,
 			Record: &lexutil.LexiconTypeDecoder{
-				Val: &tangled.GraphFollow{
-					Subject:   subjectIdent.DID.String(),
-					CreatedAt: createdAt,
-				}},
+				Val: &record,
+			},
 		})
 		if err != nil {
 			l.Error("failed to create atproto record", "err", err)
@@ -62,19 +78,12 @@ func (s *State) Follow(w http.ResponseWriter, r *http.Request) {
 
 		l.Info("created atproto record", "uri", resp.Uri)
 
-		follow := &models.Follow{
-			UserDid:    currentUser.Did,
-			SubjectDid: subjectIdent.DID.String(),
-			Rkey:       rkey,
+		if err := tx.Commit(); err != nil {
+			s.logger.Error("failed to commit transaction", "err", err)
+			// DB op failed but record is created in PDS. Ingester will backfill the missed operation
 		}
 
-		err = db.AddFollow(s.db, follow)
-		if err != nil {
-			l.Error("failed to follow", "err", err)
-			return
-		}
-
-		s.notifier.NewFollow(r.Context(), follow)
+		s.notifier.NewFollow(r.Context(), &follow)
 
 		followStats, err := db.GetFollowerFollowingCount(s.db, subjectIdent.DID.String())
 		if err != nil {

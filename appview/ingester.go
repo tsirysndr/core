@@ -200,14 +200,14 @@ func (i *Ingester) ingestStar(ctx context.Context, e *jmodels.Event, l *slog.Log
 		record := tangled.FeedStar{}
 		unmarshalErr := json.Unmarshal(raw, &record)
 
-		star := &models.Star{
+		star := models.Star{
 			Did:  did,
 			Rkey: e.Commit.RKey,
 		}
 
 		switch {
 		case unmarshalErr != nil:
-			resolved, resolveErr := i.resolveOldFormatStar(raw, star, l)
+			resolved, resolveErr := i.resolveOldFormatStar(raw, &star, l)
 			if resolveErr != nil {
 				l.Error("invalid record", "newFmtErr", unmarshalErr, "oldFmtErr", resolveErr)
 				return unmarshalErr
@@ -236,7 +236,7 @@ func (i *Ingester) ingestStar(ctx context.Context, e *jmodels.Event, l *slog.Log
 			return fmt.Errorf("star record has empty subject union")
 		}
 
-		err = db.AddStar(i.Db, star)
+		err = db.UpsertStar(i.Db, star)
 	case jmodels.CommitOperationDelete:
 		err = db.DeleteStarByRkey(i.Db, did, e.Commit.RKey)
 	}
@@ -265,7 +265,7 @@ func (i *Ingester) ingestFollow(e *jmodels.Event, l *slog.Logger) error {
 			return err
 		}
 
-		err = db.AddFollow(i.Db, &models.Follow{
+		err = db.UpsertFollow(i.Db, models.Follow{
 			UserDid:    did,
 			SubjectDid: record.Subject,
 			Rkey:       e.Commit.RKey,
@@ -1733,21 +1733,15 @@ func (i *Ingester) ingestReaction(e *jmodels.Event, l *slog.Logger) error {
 			created = time.Now()
 		}
 
-		tx, err := i.Db.Begin()
-		if err != nil {
-			return fmt.Errorf("failed to start transaction: %w", err)
+		reaction := models.Reaction{
+			ReactedByDid: did,
+			Rkey:         rkey,
+			ThreadAt:     subjectUri,
+			Kind:         kind,
+			Created:      created,
 		}
-		defer tx.Rollback()
-
-		if err := db.DeleteReactionByRkey(tx, did, rkey); err != nil {
-			return fmt.Errorf("failed to clear existing reaction: %w", err)
-		}
-		if err := db.AddReaction(tx, did, subjectUri, kind, rkey, created); err != nil {
-			return fmt.Errorf("failed to add reaction: %w", err)
-		}
-
-		if err := tx.Commit(); err != nil {
-			return err
+		if err := db.UpsertReaction(i.Db, reaction); err != nil {
+			return fmt.Errorf("failed to upsert reaction: %w", err)
 		}
 
 	case jmodels.CommitOperationDelete:

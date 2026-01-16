@@ -59,6 +59,14 @@ type Reaction struct {
 	Kind         ReactionKind
 }
 
+func (r *Reaction) AsRecord() tangled.FeedReaction {
+	return tangled.FeedReaction{
+		Subject:   r.ThreadAt.String(),
+		Reaction:  r.Kind.String(),
+		CreatedAt: r.Created.Format(time.RFC3339),
+	}
+}
+
 type ReactionDisplayData struct {
 	Count int
 	Users []string

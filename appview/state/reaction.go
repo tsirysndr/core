@@ -48,37 +48,50 @@ func (s *State) React(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodPost:
-		createdAt := time.Now()
-		rkey := tid.TID()
+		reaction := models.Reaction{
+			ReactedByDid: currentUser.Did,
+			Rkey:         tid.TID(),
+			Kind:         reactionKind,
+			ThreadAt:     subjectUri,
+			Created:      time.Now(),
+		}
+
+		tx, err := s.db.BeginTx(r.Context(), nil)
+		if err != nil {
+			s.logger.Error("failed to start transaction", "err", err)
+			return
+		}
+		defer tx.Rollback()
+
+		if err := db.UpsertReaction(tx, reaction); err != nil {
+			l.Error("db: failed to upsert reaction", "err", err)
+			return
+		}
+
+		record := reaction.AsRecord()
 		resp, err := comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 			Collection: tangled.FeedReactionNSID,
 			Repo:       currentUser.Did,
-			Rkey:       rkey,
+			Rkey:       reaction.Rkey,
 			Record: &lexutil.LexiconTypeDecoder{
-				Val: &tangled.FeedReaction{
-					Subject:   subjectUri.String(),
-					Reaction:  reactionKind.String(),
-					CreatedAt: createdAt.Format(time.RFC3339),
-				},
+				Val: &record,
 			},
 		})
 		if err != nil {
 			l.Error("failed to create atproto record", "err", err)
 			return
 		}
+		l.Info("created atproto record", "uri", resp.Uri)
 
-		err = db.AddReaction(s.db, currentUser.Did, subjectUri, reactionKind, rkey, createdAt)
-		if err != nil {
-			l.Error("failed to react", "err", err)
-			return
+		if err := tx.Commit(); err != nil {
+			s.logger.Error("failed to commit transaction", "err", err)
+			// DB op failed but record is created in PDS. Ingester will backfill the missed operation
 		}
 
 		reactionMap, err := db.GetReactionMap(s.db, 20, subjectUri)
 		if err != nil {
-			l.Error("failed to get reactions", "subjectUri", subjectUri, "err", err)
+			l.Error("failed to get reactions", "subject", subjectUri)
 		}
-
-		l.Info("created atproto record", "uri", resp.Uri)
 
 		s.pages.ThreadReactionFragment(w, pages.ThreadReactionFragmentParams{
 			Kind:        reactionKind,
