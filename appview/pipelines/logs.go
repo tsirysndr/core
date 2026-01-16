@@ -8,7 +8,7 @@ import (
 
 	terminal "github.com/buildkite/terminal-to-html/v3"
 	"github.com/gorilla/websocket"
-	"tangled.org/core/appview/pages/markup"
+	"tangled.org/core/appview/pages/markup/sanitizer"
 	"tangled.org/core/hostutil"
 )
 
@@ -20,14 +20,12 @@ var sequenceRe = regexp.MustCompile(`\x1b\[([\d;]*)m`)
 //
 // the stack contents are prepended to each new line so colours carry over.
 type ansiState struct {
-	stack     []string
-	sanitizer markup.Sanitizer
+	stack []string
 }
 
 func NewAnsiState() *ansiState {
 	return &ansiState{
-		stack:     []string{},
-		sanitizer: markup.NewSanitizer(),
+		stack: []string{},
 	}
 }
 
@@ -37,7 +35,7 @@ func (a *ansiState) Render(line string) template.HTML {
 	// render current line with the existing prefix
 	rendered := terminal.Render([]byte(prefix + line))
 	// sanitize
-	sanitized := a.sanitizer.SanitizeLogs(rendered)
+	sanitized := sanitizer.SanitizeLogs(rendered)
 
 	// update the stack with sequences from current line
 	for _, m := range sequenceRe.FindAllStringSubmatch(line, -1) {

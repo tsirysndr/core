@@ -25,6 +25,7 @@ import (
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages/markup"
+	"tangled.org/core/appview/pages/markup/sanitizer"
 	"tangled.org/core/appview/pages/repoinfo"
 	"tangled.org/core/appview/pagination"
 	"tangled.org/core/idresolver"
@@ -90,7 +91,6 @@ func NewPages(config *config.Config, res *idresolver.Resolver, database *db.DB, 
 		Hostname:   config.Core.AppviewHost,
 		CamoUrl:    config.Camo.Host,
 		CamoSecret: config.Camo.SharedSecret,
-		Sanitizer:  markup.NewSanitizer(),
 		Files:      Files,
 	}
 
@@ -346,7 +346,7 @@ func (p *Pages) TermsOfService(w io.Writer, params TermsOfServiceParams) error {
 	rctx := p.rctx.Clone()
 	rctx.RendererType = markup.RendererTypeDefault
 	htmlString := rctx.RenderMarkdown(string(markdownBytes))
-	sanitized := rctx.SanitizeDefault(htmlString)
+	sanitized := sanitizer.SanitizeDefault(htmlString)
 	params.Content = template.HTML(sanitized)
 
 	return p.execute("legal/terms", w, params)
@@ -375,7 +375,7 @@ func (p *Pages) PrivacyPolicy(w io.Writer, params PrivacyPolicyParams) error {
 	rctx := p.rctx.Clone()
 	rctx.RendererType = markup.RendererTypeDefault
 	htmlString := rctx.RenderMarkdown(string(markdownBytes))
-	sanitized := rctx.SanitizeDefault(htmlString)
+	sanitized := sanitizer.SanitizeDefault(htmlString)
 	params.Content = template.HTML(sanitized)
 
 	return p.execute("legal/privacy", w, params)
@@ -920,7 +920,7 @@ func (p *Pages) RepoIndexPage(w io.Writer, params RepoIndexParams) error {
 		case markup.FormatMarkdown:
 			params.Raw = false
 			htmlString := rctx.RenderMarkdown(params.Readme)
-			sanitized := rctx.SanitizeDefault(htmlString)
+			sanitized := sanitizer.SanitizeDefault(htmlString)
 			params.HTMLReadme = template.HTML(sanitized)
 		default:
 			params.Raw = true
@@ -1039,7 +1039,7 @@ func (p *Pages) RepoTree(w io.Writer, params RepoTreeParams) error {
 		case markup.FormatMarkdown:
 			params.Raw = false
 			htmlString := rctx.RenderMarkdown(params.Readme)
-			sanitized := rctx.SanitizeDefault(htmlString)
+			sanitized := sanitizer.SanitizeDefault(htmlString)
 			params.HTMLReadme = template.HTML(sanitized)
 		default:
 			params.Raw = true

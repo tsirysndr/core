@@ -12,7 +12,6 @@ import (
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/pages/repoinfo"
-	"tangled.org/core/appview/validator"
 	"tangled.org/core/patchutil"
 	"tangled.org/core/types"
 )
@@ -371,8 +370,7 @@ index 0000000..1111111 100644
 
 func TestPrefetchComparisonPatch(t *testing.T) {
 	s := &Pulls{
-		validator: &validator.Validator{},
-		logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 
 	cases := []struct {
@@ -408,8 +406,7 @@ func TestPrefetchComparisonPatch(t *testing.T) {
 
 func TestPrefetchComparisonValidPatch(t *testing.T) {
 	s := &Pulls{
-		validator: &validator.Validator{},
-		logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 	patch := `diff --git a/a.txt b/a.txt
 index 0000000..1111111 100644
@@ -435,8 +432,7 @@ index 0000000..1111111 100644
 
 func TestPrefetchComparisonMissingInputs(t *testing.T) {
 	s := &Pulls{
-		validator: &validator.Validator{},
-		logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 
 	cases := []struct {

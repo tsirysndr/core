@@ -12,7 +12,6 @@ import (
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
-	"tangled.org/core/appview/validator"
 	"tangled.org/core/orm"
 )
 
@@ -25,9 +24,8 @@ func newStringIngester(t *testing.T) *Ingester {
 	}
 	t.Cleanup(func() { d.Close() })
 	return &Ingester{
-		Db:        d,
-		Logger:    slog.New(slog.DiscardHandler),
-		Validator: &validator.Validator{},
+		Db:     d,
+		Logger: slog.New(slog.DiscardHandler),
 	}
 }
 

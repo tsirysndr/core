@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/bluesky-social/indigo/api/atproto"
@@ -120,6 +122,167 @@ func (l *LabelDefinition) AsRecord() tangled.LabelDefinition {
 	}
 }
 
+var (
+	// Label name should be alphanumeric with hyphens/underscores, but not start/end with them
+	labelNameRegex = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?$`)
+	// Color should be a valid hex color
+	colorRegex = regexp.MustCompile(`^#[a-fA-F0-9]{6}$`)
+	// You can only label issues and pulls presently
+	validScopes = []string{tangled.RepoIssueNSID, tangled.RepoPullNSID}
+)
+
+var _ Validator = new(LabelDefinition)
+
+func (l *LabelDefinition) Validate() error {
+	if l.Name == "" {
+		return fmt.Errorf("label name is empty")
+	}
+	if len(l.Name) > 40 {
+		return fmt.Errorf("label name too long (max 40 graphemes)")
+	}
+	if len(l.Name) < 1 {
+		return fmt.Errorf("label name too short (min 1 grapheme)")
+	}
+	if !labelNameRegex.MatchString(l.Name) {
+		return fmt.Errorf("label name contains invalid characters (use only letters, numbers, hyphens, and underscores)")
+	}
+
+	if !l.ValueType.IsConcreteType() {
+		return fmt.Errorf("invalid value type: %q (must be one of: null, boolean, integer, string)", l.ValueType.Type)
+	}
+
+	// null type checks: cannot be enums, multiple or explicit format
+	if l.ValueType.IsNull() && l.ValueType.IsEnum() {
+		return fmt.Errorf("null type cannot be used in conjunction with enum type")
+	}
+	if l.ValueType.IsNull() && l.Multiple {
+		return fmt.Errorf("null type labels cannot be multiple")
+	}
+	if l.ValueType.IsNull() && !l.ValueType.IsAnyFormat() {
+		return fmt.Errorf("format cannot be used in conjunction with null type")
+	}
+
+	// format checks: cannot be used with enum, or integers
+	if !l.ValueType.IsAnyFormat() && l.ValueType.IsEnum() {
+		return fmt.Errorf("enum types cannot be used in conjunction with format specification")
+	}
+
+	if !l.ValueType.IsAnyFormat() && !l.ValueType.IsString() {
+		return fmt.Errorf("format specifications are only permitted on string types")
+	}
+
+	// validate scope (nsid format)
+	if l.Scope == nil {
+		return fmt.Errorf("scope is required")
+	}
+	for _, s := range l.Scope {
+		if _, err := syntax.ParseNSID(s); err != nil {
+			return fmt.Errorf("failed to parse scope: %w", err)
+		}
+		if !slices.Contains(validScopes, s) {
+			return fmt.Errorf("invalid scope: scope must be present in %q", validScopes)
+		}
+	}
+
+	// validate color if provided
+	if l.Color != nil {
+		color := strings.TrimSpace(*l.Color)
+		if color == "" {
+			// empty color is fine, set to nil
+			l.Color = nil
+		} else {
+			if !colorRegex.MatchString(color) {
+				return fmt.Errorf("color must be a valid hex color (e.g. #79FFE1 or #000)")
+			}
+			// expand 3-digit hex to 6-digit hex
+			if len(color) == 4 { // #ABC
+				color = fmt.Sprintf("#%c%c%c%c%c%c", color[1], color[1], color[2], color[2], color[3], color[3])
+			}
+			// convert to uppercase for consistency
+			color = strings.ToUpper(color)
+			l.Color = &color
+		}
+	}
+
+	return nil
+}
+
+// ValidateOperandValue validates the label operation operand value based on
+// label definition.
+//
+// NOTE: This can modify the [LabelOp]
+func (def *LabelDefinition) ValidateOperandValue(op *LabelOp) error {
+	expectedKey := def.AtUri().String()
+	if op.OperandKey != def.AtUri().String() {
+		return fmt.Errorf("operand key %q does not match label definition URI %q", op.OperandKey, expectedKey)
+	}
+
+	valueType := def.ValueType
+
+	// this is permitted, it "unsets" a label
+	if op.OperandValue == "" {
+		op.Operation = LabelOperationDel
+		return nil
+	}
+
+	switch valueType.Type {
+	case ConcreteTypeNull:
+		// For null type, value should be empty
+		if op.OperandValue != "null" {
+			return fmt.Errorf("null type requires empty value, got %q", op.OperandValue)
+		}
+
+	case ConcreteTypeString:
+		// For string type, validate enum constraints if present
+		if valueType.IsEnum() {
+			if !slices.Contains(valueType.Enum, op.OperandValue) {
+				return fmt.Errorf("value %q is not in allowed enum values %v", op.OperandValue, valueType.Enum)
+			}
+		}
+
+		switch valueType.Format {
+		case ValueTypeFormatDid:
+			if _, err := syntax.ParseDID(op.OperandValue); err != nil {
+				return fmt.Errorf("failed to resolve did/handle: %w", err)
+			}
+		case ValueTypeFormatAny, "":
+		default:
+			return fmt.Errorf("unsupported format constraint: %q", valueType.Format)
+		}
+
+	case ConcreteTypeInt:
+		if op.OperandValue == "" {
+			return fmt.Errorf("integer type requires non-empty value")
+		}
+		if _, err := fmt.Sscanf(op.OperandValue, "%d", new(int)); err != nil {
+			return fmt.Errorf("value %q is not a valid integer", op.OperandValue)
+		}
+
+		if valueType.IsEnum() {
+			if !slices.Contains(valueType.Enum, op.OperandValue) {
+				return fmt.Errorf("value %q is not in allowed enum values %v", op.OperandValue, valueType.Enum)
+			}
+		}
+
+	case ConcreteTypeBool:
+		if op.OperandValue != "true" && op.OperandValue != "false" {
+			return fmt.Errorf("boolean type requires value to be 'true' or 'false', got %q", op.OperandValue)
+		}
+
+		// validate enum constraints if present (though uncommon for booleans)
+		if valueType.IsEnum() {
+			if !slices.Contains(valueType.Enum, op.OperandValue) {
+				return fmt.Errorf("value %q is not in allowed enum values %v", op.OperandValue, valueType.Enum)
+			}
+		}
+
+	default:
+		return fmt.Errorf("unsupported value type: %q", valueType.Type)
+	}
+
+	return nil
+}
+
 // random color for a given seed
 func randomColor(seed string) string {
 	hash := sha1.Sum([]byte(seed))
@@ -131,14 +294,14 @@ func randomColor(seed string) string {
 	return fmt.Sprintf("#%s%s%s", r, g, b)
 }
 
-func (ld LabelDefinition) GetColor() string {
-	if ld.Color == nil {
-		seed := fmt.Sprintf("%d:%s:%s", ld.Id, ld.Did, ld.Rkey)
+func (l LabelDefinition) GetColor() string {
+	if l.Color == nil {
+		seed := fmt.Sprintf("%d:%s:%s", l.Id, l.Did, l.Rkey)
 		color := randomColor(seed)
 		return color
 	}
 
-	return *ld.Color
+	return *l.Color
 }
 
 func LabelDefinitionFromRecord(did, rkey string, record tangled.LabelDefinition) (*LabelDefinition, error) {
@@ -203,6 +366,22 @@ func (l LabelOp) SortAt() time.Time {
 
 	// otherwise, createdat is in the future relative to indexedat -> use indexedat
 	return indexedAt
+}
+
+var _ Validator = new(LabelOp)
+
+func (l *LabelOp) Validate() error {
+	if _, err := syntax.ParseATURI(string(l.Subject)); err != nil {
+		return fmt.Errorf("invalid subject URI: %w", err)
+	}
+	if l.Operation != LabelOperationAdd && l.Operation != LabelOperationDel {
+		return fmt.Errorf("invalid operation: %q (must be 'add' or 'del')", l.Operation)
+	}
+	// Validate performed time is not zero/invalid
+	if l.PerformedAt.IsZero() {
+		return fmt.Errorf("performed_at timestamp is required")
+	}
+	return nil
 }
 
 type LabelOperation string

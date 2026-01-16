@@ -274,7 +274,7 @@ func (s *Pulls) resubmitPullHelper(
 		return
 	}
 
-	if err := s.validator.ValidatePatch(&patch); err != nil {
+	if err := validatePatch(&patch); err != nil {
 		s.pages.Notice(w, "resubmit-error", err.Error())
 		return
 	}

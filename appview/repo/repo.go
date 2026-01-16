@@ -27,7 +27,6 @@ import (
 	"tangled.org/core/appview/pagination"
 	"tangled.org/core/appview/reporesolver"
 	"tangled.org/core/appview/sites"
-	"tangled.org/core/appview/validator"
 	xrpcclient "tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/consts"
 	"tangled.org/core/eventconsumer"
@@ -59,7 +58,6 @@ type Repo struct {
 	notifier      notify.Notifier
 	logger        *slog.Logger
 	serviceAuth   *serviceauth.ServiceAuth
-	validator     *validator.Validator
 	cfClient      *cloudflare.Client
 	ogreClient    *ogre.Client
 	codesearch    *codesearch.CodeSearch
@@ -77,7 +75,6 @@ func New(
 	enforcer *rbac.Enforcer,
 	acl *knotacl.Service,
 	logger *slog.Logger,
-	validator *validator.Validator,
 	cfClient *cloudflare.Client,
 	codesearch *codesearch.CodeSearch,
 ) *Repo {
@@ -93,7 +90,6 @@ func New(
 		enforcer:      enforcer,
 		acl:           acl,
 		logger:        logger,
-		validator:     validator,
 		cfClient:      cfClient,
 		ogreClient:    ogre.NewClient(config.Ogre.Host),
 		codesearch:    codesearch,
@@ -255,7 +251,7 @@ func (rp *Repo) AddLabelDef(w http.ResponseWriter, r *http.Request) {
 		Multiple:  multiple,
 		Created:   time.Now(),
 	}
-	if err := rp.validator.ValidateLabelDefinition(&label); err != nil {
+	if err := label.Validate(); err != nil {
 		fail(err.Error(), err)
 		return
 	}

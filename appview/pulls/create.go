@@ -71,7 +71,7 @@ func (s *Pulls) handleBranchBasedPull(
 	patch := comparison.FormatPatchRaw
 	combined := comparison.CombinedPatchRaw
 
-	if err := s.validator.ValidatePatch(&patch); err != nil {
+	if err := validatePatch(&patch); err != nil {
 		s.logger.Error("failed to validate patch", "err", err)
 		s.pages.Notice(w, "pull", "Invalid patch format. Please provide a valid diff.")
 		return
@@ -85,7 +85,7 @@ func (s *Pulls) handleBranchBasedPull(
 }
 
 func (s *Pulls) handlePatchBasedPull(w http.ResponseWriter, r *http.Request, repo *models.Repo, userDid syntax.DID, title, body, targetBranch, patch string, isStacked bool, stackTitles, stackBodies map[string]string) {
-	if err := s.validator.ValidatePatch(&patch); err != nil {
+	if err := validatePatch(&patch); err != nil {
 		s.logger.Error("patch validation failed", "err", err)
 		s.pages.Notice(w, "pull", "Invalid patch format. Please provide a valid diff.")
 		return
@@ -178,7 +178,7 @@ func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo
 	patch := comparison.FormatPatchRaw
 	combined := comparison.CombinedPatchRaw
 
-	if err := s.validator.ValidatePatch(&patch); err != nil {
+	if err := validatePatch(&patch); err != nil {
 		s.logger.Error("failed to validate patch", "err", err)
 		s.pages.Notice(w, "pull", "Invalid patch format. Please provide a valid diff.")
 		return

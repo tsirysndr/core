@@ -372,7 +372,6 @@ func (s *State) IssuesRouter(mw *middleware.Middleware) http.Handler {
 		s.db,
 		s.config,
 		s.notifier,
-		s.validator,
 		s.indexer.Issues,
 		log.SubLogger(s.logger, "issues"),
 	)
@@ -390,7 +389,6 @@ func (s *State) PullsRouter(mw *middleware.Middleware) http.Handler {
 		s.config,
 		s.notifier,
 		s.aclService,
-		s.validator,
 		s.indexer.Pulls,
 		log.SubLogger(s.logger, "pulls"),
 	)
@@ -410,7 +408,6 @@ func (s *State) RepoRouter(mw *middleware.Middleware) http.Handler {
 		s.enforcer,
 		s.aclService,
 		log.SubLogger(s.logger, "repo"),
-		s.validator,
 		s.cfClient,
 		s.codesearch,
 	)
@@ -438,8 +435,8 @@ func (s *State) LabelsRouter() http.Handler {
 		s.oauth,
 		s.pages,
 		s.db,
-		s.validator,
-		s.enforcer,
+		s.idResolver.Directory(),
+		s.aclService,
 		s.notifier,
 		log.SubLogger(s.logger, "labels"),
 	)

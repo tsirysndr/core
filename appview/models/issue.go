@@ -2,10 +2,12 @@ package models
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/appview/pages/markup/sanitizer"
 )
 
 type Issue struct {
@@ -59,6 +61,26 @@ func (i *Issue) State() string {
 		return "open"
 	}
 	return "closed"
+}
+
+var _ Validator = new(Issue)
+
+func (i *Issue) Validate() error {
+	if i.Title == "" {
+		return fmt.Errorf("issue title is empty")
+	}
+	if i.Body == "" {
+		return fmt.Errorf("issue body is empty")
+	}
+
+	if st := strings.TrimSpace(sanitizer.SanitizeDescription(i.Title)); st == "" {
+		return fmt.Errorf("title is empty after HTML sanitization")
+	}
+
+	if st := strings.TrimSpace(sanitizer.SanitizeDefault(i.Body)); st == "" {
+		return fmt.Errorf("body is empty after HTML sanitization")
+	}
+	return nil
 }
 
 func (i *Issue) Participants() []syntax.DID {

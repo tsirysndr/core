@@ -48,7 +48,6 @@ type RenderContext struct {
 	IsDev        bool
 	Hostname     string
 	RendererType RendererType
-	Sanitizer    Sanitizer
 	Files        fs.FS
 }
 
@@ -203,14 +202,6 @@ func visitNode(ctx *RenderContext, node *htmlparse.Node) {
 		}
 	default:
 	}
-}
-
-func (rctx *RenderContext) SanitizeDefault(html string) string {
-	return rctx.Sanitizer.SanitizeDefault(html)
-}
-
-func (rctx *RenderContext) SanitizeDescription(html string) string {
-	return rctx.Sanitizer.SanitizeDescription(html)
 }
 
 type MarkdownTransformer struct {

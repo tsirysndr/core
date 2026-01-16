@@ -2,10 +2,12 @@ package models
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/api/tangled"
@@ -33,6 +35,25 @@ func (s *String) AsRecord() tangled.String {
 		Contents:    s.Contents,
 		CreatedAt:   s.Created.Format(time.RFC3339),
 	}
+}
+
+var _ Validator = new(String)
+
+func (s *String) Validate() error {
+	var err error
+	if utf8.RuneCountInString(s.Filename) > 140 {
+		err = errors.Join(err, fmt.Errorf("filename too long"))
+	}
+
+	if utf8.RuneCountInString(s.Description) > 280 {
+		err = errors.Join(err, fmt.Errorf("description too long"))
+	}
+
+	if len(s.Contents) == 0 {
+		err = errors.Join(err, fmt.Errorf("contents is empty"))
+	}
+
+	return err
 }
 
 func StringFromRecord(did, rkey string, record tangled.String) String {

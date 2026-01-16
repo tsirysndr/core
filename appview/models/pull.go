@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/appview/pages/markup/sanitizer"
 	"tangled.org/core/patchutil"
 	"tangled.org/core/types"
 
@@ -122,6 +123,39 @@ func (p Pull) AsRecord() tangled.RepoPull {
 		Source:      p.PullSource.AsRecord(),
 		DependentOn: dependentOn,
 	}
+}
+
+func (pull *Pull) Validate() error {
+	if len(pull.Submissions) == 0 {
+		return fmt.Errorf("pull must have at least one submission")
+	}
+
+	latestSubmission := pull.LatestSubmission()
+	if latestSubmission == nil {
+		return fmt.Errorf("pull must have a valid latest submission")
+	}
+
+	isFormatPatch := patchutil.IsFormatPatch(latestSubmission.Patch)
+
+	// title and body can only be empty if the patch is a format-patch
+	if !isFormatPatch {
+		if pull.Title == "" {
+			return fmt.Errorf("pull title is empty (required for non-format-patch pulls)")
+		}
+
+		if pull.Body == "" {
+			return fmt.Errorf("pull body is empty (required for non-format-patch pulls)")
+		}
+
+		if st := strings.TrimSpace(sanitizer.SanitizeDescription(pull.Title)); st == "" {
+			return fmt.Errorf("title is empty after HTML sanitization")
+		}
+
+		if sb := strings.TrimSpace(sanitizer.SanitizeDefault(pull.Body)); sb == "" {
+			return fmt.Errorf("body is empty after HTML sanitization")
+		}
+	}
+	return nil
 }
 
 func PullFromRecord(did, rkey string, record tangled.RepoPull, blobs []*io.ReadCloser) (*Pull, error) {

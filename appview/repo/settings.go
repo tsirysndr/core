@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -21,6 +23,7 @@ import (
 	xrpcclient "tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/consts"
 	"tangled.org/core/orm"
+	"tangled.org/core/sets"
 	"tangled.org/core/types"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
@@ -552,14 +555,15 @@ func (rp *Repo) EditBaseSettings(w http.ResponseWriter, r *http.Request) {
 		topicStr    = r.FormValue("topics")
 	)
 
-	err = rp.validator.ValidateURI(website)
-	if website != "" && err != nil {
-		l.Error("invalid uri", "err", err)
-		rp.pages.Notice(w, noticeId, err.Error())
-		return
+	if website != "" {
+		if err := validateURI(website); err != nil {
+			l.Error("invalid uri", "err", err)
+			rp.pages.Notice(w, noticeId, err.Error())
+			return
+		}
 	}
 
-	topics, err := rp.validator.ValidateRepoTopicStr(topicStr)
+	topics, err := parseRepoTopicStr(topicStr)
 	if err != nil {
 		l.Error("invalid topics", "err", err)
 		rp.pages.Notice(w, noticeId, err.Error())
@@ -618,4 +622,60 @@ func (rp *Repo) EditBaseSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rp.pages.HxRefresh(w)
+}
+
+const (
+	maxTopicLen = 50
+	maxTopics   = 20
+)
+
+var (
+	topicRE = regexp.MustCompile(`\A[a-z0-9-]+\z`)
+)
+
+// parseRepoTopicStr parses and validates whitespace-separated topic string.
+//
+// Rules:
+//   - topics are separated by whitespace
+//   - each topic may contain lowercase letters, digits, and hyphens only
+//   - each topic must be <= 50 characters long
+//   - no more than 20 topics allowed
+//   - duplicates are removed
+func parseRepoTopicStr(topicStr string) ([]string, error) {
+	topicStr = strings.TrimSpace(topicStr)
+	if topicStr == "" {
+		return nil, nil
+	}
+	parts := strings.Fields(topicStr)
+	if len(parts) > maxTopics {
+		return nil, fmt.Errorf("too many topics: %d (maximum %d)", len(parts), maxTopics)
+	}
+
+	topicSet := sets.New[string]()
+
+	for _, t := range parts {
+		if topicSet.Contains(t) {
+			continue
+		}
+		if len(t) > maxTopicLen {
+			return nil, fmt.Errorf("topic '%s' is too long (maximum %d characters)", t, maxTopics)
+		}
+		if !topicRE.MatchString(t) {
+			return nil, fmt.Errorf("topic '%s' contains invalid characters (allowed: lowercase letters, digits, hyphens)", t)
+		}
+		topicSet.Insert(t)
+	}
+	return slices.Collect(topicSet.All()), nil
+}
+
+// TODO(boltless): move this to models.Repo instead
+func validateURI(uri string) error {
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return fmt.Errorf("invalid uri format")
+	}
+	if parsed.Scheme == "" {
+		return fmt.Errorf("uri scheme missing")
+	}
+	return nil
 }

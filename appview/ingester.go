@@ -33,7 +33,6 @@ import (
 	"tangled.org/core/appview/notify"
 	"tangled.org/core/appview/repoverify"
 	"tangled.org/core/appview/serververify"
-	"tangled.org/core/appview/validator"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/orm"
 	"tangled.org/core/rbac"
@@ -48,7 +47,6 @@ type Ingester struct {
 	Cache            *cache.Cache
 	Config           *config.Config
 	Logger           *slog.Logger
-	Validator        *validator.Validator
 	MentionsResolver *mentions.Resolver
 	Notifier         notify.Notifier
 	Verifier         repoverify.Verifier
@@ -932,7 +930,7 @@ func (i *Ingester) ingestString(e *jmodels.Event, l *slog.Logger) error {
 
 		string := models.StringFromRecord(did, rkey, record)
 
-		if err = i.Validator.ValidateString(&string); err != nil {
+		if err = string.Validate(); err != nil {
 			l.Error("invalid record", "err", err)
 			return err
 		}
@@ -1363,7 +1361,7 @@ func (i *Ingester) ingestIssue(ctx context.Context, e *jmodels.Event, l *slog.Lo
 			return fmt.Errorf("issue record repo field is not a valid DID: %w", err)
 		}
 
-		if err := i.Validator.ValidateIssue(&issue); err != nil {
+		if err := issue.Validate(); err != nil {
 			return fmt.Errorf("failed to validate issue: %w", err)
 		}
 
@@ -1512,8 +1510,28 @@ func (i *Ingester) ingestPull(ctx context.Context, e *jmodels.Event, l *slog.Log
 		if err != nil {
 			return fmt.Errorf("failed to parse pull from record: %w", err)
 		}
-		if err := i.Validator.ValidatePull(pull); err != nil {
+		if err := pull.Validate(); err != nil {
 			return fmt.Errorf("failed to validate pull: %w", err)
+		}
+		if pull.DependentOn != nil {
+			if err := func() error {
+				dependentPull, err := db.GetPull(
+					i.Db,
+					orm.FilterEq("dependent_on", pull.DependentOn.String()),
+				)
+				if errors.Is(err, sql.ErrNoRows) {
+					return nil
+				}
+				if err != nil {
+					return fmt.Errorf("failed to fetch pulls with same dependency: %w", err)
+				}
+				if dependentPull.AtUri() == pull.AtUri() {
+					return nil
+				}
+				return fmt.Errorf("another pull already depends on %s, which would form a DAG, this is presently disallowed", pull.DependentOn.String())
+			}(); err != nil {
+				return fmt.Errorf("failed to validate pull stack: %w", err)
+			}
 		}
 
 		tx, err := i.Db.BeginTx(ctx, nil)
@@ -1755,7 +1773,7 @@ func (i *Ingester) ingestLabelDefinition(e *jmodels.Event, l *slog.Logger) error
 			return fmt.Errorf("failed to parse labeldef from record: %w", err)
 		}
 
-		if err := i.Validator.ValidateLabelDefinition(def); err != nil {
+		if err := def.Validate(); err != nil {
 			return fmt.Errorf("failed to validate labeldef: %w", err)
 		}
 
@@ -1833,11 +1851,21 @@ func (i *Ingester) ingestLabelOp(ctx context.Context, e *jmodels.Event, l *slog.
 			if !ok {
 				return fmt.Errorf("failed to find label def for key: %s, expected: %q", o.OperandKey, slices.Collect(maps.Keys(actx.Defs)))
 			}
-			if err := i.Validator.ValidateLabelOp(ctx, def, repo, &o); err != nil {
-				if !errors.Is(err, knotacl.ErrKnotUnreachable) {
-					return fmt.Errorf("failed to validate labelop: %w", err)
+			// validate permissions: only collaborators can apply labels currently
+			//
+			// TODO: introduce a repo:triage permission
+			allowed, permErr := i.Acl.HasRepoPermissionErr(ctx, repo, o.Did, "repo:push")
+			if permErr != nil {
+				if !errors.Is(permErr, knotacl.ErrKnotUnreachable) {
+					return fmt.Errorf("enforcing permission: %w", permErr)
 				}
-				l.Warn("ingesting labelop without permission check", "did", o.Did, "err", err)
+				l.Warn("ingesting labelop without permission check", "did", o.Did, "err", permErr)
+			} else if !allowed {
+				return fmt.Errorf("unauthorized label operation")
+			}
+
+			if err := def.ValidateOperandValue(&o); err != nil {
+				return fmt.Errorf("failed to validate labelop: %w", err)
 			}
 		}
 

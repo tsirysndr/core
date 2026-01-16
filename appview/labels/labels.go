@@ -11,50 +11,50 @@ import (
 
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/db"
+	"tangled.org/core/appview/knotacl"
 	"tangled.org/core/appview/middleware"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
-	"tangled.org/core/appview/validator"
 	"tangled.org/core/orm"
-	"tangled.org/core/rbac"
 	"tangled.org/core/tid"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/atclient"
+	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 	"github.com/go-chi/chi/v5"
 )
 
 type Labels struct {
-	oauth     *oauth.OAuth
-	pages     *pages.Pages
-	db        *db.DB
-	logger    *slog.Logger
-	validator *validator.Validator
-	enforcer  *rbac.Enforcer
-	notifier  notify.Notifier
+	oauth    *oauth.OAuth
+	pages    *pages.Pages
+	db       *db.DB
+	dir      identity.Directory
+	logger   *slog.Logger
+	acl      *knotacl.Service
+	notifier notify.Notifier
 }
 
 func New(
 	oauth *oauth.OAuth,
 	pages *pages.Pages,
 	db *db.DB,
-	validator *validator.Validator,
-	enforcer *rbac.Enforcer,
+	dir identity.Directory,
+	acl *knotacl.Service,
 	notifier notify.Notifier,
 	logger *slog.Logger,
 ) *Labels {
 	return &Labels{
-		oauth:     oauth,
-		pages:     pages,
-		db:        db,
-		logger:    logger,
-		validator: validator,
-		enforcer:  enforcer,
-		notifier:  notifier,
+		oauth:    oauth,
+		pages:    pages,
+		db:       db,
+		dir:      dir,
+		logger:   logger,
+		acl:      acl,
+		notifier: notifier,
 	}
 }
 
@@ -167,10 +167,38 @@ func (l *Labels) PerformLabelOp(w http.ResponseWriter, r *http.Request) {
 
 	for i := range labelOps {
 		def := actx.Defs[labelOps[i].OperandKey]
-		if err := l.validator.ValidateLabelOp(r.Context(), def, repo, &labelOps[i]); err != nil {
+		op := labelOps[i]
+
+		// validate permissions: only collaborators can apply labels currently
+		//
+		// TODO: introduce a repo:triage permission
+		ok, err := l.acl.HasRepoPermissionErr(r.Context(), repo, op.Did, "repo:push")
+		if err != nil {
+			fail("Failed to enforce permissions. Please try again later", fmt.Errorf("enforcing permission: %w", err))
+			return
+		}
+		if !ok {
+			fail("Unauthorized label operation", fmt.Errorf("unauthorized label operation"))
+			return
+		}
+
+		// resolve Handle to DID
+		if def.ValueType.IsString() && def.ValueType.IsDidFormat() {
+			val := syntax.AtIdentifier(op.OperandValue)
+			if val.IsHandle() {
+				ident, err := l.dir.Lookup(r.Context(), val)
+				if err != nil {
+					fail(fmt.Sprintf("Failed to resolve handle %q: %s", val, err), err)
+				}
+				op.OperandValue = ident.DID.String()
+			}
+		}
+
+		if err := def.ValidateOperandValue(&op); err != nil {
 			fail(fmt.Sprintf("Invalid form data: %s", err), err)
 			return
 		}
+		labelOps[i] = op
 	}
 
 	// reduce the opset

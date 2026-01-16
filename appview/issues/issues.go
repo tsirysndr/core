@@ -28,7 +28,6 @@ import (
 	"tangled.org/core/appview/pagination"
 	"tangled.org/core/appview/reporesolver"
 	"tangled.org/core/appview/searchquery"
-	"tangled.org/core/appview/validator"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/ogre"
 	"tangled.org/core/orm"
@@ -46,7 +45,6 @@ type Issues struct {
 	config           *config.Config
 	notifier         notify.Notifier
 	logger           *slog.Logger
-	validator        *validator.Validator
 	indexer          *issues_indexer.Indexer
 	ogreClient       *ogre.Client
 }
@@ -61,7 +59,6 @@ func New(
 	db *db.DB,
 	config *config.Config,
 	notifier notify.Notifier,
-	validator *validator.Validator,
 	indexer *issues_indexer.Indexer,
 	logger *slog.Logger,
 ) *Issues {
@@ -76,7 +73,6 @@ func New(
 		config:           config,
 		notifier:         notifier,
 		logger:           logger,
-		validator:        validator,
 		indexer:          indexer,
 		ogreClient:       ogre.NewClient(config.Ogre.Host),
 	}
@@ -206,7 +202,7 @@ func (rp *Issues) EditIssue(w http.ResponseWriter, r *http.Request) {
 		newIssue.Body = r.FormValue("body")
 		newIssue.Mentions, newIssue.References = rp.mentionsResolver.Resolve(r.Context(), newIssue.Body)
 
-		if err := rp.validator.ValidateIssue(newIssue); err != nil {
+		if err := newIssue.Validate(); err != nil {
 			l.Error("validation error", "err", err)
 			rp.pages.Notice(w, noticeId, fmt.Sprintf("Failed to edit issue: %s", err))
 			return
@@ -680,7 +676,7 @@ func (rp *Issues) NewIssue(w http.ResponseWriter, r *http.Request) {
 			Repo:       f,
 		}
 
-		if err := rp.validator.ValidateIssue(issue); err != nil {
+		if err := issue.Validate(); err != nil {
 			l.Error("validation error", "err", err)
 			rp.pages.Notice(w, "issues", fmt.Sprintf("Failed to create issue: %s", err))
 			return

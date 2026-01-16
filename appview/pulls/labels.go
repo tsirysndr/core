@@ -140,7 +140,33 @@ func (s *Pulls) applyCreationLabels(
 		valid := make([]models.LabelOp, 0, len(raw))
 		for _, op := range raw {
 			def := defs[op.OperandKey]
-			if err := s.validator.ValidateLabelOp(ctx, def, repo, &op); err != nil {
+
+			// validate permissions: only collaborators can apply labels currently
+			//
+			// TODO: introduce a repo:triage permission
+			ok, err := s.acl.HasRepoPermissionErr(ctx, repo, op.Did, "repo:push")
+			if err != nil {
+				l.Warn("invalid label op", "err", err, "subject", op.Subject, "key", op.OperandKey)
+				continue
+			}
+			if !ok {
+				l.Warn("forbidden label op", "subject", op.Subject, "key", op.OperandKey)
+				continue
+			}
+
+			// resolve Handle to DID
+			if def.ValueType.IsString() && def.ValueType.IsDidFormat() {
+				val := syntax.AtIdentifier(op.OperandValue)
+				if val.IsHandle() {
+					ident, err := s.idResolver.Directory().Lookup(ctx, val)
+					if err != nil {
+						l.Warn("failed to resolve handle", "err", err, "subject", op.Subject, "key", op.OperandKey)
+					}
+					op.OperandValue = ident.DID.String()
+				}
+			}
+
+			if err := def.ValidateOperandValue(&op); err != nil {
 				l.Warn("invalid label op", "err", err, "subject", op.Subject, "key", op.OperandKey)
 				continue
 			}

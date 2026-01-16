@@ -17,7 +17,7 @@ import (
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
-	"tangled.org/core/appview/pages/markup"
+	"tangled.org/core/appview/pages/markup/sanitizer"
 	"tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/patchutil"
 	"tangled.org/core/types"
@@ -78,7 +78,6 @@ func (s *Pulls) NewPull(w http.ResponseWriter, r *http.Request) {
 				s.pages.Notice(w, "pull", "Title is required for git-diff patches.")
 				return
 			}
-			sanitizer := markup.NewSanitizer()
 			if st := strings.TrimSpace(sanitizer.SanitizeDescription(title)); (st) == "" {
 				s.pages.Notice(w, "pull", "Title is empty after HTML sanitization")
 				return
@@ -426,7 +425,7 @@ func (s *Pulls) prefetchComparison(r *http.Request, repo *models.Repo, source pa
 		if strings.TrimSpace(patch) == "" {
 			return nil, nil, nil
 		}
-		if verr := s.validator.ValidatePatch(&patch); verr != nil {
+		if verr := validatePatch(&patch); verr != nil {
 			return nil, nil, fmt.Errorf("invalid patch: paste a valid git diff or format-patch")
 		}
 		comparison = parsePastedPatch(patch)

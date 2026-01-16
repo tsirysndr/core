@@ -34,6 +34,7 @@ import (
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages/markup"
+	"tangled.org/core/appview/pages/markup/sanitizer"
 	"tangled.org/core/crypto"
 	"tangled.org/core/idresolver"
 )
@@ -313,7 +314,7 @@ func (p *Pages) funcMap() template.FuncMap {
 			rctx := p.rctx.Clone()
 			rctx.RendererType = markup.RendererTypeDefault
 			htmlString := rctx.RenderMarkdown(text)
-			sanitized := rctx.SanitizeDefault(htmlString)
+			sanitized := sanitizer.SanitizeDefault(htmlString)
 			return template.HTML(sanitized)
 		},
 		"description": func(text string) template.HTML {
@@ -324,14 +325,14 @@ func (p *Pages) funcMap() template.FuncMap {
 					emoji.Emoji,
 				),
 			))
-			sanitized := rctx.SanitizeDescription(htmlString)
+			sanitized := sanitizer.SanitizeDescription(htmlString)
 			return template.HTML(sanitized)
 		},
 		"readme": func(text string) template.HTML {
 			rctx := p.rctx.Clone()
 			rctx.RendererType = markup.RendererTypeRepoMarkdown
 			htmlString := rctx.RenderMarkdown(text)
-			sanitized := rctx.SanitizeDefault(htmlString)
+			sanitized := sanitizer.SanitizeDefault(htmlString)
 			return template.HTML(sanitized)
 		},
 		"code": func(content, path string) string {

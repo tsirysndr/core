@@ -35,7 +35,6 @@ import (
 	pipelinessh "tangled.org/core/appview/pipelines/ssh"
 	"tangled.org/core/appview/reporesolver"
 	"tangled.org/core/appview/repoverify"
-	"tangled.org/core/appview/validator"
 	xrpcclient "tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/consts"
 	"tangled.org/core/eventconsumer"
@@ -75,7 +74,6 @@ type State struct {
 	spindlestream    *eventconsumer.Consumer
 	pipelineNotifier *pipelines.StatusNotifier
 	logger           *slog.Logger
-	validator        *validator.Validator
 	cfClient         *cloudflare.Client
 	codesearch       *codesearch.CodeSearch
 }
@@ -122,9 +120,6 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to start oauth handler: %w", err)
 	}
-
-	validator := validator.New(d, res, aclService)
-
 	repoResolver := reporesolver.New(config, aclService, d, rdb)
 
 	mentionsResolver := mentions.New(config, res, d, log.SubLogger(logger, "mentionsResolver"))
@@ -196,7 +191,6 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 		Cache:            rdb,
 		Config:           config,
 		Logger:           log.SubLogger(logger, "ingester"),
-		Validator:        validator,
 		MentionsResolver: mentionsResolver,
 		Notifier:         notifier,
 		Verifier:         repoverify.New(res, config.Core.Dev),
@@ -250,7 +244,6 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 		spindlestream:    spindlestream,
 		pipelineNotifier: pipelineNotifier,
 		logger:           logger,
-		validator:        validator,
 		cfClient:         cfClient,
 		codesearch:       &codesearch.CodeSearch{Host: config.CodeSearch.ZoektUrl},
 	}

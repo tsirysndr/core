@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
@@ -17,9 +18,9 @@ import (
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/reporesolver"
-	"tangled.org/core/appview/validator"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/ogre"
+	"tangled.org/core/patchutil"
 
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 )
@@ -37,7 +38,6 @@ type Pulls struct {
 	notifier         notify.Notifier
 	acl              *knotacl.Service
 	logger           *slog.Logger
-	validator        *validator.Validator
 	indexer          *pulls_indexer.Indexer
 	ogreClient       *ogre.Client
 }
@@ -52,7 +52,6 @@ func New(
 	config *config.Config,
 	notifier notify.Notifier,
 	acl *knotacl.Service,
-	validator *validator.Validator,
 	indexer *pulls_indexer.Indexer,
 	logger *slog.Logger,
 ) *Pulls {
@@ -67,7 +66,6 @@ func New(
 		notifier:         notifier,
 		acl:              acl,
 		logger:           logger,
-		validator:        validator,
 		indexer:          indexer,
 		ogreClient:       ogre.NewClient(config.Ogre.Host),
 	}
@@ -90,3 +88,20 @@ func gz(s string) io.Reader {
 }
 
 func ptrPullState(s models.PullState) *models.PullState { return &s }
+
+func validatePatch(patch *string) error {
+	if patch == nil || *patch == "" {
+		return fmt.Errorf("patch is empty")
+	}
+
+	// add newline if not present to diff style patches
+	if !patchutil.IsFormatPatch(*patch) && !strings.HasSuffix(*patch, "\n") {
+		*patch = *patch + "\n"
+	}
+
+	if err := patchutil.IsPatchValid(*patch); err != nil {
+		return err
+	}
+
+	return nil
+}

@@ -1,4 +1,4 @@
-package markup
+package sanitizer
 
 import (
 	"maps"
@@ -23,28 +23,14 @@ func init() {
 	sharedLogsPolicy = buildLogsPolicy()
 }
 
-type Sanitizer struct {
-	defaultPolicy     *bluemonday.Policy
-	descriptionPolicy *bluemonday.Policy
-	logsPolicy        *bluemonday.Policy
+func SanitizeDefault(html string) string {
+	return sharedDefaultPolicy.Sanitize(html)
 }
-
-func NewSanitizer() Sanitizer {
-	return Sanitizer{
-		defaultPolicy:     sharedDefaultPolicy,
-		descriptionPolicy: sharedDescriptionPolicy,
-		logsPolicy:        sharedLogsPolicy,
-	}
+func SanitizeDescription(html string) string {
+	return sharedDescriptionPolicy.Sanitize(html)
 }
-
-func (s *Sanitizer) SanitizeDefault(html string) string {
-	return s.defaultPolicy.Sanitize(html)
-}
-func (s *Sanitizer) SanitizeDescription(html string) string {
-	return s.descriptionPolicy.Sanitize(html)
-}
-func (s *Sanitizer) SanitizeLogs(html string) string {
-	return s.logsPolicy.Sanitize(html)
+func SanitizeLogs(html string) string {
+	return sharedLogsPolicy.Sanitize(html)
 }
 
 func buildDefaultPolicy() *bluemonday.Policy {
@@ -78,7 +64,6 @@ func buildDefaultPolicy() *bluemonday.Policy {
 		"dl", "dt", "dd", "kbd", "q", "samp", "var", "hr", "ruby", "rt", "rp", "li", "tr", "td", "th", "s", "strike", "summary",
 		"details", "caption", "figure", "figcaption",
 		"abbr", "bdo", "cite", "dfn", "mark", "small", "span", "time", "video", "wbr",
-		"picture", "source",
 	}
 
 	policy.AllowAttrs(generalSafeAttrs...).OnElements(generalSafeElements...)
