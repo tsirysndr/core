@@ -9,7 +9,7 @@ import (
 func seedFollow(t *testing.T, d *DB, userDid, subjectDid, rkey, followedAt string) {
 	t.Helper()
 	if _, err := d.Exec(
-		`insert into follows (user_did, subject_did, rkey, followed_at) values (?, ?, ?, ?)`,
+		`insert into follows (did, subject_did, rkey, created) values (?, ?, ?, ?)`,
 		userDid, subjectDid, rkey, followedAt,
 	); err != nil {
 		t.Fatalf("seedFollow %s -> %s: %v", userDid, subjectDid, err)

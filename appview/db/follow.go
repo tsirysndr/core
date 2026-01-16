@@ -11,14 +11,14 @@ import (
 )
 
 func AddFollow(e Execer, follow *models.Follow) error {
-	query := `insert or ignore into follows (user_did, subject_did, rkey) values (?, ?, ?)`
+	query := `insert or ignore into follows (did, subject_did, rkey) values (?, ?, ?)`
 	_, err := e.Exec(query, follow.UserDid, follow.SubjectDid, follow.Rkey)
 	return err
 }
 
 // Get a follow record
 func GetFollow(e Execer, userDid, subjectDid string) (*models.Follow, error) {
-	query := `select user_did, subject_did, followed_at, rkey from follows where user_did = ? and subject_did = ?`
+	query := `select did, subject_did, created, rkey from follows where did = ? and subject_did = ?`
 	row := e.QueryRow(query, userDid, subjectDid)
 
 	var follow models.Follow
@@ -41,13 +41,13 @@ func GetFollow(e Execer, userDid, subjectDid string) (*models.Follow, error) {
 
 // Remove a follow
 func DeleteFollow(e Execer, userDid, subjectDid string) error {
-	_, err := e.Exec(`delete from follows where user_did = ? and subject_did = ?`, userDid, subjectDid)
+	_, err := e.Exec(`delete from follows where did = ? and subject_did = ?`, userDid, subjectDid)
 	return err
 }
 
 // Remove a follow
 func DeleteFollowByRkey(e Execer, userDid, rkey string) error {
-	_, err := e.Exec(`delete from follows where user_did = ? and rkey = ?`, userDid, rkey)
+	_, err := e.Exec(`delete from follows where did = ? and rkey = ?`, userDid, rkey)
 	return err
 }
 
@@ -56,7 +56,7 @@ func GetFollowerFollowingCount(e Execer, did string) (models.FollowStats, error)
 	err := e.QueryRow(
 		`SELECT
 		COUNT(CASE WHEN subject_did = ? THEN 1 END) AS followers,
-		COUNT(CASE WHEN user_did = ? THEN 1 END) AS following
+		COUNT(CASE WHEN did = ? THEN 1 END) AS following
 		FROM follows;`, did, did).Scan(&followers, &following)
 	if err != nil {
 		return models.FollowStats{}, err
@@ -96,10 +96,10 @@ func GetFollowerFollowingCounts(e Execer, dids []string) (map[string]models.Foll
 			group by subject_did
 		) f
 		full outer join (
-			select user_did as did, count(*) as following
+			select did as did, count(*) as following
 			from follows
-			where user_did in (%s)
-			group by user_did
+			where did in (%s)
+			group by did
 		) g on f.did = g.did`,
 		placeholderStr, placeholderStr)
 
@@ -156,10 +156,10 @@ func GetFollows(e Execer, limit int, filters ...orm.Filter) ([]models.Follow, er
 	}
 
 	query := fmt.Sprintf(
-		`select user_did, subject_did, followed_at, rkey
+		`select did, subject_did, created, rkey
 		from follows
 		%s
-		order by followed_at desc
+		order by created desc
 		%s
 	`, whereClause, limitClause)
 
@@ -198,7 +198,7 @@ func GetFollowers(e Execer, did string) ([]models.Follow, error) {
 }
 
 func GetFollowing(e Execer, did string) ([]models.Follow, error) {
-	return GetFollows(e, 0, orm.FilterEq("user_did", did))
+	return GetFollows(e, 0, orm.FilterEq("did", did))
 }
 
 func getFollowStatuses(e Execer, userDid string, subjectDids []string) (map[string]models.FollowStatus, error) {
@@ -239,7 +239,7 @@ func getFollowStatuses(e Execer, userDid string, subjectDids []string) (map[stri
 	query := fmt.Sprintf(`
 		SELECT subject_did
 		FROM follows
-		WHERE user_did = ? AND subject_did IN (%s)
+		WHERE did = ? AND subject_did IN (%s)
 	`, strings.Join(placeholders, ","))
 
 	rows, err := e.Query(query, args...)

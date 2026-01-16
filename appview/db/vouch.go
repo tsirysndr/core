@@ -408,10 +408,10 @@ func GetVouchSuggestions(e Execer, did string, limit int) ([]models.VouchSuggest
 
 			union all
 
-			select f.subject_did as did, 7 as priority, f.followed_at as created,
+			select f.subject_did as did, 7 as priority, f.created as created,
 				'You recently followed this user' as reason
 			from follows f
-			where f.user_did = ?
+			where f.did = ?
 				and f.subject_did != ?
 
 			union all

@@ -12,7 +12,7 @@ import (
 // keeping the following-set check inside sqlite rather than materializing the
 // followed dids into a huge placeholder list.
 func followingFilter(key, loggedInUserDid string) orm.Filter {
-	return orm.FilterInSubquery(key, "select subject_did from follows where user_did = ?", loggedInUserDid)
+	return orm.FilterInSubquery(key, "select subject_did from follows where did = ?", loggedInUserDid)
 }
 
 // TODO: this gathers heterogenous events from different sources and aggregates
@@ -220,7 +220,7 @@ func getTimelineStars(e Execer, limit int, loggedInUserDid string, followingOnly
 func getTimelineFollows(e Execer, limit int, loggedInUserDid string, followingOnly string) ([]models.TimelineEvent, error) {
 	filters := make([]orm.Filter, 0)
 	if followingOnly != "" {
-		filters = append(filters, followingFilter("user_did", followingOnly))
+		filters = append(filters, followingFilter("did", followingOnly))
 	}
 
 	follows, err := GetFollows(e, limit, filters...)

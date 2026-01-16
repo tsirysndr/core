@@ -2247,6 +2247,124 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	// several changes here
+	// 1. remove autoincrement id for these tables
+	// 2. remove unique constraints other than (did, rkey) to handle non-unique atproto records
+	// 3. add generated at_uri field
+	//
+	// see comments below and commit message for details
+	orm.RunMigration(conn, logger, "flexible-stars-reactions-follows-public_keys", func(tx *sql.Tx) error {
+		// - add at_uri
+		// - remove autoincrement id and the (did, subject) unique constraint
+		if _, err := tx.Exec(`
+			create table stars_new (
+				did text not null,
+				rkey text not null,
+				at_uri text generated always as ('at://' || did || '/' || 'sh.tangled.feed.star' || '/' || rkey) stored,
+
+				subject_type text not null,
+				subject text not null,
+				created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+
+				unique(did, rkey)
+			);
+
+			insert into stars_new (did, rkey, subject_type, subject, created)
+			select did, rkey, subject_type, subject, created from stars;
+
+			drop table stars;
+			alter table stars_new rename to stars;
+
+			create index if not exists idx_stars_subject on stars(subject);
+			create index if not exists idx_stars_subject_type on stars(subject_type);
+			create index if not exists idx_stars_created on stars(created);
+			create index if not exists idx_stars_did_type_created on stars(did, subject_type, created);
+		`); err != nil {
+			return fmt.Errorf("migrating stars: %w", err)
+		}
+
+		// - add at_uri
+		// - reacted_by_did -> did
+		// - thread_at -> subject_at
+		// - remove unique constraint
+		if _, err := tx.Exec(`
+			create table reactions_new (
+				did text not null,
+				rkey text not null,
+				at_uri text generated always as ('at://' || did || '/' || 'sh.tangled.feed.reaction' || '/' || rkey) stored,
+
+				subject_at text not null,
+				kind text not null,
+				created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+
+				unique(did, rkey)
+			);
+
+			insert into reactions_new (did, rkey, subject_at, kind, created)
+			select reacted_by_did, rkey, thread_at, kind, created from reactions;
+
+			drop table reactions;
+			alter table reactions_new rename to reactions;
+		`); err != nil {
+			return fmt.Errorf("migrating reactions: %w", err)
+		}
+
+		// - add at_uri column
+		// - user_did -> did
+		// - followed_at -> created
+		// - remove unique constraint
+		// - remove check constraint
+		if _, err := tx.Exec(`
+			create table follows_new (
+				did text not null,
+				rkey text not null,
+				at_uri text generated always as ('at://' || did || '/' || 'sh.tangled.graph.follow' || '/' || rkey) stored,
+
+				subject_did text not null,
+				created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+
+				unique(did, rkey)
+			);
+
+			insert into follows_new (did, rkey, subject_did, created)
+			select user_did, rkey, subject_did, followed_at from follows;
+
+			drop table follows;
+			alter table follows_new rename to follows;
+
+			create index if not exists idx_follows_subject_did on follows(subject_did);
+			create index if not exists idx_follows_created on follows(created);
+		`); err != nil {
+			return fmt.Errorf("migrating follows: %w", err)
+		}
+
+		// - add at_uri column
+		// - remove foreign key relationship from repos
+		if _, err := tx.Exec(`
+			create table public_keys_new (
+				did text not null,
+				rkey text not null,
+				at_uri text generated always as ('at://' || did || '/' || 'sh.tangled.publicKey' || '/' || rkey) stored,
+
+				name text not null,
+				key text not null,
+				created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+
+				unique(did, rkey)
+			);
+
+			insert or ignore into public_keys_new (did, rkey, name, key, created)
+			select did, rkey, name, key, created from public_keys;
+
+			drop table public_keys;
+			alter table public_keys_new rename to public_keys;
+		`); err != nil {
+			return fmt.Errorf("migrating public_keys: %w", err)
+		}
+
+		return nil
+	})
+
 	return &DB{
 		db,
 		logger,

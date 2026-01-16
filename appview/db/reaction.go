@@ -10,19 +10,19 @@ import (
 	"tangled.org/core/orm"
 )
 
-func AddReaction(e Execer, reactedByDid string, threadAt syntax.ATURI, kind models.ReactionKind, rkey string, created time.Time) error {
-	query := `insert or ignore into reactions (reacted_by_did, thread_at, kind, rkey, created) values (?, ?, ?, ?, ?)`
-	_, err := e.Exec(query, reactedByDid, threadAt, kind, rkey, created.UTC().Format(time.RFC3339))
+func AddReaction(e Execer, did string, subjectAt syntax.ATURI, kind models.ReactionKind, rkey string, created time.Time) error {
+	query := `insert or ignore into reactions (did, subject_at, kind, rkey, created) values (?, ?, ?, ?, ?)`
+	_, err := e.Exec(query, did, subjectAt, kind, rkey, created.UTC().Format(time.RFC3339))
 	return err
 }
 
 // Get a reaction record
-func GetReaction(e Execer, reactedByDid string, threadAt syntax.ATURI, kind models.ReactionKind) (*models.Reaction, error) {
+func GetReaction(e Execer, did string, subjectAt syntax.ATURI, kind models.ReactionKind) (*models.Reaction, error) {
 	query := `
-	select reacted_by_did, thread_at, created, rkey
+	select did, subject_at, created, rkey
 	from reactions
-	where reacted_by_did = ? and thread_at = ? and kind = ?`
-	row := e.QueryRow(query, reactedByDid, threadAt, kind)
+	where did = ? and subject_at = ? and kind = ?`
+	row := e.QueryRow(query, did, subjectAt, kind)
 
 	var reaction models.Reaction
 	var created string
@@ -43,30 +43,30 @@ func GetReaction(e Execer, reactedByDid string, threadAt syntax.ATURI, kind mode
 }
 
 // Remove a reaction
-func DeleteReaction(e Execer, reactedByDid string, threadAt syntax.ATURI, kind models.ReactionKind) error {
-	_, err := e.Exec(`delete from reactions where reacted_by_did = ? and thread_at = ? and kind = ?`, reactedByDid, threadAt, kind)
+func DeleteReaction(e Execer, did string, subjectAt syntax.ATURI, kind models.ReactionKind) error {
+	_, err := e.Exec(`delete from reactions where did = ? and subject_at = ? and kind = ?`, did, subjectAt, kind)
 	return err
 }
 
 // Remove a reaction
-func DeleteReactionByRkey(e Execer, reactedByDid string, rkey string) error {
-	_, err := e.Exec(`delete from reactions where reacted_by_did = ? and rkey = ?`, reactedByDid, rkey)
+func DeleteReactionByRkey(e Execer, did string, rkey string) error {
+	_, err := e.Exec(`delete from reactions where did = ? and rkey = ?`, did, rkey)
 	return err
 }
 
-func GetReactionCount(e Execer, threadAt syntax.ATURI) (int, error) {
+func GetReactionCount(e Execer, subjectAt syntax.ATURI) (int, error) {
 	count := 0
-	err := e.QueryRow(`select count(reacted_by_did) from reactions where thread_at = ?`, threadAt).Scan(&count)
+	err := e.QueryRow(`select count(did) from reactions where subject_at = ?`, subjectAt).Scan(&count)
 	if err != nil {
 		return 0, err
 	}
 	return count, nil
 }
 
-func GetReactionCountByKind(e Execer, threadAt syntax.ATURI, kind models.ReactionKind) (int, error) {
+func GetReactionCountByKind(e Execer, subjectAt syntax.ATURI, kind models.ReactionKind) (int, error) {
 	count := 0
 	err := e.QueryRow(
-		`select count(reacted_by_did) from reactions where thread_at = ? and kind = ?`, threadAt, kind).Scan(&count)
+		`select count(did) from reactions where subject_at = ? and kind = ?`, subjectAt, kind).Scan(&count)
 	if err != nil {
 		return 0, err
 	}
@@ -74,9 +74,9 @@ func GetReactionCountByKind(e Execer, threadAt syntax.ATURI, kind models.Reactio
 }
 
 // GetReactionDisplayDataMap returns map of [models.ReactionKind]->[models.ReactionDisplayData]
-func GetReactionMap(e Execer, userLimit int, threadAt syntax.ATURI) (map[models.ReactionKind]models.ReactionDisplayData, error) {
-	reactionMaps, err := ListReactionDisplayDataMap(e, []syntax.ATURI{threadAt}, userLimit)
-	return reactionMaps[threadAt], err
+func GetReactionMap(e Execer, userLimit int, subjectAt syntax.ATURI) (map[models.ReactionKind]models.ReactionDisplayData, error) {
+	reactionMaps, err := ListReactionDisplayDataMap(e, []syntax.ATURI{subjectAt}, userLimit)
+	return reactionMaps[subjectAt], err
 }
 
 // ListReactionDisplayDataMap returns map of [syntax.ATURI]->[models.ReactionKind]->[models.ReactionDisplayData]
@@ -85,25 +85,25 @@ func ListReactionDisplayDataMap(e Execer, threads []syntax.ATURI, userLimit int)
 		return nil, nil
 	}
 
-	filter := orm.FilterIn("thread_at", threads)
+	filter := orm.FilterIn("subject_at", threads)
 	args := filter.Arg()
 	args = append(args, userLimit)
 	rows, err := e.Query(
 		fmt.Sprintf(
 			`with ranked_reactions as (
 				select
-					thread_at,
+					subject_at,
 					kind,
-					reacted_by_did,
-					row_number() over (partition by thread_at, kind order by created asc) as rn,
-					count(*) over (partition by thread_at, kind) as total
+					did,
+					row_number() over (partition by subject_at, kind order by created asc) as rn,
+					count(*) over (partition by subject_at, kind) as total
 				from reactions
 				where %s
 			)
-			select thread_at, kind, reacted_by_did, total
+			select subject_at, kind, did, total
 			from ranked_reactions
 			where rn <= ?
-			order by thread_at, kind, rn asc`,
+			order by subject_at, kind, rn asc`,
 			filter.Condition(),
 		),
 		args...,
@@ -143,9 +143,9 @@ func ListReactionDisplayDataMap(e Execer, threads []syntax.ATURI, userLimit int)
 }
 
 // GetReactionStatusMap returns map of [models.ReactionKind]->[bool]
-func GetReactionStatusMap(e Execer, userDid syntax.DID, threadAt syntax.ATURI) (map[models.ReactionKind]bool, error) {
-	reactionMaps, err := ListReactionStatusMap(e, []syntax.ATURI{threadAt}, userDid)
-	return reactionMaps[threadAt], err
+func GetReactionStatusMap(e Execer, userDid syntax.DID, subjectAt syntax.ATURI) (map[models.ReactionKind]bool, error) {
+	reactionMaps, err := ListReactionStatusMap(e, []syntax.ATURI{subjectAt}, userDid)
+	return reactionMaps[subjectAt], err
 }
 
 // ListReactionStatusMap returns map of [syntax.ATURI]->[models.ReactionKind]->[bool]
@@ -154,13 +154,13 @@ func ListReactionStatusMap(e Execer, threads []syntax.ATURI, userDid syntax.DID)
 		return nil, nil
 	}
 
-	filter := orm.FilterIn("thread_at", threads)
+	filter := orm.FilterIn("subject_at", threads)
 	args := []any{userDid}
 	args = append(args, filter.Arg()...)
 	rows, err := e.Query(
 		fmt.Sprintf(
-			`select thread_at, kind from reactions
-			where reacted_by_did = ? and %s`,
+			`select subject_at, kind from reactions
+			where did = ? and %s`,
 			filter.Condition(),
 		),
 		args...,
