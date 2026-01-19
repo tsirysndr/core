@@ -2,7 +2,6 @@ package db
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
@@ -25,32 +24,6 @@ func UpsertReaction(e Execer, reaction models.Reaction) error {
 		reaction.Created.Format(time.RFC3339),
 	)
 	return err
-}
-
-// Get a reaction record
-func GetReaction(e Execer, did string, subjectAt syntax.ATURI, kind models.ReactionKind) (*models.Reaction, error) {
-	query := `
-	select did, subject_at, created, rkey
-	from reactions
-	where did = ? and subject_at = ? and kind = ?`
-	row := e.QueryRow(query, did, subjectAt, kind)
-
-	var reaction models.Reaction
-	var created string
-	err := row.Scan(&reaction.ReactedByDid, &reaction.ThreadAt, &created, &reaction.Rkey)
-	if err != nil {
-		return nil, err
-	}
-
-	createdAtTime, err := time.Parse(time.RFC3339, created)
-	if err != nil {
-		log.Println("unable to determine followed at time")
-		reaction.Created = time.Now()
-	} else {
-		reaction.Created = createdAtTime
-	}
-
-	return &reaction, nil
 }
 
 // Remove a reaction
@@ -215,7 +188,6 @@ func ListReactionStatusMap(e Execer, threads []syntax.ATURI, userDid syntax.DID)
 		if _, ok := result[aturi]; !ok {
 			result[aturi] = make(map[models.ReactionKind]bool)
 		}
-
 		result[aturi][kind] = true
 	}
 
