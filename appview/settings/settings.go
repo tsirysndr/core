@@ -31,7 +31,6 @@ import (
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
-	"github.com/gliderlabs/ssh"
 	"github.com/google/uuid"
 )
 
@@ -620,24 +619,20 @@ func (s *Settings) keys(w http.ResponseWriter, r *http.Request) {
 		s.Logger.Warn("keys: unimplemented method")
 		return
 	case http.MethodPut:
-		did := s.OAuth.GetDid(r)
-		key := r.FormValue("key")
-		key = strings.TrimSpace(key)
-		name := r.FormValue("name")
-		client, err := s.OAuth.AuthorizedClient(r)
-		if err != nil {
-			s.Pages.Notice(w, "settings-keys", "Failed to authorize. Try again later.")
-			return
+		created := time.Now()
+		pubKey := models.PublicKey{
+			Did:     s.OAuth.GetDid(r),
+			Rkey:    tid.TID(),
+			Name:    r.FormValue("name"),
+			Key:     strings.TrimSpace(r.FormValue("key")),
+			Created: &created,
 		}
 
-		_, _, _, _, err = ssh.ParseAuthorizedKey([]byte(key))
-		if err != nil {
+		if err := pubKey.Validate(); err != nil {
 			s.Logger.Error("parsing public key", "err", err)
 			s.Pages.NoticeHTML(w, "settings-keys", "That doesn't look like a valid public key. Make sure it's a <strong>public</strong> key.")
 			return
 		}
-
-		rkey := tid.TID()
 
 		tx, err := s.Db.Begin()
 		if err != nil {
@@ -647,23 +642,27 @@ func (s *Settings) keys(w http.ResponseWriter, r *http.Request) {
 		}
 		defer tx.Rollback()
 
-		if err := db.AddPublicKey(tx, did, name, key, rkey); err != nil {
+		if err = db.UpsertPublicKey(tx, pubKey); err != nil {
 			s.Logger.Error("adding public key", "err", err)
 			s.Pages.Notice(w, "settings-keys", "Failed to add public key.")
 			return
 		}
 
+		client, err := s.OAuth.AuthorizedClient(r)
+		if err != nil {
+			s.Pages.Notice(w, "settings-keys", "Failed to authorize. Try again later.")
+			return
+		}
+
 		// store in pds too
+		record := pubKey.AsRecord()
 		resp, err := comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 			Collection: tangled.PublicKeyNSID,
-			Repo:       did,
-			Rkey:       rkey,
+			Repo:       pubKey.Did,
+			Rkey:       pubKey.Rkey,
 			Record: &lexutil.LexiconTypeDecoder{
-				Val: &tangled.PublicKey{
-					CreatedAt: time.Now().Format(time.RFC3339),
-					Key:       key,
-					Name:      name,
-				}},
+				Val: &record,
+			},
 		})
 		// invalid record
 		if err != nil {
@@ -690,26 +689,31 @@ func (s *Settings) keys(w http.ResponseWriter, r *http.Request) {
 
 		name := q.Get("name")
 		rkey := q.Get("rkey")
-		key := q.Get("key")
 
-		s.Logger.Debug("deleting key", "name", name, "rkey", rkey, "key", key)
+		s.Logger.Debug("deleting key", "name", name, "rkey", rkey)
 
-		client, err := s.OAuth.AuthorizedClient(r)
-		if err != nil {
-			s.Logger.Error("failed to authorize client", "err", err)
-			s.Pages.Notice(w, "settings-keys", "Failed to authorize client.")
-			return
-		}
+		if rkey == "" {
+			if err := db.DeletePublicKeyLegacy(s.Db, did, name); err != nil {
+				s.Logger.Error("failed to remove public key", "err", err)
+				s.Pages.Notice(w, "settings-keys", "Failed to remove public key.")
+				return
+			}
+		} else {
+			if err := db.DeletePublicKeyByRkey(s.Db, did, rkey); err != nil {
+				s.Logger.Error("failed to remove public key", "err", err)
+				s.Pages.Notice(w, "settings-keys", "Failed to remove public key.")
+				return
+			}
 
-		if err := db.DeletePublicKey(s.Db, did, name, key); err != nil {
-			s.Logger.Error("removing public key", "err", err)
-			s.Pages.Notice(w, "settings-keys", "Failed to remove public key.")
-			return
-		}
+			client, err := s.OAuth.AuthorizedClient(r)
+			if err != nil {
+				s.Logger.Error("failed to authorize client", "err", err)
+				s.Pages.Notice(w, "settings-keys", "Failed to authorize client.")
+				return
+			}
 
-		if rkey != "" {
 			// remove from pds too
-			_, err := comatproto.RepoDeleteRecord(r.Context(), client, &comatproto.RepoDeleteRecord_Input{
+			_, err = comatproto.RepoDeleteRecord(r.Context(), client, &comatproto.RepoDeleteRecord_Input{
 				Collection: tangled.PublicKeyNSID,
 				Repo:       did,
 				Rkey:       rkey,

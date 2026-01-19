@@ -244,6 +244,7 @@ func (i *Ingester) ingestStar(ctx context.Context, e *jmodels.Event, l *slog.Log
 	if err != nil {
 		return fmt.Errorf("failed to %s star record: %w", e.Commit.Operation, err)
 	}
+	l.Info("processed star", "operation", e.Commit.Operation, "rkey", e.Commit.RKey)
 
 	l.Info("ingested record")
 	return nil
@@ -277,6 +278,7 @@ func (i *Ingester) ingestFollow(e *jmodels.Event, l *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("failed to %s follow record: %w", e.Commit.Operation, err)
 	}
+	l.Info("processed follow", "operation", e.Commit.Operation, "rkey", e.Commit.RKey)
 
 	l.Info("ingested record")
 	return nil
@@ -382,7 +384,7 @@ func (i *Ingester) ingestPublicKey(e *jmodels.Event, l *slog.Logger) error {
 	l = l.With("handler", "ingestPublicKey")
 
 	switch e.Commit.Operation {
-	case jmodels.CommitOperationCreate:
+	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
 		l.Debug("processing add of pubkey")
 		raw := json.RawMessage(e.Commit.Record)
 		record := tangled.PublicKey{}
@@ -391,23 +393,17 @@ func (i *Ingester) ingestPublicKey(e *jmodels.Event, l *slog.Logger) error {
 			l.Error("invalid record", "err", err)
 			return err
 		}
-
-		name := record.Name
-		key := record.Key
-		err = db.AddPublicKey(i.Db, did, name, key, e.Commit.RKey)
-	case jmodels.CommitOperationUpdate:
-		l.Debug("processing update of pubkey")
-		raw := json.RawMessage(e.Commit.Record)
-		record := tangled.PublicKey{}
-		err = json.Unmarshal(raw, &record)
+		pubKey, err := models.PublicKeyFromRecord(syntax.DID(did), syntax.RecordKey(e.Commit.RKey), record)
 		if err != nil {
 			l.Error("invalid record", "err", err)
 			return err
 		}
+		if err := pubKey.Validate(); err != nil {
+			l.Error("invalid record", "err", err)
+			return err
+		}
 
-		name := record.Name
-		key := record.Key
-		err = db.UpdatePublicKey(i.Db, did, name, key, e.Commit.RKey)
+		err = db.UpsertPublicKey(i.Db, pubKey)
 	case jmodels.CommitOperationDelete:
 		l.Debug("processing delete of pubkey")
 		err = db.DeletePublicKeyByRkey(i.Db, did, e.Commit.RKey)
@@ -416,6 +412,7 @@ func (i *Ingester) ingestPublicKey(e *jmodels.Event, l *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("failed to %s pubkey record: %w", e.Commit.Operation, err)
 	}
+	l.Info("processed pubkey", "operation", e.Commit.Operation, "rkey", e.Commit.RKey)
 
 	l.Info("ingested record")
 	return nil

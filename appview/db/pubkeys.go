@@ -6,11 +6,20 @@ import (
 	"tangled.org/core/appview/models"
 )
 
-func AddPublicKey(e Execer, did, name, key, rkey string) error {
+func UpsertPublicKey(e Execer, pubKey models.PublicKey) error {
 	_, err := e.Exec(
-		`insert or ignore into public_keys (did, name, key, rkey)
-		 values (?, ?, ?, ?)`,
-		did, name, key, rkey)
+		`insert into public_keys (did, rkey, name, key, created)
+		values (?, ?, ?, ?, ?)
+		on conflict(did, rkey) do update set
+			name    = excluded.name,
+			key     = excluded.key,
+			created = excluded.created`,
+		pubKey.Did,
+		pubKey.Rkey,
+		pubKey.Name,
+		pubKey.Key,
+		pubKey.Created.Format(time.RFC3339),
+	)
 	return err
 }
 
@@ -21,11 +30,12 @@ func UpdatePublicKey(e Execer, did, name, key, rkey string) error {
 	return err
 }
 
-func DeletePublicKey(e Execer, did, name, key string) error {
+// for public_keys with empty rkey
+func DeletePublicKeyLegacy(e Execer, did, name string) error {
 	_, err := e.Exec(`
 		delete from public_keys
-		where did = ? and name = ? and key = ?`,
-		did, name, key)
+		where did = ? and name = ? and rkey = ''`,
+		did, name)
 	return err
 }
 
