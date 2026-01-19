@@ -126,37 +126,54 @@ func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 
 		return
 	case http.MethodDelete:
-		// find the record in the db
-		star, err := db.GetStar(s.db, currentUser.Did, subjectKey)
+		tx, err := s.db.BeginTx(r.Context(), nil)
 		if err != nil {
-			l.Error("failed to get star relationship", "err", err)
+			l.Error("failed to start transaction", "err", err)
+		}
+		defer tx.Rollback()
+
+		stars, err := db.DeleteStars(tx, syntax.DID(currentUser.Did), subjectKey)
+		if err != nil {
+			l.Error("failed to delete stars from db", "err", err)
 			return
 		}
 
-		_, err = comatproto.RepoDeleteRecord(r.Context(), client, &comatproto.RepoDeleteRecord_Input{
-			Collection: tangled.FeedStarNSID,
-			Repo:       currentUser.Did,
-			Rkey:       star.Rkey,
+		var writes []*comatproto.RepoApplyWrites_Input_Writes_Elem
+		for _, starAt := range stars {
+			writes = append(writes, &comatproto.RepoApplyWrites_Input_Writes_Elem{
+				RepoApplyWrites_Delete: &comatproto.RepoApplyWrites_Delete{
+					Collection: tangled.FeedStarNSID,
+					Rkey:       starAt.RecordKey().String(),
+				},
+			})
+		}
+		_, err = comatproto.RepoApplyWrites(r.Context(), client, &comatproto.RepoApplyWrites_Input{
+			Repo:   currentUser.Did,
+			Writes: writes,
 		})
-
 		if err != nil {
-			l.Error("failed to unstar", "err", err)
+			l.Error("failed to delete stars from PDS", "err", err)
 			return
 		}
 
-		err = db.DeleteStarByRkey(s.db, currentUser.Did, star.Rkey)
-		if err != nil {
-			l.Warn("failed to delete star from DB", "err", err)
-			// this is not an issue, the firehose event might have already done this
+		if err := tx.Commit(); err != nil {
+			l.Error("failed to commit transaction", "err", err)
+			// DB op failed but record is created in PDS. Ingester will backfill the missed operation
 		}
+
+		s.notifier.DeleteStar(r.Context(), &models.Star{
+			Did:    currentUser.Did,
+			SubjectType: subjectType,
+			Subject: subjectKey,
+			// Rkey
+			// Created
+		})
 
 		starCount, err := db.GetStarCount(s.db, subjectType, subjectKey)
 		if err != nil {
 			l.Error("failed to get star count", "subject", subjectKey, "err", err)
 			return
 		}
-
-		s.notifier.DeleteStar(r.Context(), star)
 
 		s.pages.StarBtnFragment(w, pages.StarBtnFragmentParams{
 			IsStarred: false,

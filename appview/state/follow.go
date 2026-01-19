@@ -5,6 +5,7 @@ import (
 	"time"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/db"
@@ -88,29 +89,49 @@ func (s *State) Follow(w http.ResponseWriter, r *http.Request) {
 
 		return
 	case http.MethodDelete:
-		// find the record in the db
-		follow, err := db.GetFollow(s.db, currentUser.Did, subjectIdent.DID.String())
+		tx, err := s.db.BeginTx(r.Context(), nil)
 		if err != nil {
-			l.Error("failed to get follow relationship", "err", err)
+			l.Error("failed to start transaction", "err", err)
+			return
+		}
+		defer tx.Rollback()
+
+		follows, err := db.DeleteFollow(tx, syntax.DID(currentUser.Did), subjectIdent.DID)
+		if err != nil {
+			l.Error("failed to delete follows from db", "err", err)
 			return
 		}
 
-		_, err = comatproto.RepoDeleteRecord(r.Context(), client, &comatproto.RepoDeleteRecord_Input{
-			Collection: tangled.GraphFollowNSID,
-			Repo:       currentUser.Did,
-			Rkey:       follow.Rkey,
+		var writes []*comatproto.RepoApplyWrites_Input_Writes_Elem
+		for _, followAt := range follows {
+			writes = append(writes, &comatproto.RepoApplyWrites_Input_Writes_Elem{
+				RepoApplyWrites_Delete: &comatproto.RepoApplyWrites_Delete{
+					Collection: tangled.GraphFollowNSID,
+					Rkey:       followAt.RecordKey().String(),
+				},
+			})
+		}
+		_, err = comatproto.RepoApplyWrites(r.Context(), client, &comatproto.RepoApplyWrites_Input{
+			Repo:   currentUser.Did,
+			Writes: writes,
 		})
-
 		if err != nil {
-			l.Error("failed to unfollow", "err", err)
+			l.Error("failed to delete follows from PDS", "err", err)
 			return
 		}
 
-		err = db.DeleteFollowByRkey(s.db, currentUser.Did, follow.Rkey)
-		if err != nil {
-			l.Warn("failed to delete follow from DB", "err", err)
-			// this is not an issue, the firehose event might have already done this
+		if err := tx.Commit(); err != nil {
+			l.Error("failed to commit transaction", "err", err)
+			// The record was deleted from the PDS but the local rollback kept it.
+			// Ingester will backfill the missed operation
 		}
+
+		s.notifier.DeleteFollow(r.Context(), &models.Follow{
+			UserDid:    currentUser.Did,
+			SubjectDid: subjectIdent.DID.String(),
+			// Rkey
+			// FollowedAt
+		})
 
 		followStats, err := db.GetFollowerFollowingCount(s.db, subjectIdent.DID.String())
 		if err != nil {
@@ -122,8 +143,6 @@ func (s *State) Follow(w http.ResponseWriter, r *http.Request) {
 			FollowStatus:   models.IsNotFollowing,
 			FollowersCount: followStats.Followers,
 		})
-
-		s.notifier.DeleteFollow(r.Context(), follow)
 
 		return
 	}

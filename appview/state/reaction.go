@@ -91,27 +91,39 @@ func (s *State) React(w http.ResponseWriter, r *http.Request) {
 
 		return
 	case http.MethodDelete:
-		reaction, err := db.GetReaction(s.db, currentUser.Did, subjectUri, reactionKind)
+		tx, err := s.db.BeginTx(r.Context(), nil)
 		if err != nil {
-			l.Error("failed to get reaction relationship", "did", currentUser.Did, "subjectUri", subjectUri, "err", err)
+			l.Error("failed to start transaction", "err", err)
+		}
+		defer tx.Rollback()
+
+		reactions, err := db.DeleteReaction(tx, syntax.DID(currentUser.Did), subjectUri, reactionKind)
+		if err != nil {
+			l.Error("failed to delete reactions from db", "err", err)
 			return
 		}
 
-		_, err = comatproto.RepoDeleteRecord(r.Context(), client, &comatproto.RepoDeleteRecord_Input{
-			Collection: tangled.FeedReactionNSID,
-			Repo:       currentUser.Did,
-			Rkey:       reaction.Rkey,
+		var writes []*comatproto.RepoApplyWrites_Input_Writes_Elem
+		for _, reactionAt := range reactions {
+			writes = append(writes, &comatproto.RepoApplyWrites_Input_Writes_Elem{
+				RepoApplyWrites_Delete: &comatproto.RepoApplyWrites_Delete{
+					Collection: tangled.FeedReactionNSID,
+					Rkey:       reactionAt.RecordKey().String(),
+				},
+			})
+		}
+		_, err = comatproto.RepoApplyWrites(r.Context(), client, &comatproto.RepoApplyWrites_Input{
+			Repo:   currentUser.Did,
+			Writes: writes,
 		})
-
 		if err != nil {
-			l.Error("failed to remove reaction", "err", err)
+			l.Error("failed to delete reactions from PDS", "err", err)
 			return
 		}
 
-		err = db.DeleteReactionByRkey(s.db, currentUser.Did, reaction.Rkey)
-		if err != nil {
-			l.Warn("failed to delete reaction from DB", "err", err)
-			// this is not an issue, the firehose event might have already done this
+		if err := tx.Commit(); err != nil {
+			l.Error("failed to commit transaction", "err", err)
+			// DB op failed but record is created in PDS. Ingester will backfill the missed operation
 		}
 
 		reactionMap, err := db.GetReactionMap(s.db, 20, subjectUri)

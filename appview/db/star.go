@@ -1,12 +1,13 @@
 package db
 
 import (
+	"database/sql"
 	"fmt"
-	"log"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pagination"
 	"tangled.org/core/orm"
@@ -22,32 +23,6 @@ func AddStar(e Execer, star *models.Star) error {
 		star.Rkey,
 	)
 	return err
-}
-
-// Get a star record
-func GetStar(e Execer, did string, subject string) (*models.Star, error) {
-	query := `
-	select did, subject_type, subject, created, rkey
-	from stars
-	where did = ? and subject = ?`
-	row := e.QueryRow(query, did, subject)
-
-	var star models.Star
-	var created string
-	err := row.Scan(&star.Did, &star.SubjectType, &star.Subject, &created, &star.Rkey)
-	if err != nil {
-		return nil, err
-	}
-
-	createdAtTime, err := time.Parse(time.RFC3339, created)
-	if err != nil {
-		log.Println("unable to determine followed at time")
-		star.Created = time.Now()
-	} else {
-		star.Created = createdAtTime
-	}
-
-	return &star, nil
 }
 
 func GetStars(e Execer, subject string, page pagination.Page) ([]models.Star, error) {
@@ -82,10 +57,30 @@ func GetStars(e Execer, subject string, page pagination.Page) ([]models.Star, er
 	return stars, rows.Err()
 }
 
-// Remove a star
-func DeleteStar(e Execer, did string, subject string) error {
-	_, err := e.Exec(`delete from stars where did = ? and subject = ?`, did, subject)
-	return err
+// Remove all stars from given user to subject
+func DeleteStars(tx *sql.Tx, did syntax.DID, subject string) ([]syntax.ATURI, error) {
+	var deleted []syntax.ATURI
+	rows, err := tx.Query(
+		`delete from stars
+		where did = ? and subject = ?
+		returning at_uri`,
+		did,
+		subject,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("deleting stars: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var aturi syntax.ATURI
+		if err := rows.Scan(&aturi); err != nil {
+			return nil, fmt.Errorf("scanning at_uri: %w", err)
+		}
+		deleted = append(deleted, aturi)
+	}
+
+	return deleted, nil
 }
 
 // Remove a star

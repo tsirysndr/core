@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/orm"
 )
@@ -16,33 +17,29 @@ func AddFollow(e Execer, follow *models.Follow) error {
 	return err
 }
 
-// Get a follow record
-func GetFollow(e Execer, userDid, subjectDid string) (*models.Follow, error) {
-	query := `select did, subject_did, created, rkey from follows where did = ? and subject_did = ?`
-	row := e.QueryRow(query, userDid, subjectDid)
-
-	var follow models.Follow
-	var followedAt string
-	err := row.Scan(&follow.UserDid, &follow.SubjectDid, &followedAt, &follow.Rkey)
-	if err != nil {
-		return nil, err
-	}
-
-	followedAtTime, err := time.Parse(time.RFC3339, followedAt)
-	if err != nil {
-		log.Println("unable to determine followed at time")
-		follow.FollowedAt = time.Now()
-	} else {
-		follow.FollowedAt = followedAtTime
-	}
-
-	return &follow, nil
-}
-
 // Remove a follow
-func DeleteFollow(e Execer, userDid, subjectDid string) error {
-	_, err := e.Exec(`delete from follows where did = ? and subject_did = ?`, userDid, subjectDid)
-	return err
+func DeleteFollow(e Execer, did, subjectDid syntax.DID) ([]syntax.ATURI, error) {
+	var deleted []syntax.ATURI
+	rows, err := e.Query(
+		`delete from follows
+		where did = ? and subject_did = ?
+		returning at_uri`,
+		did,
+		subjectDid,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("deleting follows: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var aturi syntax.ATURI
+		if err := rows.Scan(&aturi); err != nil {
+			return nil, fmt.Errorf("scanning at_uri: %w", err)
+		}
+		deleted = append(deleted, aturi)
+	}
+	return deleted, nil
 }
 
 // Remove a follow

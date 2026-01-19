@@ -43,9 +43,29 @@ func GetReaction(e Execer, did string, subjectAt syntax.ATURI, kind models.React
 }
 
 // Remove a reaction
-func DeleteReaction(e Execer, did string, subjectAt syntax.ATURI, kind models.ReactionKind) error {
-	_, err := e.Exec(`delete from reactions where did = ? and subject_at = ? and kind = ?`, did, subjectAt, kind)
-	return err
+func DeleteReaction(e Execer, did syntax.DID, subjectAt syntax.ATURI, kind models.ReactionKind) ([]syntax.ATURI, error) {
+	var deleted []syntax.ATURI
+	rows, err := e.Query(
+		`delete from reactions
+		where did = ? and subject_at = ? and kind = ?
+		returning at_uri`,
+		did,
+		subjectAt,
+		kind,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("deleting stars: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var aturi syntax.ATURI
+		if err := rows.Scan(&aturi); err != nil {
+			return nil, fmt.Errorf("scanning at_uri: %w", err)
+		}
+		deleted = append(deleted, aturi)
+	}
+	return deleted, nil
 }
 
 // Remove a reaction
