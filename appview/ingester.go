@@ -596,6 +596,7 @@ func (i *Ingester) ingestProfile(ctx context.Context, e *jmodels.Event, l *slog.
 		if err != nil {
 			return fmt.Errorf("failed to start transaction: %w", err)
 		}
+		defer tx.Rollback()
 
 		err = db.ValidateProfile(tx, &profile)
 		if err != nil {
@@ -603,7 +604,15 @@ func (i *Ingester) ingestProfile(ctx context.Context, e *jmodels.Event, l *slog.
 		}
 
 		err = db.UpsertProfile(tx, &profile)
-		if err == nil && i.Cache != nil {
+		if err != nil {
+			return fmt.Errorf("upserting profile: %w", err)
+		}
+
+		err = tx.Commit()
+		if err != nil {
+			return fmt.Errorf("tx.Commit: %w", err)
+		}
+		if i.Cache != nil {
 			pipe := i.Cache.Pipeline()
 			didKey := fmt.Sprintf(cache.PreferredHandleByDid, did)
 			if preferredHandle != "" {

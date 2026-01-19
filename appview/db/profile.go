@@ -131,8 +131,6 @@ func monthsBetween(from, to time.Time) int {
 }
 
 func UpsertProfile(tx *sql.Tx, profile *models.Profile) error {
-	defer tx.Rollback()
-
 	// update links
 	_, err := tx.Exec(`delete from profile_links where did = ?`, profile.Did)
 	if err != nil {
@@ -230,8 +228,7 @@ func UpsertProfile(tx *sql.Tx, profile *models.Profile) error {
 			return err
 		}
 	}
-
-	return tx.Commit()
+	return nil
 }
 
 func DeleteProfile(tx *sql.Tx, did string) error {
