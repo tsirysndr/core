@@ -127,18 +127,16 @@ func (o *OAuth) GetMultiAccountUser(r *http.Request) *MultiAccountUser {
 }
 
 type AuthReturnInfo struct {
-	ReturnURL  string
-	AddAccount bool
+	ReturnURL string
 }
 
-func (o *OAuth) SetAuthReturn(w http.ResponseWriter, r *http.Request, returnURL string, addAccount bool) error {
+func (o *OAuth) SetAuthReturn(w http.ResponseWriter, r *http.Request, returnURL string) error {
 	session, err := o.SessStore.Get(r, AuthReturnName)
 	if err != nil {
 		return err
 	}
 
 	session.Values[AuthReturnURL] = returnURL
-	session.Values[AuthAddAccount] = addAccount
 	session.Options.MaxAge = 60 * 30
 	session.Options.HttpOnly = true
 	session.Options.Secure = !o.Config.Core.Dev
@@ -154,11 +152,9 @@ func (o *OAuth) GetAuthReturn(r *http.Request) *AuthReturnInfo {
 	}
 
 	returnURL, _ := session.Values[AuthReturnURL].(string)
-	addAccount, _ := session.Values[AuthAddAccount].(bool)
 
 	return &AuthReturnInfo{
-		ReturnURL:  returnURL,
-		AddAccount: addAccount,
+		ReturnURL: returnURL,
 	}
 }
 

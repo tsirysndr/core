@@ -396,7 +396,7 @@ func (o *OAuth) StartElevatedAuthFlow(ctx context.Context, w http.ResponseWriter
 	info.AccountDID = &parsedDid
 	o.ClientApp.Store.SaveAuthRequestInfo(ctx, *info)
 
-	if err := o.SetAuthReturn(w, r, returnURL, false); err != nil {
+	if err := o.SetAuthReturn(w, r, returnURL); err != nil {
 		return "", fmt.Errorf("failed to set auth return: %w", err)
 	}
 

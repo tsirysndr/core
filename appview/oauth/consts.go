@@ -5,7 +5,6 @@ const (
 	AccountsName         = "appview-accounts-v2"
 	AuthReturnName       = "appview-auth-return"
 	AuthReturnURL        = "return_url"
-	AuthAddAccount       = "add_account"
 	SessionHandle        = "handle"
 	SessionDid           = "did"
 	SessionId            = "id"

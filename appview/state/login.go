@@ -33,7 +33,6 @@ func (s *State) Login(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		handle := r.FormValue("handle")
 		returnURL := r.FormValue("return_url")
-		addAccount := r.FormValue("add_account") == "true"
 
 		// remove spaces around the handle, handles can't have spaces around them
 		handle = strings.TrimSpace(handle)
@@ -96,7 +95,7 @@ func (s *State) Login(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if err := s.oauth.SetAuthReturn(w, r, sanitizeReturnURL(returnURL), addAccount); err != nil {
+		if err := s.oauth.SetAuthReturn(w, r, sanitizeReturnURL(returnURL)); err != nil {
 			l.Error("failed to set auth return", "err", err)
 		}
 
