@@ -59,7 +59,7 @@ func (s *Settings) revokePdsSession(session *pdsSession) {
 
 func (s *Settings) requestPasswordReset(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
-	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Active.Did)); !isTngl {
+	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Did)); !isTngl {
 		s.Pages.Notice(w, "password-error", "Only available for tngl.sh accounts.")
 		return
 	}
@@ -100,7 +100,7 @@ func (s *Settings) requestPasswordReset(w http.ResponseWriter, r *http.Request) 
 
 func (s *Settings) resetPassword(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
-	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Active.Did)); !isTngl {
+	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Did)); !isTngl {
 		s.Pages.Notice(w, "password-error", "Only available for tngl.sh accounts.")
 		return
 	}
@@ -134,7 +134,7 @@ func (s *Settings) resetPassword(w http.ResponseWriter, r *http.Request) {
 
 func (s *Settings) deactivateAccount(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
-	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Active.Did)); !isTngl {
+	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Did)); !isTngl {
 		s.Pages.Notice(w, "deactivate-error", "Only available for tngl.sh accounts.")
 		return
 	}
@@ -172,7 +172,7 @@ func (s *Settings) deactivateAccount(w http.ResponseWriter, r *http.Request) {
 
 func (s *Settings) requestAccountDelete(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
-	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Active.Did)); !isTngl {
+	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Did)); !isTngl {
 		s.Pages.Notice(w, "delete-error", "Only available for tngl.sh accounts.")
 		return
 	}
@@ -204,7 +204,7 @@ func (s *Settings) requestAccountDelete(w http.ResponseWriter, r *http.Request) 
 
 func (s *Settings) deleteAccount(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
-	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Active.Did)); !isTngl {
+	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Did)); !isTngl {
 		s.Pages.Notice(w, "delete-error", "Only available for tngl.sh accounts.")
 		return
 	}
@@ -269,7 +269,7 @@ func (s *Settings) isAccountDeactivated(ctx context.Context, did syntax.DID) boo
 
 func (s *Settings) reactivateAccount(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
-	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Active.Did)); !isTngl {
+	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Did)); !isTngl {
 		s.Pages.Notice(w, "reactivate-error", "Only available for tngl.sh accounts.")
 		return
 	}

@@ -22,12 +22,8 @@ type AccountRegistry struct {
 }
 
 type MultiAccountUser struct {
-	Active   User
+	Did      string
 	Accounts []AccountInfo
-}
-
-func (m *MultiAccountUser) Did() string {
-	return m.Active.Did
 }
 
 func (o *OAuth) GetAccounts(r *http.Request) *AccountRegistry {
@@ -116,9 +112,7 @@ func (o *OAuth) GetMultiAccountUser(r *http.Request) *MultiAccountUser {
 
 	registry := o.GetAccounts(r)
 	return &MultiAccountUser{
-		Active: User{
-			Did: sess.Data.AccountDID.String(),
-		},
+		Did:      sess.Data.AccountDID.String(),
 		Accounts: registry.Accounts,
 	}
 }

@@ -54,7 +54,7 @@ func (n *Notifications) notificationsPage(w http.ResponseWriter, r *http.Request
 
 	total, err := db.CountNotifications(
 		n.db,
-		orm.FilterEq("recipient_did", user.Active.Did),
+		orm.FilterEq("recipient_did", user.Did),
 	)
 	if err != nil {
 		l.Error("failed to get total notifications", "err", err)
@@ -65,7 +65,7 @@ func (n *Notifications) notificationsPage(w http.ResponseWriter, r *http.Request
 	notifications, err := db.GetNotificationsWithEntities(
 		n.db,
 		page,
-		orm.FilterEq("recipient_did", user.Active.Did),
+		orm.FilterEq("recipient_did", user.Did),
 	)
 	if err != nil {
 		l.Error("failed to get notifications", "err", err)
@@ -73,7 +73,7 @@ func (n *Notifications) notificationsPage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	err = db.MarkAllNotificationsRead(n.db, user.Active.Did)
+	err = db.MarkAllNotificationsRead(n.db, user.Did)
 	if err != nil {
 		l.Error("failed to mark notifications as read", "err", err)
 	}
@@ -98,7 +98,7 @@ func (n *Notifications) getUnreadCount(w http.ResponseWriter, r *http.Request) {
 
 	count, err := db.CountNotifications(
 		n.db,
-		orm.FilterEq("recipient_did", user.Active.Did),
+		orm.FilterEq("recipient_did", user.Did),
 		orm.FilterEq("read", 0),
 	)
 	if err != nil {

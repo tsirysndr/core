@@ -86,7 +86,7 @@ func (l *Labels) PerformLabelOp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	did := user.Active.Did
+	did := user.Did
 	rkey := tid.TID()
 	performedAt := time.Now()
 	indexedAt := time.Now()

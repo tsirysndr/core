@@ -115,7 +115,7 @@ func (s *Settings) isTnglShUser(ctx context.Context, did syntax.DID) (bool, erro
 func (s *Settings) sitesSettings(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
 
-	claim, err := db.GetActiveDomainClaimForDid(s.Db, user.Active.Did)
+	claim, err := db.GetActiveDomainClaimForDid(s.Db, user.Did)
 	if err != nil {
 		s.Logger.Error("failed to get domain claim", "err", err)
 		claim = nil
@@ -123,7 +123,7 @@ func (s *Settings) sitesSettings(w http.ResponseWriter, r *http.Request) {
 
 	// determine whether the active account has a tngl.sh handle, in which
 	// case their sites domain is automatically their handle domain.
-	isTnglHandle, _ := s.isTnglHandle(r.Context(), syntax.DID(user.Active.Did))
+	isTnglHandle, _ := s.isTnglHandle(r.Context(), syntax.DID(user.Did))
 
 	s.Pages.UserSiteSettings(w, pages.UserSiteSettingsParams{
 		LoggedInUser: user,
@@ -193,7 +193,7 @@ func (s *Settings) releaseSitesDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isTnglHandle, err := s.isTnglHandle(r.Context(), syntax.DID(user.Active.Did))
+	isTnglHandle, err := s.isTnglHandle(r.Context(), syntax.DID(user.Did))
 	if err != nil {
 		s.Pages.Notice(w, "settings-sites-error", "Unable to resolve user identity")
 		return
@@ -203,7 +203,7 @@ func (s *Settings) releaseSitesDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.ReleaseDomain(s.Db, user.Active.Did, domain); err != nil {
+	if err := db.ReleaseDomain(s.Db, user.Did, domain); err != nil {
 		s.Logger.Error("releasing domain", "err", err)
 		s.Pages.Notice(w, "settings-sites-error", "Unable to release domain. Make sure it belongs to your account.")
 		return
@@ -211,12 +211,12 @@ func (s *Settings) releaseSitesDomain(w http.ResponseWriter, r *http.Request) {
 
 	// Clean up all site data for this DID asynchronously.
 	if s.CfClient.Enabled() {
-		siteConfigs, err := db.GetRepoSiteConfigsForDid(s.Db, user.Active.Did)
+		siteConfigs, err := db.GetRepoSiteConfigsForDid(s.Db, user.Did)
 		if err != nil {
 			s.Logger.Error("releaseSitesDomain: fetching site configs for cleanup", "err", err)
 		}
 
-		if err := db.DeleteRepoSiteConfigsForDid(s.Db, user.Active.Did); err != nil {
+		if err := db.DeleteRepoSiteConfigsForDid(s.Db, user.Did); err != nil {
 			s.Logger.Error("releaseSitesDomain: deleting site configs from db", "err", err)
 		}
 
@@ -225,8 +225,8 @@ func (s *Settings) releaseSitesDomain(w http.ResponseWriter, r *http.Request) {
 
 			// Delete each repo's R2 objects.
 			for _, sc := range siteConfigs {
-				if err := sites.Delete(ctx, s.CfClient, user.Active.Did, sc.RepoName); err != nil {
-					s.Logger.Error("releaseSitesDomain: R2 delete failed", "did", user.Active.Did, "repo", sc.RepoName, "err", err)
+				if err := sites.Delete(ctx, s.CfClient, user.Did, sc.RepoName); err != nil {
+					s.Logger.Error("releaseSitesDomain: R2 delete failed", "did", user.Did, "repo", sc.RepoName, "err", err)
 				}
 			}
 
@@ -260,15 +260,15 @@ func isValidSubdomain(s string) bool {
 func (s *Settings) profileSettings(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
 
-	punchcardPreferences, err := db.GetPunchcardPreference(s.Db, user.Did())
+	punchcardPreferences, err := db.GetPunchcardPreference(s.Db, user.Did)
 	if err != nil {
 		log.Printf("failed to get users punchcard preferences: %s", err)
 	}
 
-	isTnglSh, err := s.isTnglShUser(r.Context(), syntax.DID(user.Active.Did))
+	isTnglSh, err := s.isTnglShUser(r.Context(), syntax.DID(user.Did))
 
 	// TODO: bring the user state from DB instead of PDS request
-	isDeactivated := s.isAccountDeactivated(r.Context(), syntax.DID(user.Active.Did))
+	isDeactivated := s.isAccountDeactivated(r.Context(), syntax.DID(user.Did))
 
 	s.Pages.UserProfileSettings(w, pages.UserProfileSettingsParams{
 		LoggedInUser:        user,
@@ -325,7 +325,7 @@ func (s *Settings) updateNotificationPreferences(w http.ResponseWriter, r *http.
 
 func (s *Settings) keysSettings(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
-	pubKeys, err := db.GetPublicKeysForDid(s.Db, user.Active.Did)
+	pubKeys, err := db.GetPublicKeysForDid(s.Db, user.Did)
 	if err != nil {
 		s.Logger.Error("keys settings", "err", err)
 	}
@@ -338,7 +338,7 @@ func (s *Settings) keysSettings(w http.ResponseWriter, r *http.Request) {
 
 func (s *Settings) emailsSettings(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
-	emails, err := db.GetAllEmails(s.Db, user.Active.Did)
+	emails, err := db.GetAllEmails(s.Db, user.Did)
 	if err != nil {
 		s.Logger.Error("emails settings", "err", err)
 	}
@@ -733,7 +733,7 @@ func (s *Settings) keys(w http.ResponseWriter, r *http.Request) {
 
 func (s *Settings) elevateForHandle(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
-	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Active.Did)); !isTngl {
+	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Did)); !isTngl {
 		http.Redirect(w, r, "/settings/profile", http.StatusSeeOther)
 		return
 	}
@@ -746,7 +746,7 @@ func (s *Settings) elevateForHandle(w http.ResponseWriter, r *http.Request) {
 
 	redirectURL, err := s.OAuth.StartElevatedAuthFlow(
 		r.Context(), w, r,
-		user.Did(),
+		user.Did,
 		[]string{"identity:handle"},
 		"/settings/profile?handle=1",
 	)
@@ -761,7 +761,7 @@ func (s *Settings) elevateForHandle(w http.ResponseWriter, r *http.Request) {
 
 func (s *Settings) updateHandle(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
-	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Active.Did)); !isTngl {
+	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Did)); !isTngl {
 		s.Pages.Notice(w, "handle-error", "Handle changes are only available for tngl.sh accounts.")
 		return
 	}
@@ -803,7 +803,7 @@ func (s *Settings) updateHandle(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(err.Error(), "ScopeMissing") || strings.Contains(err.Error(), "insufficient_scope") {
 			redirectURL, elevErr := s.OAuth.StartElevatedAuthFlow(
 				r.Context(), w, r,
-				user.Did(),
+				user.Did,
 				[]string{"identity:handle"},
 				"/settings/profile?handle=1",
 			)

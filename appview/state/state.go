@@ -286,11 +286,11 @@ func (s *State) UpgradeBanner(w http.ResponseWriter, r *http.Request) {
 	}
 
 	l := s.logger.With("handler", "UpgradeBanner")
-	l = l.With("did", user.Active.Did)
+	l = l.With("did", user.Did)
 
 	regs, err := db.GetRegistrations(
 		s.db,
-		orm.FilterEq("did", user.Active.Did),
+		orm.FilterEq("did", user.Did),
 		orm.FilterEq("needs_upgrade", 1),
 	)
 	if err != nil {
@@ -300,7 +300,7 @@ func (s *State) UpgradeBanner(w http.ResponseWriter, r *http.Request) {
 	spindles, err := db.GetSpindles(
 		r.Context(),
 		s.db,
-		orm.FilterEq("owner", user.Active.Did),
+		orm.FilterEq("owner", user.Did),
 		orm.FilterEq("needs_upgrade", 1),
 	)
 	if err != nil {
@@ -390,7 +390,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		user := s.oauth.GetMultiAccountUser(r)
-		knots, err := s.enforcer.GetKnotsForUser(user.Active.Did)
+		knots, err := s.enforcer.GetKnotsForUser(user.Did)
 		if err != nil {
 			s.pages.Notice(w, "repo", "Invalid user account.")
 			return
@@ -405,7 +405,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 		l := s.logger.With("handler", "NewRepo")
 
 		user := s.oauth.GetMultiAccountUser(r)
-		l = l.With("did", user.Active.Did)
+		l = l.With("did", user.Did)
 
 		// form validation
 		domain := r.FormValue("domain")
@@ -441,7 +441,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// ACL validation
-		ok, err := s.enforcer.E.Enforce(user.Active.Did, domain, domain, "repo:create")
+		ok, err := s.enforcer.E.Enforce(user.Did, domain, domain, "repo:create")
 		if err != nil || !ok {
 			l.Info("unauthorized")
 			s.pages.Notice(w, "repo", "You do not have permission to create a repo in this knot.")
@@ -451,7 +451,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 		// Check for existing repos
 		existingRepo, err := db.GetRepo(
 			s.db,
-			orm.FilterEq("did", user.Active.Did),
+			orm.FilterEq("did", user.Did),
 			orm.FilterEq("name", repoName),
 		)
 		if err == nil && existingRepo != nil {
@@ -501,7 +501,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 		}
 
 		repo := &models.Repo{
-			Did:         user.Active.Did,
+			Did:         user.Did,
 			Name:        repoName,
 			Knot:        domain,
 			Rkey:        rkey,
@@ -529,7 +529,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 					}
 					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 					if dErr := tangled.RepoDelete(ctx, deleteClient, &tangled.RepoDelete_Input{
-						Did:  user.Active.Did,
+						Did:  user.Did,
 						Name: repoName,
 						Rkey: rkey,
 					}); dErr != nil {
@@ -542,7 +542,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				l.Error("exhausted retries for knot cleanup, repo may be orphaned",
-					"did", user.Active.Did, "repo", repoName, "knot", domain)
+					"did", user.Did, "repo", repoName, "knot", domain)
 			}()
 		}
 
@@ -556,7 +556,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 
 		atresp, err := comatproto.RepoPutRecord(r.Context(), atpClient, &comatproto.RepoPutRecord_Input{
 			Collection: tangled.RepoNSID,
-			Repo:       user.Active.Did,
+			Repo:       user.Did,
 			Rkey:       rkey,
 			Record: &lexutil.LexiconTypeDecoder{
 				Val: &record,
@@ -607,7 +607,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 		}
 
 		rbacPath := repo.RepoIdentifier()
-		err = s.enforcer.AddRepo(user.Active.Did, domain, rbacPath)
+		err = s.enforcer.AddRepo(user.Did, domain, rbacPath)
 		if err != nil {
 			l.Error("acl setup failed", "err", err)
 			s.pages.Notice(w, "repo", "Failed to set up repository permissions.")
@@ -634,7 +634,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 		if repoDid != "" {
 			s.pages.HxLocation(w, fmt.Sprintf("/%s", repoDid))
 		} else {
-			s.pages.HxLocation(w, fmt.Sprintf("/%s/%s", user.Active.Did, repoName))
+			s.pages.HxLocation(w, fmt.Sprintf("/%s/%s", user.Did, repoName))
 		}
 	}
 }

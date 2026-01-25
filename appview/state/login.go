@@ -133,7 +133,7 @@ func (s *State) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	currentDid := currentUser.Active.Did
+	currentDid := currentUser.Did
 
 	var remainingAccounts []string
 	for _, acc := range currentUser.Accounts {

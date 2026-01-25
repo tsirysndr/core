@@ -49,7 +49,7 @@ func (s *State) React(w http.ResponseWriter, r *http.Request) {
 		rkey := tid.TID()
 		resp, err := comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 			Collection: tangled.FeedReactionNSID,
-			Repo:       currentUser.Active.Did,
+			Repo:       currentUser.Did,
 			Rkey:       rkey,
 			Record: &lexutil.LexiconTypeDecoder{
 				Val: &tangled.FeedReaction{
@@ -64,7 +64,7 @@ func (s *State) React(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		err = db.AddReaction(s.db, currentUser.Active.Did, subjectUri, reactionKind, rkey)
+		err = db.AddReaction(s.db, currentUser.Did, subjectUri, reactionKind, rkey)
 		if err != nil {
 			l.Error("failed to react", "err", err)
 			return
@@ -87,15 +87,15 @@ func (s *State) React(w http.ResponseWriter, r *http.Request) {
 
 		return
 	case http.MethodDelete:
-		reaction, err := db.GetReaction(s.db, currentUser.Active.Did, subjectUri, reactionKind)
+		reaction, err := db.GetReaction(s.db, currentUser.Did, subjectUri, reactionKind)
 		if err != nil {
-			l.Error("failed to get reaction relationship", "did", currentUser.Active.Did, "subjectUri", subjectUri, "err", err)
+			l.Error("failed to get reaction relationship", "did", currentUser.Did, "subjectUri", subjectUri, "err", err)
 			return
 		}
 
 		_, err = comatproto.RepoDeleteRecord(r.Context(), client, &comatproto.RepoDeleteRecord_Input{
 			Collection: tangled.FeedReactionNSID,
-			Repo:       currentUser.Active.Did,
+			Repo:       currentUser.Did,
 			Rkey:       reaction.Rkey,
 		})
 
@@ -104,7 +104,7 @@ func (s *State) React(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		err = db.DeleteReactionByRkey(s.db, currentUser.Active.Did, reaction.Rkey)
+		err = db.DeleteReactionByRkey(s.db, currentUser.Did, reaction.Rkey)
 		if err != nil {
 			l.Warn("failed to delete reaction from DB", "err", err)
 			// this is not an issue, the firehose event might have already done this

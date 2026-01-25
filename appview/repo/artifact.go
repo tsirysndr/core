@@ -77,7 +77,7 @@ func (rp *Repo) AttachArtifact(w http.ResponseWriter, r *http.Request) {
 
 	putRecordResp, err := comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 		Collection: tangled.RepoArtifactNSID,
-		Repo:       user.Active.Did,
+		Repo:       user.Did,
 		Rkey:       rkey,
 		Record: &lexutil.LexiconTypeDecoder{
 			Val: repoArtifactRecord(f, uploadBlobResp.Blob, createdAt, header.Filename, tag.Tag.Hash[:]),
@@ -100,7 +100,7 @@ func (rp *Repo) AttachArtifact(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	artifact := models.Artifact{
-		Did:       user.Active.Did,
+		Did:       user.Did,
 		Rkey:      rkey,
 		RepoAt:    f.RepoAt(),
 		Tag:       tag.Tag.Hash,
@@ -251,7 +251,7 @@ func (rp *Repo) DeleteArtifact(w http.ResponseWriter, r *http.Request) {
 
 	artifact := artifacts[0]
 
-	if user.Active.Did != artifact.Did {
+	if user.Did != artifact.Did {
 		l.Error("user not authorized to delete artifact", "err", err)
 		rp.pages.Notice(w, "remove", "Unauthorized deletion of artifact.")
 		return
@@ -259,7 +259,7 @@ func (rp *Repo) DeleteArtifact(w http.ResponseWriter, r *http.Request) {
 
 	_, err = comatproto.RepoDeleteRecord(r.Context(), client, &comatproto.RepoDeleteRecord_Input{
 		Collection: tangled.RepoArtifactNSID,
-		Repo:       user.Active.Did,
+		Repo:       user.Did,
 		Rkey:       artifact.Rkey,
 	})
 	if err != nil {

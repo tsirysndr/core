@@ -106,7 +106,7 @@ func (rp *Issues) RepoSingleIssue(w http.ResponseWriter, r *http.Request) {
 
 	userReactions := map[models.ReactionKind]bool{}
 	if user != nil {
-		userReactions = db.GetReactionStatusMap(rp.db, user.Active.Did, issue.AtUri())
+		userReactions = db.GetReactionStatusMap(rp.db, user.Did, issue.AtUri())
 	}
 
 	backlinks, err := db.GetBacklinks(rp.db, issue.AtUri())
@@ -185,7 +185,7 @@ func (rp *Issues) EditIssue(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		ex, err := comatproto.RepoGetRecord(r.Context(), client, "", tangled.RepoIssueNSID, user.Active.Did, newIssue.Rkey)
+		ex, err := comatproto.RepoGetRecord(r.Context(), client, "", tangled.RepoIssueNSID, user.Did, newIssue.Rkey)
 		if err != nil {
 			l.Error("failed to get record", "err", err)
 			rp.pages.Notice(w, noticeId, "Failed to edit issue, no record found on PDS.")
@@ -194,7 +194,7 @@ func (rp *Issues) EditIssue(w http.ResponseWriter, r *http.Request) {
 
 		_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 			Collection: tangled.RepoIssueNSID,
-			Repo:       user.Active.Did,
+			Repo:       user.Did,
 			Rkey:       newIssue.Rkey,
 			SwapRecord: ex.Cid,
 			Record: &lexutil.LexiconTypeDecoder{
@@ -309,10 +309,10 @@ func (rp *Issues) CloseIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles := repoinfo.RolesInRepo{Roles: rp.enforcer.GetPermissionsInRepo(user.Active.Did, f.Knot, f.RepoIdentifier())}
+	roles := repoinfo.RolesInRepo{Roles: rp.enforcer.GetPermissionsInRepo(user.Did, f.Knot, f.RepoIdentifier())}
 	isRepoOwner := roles.IsOwner()
 	isCollaborator := roles.IsCollaborator()
-	isIssueOwner := user.Active.Did == issue.Did
+	isIssueOwner := user.Did == issue.Did
 
 	// TODO: make this more granular
 	if isIssueOwner || isRepoOwner || isCollaborator {
@@ -329,7 +329,7 @@ func (rp *Issues) CloseIssue(w http.ResponseWriter, r *http.Request) {
 		issue.Open = false
 
 		// notify about the issue closure
-		rp.notifier.NewIssueState(r.Context(), syntax.DID(user.Active.Did), issue)
+		rp.notifier.NewIssueState(r.Context(), syntax.DID(user.Did), issue)
 
 		ownerSlashRepo := reporesolver.GetBaseRepoPath(r, f)
 		rp.pages.HxLocation(w, fmt.Sprintf("/%s/issues/%d", ownerSlashRepo, issue.IssueId))
@@ -357,10 +357,10 @@ func (rp *Issues) ReopenIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles := repoinfo.RolesInRepo{Roles: rp.enforcer.GetPermissionsInRepo(user.Active.Did, f.Knot, f.RepoIdentifier())}
+	roles := repoinfo.RolesInRepo{Roles: rp.enforcer.GetPermissionsInRepo(user.Did, f.Knot, f.RepoIdentifier())}
 	isRepoOwner := roles.IsOwner()
 	isCollaborator := roles.IsCollaborator()
-	isIssueOwner := user.Active.Did == issue.Did
+	isIssueOwner := user.Did == issue.Did
 
 	if isCollaborator || isRepoOwner || isIssueOwner {
 		err := db.ReopenIssues(
@@ -376,7 +376,7 @@ func (rp *Issues) ReopenIssue(w http.ResponseWriter, r *http.Request) {
 		issue.Open = true
 
 		// notify about the issue reopen
-		rp.notifier.NewIssueState(r.Context(), syntax.DID(user.Active.Did), issue)
+		rp.notifier.NewIssueState(r.Context(), syntax.DID(user.Did), issue)
 
 		ownerSlashRepo := reporesolver.GetBaseRepoPath(r, f)
 		rp.pages.HxLocation(w, fmt.Sprintf("/%s/issues/%d", ownerSlashRepo, issue.IssueId))
@@ -419,7 +419,7 @@ func (rp *Issues) NewIssueComment(w http.ResponseWriter, r *http.Request) {
 	mentions, references := rp.mentionsResolver.Resolve(r.Context(), body)
 
 	comment := models.IssueComment{
-		Did:        user.Active.Did,
+		Did:        user.Did,
 		Rkey:       tid.TID(),
 		IssueAt:    issue.AtUri().String(),
 		ReplyTo:    replyTo,
@@ -560,8 +560,8 @@ func (rp *Issues) EditIssueComment(w http.ResponseWriter, r *http.Request) {
 	}
 	comment := comments[0]
 
-	if comment.Did != user.Active.Did {
-		l.Error("unauthorized comment edit", "expectedDid", comment.Did, "gotDid", user.Active.Did)
+	if comment.Did != user.Did {
+		l.Error("unauthorized comment edit", "expectedDid", comment.Did, "gotDid", user.Did)
 		http.Error(w, "you are not the author of this comment", http.StatusUnauthorized)
 		return
 	}
@@ -611,7 +611,7 @@ func (rp *Issues) EditIssueComment(w http.ResponseWriter, r *http.Request) {
 		// rkey is optional, it was introduced later
 		if newComment.Rkey != "" {
 			// update the record on pds
-			ex, err := comatproto.RepoGetRecord(r.Context(), client, "", tangled.RepoIssueCommentNSID, user.Active.Did, comment.Rkey)
+			ex, err := comatproto.RepoGetRecord(r.Context(), client, "", tangled.RepoIssueCommentNSID, user.Did, comment.Rkey)
 			if err != nil {
 				l.Error("failed to get record", "err", err, "did", newComment.Did, "rkey", newComment.Rkey)
 				rp.pages.Notice(w, fmt.Sprintf("comment-%s-status", commentId), "Failed to update description, no record found on PDS.")
@@ -620,7 +620,7 @@ func (rp *Issues) EditIssueComment(w http.ResponseWriter, r *http.Request) {
 
 			_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 				Collection: tangled.RepoIssueCommentNSID,
-				Repo:       user.Active.Did,
+				Repo:       user.Did,
 				Rkey:       newComment.Rkey,
 				SwapRecord: ex.Cid,
 				Record: &lexutil.LexiconTypeDecoder{
@@ -742,8 +742,8 @@ func (rp *Issues) DeleteIssueComment(w http.ResponseWriter, r *http.Request) {
 	}
 	comment := comments[0]
 
-	if comment.Did != user.Active.Did {
-		l.Error("unauthorized action", "expectedDid", comment.Did, "gotDid", user.Active.Did)
+	if comment.Did != user.Did {
+		l.Error("unauthorized action", "expectedDid", comment.Did, "gotDid", user.Did)
 		http.Error(w, "you are not the author of this comment", http.StatusUnauthorized)
 		return
 	}
@@ -772,7 +772,7 @@ func (rp *Issues) DeleteIssueComment(w http.ResponseWriter, r *http.Request) {
 		}
 		_, err = comatproto.RepoDeleteRecord(r.Context(), client, &comatproto.RepoDeleteRecord_Input{
 			Collection: tangled.RepoIssueCommentNSID,
-			Repo:       user.Active.Did,
+			Repo:       user.Did,
 			Rkey:       comment.Rkey,
 		})
 		if err != nil {
@@ -1018,7 +1018,7 @@ func (rp *Issues) NewIssue(w http.ResponseWriter, r *http.Request) {
 			Title:      r.FormValue("title"),
 			Body:       body,
 			Open:       true,
-			Did:        user.Active.Did,
+			Did:        user.Did,
 			Created:    time.Now(),
 			Mentions:   mentions,
 			References: references,
@@ -1042,7 +1042,7 @@ func (rp *Issues) NewIssue(w http.ResponseWriter, r *http.Request) {
 		}
 		resp, err := comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 			Collection: tangled.RepoIssueNSID,
-			Repo:       user.Active.Did,
+			Repo:       user.Did,
 			Rkey:       issue.Rkey,
 			Record: &lexutil.LexiconTypeDecoder{
 				Val: &record,

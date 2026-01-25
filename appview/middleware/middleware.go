@@ -133,9 +133,9 @@ func (mw Middleware) knotRoleMiddleware(group string) middlewareFunc {
 				return
 			}
 
-			ok, err := mw.enforcer.E.HasGroupingPolicy(actor.Active.Did, group, domain)
+			ok, err := mw.enforcer.E.HasGroupingPolicy(actor.Did, group, domain)
 			if err != nil || !ok {
-				l.Warn("permission denied", "did", actor.Active.Did, "group", group, "domain", domain)
+				l.Warn("permission denied", "did", actor.Did, "group", group, "domain", domain)
 				http.Error(w, "Forbidden", http.StatusUnauthorized)
 				return
 			}
@@ -167,9 +167,9 @@ func (mw Middleware) RepoPermissionMiddleware(requiredPerm string) middlewareFun
 				return
 			}
 
-			ok, err := mw.enforcer.E.Enforce(actor.Active.Did, f.Knot, f.RepoIdentifier(), requiredPerm)
+			ok, err := mw.enforcer.E.Enforce(actor.Did, f.Knot, f.RepoIdentifier(), requiredPerm)
 			if err != nil || !ok {
-				l.Warn("permission denied", "did", actor.Active.Did, "perm", requiredPerm, "repo", f.RepoIdentifier())
+				l.Warn("permission denied", "did", actor.Did, "perm", requiredPerm, "repo", f.RepoIdentifier())
 				http.Error(w, "Forbidden", http.StatusUnauthorized)
 				return
 			}

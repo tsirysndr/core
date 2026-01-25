@@ -48,7 +48,7 @@ func (s *State) Timeline(w http.ResponseWriter, r *http.Request) {
 
 	var userDid string
 	if user != nil {
-		userDid = user.Active.Did
+		userDid = user.Did
 	}
 	timeline, err := db.MakeTimeline(s.db, 50, userDid, filtered)
 	if err != nil {

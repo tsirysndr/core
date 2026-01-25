@@ -41,7 +41,7 @@ func (s *State) RemoveAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	currentUser := s.oauth.GetMultiAccountUser(r)
-	isCurrentAccount := currentUser != nil && currentUser.Active.Did == did
+	isCurrentAccount := currentUser != nil && currentUser.Did == did
 
 	var remainingAccounts []string
 	if currentUser != nil {

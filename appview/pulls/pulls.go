@@ -106,7 +106,7 @@ func (s *Pulls) PullActions(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		user := s.oauth.GetMultiAccountUser(r)
 		if user != nil {
-			l = l.With("user", user.Active.Did)
+			l = l.With("user", user.Did)
 		}
 
 		f, err := s.repoResolver.Resolve(r)
@@ -140,7 +140,7 @@ func (s *Pulls) PullActions(w http.ResponseWriter, r *http.Request) {
 		mergeCheckResponse := s.mergeCheck(r, f, pull, stack)
 		branchDeleteStatus := s.branchDeleteStatus(r, f, pull)
 		resubmitResult := pages.Unknown
-		if user.Active.Did == pull.OwnerDid {
+		if user.Did == pull.OwnerDid {
 			resubmitResult = s.resubmitCheck(r, f, pull, stack)
 		}
 
@@ -163,7 +163,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 
 	user := s.oauth.GetMultiAccountUser(r)
 	if user != nil {
-		l = l.With("user", user.Active.Did)
+		l = l.With("user", user.Did)
 	}
 
 	f, err := s.repoResolver.Resolve(r)
@@ -209,7 +209,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 	mergeCheckResponse := s.mergeCheck(r, f, pull, stack)
 	branchDeleteStatus := s.branchDeleteStatus(r, f, pull)
 	resubmitResult := pages.Unknown
-	if user != nil && user.Active.Did == pull.OwnerDid {
+	if user != nil && user.Did == pull.OwnerDid {
 		resubmitResult = s.resubmitCheck(r, f, pull, stack)
 	}
 
@@ -247,7 +247,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 
 	userReactions := map[models.ReactionKind]bool{}
 	if user != nil {
-		userReactions = db.GetReactionStatusMap(s.db, user.Active.Did, pull.AtUri())
+		userReactions = db.GetReactionStatusMap(s.db, user.Did, pull.AtUri())
 	}
 
 	labelDefs, err := db.GetLabelDefinitions(
@@ -415,7 +415,7 @@ func (s *Pulls) branchDeleteStatus(r *http.Request, repo *models.Repo, pull *mod
 	}
 
 	// user can only delete branch if they are a collaborator in the repo that the branch belongs to
-	perms := s.enforcer.GetPermissionsInRepo(user.Active.Did, repo.Knot, repo.RepoIdentifier())
+	perms := s.enforcer.GetPermissionsInRepo(user.Did, repo.Knot, repo.RepoIdentifier())
 	if !slices.Contains(perms, "repo:push") {
 		return nil
 	}
@@ -504,7 +504,7 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 
 	user := s.oauth.GetMultiAccountUser(r)
 	if user != nil {
-		l = l.With("user", user.Active.Did)
+		l = l.With("user", user.Did)
 	}
 
 	params := r.URL.Query()
@@ -801,7 +801,7 @@ func (s *Pulls) PullComment(w http.ResponseWriter, r *http.Request) {
 
 	user := s.oauth.GetMultiAccountUser(r)
 	if user != nil {
-		l = l.With("user", user.Active.Did)
+		l = l.With("user", user.Did)
 	}
 
 	f, err := s.repoResolver.Resolve(r)
@@ -863,7 +863,7 @@ func (s *Pulls) PullComment(w http.ResponseWriter, r *http.Request) {
 		}
 		atResp, err := comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 			Collection: tangled.RepoPullCommentNSID,
-			Repo:       user.Active.Did,
+			Repo:       user.Did,
 			Rkey:       tid.TID(),
 			Record: &lexutil.LexiconTypeDecoder{
 				Val: &tangled.RepoPullComment{
@@ -880,7 +880,7 @@ func (s *Pulls) PullComment(w http.ResponseWriter, r *http.Request) {
 		}
 
 		comment := &models.PullComment{
-			OwnerDid:     user.Active.Did,
+			OwnerDid:     user.Did,
 			RepoAt:       f.RepoAt().String(),
 			PullId:       pull.PullId,
 			Body:         body,
@@ -918,7 +918,7 @@ func (s *Pulls) NewPull(w http.ResponseWriter, r *http.Request) {
 
 	user := s.oauth.GetMultiAccountUser(r)
 	if user != nil {
-		l = l.With("user", user.Active.Did)
+		l = l.With("user", user.Did)
 	}
 
 	f, err := s.repoResolver.Resolve(r)
@@ -974,7 +974,7 @@ func (s *Pulls) NewPull(w http.ResponseWriter, r *http.Request) {
 		fromFork := r.FormValue("fork")
 		sourceBranch := r.FormValue("sourceBranch")
 		patch := r.FormValue("patch")
-		userDid := syntax.DID(user.Active.Did)
+		userDid := syntax.DID(user.Did)
 
 		if targetBranch == "" {
 			s.pages.Notice(w, "pull", "Target branch is required.")
@@ -1603,10 +1603,10 @@ func (s *Pulls) CompareForksFragment(w http.ResponseWriter, r *http.Request) {
 
 	user := s.oauth.GetMultiAccountUser(r)
 	if user != nil {
-		l = l.With("user", user.Active.Did)
+		l = l.With("user", user.Did)
 	}
 
-	forks, err := db.GetForksByDid(s.db, user.Active.Did)
+	forks, err := db.GetForksByDid(s.db, user.Did)
 	if err != nil {
 		l.Error("failed to get forks", "err", err)
 		return
@@ -1624,7 +1624,7 @@ func (s *Pulls) CompareForksBranchesFragment(w http.ResponseWriter, r *http.Requ
 
 	user := s.oauth.GetMultiAccountUser(r)
 	if user != nil {
-		l = l.With("user", user.Active.Did)
+		l = l.With("user", user.Did)
 	}
 
 	f, err := s.repoResolver.Resolve(r)
@@ -1704,7 +1704,7 @@ func (s *Pulls) ResubmitPull(w http.ResponseWriter, r *http.Request) {
 
 	user := s.oauth.GetMultiAccountUser(r)
 	if user != nil {
-		l = l.With("user", user.Active.Did)
+		l = l.With("user", user.Did)
 	}
 
 	pull, ok := r.Context().Value("pull").(*models.Pull)
@@ -1741,7 +1741,7 @@ func (s *Pulls) resubmitPatch(w http.ResponseWriter, r *http.Request) {
 
 	user := s.oauth.GetMultiAccountUser(r)
 	if user != nil {
-		l = l.With("user", user.Active.Did)
+		l = l.With("user", user.Did)
 	}
 
 	pull, ok := r.Context().Value("pull").(*models.Pull)
@@ -1752,8 +1752,8 @@ func (s *Pulls) resubmitPatch(w http.ResponseWriter, r *http.Request) {
 	}
 	l = l.With("pull_id", pull.PullId, "pull_owner", pull.OwnerDid)
 
-	if user == nil || user.Active.Did != pull.OwnerDid {
-		l.Warn("unauthorized user", "actual_user", user.Active.Did, "expected_owner", pull.OwnerDid)
+	if user == nil || user.Did != pull.OwnerDid {
+		l.Warn("unauthorized user", "actual_user", user.Did, "expected_owner", pull.OwnerDid)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -1766,7 +1766,7 @@ func (s *Pulls) resubmitPatch(w http.ResponseWriter, r *http.Request) {
 
 	patch := r.FormValue("patch")
 
-	s.resubmitPullHelper(w, r, f, syntax.DID(user.Active.Did), pull, patch, "", "")
+	s.resubmitPullHelper(w, r, f, syntax.DID(user.Did), pull, patch, "", "")
 }
 
 func (s *Pulls) resubmitBranch(w http.ResponseWriter, r *http.Request) {
@@ -1774,7 +1774,7 @@ func (s *Pulls) resubmitBranch(w http.ResponseWriter, r *http.Request) {
 
 	user := s.oauth.GetMultiAccountUser(r)
 	if user != nil {
-		l = l.With("user", user.Active.Did)
+		l = l.With("user", user.Did)
 	}
 
 	pull, ok := r.Context().Value("pull").(*models.Pull)
@@ -1785,8 +1785,8 @@ func (s *Pulls) resubmitBranch(w http.ResponseWriter, r *http.Request) {
 	}
 	l = l.With("pull_id", pull.PullId, "pull_owner", pull.OwnerDid, "target_branch", pull.TargetBranch)
 
-	if user == nil || user.Active.Did != pull.OwnerDid {
-		l.Warn("unauthorized user", "actual_user", user.Active.Did, "expected_owner", pull.OwnerDid)
+	if user == nil || user.Did != pull.OwnerDid {
+		l.Warn("unauthorized user", "actual_user", user.Did, "expected_owner", pull.OwnerDid)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -1797,7 +1797,7 @@ func (s *Pulls) resubmitBranch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles := repoinfo.RolesInRepo{Roles: s.enforcer.GetPermissionsInRepo(user.Active.Did, f.Knot, f.RepoIdentifier())}
+	roles := repoinfo.RolesInRepo{Roles: s.enforcer.GetPermissionsInRepo(user.Did, f.Knot, f.RepoIdentifier())}
 	if !roles.IsPushAllowed() {
 		l.Warn("unauthorized user - no push permission")
 		w.WriteHeader(http.StatusUnauthorized)
@@ -1836,7 +1836,7 @@ func (s *Pulls) resubmitBranch(w http.ResponseWriter, r *http.Request) {
 	patch := comparison.FormatPatchRaw
 	combined := comparison.CombinedPatchRaw
 
-	s.resubmitPullHelper(w, r, f, syntax.DID(user.Active.Did), pull, patch, combined, sourceRev)
+	s.resubmitPullHelper(w, r, f, syntax.DID(user.Did), pull, patch, combined, sourceRev)
 }
 
 func (s *Pulls) resubmitFork(w http.ResponseWriter, r *http.Request) {
@@ -1844,7 +1844,7 @@ func (s *Pulls) resubmitFork(w http.ResponseWriter, r *http.Request) {
 
 	user := s.oauth.GetMultiAccountUser(r)
 	if user != nil {
-		l = l.With("user", user.Active.Did)
+		l = l.With("user", user.Did)
 	}
 
 	pull, ok := r.Context().Value("pull").(*models.Pull)
@@ -1855,8 +1855,8 @@ func (s *Pulls) resubmitFork(w http.ResponseWriter, r *http.Request) {
 	}
 	l = l.With("pull_id", pull.PullId, "pull_owner", pull.OwnerDid, "target_branch", pull.TargetBranch)
 
-	if user == nil || user.Active.Did != pull.OwnerDid {
-		l.Warn("unauthorized user", "actual_user", user.Active.Did, "expected_owner", pull.OwnerDid)
+	if user == nil || user.Did != pull.OwnerDid {
+		l.Warn("unauthorized user", "actual_user", user.Did, "expected_owner", pull.OwnerDid)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -1939,7 +1939,7 @@ func (s *Pulls) resubmitFork(w http.ResponseWriter, r *http.Request) {
 	patch := comparison.FormatPatchRaw
 	combined := comparison.CombinedPatchRaw
 
-	s.resubmitPullHelper(w, r, f, syntax.DID(user.Active.Did), pull, patch, combined, sourceRev)
+	s.resubmitPullHelper(w, r, f, syntax.DID(user.Did), pull, patch, combined, sourceRev)
 }
 
 func (s *Pulls) resubmitPullHelper(
@@ -2301,7 +2301,7 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 
 	user := s.oauth.GetMultiAccountUser(r)
 	if user != nil {
-		l = l.With("user", user.Active.Did)
+		l = l.With("user", user.Did)
 	}
 
 	f, err := s.repoResolver.Resolve(r)
@@ -2414,7 +2414,7 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 
 	// notify about the pull merge
 	for _, p := range pullsToMerge {
-		s.notifier.NewPullState(r.Context(), syntax.DID(user.Active.Did), p)
+		s.notifier.NewPullState(r.Context(), syntax.DID(user.Did), p)
 	}
 
 	ownerSlashRepo := reporesolver.GetBaseRepoPath(r, f)
@@ -2426,7 +2426,7 @@ func (s *Pulls) ClosePull(w http.ResponseWriter, r *http.Request) {
 
 	user := s.oauth.GetMultiAccountUser(r)
 	if user != nil {
-		l = l.With("user", user.Active.Did)
+		l = l.With("user", user.Did)
 	}
 
 	f, err := s.repoResolver.Resolve(r)
@@ -2444,10 +2444,10 @@ func (s *Pulls) ClosePull(w http.ResponseWriter, r *http.Request) {
 	l = l.With("pull_id", pull.PullId, "pull_owner", pull.OwnerDid)
 
 	// auth filter: only owner or collaborators can close
-	roles := repoinfo.RolesInRepo{Roles: s.enforcer.GetPermissionsInRepo(user.Active.Did, f.Knot, f.RepoIdentifier())}
+	roles := repoinfo.RolesInRepo{Roles: s.enforcer.GetPermissionsInRepo(user.Did, f.Knot, f.RepoIdentifier())}
 	isOwner := roles.IsOwner()
 	isCollaborator := roles.IsCollaborator()
-	isPullAuthor := user.Active.Did == pull.OwnerDid
+	isPullAuthor := user.Did == pull.OwnerDid
 	isCloseAllowed := isOwner || isCollaborator || isPullAuthor
 	if !isCloseAllowed {
 		l.Error("unauthorized to close pull", "is_owner", isOwner, "is_collaborator", isCollaborator, "is_pull_author", isPullAuthor)
@@ -2490,7 +2490,7 @@ func (s *Pulls) ClosePull(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, p := range pullsToClose {
-		s.notifier.NewPullState(r.Context(), syntax.DID(user.Active.Did), p)
+		s.notifier.NewPullState(r.Context(), syntax.DID(user.Did), p)
 	}
 
 	ownerSlashRepo := reporesolver.GetBaseRepoPath(r, f)
@@ -2502,7 +2502,7 @@ func (s *Pulls) ReopenPull(w http.ResponseWriter, r *http.Request) {
 
 	user := s.oauth.GetMultiAccountUser(r)
 	if user != nil {
-		l = l.With("user", user.Active.Did)
+		l = l.With("user", user.Did)
 	}
 
 	f, err := s.repoResolver.Resolve(r)
@@ -2521,10 +2521,10 @@ func (s *Pulls) ReopenPull(w http.ResponseWriter, r *http.Request) {
 	l = l.With("pull_id", pull.PullId, "pull_owner", pull.OwnerDid, "state", pull.State)
 
 	// auth filter: only owner or collaborators can close
-	roles := repoinfo.RolesInRepo{Roles: s.enforcer.GetPermissionsInRepo(user.Active.Did, f.Knot, f.RepoIdentifier())}
+	roles := repoinfo.RolesInRepo{Roles: s.enforcer.GetPermissionsInRepo(user.Did, f.Knot, f.RepoIdentifier())}
 	isOwner := roles.IsOwner()
 	isCollaborator := roles.IsCollaborator()
-	isPullAuthor := user.Active.Did == pull.OwnerDid
+	isPullAuthor := user.Did == pull.OwnerDid
 	isCloseAllowed := isOwner || isCollaborator || isPullAuthor
 	if !isCloseAllowed {
 		l.Error("unauthorized to reopen pull", "is_owner", isOwner, "is_collaborator", isCollaborator, "is_pull_author", isPullAuthor)
@@ -2567,7 +2567,7 @@ func (s *Pulls) ReopenPull(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, p := range pullsToReopen {
-		s.notifier.NewPullState(r.Context(), syntax.DID(user.Active.Did), p)
+		s.notifier.NewPullState(r.Context(), syntax.DID(user.Did), p)
 	}
 
 	ownerSlashRepo := reporesolver.GetBaseRepoPath(r, f)

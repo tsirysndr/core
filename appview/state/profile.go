@@ -92,14 +92,10 @@ func (s *State) profile(r *http.Request) (*pages.ProfileCard, error) {
 	loggedInUser := s.oauth.GetMultiAccountUser(r)
 	followStatus := models.IsNotFollowing
 	if loggedInUser != nil {
-		followStatus = db.GetFollowStatus(s.db, loggedInUser.Active.Did, did)
+		followStatus = db.GetFollowStatus(s.db, loggedInUser.Did, did)
 	}
 
-	var loggedInDid string
-	if loggedInUser != nil {
-		loggedInDid = loggedInUser.Did()
-	}
-	showPunchcard := s.shouldShowPunchcard(did, loggedInDid)
+	showPunchcard := s.shouldShowPunchcard(did, loggedInUser.Did)
 
 	var punchcard *models.Punchcard
 	if showPunchcard {
@@ -432,9 +428,9 @@ func (s *State) followPage(
 
 	loggedInUserFollowing := make(map[string]struct{})
 	if loggedInUser != nil {
-		following, err := db.GetFollowing(s.db, loggedInUser.Active.Did)
+		following, err := db.GetFollowing(s.db, loggedInUser.Did)
 		if err != nil {
-			l.Error("failed to get follow list", "err", err, "loggedInUser", loggedInUser.Active.Did)
+			l.Error("failed to get follow list", "err", err, "loggedInUser", loggedInUser.Did)
 			return &params, err
 		}
 		loggedInUserFollowing = make(map[string]struct{}, len(following))
@@ -449,7 +445,7 @@ func (s *State) followPage(
 		followStatus := models.IsNotFollowing
 		if _, exists := loggedInUserFollowing[did]; exists {
 			followStatus = models.IsFollowing
-		} else if loggedInUser != nil && loggedInUser.Active.Did == did {
+		} else if loggedInUser != nil && loggedInUser.Did == did {
 			followStatus = models.IsSelf
 		}
 
@@ -656,12 +652,12 @@ func (s *State) UpdateProfileBio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	profile, err := db.GetProfile(s.db, user.Active.Did)
+	profile, err := db.GetProfile(s.db, user.Did)
 	if err != nil {
-		l.Error("getting profile data", "did", user.Active.Did, "err", err)
+		l.Error("getting profile data", "did", user.Did, "err", err)
 	}
 	if profile == nil {
-		profile = &models.Profile{Did: user.Active.Did}
+		profile = &models.Profile{Did: user.Did}
 	}
 
 	profile.Description = r.FormValue("description")
@@ -676,7 +672,7 @@ func (s *State) UpdateProfileBio(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		ident, err := s.idResolver.ResolveIdent(r.Context(), user.Active.Did)
+		ident, err := s.idResolver.ResolveIdent(r.Context(), user.Did)
 		if err != nil || !slices.Contains(ident.AlsoKnownAs, "at://"+rawPreferredHandle) {
 			s.pages.Notice(w, "update-profile", "Handle not found in your DID document.")
 			return
@@ -720,12 +716,12 @@ func (s *State) UpdateProfilePins(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	profile, err := db.GetProfile(s.db, user.Active.Did)
+	profile, err := db.GetProfile(s.db, user.Did)
 	if err != nil {
-		l.Error("getting profile data", "did", user.Active.Did, "err", err)
+		l.Error("getting profile data", "did", user.Did, "err", err)
 	}
 	if profile == nil {
-		profile = &models.Profile{Did: user.Active.Did}
+		profile = &models.Profile{Did: user.Did}
 	}
 
 	i := 0
@@ -775,7 +771,7 @@ func (s *State) updateProfile(profile *models.Profile, w http.ResponseWriter, r 
 		vanityStats = append(vanityStats, string(v.Kind))
 	}
 
-	ex, _ := comatproto.RepoGetRecord(r.Context(), client, "", tangled.ActorProfileNSID, user.Active.Did, "self")
+	ex, _ := comatproto.RepoGetRecord(r.Context(), client, "", tangled.ActorProfileNSID, user.Did, "self")
 	var cid *string
 	var existingAvatar *lexutil.LexBlob
 	if ex != nil {
@@ -787,7 +783,7 @@ func (s *State) updateProfile(profile *models.Profile, w http.ResponseWriter, r 
 
 	_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 		Collection: tangled.ActorProfileNSID,
-		Repo:       user.Active.Did,
+		Repo:       user.Did,
 		Rkey:       "self",
 		Record: &lexutil.LexiconTypeDecoder{
 			Val: &tangled.ActorProfile{
@@ -818,23 +814,23 @@ func (s *State) updateProfile(profile *models.Profile, w http.ResponseWriter, r 
 
 	s.notifier.UpdateProfile(r.Context(), profile)
 
-	s.pages.HxRedirect(w, "/"+user.Active.Did)
+	s.pages.HxRedirect(w, "/"+user.Did)
 }
 
 func (s *State) EditBioFragment(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "EditBioFragment")
 	user := s.oauth.GetMultiAccountUser(r)
 
-	profile, err := db.GetProfile(s.db, user.Active.Did)
+	profile, err := db.GetProfile(s.db, user.Did)
 	if err != nil {
-		l.Error("getting profile data", "did", user.Active.Did, "err", err)
+		l.Error("getting profile data", "did", user.Did, "err", err)
 	}
 	if profile == nil {
-		profile = &models.Profile{Did: user.Active.Did}
+		profile = &models.Profile{Did: user.Did}
 	}
 
 	var alsoKnownAs []string
-	ident, err := s.idResolver.ResolveIdent(r.Context(), user.Active.Did)
+	ident, err := s.idResolver.ResolveIdent(r.Context(), user.Did)
 	if err == nil {
 		alsoKnownAs = ident.AlsoKnownAs
 	}
@@ -850,22 +846,22 @@ func (s *State) EditPinsFragment(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "EditPinsFragment")
 	user := s.oauth.GetMultiAccountUser(r)
 
-	profile, err := db.GetProfile(s.db, user.Active.Did)
+	profile, err := db.GetProfile(s.db, user.Did)
 	if err != nil {
-		l.Error("getting profile data", "did", user.Active.Did, "err", err)
+		l.Error("getting profile data", "did", user.Did, "err", err)
 	}
 	if profile == nil {
-		profile = &models.Profile{Did: user.Active.Did}
+		profile = &models.Profile{Did: user.Did}
 	}
 
-	repos, err := db.GetRepos(s.db, orm.FilterEq("did", user.Active.Did))
+	repos, err := db.GetRepos(s.db, orm.FilterEq("did", user.Did))
 	if err != nil {
-		l.Error("getting repos", "did", user.Active.Did, "err", err)
+		l.Error("getting repos", "did", user.Did, "err", err)
 	}
 
-	collaboratingRepos, err := db.CollaboratingIn(s.db, user.Active.Did)
+	collaboratingRepos, err := db.CollaboratingIn(s.db, user.Did)
 	if err != nil {
-		l.Error("getting collaborating repos", "did", user.Active.Did, "err", err)
+		l.Error("getting collaborating repos", "did", user.Did, "err", err)
 	}
 
 	allRepos := []pages.PinnedRepo{}
@@ -893,7 +889,7 @@ func (s *State) EditPinsFragment(w http.ResponseWriter, r *http.Request) {
 func (s *State) UploadProfileAvatar(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "UploadProfileAvatar")
 	user := s.oauth.GetMultiAccountUser(r)
-	l = l.With("did", user.Active.Did)
+	l = l.With("did", user.Did)
 
 	// Parse multipart form (10MB max)
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
@@ -940,7 +936,7 @@ func (s *State) UploadProfileAvatar(w http.ResponseWriter, r *http.Request) {
 	l.Info("uploaded avatar blob", "cid", uploadBlobResp.Blob.Ref.String())
 
 	// get current profile record from PDS to get its CID for swap
-	getRecordResp, err := comatproto.RepoGetRecord(r.Context(), client, "", tangled.ActorProfileNSID, user.Active.Did, "self")
+	getRecordResp, err := comatproto.RepoGetRecord(r.Context(), client, "", tangled.ActorProfileNSID, user.Did, "self")
 	if err != nil {
 		l.Error("failed to get current profile record", "err", err)
 		s.pages.Notice(w, "avatar-error", "Failed to get current profile from your PDS")
@@ -964,7 +960,7 @@ func (s *State) UploadProfileAvatar(w http.ResponseWriter, r *http.Request) {
 
 	_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 		Collection: tangled.ActorProfileNSID,
-		Repo:       user.Active.Did,
+		Repo:       user.Did,
 		Rkey:       "self",
 		Record:     &lexutil.LexiconTypeDecoder{Val: profileRecord},
 		SwapRecord: getRecordResp.Cid,
@@ -978,12 +974,12 @@ func (s *State) UploadProfileAvatar(w http.ResponseWriter, r *http.Request) {
 
 	l.Info("successfully updated profile with avatar")
 
-	profile, err := db.GetProfile(s.db, user.Active.Did)
+	profile, err := db.GetProfile(s.db, user.Did)
 	if err != nil {
 		l.Warn("getting profile data from DB", "err", err)
 	}
 	if profile == nil {
-		profile = &models.Profile{Did: user.Active.Did}
+		profile = &models.Profile{Did: user.Did}
 	}
 	profile.Avatar = uploadBlobResp.Blob.Ref.String()
 
@@ -1009,7 +1005,7 @@ func (s *State) UploadProfileAvatar(w http.ResponseWriter, r *http.Request) {
 func (s *State) RemoveProfileAvatar(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "RemoveProfileAvatar")
 	user := s.oauth.GetMultiAccountUser(r)
-	l = l.With("did", user.Active.Did)
+	l = l.With("did", user.Did)
 
 	client, err := s.oauth.AuthorizedClient(r)
 	if err != nil {
@@ -1018,7 +1014,7 @@ func (s *State) RemoveProfileAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	getRecordResp, err := comatproto.RepoGetRecord(r.Context(), client, "", tangled.ActorProfileNSID, user.Active.Did, "self")
+	getRecordResp, err := comatproto.RepoGetRecord(r.Context(), client, "", tangled.ActorProfileNSID, user.Did, "self")
 	if err != nil {
 		l.Error("failed to get current profile record", "err", err)
 		s.pages.Notice(w, "avatar-error", "Failed to get current profile from your PDS")
@@ -1042,7 +1038,7 @@ func (s *State) RemoveProfileAvatar(w http.ResponseWriter, r *http.Request) {
 
 	_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 		Collection: tangled.ActorProfileNSID,
-		Repo:       user.Active.Did,
+		Repo:       user.Did,
 		Rkey:       "self",
 		Record:     &lexutil.LexiconTypeDecoder{Val: profileRecord},
 		SwapRecord: getRecordResp.Cid,
@@ -1056,12 +1052,12 @@ func (s *State) RemoveProfileAvatar(w http.ResponseWriter, r *http.Request) {
 
 	l.Info("successfully removed avatar from PDS")
 
-	profile, err := db.GetProfile(s.db, user.Active.Did)
+	profile, err := db.GetProfile(s.db, user.Did)
 	if err != nil {
 		l.Warn("getting profile data from DB", "err", err)
 	}
 	if profile == nil {
-		profile = &models.Profile{Did: user.Active.Did}
+		profile = &models.Profile{Did: user.Did}
 	}
 	profile.Avatar = ""
 
@@ -1103,7 +1099,7 @@ func (s *State) UpdateProfilePunchcardSetting(w http.ResponseWriter, r *http.Req
 		hideOthers = true
 	}
 
-	err = db.UpsertPunchcardPreference(s.db, user.Active.Did, hideMine, hideOthers)
+	err = db.UpsertPunchcardPreference(s.db, user.Did, hideMine, hideOthers)
 	if err != nil {
 		l.Error("failed to update punchcard preferences", "err", err)
 		return

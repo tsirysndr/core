@@ -237,13 +237,9 @@ func (o *OAuth) RemoveAccount(w http.ResponseWriter, r *http.Request, targetDid 
 	return o.saveAccounts(w, r, registry)
 }
 
-type User struct {
-	Did string
-}
-
 func (o *OAuth) GetDid(r *http.Request) string {
 	if u := o.GetMultiAccountUser(r); u != nil {
-		return u.Did()
+		return u.Did
 	}
 
 	return ""

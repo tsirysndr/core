@@ -72,7 +72,7 @@ func (rp *Repo) SetDefaultBranch(w http.ResponseWriter, r *http.Request) {
 func (rp *Repo) Secrets(w http.ResponseWriter, r *http.Request) {
 	user := rp.oauth.GetMultiAccountUser(r)
 	l := rp.logger.With("handler", "Secrets")
-	l = l.With("did", user.Active.Did)
+	l = l.With("did", user.Did)
 
 	f, err := rp.repoResolver.Resolve(r)
 	if err != nil {
