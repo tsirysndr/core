@@ -126,10 +126,6 @@ func (o *OAuth) GetMultiAccountUser(r *http.Request) *MultiAccountUser {
 	}
 }
 
-type AuthReturnInfo struct {
-	ReturnURL string
-}
-
 func (o *OAuth) SetAuthReturn(w http.ResponseWriter, r *http.Request, returnURL string) error {
 	session, err := o.SessStore.Get(r, AuthReturnName)
 	if err != nil {
@@ -145,17 +141,15 @@ func (o *OAuth) SetAuthReturn(w http.ResponseWriter, r *http.Request, returnURL 
 	return session.Save(r, w)
 }
 
-func (o *OAuth) GetAuthReturn(r *http.Request) *AuthReturnInfo {
+func (o *OAuth) GetAuthReturn(r *http.Request) string {
 	session, err := o.SessStore.Get(r, AuthReturnName)
 	if err != nil || session.IsNew {
-		return &AuthReturnInfo{}
+		return ""
 	}
 
 	returnURL, _ := session.Values[AuthReturnURL].(string)
 
-	return &AuthReturnInfo{
-		ReturnURL: returnURL,
-	}
+	return returnURL
 }
 
 func (o *OAuth) ClearAuthReturn(w http.ResponseWriter, r *http.Request) error {

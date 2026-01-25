@@ -64,7 +64,7 @@ func (o *OAuth) callback(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	l := o.Logger.With("query", r.URL.Query())
 
-	authReturn := o.GetAuthReturn(r)
+	redirectURL := o.GetAuthReturn(r)
 	_ = o.ClearAuthReturn(w, r)
 
 	sessData, err := o.ClientApp.ProcessCallback(ctx, r.URL.Query())
@@ -108,9 +108,8 @@ func (o *OAuth) callback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	redirectURL := "/"
-	if authReturn.ReturnURL != "" {
-		redirectURL = authReturn.ReturnURL
+	if redirectURL == "" {
+		redirectURL = "/"
 	}
 
 	if o.isAccountDeactivated(sessData) {
