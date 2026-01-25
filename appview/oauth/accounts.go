@@ -34,13 +34,6 @@ func (m *MultiAccountUser) Did() string {
 	return m.Active.Did
 }
 
-func (m *MultiAccountUser) Pds() string {
-	if m.Active == nil {
-		return ""
-	}
-	return m.Active.Pds
-}
-
 func (o *OAuth) GetAccounts(r *http.Request) *AccountRegistry {
 	session, err := o.SessStore.Get(r, AccountsName)
 	if err != nil || session.IsNew {

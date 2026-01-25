@@ -49,7 +49,7 @@
       </div>
       <div class="flex flex-col gap-1 p-4">
         <span class="text-sm text-gray-500 dark:text-gray-400">Personal Data Server (PDS)</span>
-        <span class="font-bold">{{ .LoggedInUser.Pds }}</span>
+        <span class="font-bold">{{ resolvePds .LoggedInUser.Did }}</span>
       </div>
     </div>
     {{ if and .IsTnglSh .HandleOpen }}
@@ -132,9 +132,10 @@
 {{ end }}
 
 {{ define "accountActions" }}
+  {{ $isDeactivated := (and .IsTnglSh .IsDeactivated) }}
   <div>
     <h2 class="text-sm uppercase font-bold">Account</h2>
-    {{ if .IsDeactivated }}
+    {{ if $isDeactivated }}
       <div class="mt-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded text-sm text-amber-700 dark:text-amber-300">
         Your account is deactivated. Your profile and repositories are currently inaccessible. Reactivate to restore access.
       </div>
@@ -147,7 +148,7 @@
         {{ i "key" "size-4" }}
         change password
       </button>
-      {{ if .IsDeactivated }}
+      {{ if $isDeactivated }}
         <button
           popovertarget="reactivate-modal"
           popovertargetaction="toggle"
@@ -199,7 +200,7 @@
     </div>
   </div>
 
-  {{ if .IsDeactivated }}
+  {{ if $isDeactivated }}
     <div
       id="reactivate-modal"
       popover

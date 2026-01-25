@@ -25,6 +25,7 @@ import (
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/sites"
+	"tangled.org/core/idresolver"
 	"tangled.org/core/tid"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
@@ -36,12 +37,13 @@ import (
 )
 
 type Settings struct {
-	Db       *db.DB
-	OAuth    *oauth.OAuth
-	Pages    *pages.Pages
-	Config   *config.Config
-	CfClient *cloudflare.Client
-	Logger   *slog.Logger
+	Db         *db.DB
+	OAuth      *oauth.OAuth
+	Pages      *pages.Pages
+	Config     *config.Config
+	CfClient   *cloudflare.Client
+	IdResolver *idresolver.Resolver
+	Logger     *slog.Logger
 }
 
 func (s *Settings) Router() http.Handler {
@@ -92,6 +94,24 @@ func (s *Settings) Router() http.Handler {
 	return r
 }
 
+func (s *Settings) isTnglHandle(ctx context.Context, did syntax.DID) (bool, error) {
+	userIdent, err := s.IdResolver.ResolveIdent(ctx, did.String())
+	if err != nil {
+		s.Logger.Error("failed to resolve user ident", "err", err)
+		return false, err
+	}
+	return strings.HasSuffix(userIdent.Handle.String(), s.Config.Pds.UserDomain), nil
+}
+
+func (s *Settings) isTnglShUser(ctx context.Context, did syntax.DID) (bool, error) {
+	userIdent, err := s.IdResolver.ResolveIdent(ctx, did.String())
+	if err != nil {
+		s.Logger.Error("failed to resolve user ident", "err", err)
+		return false, err
+	}
+	return strings.TrimRight(userIdent.PDSEndpoint(), "/") == strings.TrimRight(s.Config.Pds.Host, "/"), nil
+}
+
 func (s *Settings) sitesSettings(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
 
@@ -103,13 +123,7 @@ func (s *Settings) sitesSettings(w http.ResponseWriter, r *http.Request) {
 
 	// determine whether the active account has a tngl.sh handle, in which
 	// case their sites domain is automatically their handle domain.
-	isTnglHandle := false
-	for _, acc := range user.Accounts {
-		if acc.Did == user.Active.Did {
-			isTnglHandle = strings.HasSuffix(acc.Handle, s.Config.Pds.UserDomain)
-			break
-		}
-	}
+	isTnglHandle, _ := s.isTnglHandle(r.Context(), syntax.DID(user.Active.Did))
 
 	s.Pages.UserSiteSettings(w, pages.UserSiteSettingsParams{
 		LoggedInUser: user,
@@ -179,14 +193,14 @@ func (s *Settings) releaseSitesDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, acc := range user.Accounts {
-		if acc.Did == user.Active.Did {
-			if strings.HasSuffix(acc.Handle, s.Config.Pds.UserDomain) {
-				s.Pages.Notice(w, "settings-sites-error", "Your tngl.sh domain is tied to your handle and cannot be released here.")
-				return
-			}
-			break
-		}
+	isTnglHandle, err := s.isTnglHandle(r.Context(), syntax.DID(user.Active.Did))
+	if err != nil {
+		s.Pages.Notice(w, "settings-sites-error", "Unable to resolve user identity")
+		return
+	}
+	if isTnglHandle {
+		s.Pages.Notice(w, "settings-sites-error", "Your tngl.sh domain is tied to your handle and cannot be released here.")
+		return
 	}
 
 	if err := db.ReleaseDomain(s.Db, user.Active.Did, domain); err != nil {
@@ -251,12 +265,15 @@ func (s *Settings) profileSettings(w http.ResponseWriter, r *http.Request) {
 		log.Printf("failed to get users punchcard preferences: %s", err)
 	}
 
-	isDeactivated := s.Config.Pds.IsTnglShUser(user.Pds()) && s.isAccountDeactivated(r.Context(), user.Did(), user.Pds())
+	isTnglSh, err := s.isTnglShUser(r.Context(), syntax.DID(user.Active.Did))
+
+	// TODO: bring the user state from DB instead of PDS request
+	isDeactivated := s.isAccountDeactivated(r.Context(), syntax.DID(user.Active.Did))
 
 	s.Pages.UserProfileSettings(w, pages.UserProfileSettingsParams{
 		LoggedInUser:        user,
 		PunchcardPreference: punchcardPreferences,
-		IsTnglSh:            s.Config.Pds.IsTnglShUser(user.Pds()),
+		IsTnglSh:            isTnglSh,
 		IsDeactivated:       isDeactivated,
 		HandleOpen:          r.URL.Query().Get("handle") == "1",
 	})
@@ -716,7 +733,7 @@ func (s *Settings) keys(w http.ResponseWriter, r *http.Request) {
 
 func (s *Settings) elevateForHandle(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
-	if !s.Config.Pds.IsTnglShUser(user.Pds()) {
+	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Active.Did)); !isTngl {
 		http.Redirect(w, r, "/settings/profile", http.StatusSeeOther)
 		return
 	}
@@ -744,7 +761,7 @@ func (s *Settings) elevateForHandle(w http.ResponseWriter, r *http.Request) {
 
 func (s *Settings) updateHandle(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
-	if !s.Config.Pds.IsTnglShUser(user.Pds()) {
+	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Active.Did)); !isTngl {
 		s.Pages.Notice(w, "handle-error", "Handle changes are only available for tngl.sh accounts.")
 		return
 	}

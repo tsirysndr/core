@@ -249,7 +249,7 @@ func TestAccountRegistry_OtherAccounts(t *testing.T) {
 func TestMultiAccountUser_Did(t *testing.T) {
 	t.Run("with active user", func(t *testing.T) {
 		user := &MultiAccountUser{
-			Active: &User{Did: "did:plc:test", Pds: "https://bsky.social"},
+			Active: &User{Did: "did:plc:test"},
 		}
 		if user.Did() != "did:plc:test" {
 			t.Errorf("Did() = %s, want did:plc:test", user.Did())

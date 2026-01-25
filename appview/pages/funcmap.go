@@ -81,6 +81,13 @@ func (p *Pages) funcMap() template.FuncMap {
 
 			return identity.Handle.String()
 		},
+		"resolvePds": func(s string) string {
+			identity, err := p.resolver.ResolveIdent(context.Background(), s)
+			if err != nil {
+				return ""
+			}
+			return identity.PDSEndpoint()
+		},
 		"ownerSlashRepo": func(repo *models.Repo) string {
 			ownerId, err := p.resolver.ResolveIdent(context.Background(), repo.Did)
 			if err != nil {

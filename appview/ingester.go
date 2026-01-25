@@ -51,7 +51,12 @@ func (i *Ingester) Ingest() processFunc {
 		l := i.Logger.With("kind", e.Kind)
 		switch e.Kind {
 		case jmodels.EventKindAccount:
-			if !e.Account.Active && *e.Account.Status == "deactivated" {
+			// TODO: sync account state to db
+			if e.Account.Active {
+				break
+			}
+			// TODO: revoke sessions by DID
+			if *e.Account.Status == "deactivated" {
 				err = i.IdResolver.InvalidateIdent(ctx, e.Account.Did)
 			}
 		case jmodels.EventKindIdentity:

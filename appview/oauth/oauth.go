@@ -239,7 +239,6 @@ func (o *OAuth) RemoveAccount(w http.ResponseWriter, r *http.Request, targetDid 
 
 type User struct {
 	Did string
-	Pds string
 }
 
 func (o *OAuth) GetUser(r *http.Request) *User {
@@ -250,7 +249,6 @@ func (o *OAuth) GetUser(r *http.Request) *User {
 
 	return &User{
 		Did: sess.Data.AccountDID.String(),
-		Pds: sess.Data.HostURL,
 	}
 }
 

@@ -238,12 +238,13 @@ func (s *State) Core() http.HandlerFunc {
 
 func (s *State) SettingsRouter() http.Handler {
 	settings := &settings.Settings{
-		Db:       s.db,
-		OAuth:    s.oauth,
-		Pages:    s.pages,
-		Config:   s.config,
-		CfClient: s.cfClient,
-		Logger:   log.SubLogger(s.logger, "settings"),
+		Db:         s.db,
+		OAuth:      s.oauth,
+		Pages:      s.pages,
+		Config:     s.config,
+		CfClient:   s.cfClient,
+		Logger:     log.SubLogger(s.logger, "settings"),
+		IdResolver: s.idResolver,
 	}
 
 	return settings.Router()

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/bluesky-social/indigo/xrpc"
 )
 
@@ -58,7 +59,7 @@ func (s *Settings) revokePdsSession(session *pdsSession) {
 
 func (s *Settings) requestPasswordReset(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
-	if !s.Config.Pds.IsTnglShUser(user.Pds()) {
+	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Active.Did)); !isTngl {
 		s.Pages.Notice(w, "password-error", "Only available for tngl.sh accounts.")
 		return
 	}
@@ -99,7 +100,7 @@ func (s *Settings) requestPasswordReset(w http.ResponseWriter, r *http.Request) 
 
 func (s *Settings) resetPassword(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
-	if !s.Config.Pds.IsTnglShUser(user.Pds()) {
+	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Active.Did)); !isTngl {
 		s.Pages.Notice(w, "password-error", "Only available for tngl.sh accounts.")
 		return
 	}
@@ -133,7 +134,7 @@ func (s *Settings) resetPassword(w http.ResponseWriter, r *http.Request) {
 
 func (s *Settings) deactivateAccount(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
-	if !s.Config.Pds.IsTnglShUser(user.Pds()) {
+	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Active.Did)); !isTngl {
 		s.Pages.Notice(w, "deactivate-error", "Only available for tngl.sh accounts.")
 		return
 	}
@@ -171,7 +172,7 @@ func (s *Settings) deactivateAccount(w http.ResponseWriter, r *http.Request) {
 
 func (s *Settings) requestAccountDelete(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
-	if !s.Config.Pds.IsTnglShUser(user.Pds()) {
+	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Active.Did)); !isTngl {
 		s.Pages.Notice(w, "delete-error", "Only available for tngl.sh accounts.")
 		return
 	}
@@ -203,7 +204,7 @@ func (s *Settings) requestAccountDelete(w http.ResponseWriter, r *http.Request) 
 
 func (s *Settings) deleteAccount(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
-	if !s.Config.Pds.IsTnglShUser(user.Pds()) {
+	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Active.Did)); !isTngl {
 		s.Pages.Notice(w, "delete-error", "Only available for tngl.sh accounts.")
 		return
 	}
@@ -243,13 +244,18 @@ func (s *Settings) deleteAccount(w http.ResponseWriter, r *http.Request) {
 	s.Pages.HxRedirect(w, "/")
 }
 
-func (s *Settings) isAccountDeactivated(ctx context.Context, did, pdsHost string) bool {
+func (s *Settings) isAccountDeactivated(ctx context.Context, did syntax.DID) bool {
+	ident, err := s.IdResolver.ResolveIdent(ctx, did.String())
+	if err != nil {
+		s.Logger.Error("failed to resolve user did", "err", err)
+		return false
+	}
 	client := &xrpc.Client{
-		Host:   pdsHost,
+		Host:   ident.PDSEndpoint(),
 		Client: &http.Client{Timeout: 5 * time.Second},
 	}
 
-	_, err := comatproto.RepoDescribeRepo(ctx, client, did)
+	_, err = comatproto.RepoDescribeRepo(ctx, client, did.String())
 	if err == nil {
 		return false
 	}
@@ -263,7 +269,7 @@ func (s *Settings) isAccountDeactivated(ctx context.Context, did, pdsHost string
 
 func (s *Settings) reactivateAccount(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
-	if !s.Config.Pds.IsTnglShUser(user.Pds()) {
+	if isTngl, _ := s.isTnglShUser(r.Context(), syntax.DID(user.Active.Did)); !isTngl {
 		s.Pages.Notice(w, "reactivate-error", "Only available for tngl.sh accounts.")
 		return
 	}
