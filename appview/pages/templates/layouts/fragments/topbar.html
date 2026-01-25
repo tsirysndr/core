@@ -48,17 +48,16 @@
 {{ end }}
 
 {{ define "profileDropdown" }}
+{{ $handle := resolve .Did }}
 <details class="relative inline-block text-left nav-dropdown">
     <summary class="cursor-pointer list-none flex items-center gap-1">
-        {{ $user := .Active.Did }}
-        {{ template "user/fragments/pic" (list $user "size-6") }}
-        <span class="hidden md:inline">{{ $user | resolve | truncateAt30 }}</span>
+        {{ template "user/fragments/pic" (list .Did "size-6") }}
+        <span class="hidden md:inline">{{ $handle | truncateAt30 }}</span>
     </summary>
     <div class="absolute right-0 mt-4 rounded bg-white dark:bg-gray-800 dark:text-white border border-gray-200 dark:border-gray-700 shadow-lg z-50 text-sm" style="width: 14rem;">
-        {{ $active := .Active.Did }}
         {{ $linkStyle := "flex items-center gap-3 px-4 py-2 hover:no-underline hover:bg-gray-50 hover:dark:bg-gray-700/50" }}
 
-        {{ $others := .Accounts | otherAccounts $active }}
+        {{ $others := .Accounts | otherAccounts .Did }}
         {{ if $others }}
           <div class="text-sm text-gray-500 dark:text-gray-400 px-3 py-1 pt-2">switch account</div>
           {{ range $others }}
@@ -86,15 +85,15 @@
         </a>
 
         <div class="border-t border-gray-200 dark:border-gray-700">
-            <a href="/{{ $active }}" class="{{$linkStyle}}">
+            <a href="/{{ $handle }}" class="{{$linkStyle}}">
               {{ i "user" "size-4" }}
               profile
             </a>
-            <a href="/{{ $active }}?tab=repos" class="{{$linkStyle}}">
+            <a href="/{{ $handle }}?tab=repos" class="{{$linkStyle}}">
               {{ i "book-marked" "size-4" }}
               repositories
             </a>
-            <a href="/{{ $active }}?tab=strings" class="{{$linkStyle}}">
+            <a href="/{{ $handle }}?tab=strings" class="{{$linkStyle}}">
               {{ i "line-squiggle" "size-4" }}
               strings
             </a>
