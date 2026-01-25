@@ -77,7 +77,7 @@ func (rr *RepoResolver) GetRepoInfo(r *http.Request, user *oauth.MultiAccountUse
 	repoAt := repo.RepoAt()
 	isStarred := false
 	roles := repoinfo.RolesInRepo{}
-	if user != nil && user.Active != nil {
+	if user != nil {
 		isStarred = db.GetStarStatus(rr.execer, user.Active.Did, repoAt)
 		roles.Roles = rr.enforcer.GetPermissionsInRepo(user.Active.Did, repo.Knot, repo.RepoIdentifier())
 	}

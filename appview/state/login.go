@@ -11,7 +11,6 @@ import (
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/bluesky-social/indigo/xrpc"
-	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 )
 
@@ -24,21 +23,12 @@ func (s *State) Login(w http.ResponseWriter, r *http.Request) {
 		errorCode := r.URL.Query().Get("error")
 		addAccount := r.URL.Query().Get("mode") == "add_account"
 
-		user := s.oauth.GetMultiAccountUser(r)
-		if user == nil {
-			registry := s.oauth.GetAccounts(r)
-			if len(registry.Accounts) > 0 {
-				user = &oauth.MultiAccountUser{
-					Active:   nil,
-					Accounts: registry.Accounts,
-				}
-			}
-		}
+		registry := s.oauth.GetAccounts(r)
 		s.pages.Login(w, pages.LoginParams{
-			ReturnUrl:    returnURL,
-			ErrorCode:    errorCode,
-			AddAccount:   addAccount,
-			LoggedInUser: user,
+			ReturnUrl:  returnURL,
+			ErrorCode:  errorCode,
+			AddAccount: addAccount,
+			Accounts:   registry.Accounts,
 		})
 	case http.MethodPost:
 		handle := r.FormValue("handle")
@@ -139,7 +129,7 @@ func (s *State) Logout(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "Logout")
 
 	currentUser := s.oauth.GetMultiAccountUser(r)
-	if currentUser == nil || currentUser.Active == nil {
+	if currentUser == nil {
 		s.pages.HxRedirect(w, "/login")
 		return
 	}

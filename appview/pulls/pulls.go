@@ -105,7 +105,7 @@ func (s *Pulls) PullActions(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		user := s.oauth.GetMultiAccountUser(r)
-		if user != nil && user.Active != nil {
+		if user != nil {
 			l = l.With("user", user.Active.Did)
 		}
 
@@ -162,7 +162,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 	l := s.logger.With("handler", "repoPullHelper", "interdiff", interdiff)
 
 	user := s.oauth.GetMultiAccountUser(r)
-	if user != nil && user.Active != nil {
+	if user != nil {
 		l = l.With("user", user.Active.Did)
 	}
 
@@ -209,7 +209,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 	mergeCheckResponse := s.mergeCheck(r, f, pull, stack)
 	branchDeleteStatus := s.branchDeleteStatus(r, f, pull)
 	resubmitResult := pages.Unknown
-	if user != nil && user.Active != nil && user.Active.Did == pull.OwnerDid {
+	if user != nil && user.Active.Did == pull.OwnerDid {
 		resubmitResult = s.resubmitCheck(r, f, pull, stack)
 	}
 
@@ -503,7 +503,7 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "RepoPulls")
 
 	user := s.oauth.GetMultiAccountUser(r)
-	if user != nil && user.Active != nil {
+	if user != nil {
 		l = l.With("user", user.Active.Did)
 	}
 
@@ -800,7 +800,7 @@ func (s *Pulls) PullComment(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "PullComment")
 
 	user := s.oauth.GetMultiAccountUser(r)
-	if user != nil && user.Active != nil {
+	if user != nil {
 		l = l.With("user", user.Active.Did)
 	}
 
@@ -917,7 +917,7 @@ func (s *Pulls) NewPull(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "NewPull")
 
 	user := s.oauth.GetMultiAccountUser(r)
-	if user != nil && user.Active != nil {
+	if user != nil {
 		l = l.With("user", user.Active.Did)
 	}
 
@@ -1601,7 +1601,7 @@ func (s *Pulls) CompareForksFragment(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "CompareForksFragment")
 
 	user := s.oauth.GetMultiAccountUser(r)
-	if user != nil && user.Active != nil {
+	if user != nil {
 		l = l.With("user", user.Active.Did)
 	}
 
@@ -1622,7 +1622,7 @@ func (s *Pulls) CompareForksBranchesFragment(w http.ResponseWriter, r *http.Requ
 	l := s.logger.With("handler", "CompareForksBranchesFragment")
 
 	user := s.oauth.GetMultiAccountUser(r)
-	if user != nil && user.Active != nil {
+	if user != nil {
 		l = l.With("user", user.Active.Did)
 	}
 
@@ -1702,7 +1702,7 @@ func (s *Pulls) ResubmitPull(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "ResubmitPull")
 
 	user := s.oauth.GetMultiAccountUser(r)
-	if user != nil && user.Active != nil {
+	if user != nil {
 		l = l.With("user", user.Active.Did)
 	}
 
@@ -1739,7 +1739,7 @@ func (s *Pulls) resubmitPatch(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "resubmitPatch")
 
 	user := s.oauth.GetMultiAccountUser(r)
-	if user != nil && user.Active != nil {
+	if user != nil {
 		l = l.With("user", user.Active.Did)
 	}
 
@@ -1772,7 +1772,7 @@ func (s *Pulls) resubmitBranch(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "resubmitBranch")
 
 	user := s.oauth.GetMultiAccountUser(r)
-	if user != nil && user.Active != nil {
+	if user != nil {
 		l = l.With("user", user.Active.Did)
 	}
 
@@ -1842,7 +1842,7 @@ func (s *Pulls) resubmitFork(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "resubmitFork")
 
 	user := s.oauth.GetMultiAccountUser(r)
-	if user != nil && user.Active != nil {
+	if user != nil {
 		l = l.With("user", user.Active.Did)
 	}
 
@@ -2299,7 +2299,7 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "MergePull")
 
 	user := s.oauth.GetMultiAccountUser(r)
-	if user != nil && user.Active != nil {
+	if user != nil {
 		l = l.With("user", user.Active.Did)
 	}
 
@@ -2424,7 +2424,7 @@ func (s *Pulls) ClosePull(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "ClosePull")
 
 	user := s.oauth.GetMultiAccountUser(r)
-	if user != nil && user.Active != nil {
+	if user != nil {
 		l = l.With("user", user.Active.Did)
 	}
 
@@ -2500,7 +2500,7 @@ func (s *Pulls) ReopenPull(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "ReopenPull")
 
 	user := s.oauth.GetMultiAccountUser(r)
-	if user != nil && user.Active != nil {
+	if user != nil {
 		l = l.With("user", user.Active.Did)
 	}
 

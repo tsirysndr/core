@@ -210,21 +210,3 @@ func TestAccountRegistry_FindAccount(t *testing.T) {
 		}
 	})
 }
-
-func TestMultiAccountUser_Did(t *testing.T) {
-	t.Run("with active user", func(t *testing.T) {
-		user := &MultiAccountUser{
-			Active: &User{Did: "did:plc:test"},
-		}
-		if user.Did() != "did:plc:test" {
-			t.Errorf("Did() = %s, want did:plc:test", user.Did())
-		}
-	})
-
-	t.Run("with nil active", func(t *testing.T) {
-		user := &MultiAccountUser{Active: nil}
-		if user.Did() != "" {
-			t.Errorf("Did() = %s, want empty string", user.Did())
-		}
-	})
-}
