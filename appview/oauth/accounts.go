@@ -53,7 +53,7 @@ func (o *OAuth) GetAccounts(r *http.Request) *AccountRegistry {
 	return &registry
 }
 
-func (o *OAuth) SaveAccounts(w http.ResponseWriter, r *http.Request, registry *AccountRegistry) error {
+func (o *OAuth) saveAccounts(w http.ResponseWriter, r *http.Request, registry *AccountRegistry) error {
 	session, err := o.SessStore.Get(r, AccountsName)
 	if err != nil {
 		o.Logger.Warn("failed to decode existing accounts cookie, will create new", "err", err)
@@ -114,25 +114,17 @@ func (r *AccountRegistry) FindAccount(did string) *AccountInfo {
 	return nil
 }
 
-func (r *AccountRegistry) OtherAccounts(activeDid string) []AccountInfo {
-	result := make([]AccountInfo, 0, len(r.Accounts))
-	for _, acc := range r.Accounts {
-		if acc.Did != activeDid {
-			result = append(result, acc)
-		}
-	}
-	return result
-}
-
 func (o *OAuth) GetMultiAccountUser(r *http.Request) *MultiAccountUser {
-	user := o.GetUser(r)
-	if user == nil {
+	sess, err := o.ResumeSession(r)
+	if err != nil {
 		return nil
 	}
 
 	registry := o.GetAccounts(r)
 	return &MultiAccountUser{
-		Active:   user,
+		Active: &User{
+			Did: sess.Data.AccountDID.String(),
+		},
 		Accounts: registry.Accounts,
 	}
 }

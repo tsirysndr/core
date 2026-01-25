@@ -10,11 +10,5 @@ const (
 	SessionDid           = "did"
 	SessionId            = "id"
 	SessionPds           = "pds"
-	SessionAccessJwt     = "accessJwt"
-	SessionRefreshJwt    = "refreshJwt"
-	SessionExpiry        = "expiry"
 	SessionAuthenticated = "authenticated"
-
-	SessionDpopPrivateJwk      = "dpopPrivateJwk"
-	SessionDpopAuthServerNonce = "dpopAuthServerNonce"
 )

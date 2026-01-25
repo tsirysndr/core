@@ -892,8 +892,8 @@ func (s *State) EditPinsFragment(w http.ResponseWriter, r *http.Request) {
 
 func (s *State) UploadProfileAvatar(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "UploadProfileAvatar")
-	user := s.oauth.GetUser(r)
-	l = l.With("did", user.Did)
+	user := s.oauth.GetMultiAccountUser(r)
+	l = l.With("did", user.Active.Did)
 
 	// Parse multipart form (10MB max)
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
@@ -940,7 +940,7 @@ func (s *State) UploadProfileAvatar(w http.ResponseWriter, r *http.Request) {
 	l.Info("uploaded avatar blob", "cid", uploadBlobResp.Blob.Ref.String())
 
 	// get current profile record from PDS to get its CID for swap
-	getRecordResp, err := comatproto.RepoGetRecord(r.Context(), client, "", tangled.ActorProfileNSID, user.Did, "self")
+	getRecordResp, err := comatproto.RepoGetRecord(r.Context(), client, "", tangled.ActorProfileNSID, user.Active.Did, "self")
 	if err != nil {
 		l.Error("failed to get current profile record", "err", err)
 		s.pages.Notice(w, "avatar-error", "Failed to get current profile from your PDS")
@@ -964,7 +964,7 @@ func (s *State) UploadProfileAvatar(w http.ResponseWriter, r *http.Request) {
 
 	_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 		Collection: tangled.ActorProfileNSID,
-		Repo:       user.Did,
+		Repo:       user.Active.Did,
 		Rkey:       "self",
 		Record:     &lexutil.LexiconTypeDecoder{Val: profileRecord},
 		SwapRecord: getRecordResp.Cid,
@@ -978,12 +978,12 @@ func (s *State) UploadProfileAvatar(w http.ResponseWriter, r *http.Request) {
 
 	l.Info("successfully updated profile with avatar")
 
-	profile, err := db.GetProfile(s.db, user.Did)
+	profile, err := db.GetProfile(s.db, user.Active.Did)
 	if err != nil {
 		l.Warn("getting profile data from DB", "err", err)
 	}
 	if profile == nil {
-		profile = &models.Profile{Did: user.Did}
+		profile = &models.Profile{Did: user.Active.Did}
 	}
 	profile.Avatar = uploadBlobResp.Blob.Ref.String()
 
@@ -1008,8 +1008,8 @@ func (s *State) UploadProfileAvatar(w http.ResponseWriter, r *http.Request) {
 
 func (s *State) RemoveProfileAvatar(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "RemoveProfileAvatar")
-	user := s.oauth.GetUser(r)
-	l = l.With("did", user.Did)
+	user := s.oauth.GetMultiAccountUser(r)
+	l = l.With("did", user.Active.Did)
 
 	client, err := s.oauth.AuthorizedClient(r)
 	if err != nil {
@@ -1018,7 +1018,7 @@ func (s *State) RemoveProfileAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	getRecordResp, err := comatproto.RepoGetRecord(r.Context(), client, "", tangled.ActorProfileNSID, user.Did, "self")
+	getRecordResp, err := comatproto.RepoGetRecord(r.Context(), client, "", tangled.ActorProfileNSID, user.Active.Did, "self")
 	if err != nil {
 		l.Error("failed to get current profile record", "err", err)
 		s.pages.Notice(w, "avatar-error", "Failed to get current profile from your PDS")
@@ -1042,7 +1042,7 @@ func (s *State) RemoveProfileAvatar(w http.ResponseWriter, r *http.Request) {
 
 	_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 		Collection: tangled.ActorProfileNSID,
-		Repo:       user.Did,
+		Repo:       user.Active.Did,
 		Rkey:       "self",
 		Record:     &lexutil.LexiconTypeDecoder{Val: profileRecord},
 		SwapRecord: getRecordResp.Cid,
@@ -1056,12 +1056,12 @@ func (s *State) RemoveProfileAvatar(w http.ResponseWriter, r *http.Request) {
 
 	l.Info("successfully removed avatar from PDS")
 
-	profile, err := db.GetProfile(s.db, user.Did)
+	profile, err := db.GetProfile(s.db, user.Active.Did)
 	if err != nil {
 		l.Warn("getting profile data from DB", "err", err)
 	}
 	if profile == nil {
-		profile = &models.Profile{Did: user.Did}
+		profile = &models.Profile{Did: user.Active.Did}
 	}
 	profile.Avatar = ""
 
@@ -1091,7 +1091,7 @@ func (s *State) UpdateProfilePunchcardSetting(w http.ResponseWriter, r *http.Req
 		l.Error("invalid profile update form", "err", err)
 		return
 	}
-	user := s.oauth.GetUser(r)
+	user := s.oauth.GetMultiAccountUser(r)
 
 	hideOthers := false
 	hideMine := false
@@ -1103,7 +1103,7 @@ func (s *State) UpdateProfilePunchcardSetting(w http.ResponseWriter, r *http.Req
 		hideOthers = true
 	}
 
-	err = db.UpsertPunchcardPreference(s.db, user.Did, hideMine, hideOthers)
+	err = db.UpsertPunchcardPreference(s.db, user.Active.Did, hideMine, hideOthers)
 	if err != nil {
 		l.Error("failed to update punchcard preferences", "err", err)
 		return

@@ -211,41 +211,6 @@ func TestAccountRegistry_FindAccount(t *testing.T) {
 	})
 }
 
-func TestAccountRegistry_OtherAccounts(t *testing.T) {
-	registry := &AccountRegistry{
-		Accounts: []AccountInfo{
-			{Did: "did:plc:active", Handle: "active", SessionId: "s1"},
-			{Did: "did:plc:other1", Handle: "other1", SessionId: "s2"},
-			{Did: "did:plc:other2", Handle: "other2", SessionId: "s3"},
-		},
-	}
-
-	others := registry.OtherAccounts("did:plc:active")
-
-	if len(others) != 2 {
-		t.Errorf("OtherAccounts() len = %d, want 2", len(others))
-	}
-
-	for _, acc := range others {
-		if acc.Did == "did:plc:active" {
-			t.Errorf("OtherAccounts() should not include active account")
-		}
-	}
-
-	hasDid := func(did string) bool {
-		for _, acc := range others {
-			if acc.Did == did {
-				return true
-			}
-		}
-		return false
-	}
-
-	if !hasDid("did:plc:other1") || !hasDid("did:plc:other2") {
-		t.Errorf("OtherAccounts() missing expected accounts")
-	}
-}
-
 func TestMultiAccountUser_Did(t *testing.T) {
 	t.Run("with active user", func(t *testing.T) {
 		user := &MultiAccountUser{

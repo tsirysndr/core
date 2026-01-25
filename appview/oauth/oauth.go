@@ -128,7 +128,7 @@ func (o *OAuth) SaveSession(w http.ResponseWriter, r *http.Request, sessData *oa
 	if err := registry.AddAccount(sessData.AccountDID.String(), handle, sessData.SessionID); err != nil {
 		return err
 	}
-	return o.SaveAccounts(w, r, registry)
+	return o.saveAccounts(w, r, registry)
 }
 
 func (o *OAuth) ResumeSession(r *http.Request) (*oauth.ClientSession, error) {
@@ -204,7 +204,7 @@ func (o *OAuth) SwitchAccount(w http.ResponseWriter, r *http.Request, targetDid 
 	sess, err := o.ClientApp.ResumeSession(r.Context(), did, account.SessionId)
 	if err != nil {
 		registry.RemoveAccount(targetDid)
-		_ = o.SaveAccounts(w, r, registry)
+		_ = o.saveAccounts(w, r, registry)
 		return fmt.Errorf("session expired for account: %w", err)
 	}
 
@@ -234,22 +234,11 @@ func (o *OAuth) RemoveAccount(w http.ResponseWriter, r *http.Request, targetDid 
 	}
 
 	registry.RemoveAccount(targetDid)
-	return o.SaveAccounts(w, r, registry)
+	return o.saveAccounts(w, r, registry)
 }
 
 type User struct {
 	Did string
-}
-
-func (o *OAuth) GetUser(r *http.Request) *User {
-	sess, err := o.ResumeSession(r)
-	if err != nil {
-		return nil
-	}
-
-	return &User{
-		Did: sess.Data.AccountDID.String(),
-	}
 }
 
 func (o *OAuth) GetDid(r *http.Request) string {
