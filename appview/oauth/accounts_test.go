@@ -28,7 +28,7 @@ func TestAccountRegistry_AddAccount(t *testing.T) {
 		{
 			name: "add second account",
 			initial: []AccountInfo{
-				{Did: "did:plc:abc123", Handle: "alice.bsky.social", SessionId: "session-1", AddedAt: 1000},
+				{Did: "did:plc:abc123", SessionId: "session-1", AddedAt: 1000},
 			},
 			addDid:        "did:plc:def456",
 			addHandle:     "bob.bsky.social",
@@ -40,7 +40,7 @@ func TestAccountRegistry_AddAccount(t *testing.T) {
 		{
 			name: "update existing account session",
 			initial: []AccountInfo{
-				{Did: "did:plc:abc123", Handle: "alice.bsky.social", SessionId: "old-session", AddedAt: 1000},
+				{Did: "did:plc:abc123", SessionId: "old-session", AddedAt: 1000},
 			},
 			addDid:        "did:plc:abc123",
 			addHandle:     "alice.bsky.social",
@@ -112,8 +112,8 @@ func TestAccountRegistry_RemoveAccount(t *testing.T) {
 		{
 			name: "remove existing account",
 			initial: []AccountInfo{
-				{Did: "did:plc:abc123", Handle: "alice", SessionId: "s1"},
-				{Did: "did:plc:def456", Handle: "bob", SessionId: "s2"},
+				{Did: "did:plc:abc123", SessionId: "s1"},
+				{Did: "did:plc:def456", SessionId: "s2"},
 			},
 			removeDid: "did:plc:abc123",
 			wantLen:   1,
@@ -122,7 +122,7 @@ func TestAccountRegistry_RemoveAccount(t *testing.T) {
 		{
 			name: "remove non-existing account",
 			initial: []AccountInfo{
-				{Did: "did:plc:abc123", Handle: "alice", SessionId: "s1"},
+				{Did: "did:plc:abc123", SessionId: "s1"},
 			},
 			removeDid: "did:plc:notfound",
 			wantLen:   1,
@@ -131,7 +131,7 @@ func TestAccountRegistry_RemoveAccount(t *testing.T) {
 		{
 			name: "remove last account",
 			initial: []AccountInfo{
-				{Did: "did:plc:abc123", Handle: "alice", SessionId: "s1"},
+				{Did: "did:plc:abc123", SessionId: "s1"},
 			},
 			removeDid: "did:plc:abc123",
 			wantLen:   0,
@@ -171,9 +171,9 @@ func TestAccountRegistry_RemoveAccount(t *testing.T) {
 func TestAccountRegistry_FindAccount(t *testing.T) {
 	registry := &AccountRegistry{
 		Accounts: []AccountInfo{
-			{Did: "did:plc:first", Handle: "first", SessionId: "s1", AddedAt: 1000},
-			{Did: "did:plc:second", Handle: "second", SessionId: "s2", AddedAt: 2000},
-			{Did: "did:plc:third", Handle: "third", SessionId: "s3", AddedAt: 3000},
+			{Did: "did:plc:first", SessionId: "s1", AddedAt: 1000},
+			{Did: "did:plc:second", SessionId: "s2", AddedAt: 2000},
+			{Did: "did:plc:third", SessionId: "s3", AddedAt: 3000},
 		},
 	}
 
@@ -181,9 +181,6 @@ func TestAccountRegistry_FindAccount(t *testing.T) {
 		found := registry.FindAccount("did:plc:second")
 		if found == nil {
 			t.Fatal("FindAccount() returned nil for existing account")
-		}
-		if found.Handle != "second" {
-			t.Errorf("FindAccount() handle = %s, want second", found.Handle)
 		}
 		if found.SessionId != "s2" {
 			t.Errorf("FindAccount() sessionId = %s, want s2", found.SessionId)

@@ -13,7 +13,6 @@ var ErrMaxAccountsReached = errors.New("maximum number of linked accounts reache
 
 type AccountInfo struct {
 	Did       string `json:"did"`
-	Handle    string `json:"handle"`
 	SessionId string `json:"session_id"`
 	AddedAt   int64  `json:"added_at"`
 }
@@ -74,7 +73,6 @@ func (r *AccountRegistry) AddAccount(did, handle, sessionId string) error {
 	for i, acc := range r.Accounts {
 		if acc.Did == did {
 			r.Accounts[i].SessionId = sessionId
-			r.Accounts[i].Handle = handle
 			return nil
 		}
 	}
@@ -85,7 +83,6 @@ func (r *AccountRegistry) AddAccount(did, handle, sessionId string) error {
 
 	r.Accounts = append(r.Accounts, AccountInfo{
 		Did:       did,
-		Handle:    handle,
 		SessionId: sessionId,
 		AddedAt:   time.Now().Unix(),
 	})
