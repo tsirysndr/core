@@ -1,0 +1,55 @@
+{{define "base"}}
+<!DOCTYPE html>
+<html>
+<head>
+  <title>KnotMirror Admin</title>
+  <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js" integrity="sha384-/TgkGk7p307TH7EXJDuUlgG3Ce1UVolAOFopFekQkkXihi5u/6OCvVKyz1W+idaz" crossorigin="anonymous"></script>
+  <style>
+    nav { margin-bottom: 20px; border-bottom: 1px solid #ccc; padding: 10px 0; }
+    nav a { margin-right: 15px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px; border: 1px solid #ddd; }
+    .pagination { margin-top: 20px; }
+    .filters { background: #f4f4f4; padding: 15px; margin-bottom: 20px; }
+    #notifications {
+      position: fixed;
+      bottom: 8px;
+      right: 8px;
+      z-index: 1000;
+      pointer-events: none;
+    }
+    .notif {
+      pointer-events: auto;
+      background: #333;
+      color: #fff;
+      padding: 2px 4px;
+      margin: 4px 0;
+      opacity: 0.95;
+    }
+    .notif.warn { background: #ed6c02 }
+    .notif.error { background: #d32f2f }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/repos">Repositories</a>
+    <a href="/hosts">Knot Hosts</a>
+  </nav>
+  <main id="main">
+    {{template "content" .}}
+  </main>
+  <div id="notifications"></div>
+  <script>
+    document.body.addEventListener("htmx:oobBeforeSwap", (evt) => {
+      evt.detail.fragment.querySelectorAll(".notif").forEach((el) => {
+        console.debug("set timeout to notif element", el)
+        setTimeout(() => {
+          console.debug("clearing notif element", el);
+          el.remove();
+        }, 10 * 1000);
+      });
+    });
+  </script>
+</body>
+</html>
+{{end}}

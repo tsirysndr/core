@@ -107,10 +107,11 @@
         knot = self.callPackage ./nix/pkgs/knot.nix {};
         dolly = self.callPackage ./nix/pkgs/dolly.nix {};
         tap = self.callPackage ./nix/pkgs/tap.nix {};
+        knotmirror = self.callPackage ./nix/pkgs/knot-mirror.nix {};
       });
   in {
     overlays.default = final: prev: {
-      inherit (mkPackageSet final) lexgen goat sqlite-lib spindle knot-unwrapped knot appview docs dolly tap;
+      inherit (mkPackageSet final) lexgen goat sqlite-lib spindle knot-unwrapped knot appview docs dolly tap knotmirror;
     };
 
     packages = forAllSystems (system: let
@@ -206,6 +207,7 @@
           pkgs.coreutils # for those of us who are on systems that use busybox (alpine)
           packages'.lexgen
           packages'.treefmt-wrapper
+          packages'.tap
         ];
         shellHook = ''
           mkdir -p appview/pages/static

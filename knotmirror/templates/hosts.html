@@ -1,0 +1,44 @@
+{{template "base" .}}
+{{define "content"}}
+<h2>Knot Hosts</h2>
+
+<div class="filters">
+  <form
+    hx-get=""
+    hx-target="#table"
+    hx-select="#table"
+    hx-swap="outerHTML"
+    hx-trigger="every 10s"
+  >
+    <select name="status">
+      {{ range const.AllHostStatuses }}
+      <option value="{{.}}" {{ if eq $.FilterByStatus . }}selected{{end}}>{{.}}</option>
+      {{ end }}
+    </select>
+    <button type="submit">Filter</button>
+  </form>
+</div>
+
+<table id="table">
+  <thead>
+    <tr>
+      <th>Hostname</th>
+      <th>SSL</th>
+      <th>Status</th>
+      <th>Last Seq</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Hosts}}
+    <tr>
+      <td>{{.Hostname}}</td>
+      <td>{{if .NoSSL}}False{{else}}True{{end}}</td>
+      <td>{{.Status}}</td>
+      <td>{{.LastSeq}}</td>
+    </tr>
+    {{else}}
+    <tr><td colspan="4">No hosts registered.</td></tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}
