@@ -17,18 +17,24 @@ func init() {
 } //
 // RECORDTYPE: RepoPull
 type RepoPull struct {
-	LexiconTypeID string   `json:"$type,const=sh.tangled.repo.pull" cborgen:"$type,const=sh.tangled.repo.pull"`
-	Body          *string  `json:"body,omitempty" cborgen:"body,omitempty"`
-	CreatedAt     string   `json:"createdAt" cborgen:"createdAt"`
-	Mentions      []string `json:"mentions,omitempty" cborgen:"mentions,omitempty"`
-	// patch: (deprecated) use patchBlob instead
-	Patch *string `json:"patch,omitempty" cborgen:"patch,omitempty"`
-	// patchBlob: patch content
-	PatchBlob  *util.LexBlob    `json:"patchBlob" cborgen:"patchBlob"`
-	References []string         `json:"references,omitempty" cborgen:"references,omitempty"`
-	Source     *RepoPull_Source `json:"source,omitempty" cborgen:"source,omitempty"`
-	Target     *RepoPull_Target `json:"target" cborgen:"target"`
-	Title      string           `json:"title" cborgen:"title"`
+	LexiconTypeID string            `json:"$type,const=sh.tangled.repo.pull" cborgen:"$type,const=sh.tangled.repo.pull"`
+	Body          *string           `json:"body,omitempty" cborgen:"body,omitempty"`
+	CreatedAt     string            `json:"createdAt" cborgen:"createdAt"`
+	DependentOn   *string           `json:"dependentOn,omitempty" cborgen:"dependentOn,omitempty"`
+	Mentions      []string          `json:"mentions,omitempty" cborgen:"mentions,omitempty"`
+	References    []string          `json:"references,omitempty" cborgen:"references,omitempty"`
+	Rounds        []*RepoPull_Round `json:"rounds" cborgen:"rounds"`
+	Source        *RepoPull_Source  `json:"source,omitempty" cborgen:"source,omitempty"`
+	Target        *RepoPull_Target  `json:"target" cborgen:"target"`
+	Title         string            `json:"title" cborgen:"title"`
+}
+
+// RepoPull_Round is a "round" in the sh.tangled.repo.pull schema.
+//
+// revisions of this pull request, newer rounds are appended to this array. appviews may reject records do not treat this field as append-only. the blob format is gzipped text-based git-format-patches.
+type RepoPull_Round struct {
+	CreatedAt string        `json:"createdAt" cborgen:"createdAt"`
+	PatchBlob *util.LexBlob `json:"patchBlob" cborgen:"patchBlob"`
 }
 
 // RepoPull_Source is a "source" in the sh.tangled.repo.pull schema.
@@ -36,7 +42,6 @@ type RepoPull_Source struct {
 	Branch  string  `json:"branch" cborgen:"branch"`
 	Repo    *string `json:"repo,omitempty" cborgen:"repo,omitempty"`
 	RepoDid *string `json:"repoDid,omitempty" cborgen:"repoDid,omitempty"`
-	Sha     string  `json:"sha" cborgen:"sha"`
 }
 
 // RepoPull_Target is a "target" in the sh.tangled.repo.pull schema.

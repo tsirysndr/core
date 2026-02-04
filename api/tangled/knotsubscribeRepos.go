@@ -18,8 +18,8 @@ type KnotSubscribeRepos_GitSync1 struct {
 
 // KnotSubscribeRepos_GitSync2 is a "gitSync2" in the sh.tangled.knot.subscribeRepos schema.
 type KnotSubscribeRepos_GitSync2 struct {
-	// did: Repository AT-URI identifier
-	Did *string `json:"did,omitempty" cborgen:"did,omitempty"`
+	// repo: Repository AT-URI identifier
+	Repo string `json:"repo" cborgen:"repo"`
 	// seq: The stream sequence number of this message.
 	Seq int64 `json:"seq" cborgen:"seq"`
 }

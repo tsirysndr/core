@@ -50,6 +50,7 @@ func main() {
 		tangled.RepoPull{},
 		tangled.RepoPullComment{},
 		tangled.RepoPull_Source{},
+		tangled.RepoPull_Round{},
 		tangled.RepoPullStatus{},
 		tangled.RepoPull_Target{},
 		tangled.Spindle{},

@@ -8581,11 +8581,11 @@ func (t *RepoPull) MarshalCBOR(w io.Writer) error {
 		fieldCount--
 	}
 
-	if t.Mentions == nil {
+	if t.DependentOn == nil {
 		fieldCount--
 	}
 
-	if t.Patch == nil {
+	if t.Mentions == nil {
 		fieldCount--
 	}
 
@@ -8652,38 +8652,6 @@ func (t *RepoPull) MarshalCBOR(w io.Writer) error {
 		return err
 	}
 
-	// t.Patch (string) (string)
-	if t.Patch != nil {
-
-		if len("patch") > 1000000 {
-			return xerrors.Errorf("Value in field \"patch\" was too long")
-		}
-
-		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("patch"))); err != nil {
-			return err
-		}
-		if _, err := cw.WriteString(string("patch")); err != nil {
-			return err
-		}
-
-		if t.Patch == nil {
-			if _, err := cw.Write(cbg.CborNull); err != nil {
-				return err
-			}
-		} else {
-			if len(*t.Patch) > 1000000 {
-				return xerrors.Errorf("Value in field t.Patch was too long")
-			}
-
-			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(*t.Patch))); err != nil {
-				return err
-			}
-			if _, err := cw.WriteString(string(*t.Patch)); err != nil {
-				return err
-			}
-		}
-	}
-
 	// t.Title (string) (string)
 	if len("title") > 1000000 {
 		return xerrors.Errorf("Value in field \"title\" was too long")
@@ -8705,6 +8673,32 @@ func (t *RepoPull) MarshalCBOR(w io.Writer) error {
 	}
 	if _, err := cw.WriteString(string(t.Title)); err != nil {
 		return err
+	}
+
+	// t.Rounds ([]*tangled.RepoPull_Round) (slice)
+	if len("rounds") > 1000000 {
+		return xerrors.Errorf("Value in field \"rounds\" was too long")
+	}
+
+	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("rounds"))); err != nil {
+		return err
+	}
+	if _, err := cw.WriteString(string("rounds")); err != nil {
+		return err
+	}
+
+	if len(t.Rounds) > 8192 {
+		return xerrors.Errorf("Slice value in field t.Rounds was too long")
+	}
+
+	if err := cw.WriteMajorTypeHeader(cbg.MajArray, uint64(len(t.Rounds))); err != nil {
+		return err
+	}
+	for _, v := range t.Rounds {
+		if err := v.MarshalCBOR(cw); err != nil {
+			return err
+		}
+
 	}
 
 	// t.Source (tangled.RepoPull_Source) (struct)
@@ -8801,22 +8795,6 @@ func (t *RepoPull) MarshalCBOR(w io.Writer) error {
 		return err
 	}
 
-	// t.PatchBlob (util.LexBlob) (struct)
-	if len("patchBlob") > 1000000 {
-		return xerrors.Errorf("Value in field \"patchBlob\" was too long")
-	}
-
-	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("patchBlob"))); err != nil {
-		return err
-	}
-	if _, err := cw.WriteString(string("patchBlob")); err != nil {
-		return err
-	}
-
-	if err := t.PatchBlob.MarshalCBOR(cw); err != nil {
-		return err
-	}
-
 	// t.References ([]string) (slice)
 	if t.References != nil {
 
@@ -8852,6 +8830,38 @@ func (t *RepoPull) MarshalCBOR(w io.Writer) error {
 
 		}
 	}
+
+	// t.DependentOn (string) (string)
+	if t.DependentOn != nil {
+
+		if len("dependentOn") > 1000000 {
+			return xerrors.Errorf("Value in field \"dependentOn\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("dependentOn"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("dependentOn")); err != nil {
+			return err
+		}
+
+		if t.DependentOn == nil {
+			if _, err := cw.Write(cbg.CborNull); err != nil {
+				return err
+			}
+		} else {
+			if len(*t.DependentOn) > 1000000 {
+				return xerrors.Errorf("Value in field t.DependentOn was too long")
+			}
+
+			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(*t.DependentOn))); err != nil {
+				return err
+			}
+			if _, err := cw.WriteString(string(*t.DependentOn)); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
@@ -8880,7 +8890,7 @@ func (t *RepoPull) UnmarshalCBOR(r io.Reader) (err error) {
 
 	n := extra
 
-	nameBuf := make([]byte, 10)
+	nameBuf := make([]byte, 11)
 	for i := uint64(0); i < n; i++ {
 		nameLen, ok, err := cbg.ReadFullStringIntoBuf(cr, nameBuf, 1000000)
 		if err != nil {
@@ -8928,27 +8938,6 @@ func (t *RepoPull) UnmarshalCBOR(r io.Reader) (err error) {
 
 				t.LexiconTypeID = string(sval)
 			}
-			// t.Patch (string) (string)
-		case "patch":
-
-			{
-				b, err := cr.ReadByte()
-				if err != nil {
-					return err
-				}
-				if b != cbg.CborNull[0] {
-					if err := cr.UnreadByte(); err != nil {
-						return err
-					}
-
-					sval, err := cbg.ReadStringWithMax(cr, 1000000)
-					if err != nil {
-						return err
-					}
-
-					t.Patch = (*string)(&sval)
-				}
-			}
 			// t.Title (string) (string)
 		case "title":
 
@@ -8959,6 +8948,55 @@ func (t *RepoPull) UnmarshalCBOR(r io.Reader) (err error) {
 				}
 
 				t.Title = string(sval)
+			}
+			// t.Rounds ([]*tangled.RepoPull_Round) (slice)
+		case "rounds":
+
+			maj, extra, err = cr.ReadHeader()
+			if err != nil {
+				return err
+			}
+
+			if extra > 8192 {
+				return fmt.Errorf("t.Rounds: array too large (%d)", extra)
+			}
+
+			if maj != cbg.MajArray {
+				return fmt.Errorf("expected cbor array")
+			}
+
+			if extra > 0 {
+				t.Rounds = make([]*RepoPull_Round, extra)
+			}
+
+			for i := 0; i < int(extra); i++ {
+				{
+					var maj byte
+					var extra uint64
+					var err error
+					_ = maj
+					_ = extra
+					_ = err
+
+					{
+
+						b, err := cr.ReadByte()
+						if err != nil {
+							return err
+						}
+						if b != cbg.CborNull[0] {
+							if err := cr.UnreadByte(); err != nil {
+								return err
+							}
+							t.Rounds[i] = new(RepoPull_Round)
+							if err := t.Rounds[i].UnmarshalCBOR(cr); err != nil {
+								return xerrors.Errorf("unmarshaling t.Rounds[i] pointer: %w", err)
+							}
+						}
+
+					}
+
+				}
 			}
 			// t.Source (tangled.RepoPull_Source) (struct)
 		case "source":
@@ -9051,26 +9089,6 @@ func (t *RepoPull) UnmarshalCBOR(r io.Reader) (err error) {
 
 				t.CreatedAt = string(sval)
 			}
-			// t.PatchBlob (util.LexBlob) (struct)
-		case "patchBlob":
-
-			{
-
-				b, err := cr.ReadByte()
-				if err != nil {
-					return err
-				}
-				if b != cbg.CborNull[0] {
-					if err := cr.UnreadByte(); err != nil {
-						return err
-					}
-					t.PatchBlob = new(util.LexBlob)
-					if err := t.PatchBlob.UnmarshalCBOR(cr); err != nil {
-						return xerrors.Errorf("unmarshaling t.PatchBlob pointer: %w", err)
-					}
-				}
-
-			}
 			// t.References ([]string) (slice)
 		case "references":
 
@@ -9109,6 +9127,27 @@ func (t *RepoPull) UnmarshalCBOR(r io.Reader) (err error) {
 						t.References[i] = string(sval)
 					}
 
+				}
+			}
+			// t.DependentOn (string) (string)
+		case "dependentOn":
+
+			{
+				b, err := cr.ReadByte()
+				if err != nil {
+					return err
+				}
+				if b != cbg.CborNull[0] {
+					if err := cr.UnreadByte(); err != nil {
+						return err
+					}
+
+					sval, err := cbg.ReadStringWithMax(cr, 1000000)
+					if err != nil {
+						return err
+					}
+
+					t.DependentOn = (*string)(&sval)
 				}
 			}
 
@@ -9488,7 +9527,7 @@ func (t *RepoPull_Source) MarshalCBOR(w io.Writer) error {
 	}
 
 	cw := cbg.NewCborWriter(w)
-	fieldCount := 4
+	fieldCount := 3
 
 	if t.Repo == nil {
 		fieldCount--
@@ -9499,29 +9538,6 @@ func (t *RepoPull_Source) MarshalCBOR(w io.Writer) error {
 	}
 
 	if _, err := cw.Write(cbg.CborEncodeMajorType(cbg.MajMap, uint64(fieldCount))); err != nil {
-		return err
-	}
-
-	// t.Sha (string) (string)
-	if len("sha") > 1000000 {
-		return xerrors.Errorf("Value in field \"sha\" was too long")
-	}
-
-	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("sha"))); err != nil {
-		return err
-	}
-	if _, err := cw.WriteString(string("sha")); err != nil {
-		return err
-	}
-
-	if len(t.Sha) > 1000000 {
-		return xerrors.Errorf("Value in field t.Sha was too long")
-	}
-
-	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(t.Sha))); err != nil {
-		return err
-	}
-	if _, err := cw.WriteString(string(t.Sha)); err != nil {
 		return err
 	}
 
@@ -9655,18 +9671,7 @@ func (t *RepoPull_Source) UnmarshalCBOR(r io.Reader) (err error) {
 		}
 
 		switch string(nameBuf[:nameLen]) {
-		// t.Sha (string) (string)
-		case "sha":
-
-			{
-				sval, err := cbg.ReadStringWithMax(cr, 1000000)
-				if err != nil {
-					return err
-				}
-
-				t.Sha = string(sval)
-			}
-			// t.Repo (string) (string)
+		// t.Repo (string) (string)
 		case "repo":
 
 			{
@@ -9718,6 +9723,142 @@ func (t *RepoPull_Source) UnmarshalCBOR(r io.Reader) (err error) {
 
 					t.RepoDid = (*string)(&sval)
 				}
+			}
+
+		default:
+			// Field doesn't exist on this type, so ignore it
+			if err := cbg.ScanForLinks(r, func(cid.Cid) {}); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+func (t *RepoPull_Round) MarshalCBOR(w io.Writer) error {
+	if t == nil {
+		_, err := w.Write(cbg.CborNull)
+		return err
+	}
+
+	cw := cbg.NewCborWriter(w)
+
+	if _, err := cw.Write([]byte{162}); err != nil {
+		return err
+	}
+
+	// t.CreatedAt (string) (string)
+	if len("createdAt") > 1000000 {
+		return xerrors.Errorf("Value in field \"createdAt\" was too long")
+	}
+
+	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("createdAt"))); err != nil {
+		return err
+	}
+	if _, err := cw.WriteString(string("createdAt")); err != nil {
+		return err
+	}
+
+	if len(t.CreatedAt) > 1000000 {
+		return xerrors.Errorf("Value in field t.CreatedAt was too long")
+	}
+
+	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(t.CreatedAt))); err != nil {
+		return err
+	}
+	if _, err := cw.WriteString(string(t.CreatedAt)); err != nil {
+		return err
+	}
+
+	// t.PatchBlob (util.LexBlob) (struct)
+	if len("patchBlob") > 1000000 {
+		return xerrors.Errorf("Value in field \"patchBlob\" was too long")
+	}
+
+	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("patchBlob"))); err != nil {
+		return err
+	}
+	if _, err := cw.WriteString(string("patchBlob")); err != nil {
+		return err
+	}
+
+	if err := t.PatchBlob.MarshalCBOR(cw); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *RepoPull_Round) UnmarshalCBOR(r io.Reader) (err error) {
+	*t = RepoPull_Round{}
+
+	cr := cbg.NewCborReader(r)
+
+	maj, extra, err := cr.ReadHeader()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+	}()
+
+	if maj != cbg.MajMap {
+		return fmt.Errorf("cbor input should be of type map")
+	}
+
+	if extra > cbg.MaxLength {
+		return fmt.Errorf("RepoPull_Round: map struct too large (%d)", extra)
+	}
+
+	n := extra
+
+	nameBuf := make([]byte, 9)
+	for i := uint64(0); i < n; i++ {
+		nameLen, ok, err := cbg.ReadFullStringIntoBuf(cr, nameBuf, 1000000)
+		if err != nil {
+			return err
+		}
+
+		if !ok {
+			// Field doesn't exist on this type, so ignore it
+			if err := cbg.ScanForLinks(cr, func(cid.Cid) {}); err != nil {
+				return err
+			}
+			continue
+		}
+
+		switch string(nameBuf[:nameLen]) {
+		// t.CreatedAt (string) (string)
+		case "createdAt":
+
+			{
+				sval, err := cbg.ReadStringWithMax(cr, 1000000)
+				if err != nil {
+					return err
+				}
+
+				t.CreatedAt = string(sval)
+			}
+			// t.PatchBlob (util.LexBlob) (struct)
+		case "patchBlob":
+
+			{
+
+				b, err := cr.ReadByte()
+				if err != nil {
+					return err
+				}
+				if b != cbg.CborNull[0] {
+					if err := cr.UnreadByte(); err != nil {
+						return err
+					}
+					t.PatchBlob = new(util.LexBlob)
+					if err := t.PatchBlob.UnmarshalCBOR(cr); err != nil {
+						return xerrors.Errorf("unmarshaling t.PatchBlob pointer: %w", err)
+					}
+				}
+
 			}
 
 		default:
