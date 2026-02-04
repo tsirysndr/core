@@ -1,16 +1,21 @@
 package models
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
+	"io"
 	"log"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/patchutil"
 	"tangled.org/core/types"
+
+	"github.com/bluesky-social/indigo/atproto/syntax"
+	lexutil "github.com/bluesky-social/indigo/lex/util"
 )
 
 type PullState int
@@ -19,7 +24,7 @@ const (
 	PullClosed PullState = iota
 	PullOpen
 	PullMerged
-	PullDeleted
+	PullAbandoned
 )
 
 func (p PullState) String() string {
@@ -30,8 +35,8 @@ func (p PullState) String() string {
 		return "merged"
 	case PullClosed:
 		return "closed"
-	case PullDeleted:
-		return "deleted"
+	case PullAbandoned:
+		return "abandoned"
 	default:
 		return "closed"
 	}
@@ -46,8 +51,8 @@ func (p PullState) IsMerged() bool {
 func (p PullState) IsClosed() bool {
 	return p == PullClosed
 }
-func (p PullState) IsDeleted() bool {
-	return p == PullDeleted
+func (p PullState) IsAbandoned() bool {
+	return p == PullAbandoned
 }
 
 type Pull struct {
@@ -70,9 +75,7 @@ type Pull struct {
 	References   []syntax.ATURI
 
 	// stacking
-	StackId        string // nullable string
-	ChangeId       string // nullable string
-	ParentChangeId string // nullable string
+	DependentOn *syntax.ATURI
 
 	// meta
 	Created    time.Time
@@ -89,7 +92,6 @@ func (p Pull) AsRecord() tangled.RepoPull {
 	if p.PullSource != nil {
 		source = &tangled.RepoPull_Source{}
 		source.Branch = p.PullSource.Branch
-		source.Sha = p.LatestSha()
 		if p.PullSource.RepoAt != nil {
 			s := p.PullSource.RepoAt.String()
 			source.Repo = &s
@@ -104,7 +106,23 @@ func (p Pull) AsRecord() tangled.RepoPull {
 		references[i] = string(uri)
 	}
 
-	targetRepoStr := p.RepoAt.String()
+	var targetRepoAt, targetRepoDid string
+	if p.Repo != nil && p.Repo.RepoDid != "" {
+		targetRepoDid = p.Repo.RepoDid
+	}
+	targetRepoAt = p.RepoAt.String()
+
+	rounds := make([]*tangled.RepoPull_Round, len(p.Submissions))
+	for i, submission := range p.Submissions {
+		rounds[i] = submission.AsRecord()
+	}
+
+	var dependentOn *string
+	if p.DependentOn != nil {
+		x := p.DependentOn.String()
+		dependentOn = &x
+	}
+
 	record := tangled.RepoPull{
 		Title:      p.Title,
 		Body:       &p.Body,
@@ -112,12 +130,126 @@ func (p Pull) AsRecord() tangled.RepoPull {
 		References: references,
 		CreatedAt:  p.Created.Format(time.RFC3339),
 		Target: &tangled.RepoPull_Target{
-			Repo:   &targetRepoStr,
-			Branch: p.TargetBranch,
+			Repo:    &targetRepoAt,
+			RepoDid: &targetRepoDid,
+			Branch:  p.TargetBranch,
 		},
-		Source: source,
+		Rounds:      rounds,
+		Source:      source,
+		DependentOn: dependentOn,
 	}
 	return record
+}
+
+func PullFromRecord(did, rkey string, record tangled.RepoPull, blobs []*io.ReadCloser) Pull {
+	created, err := time.Parse(time.RFC3339, record.CreatedAt)
+	if err != nil {
+		created = time.Now()
+	}
+
+	body := ""
+	if record.Body != nil {
+		body = *record.Body
+	}
+
+	var mentions []syntax.DID
+	for _, m := range record.Mentions {
+		if did, err := syntax.ParseDID(m); err == nil {
+			mentions = append(mentions, did)
+		}
+	}
+
+	var targetRepoAt syntax.ATURI
+	var targetBranch string
+	if record.Target != nil {
+		if uri, err := syntax.ParseATURI(record.Target.Repo); err == nil {
+			targetRepoAt = uri
+		}
+		targetBranch = record.Target.Branch
+	}
+
+	var pullSource *PullSource
+	if record.Source != nil {
+		pullSource = &PullSource{
+			Branch: record.Source.Branch,
+		}
+
+		if record.Source.Repo != nil {
+			if uri, err := syntax.ParseATURI(*record.Source.Repo); err == nil {
+				pullSource.RepoAt = &uri
+			}
+		}
+	}
+
+	var dependentOn *syntax.ATURI
+	if record.DependentOn != nil {
+		if uri, err := syntax.ParseATURI(*record.DependentOn); err == nil {
+			dependentOn = &uri
+		}
+	}
+
+	var submissions []*PullSubmission
+	for i, s := range record.Rounds {
+		var blob *io.ReadCloser
+		if i < len(blobs) {
+			blob = blobs[i]
+		}
+		submission, err := PullSubmissionFromRecord(did, rkey, i, s, blob)
+		if err != nil {
+			submissions = append(submissions, nil)
+		} else {
+			submissions = append(submissions, submission)
+		}
+	}
+
+	return Pull{
+		RepoAt:       targetRepoAt,
+		OwnerDid:     did,
+		Rkey:         rkey,
+		Title:        record.Title,
+		Body:         body,
+		TargetBranch: targetBranch,
+		PullSource:   pullSource,
+		State:        PullOpen,
+		Submissions:  submissions,
+		Created:      created,
+		DependentOn:  dependentOn,
+	}
+}
+
+func PullSubmissionFromRecord(did, rkey string, roundNumber int, round *tangled.RepoPull_Round, blob *io.ReadCloser) (*PullSubmission, error) {
+	created, err := time.Parse(time.RFC3339, round.CreatedAt)
+	if err != nil {
+		created = time.Now()
+	}
+
+	var patch, sourceRev string
+	if blob != nil {
+		p, err := extractGzip(*blob)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract gzip: %w", err)
+		}
+		patch = p
+		if patchutil.IsFormatPatch(p) {
+			patches, err := patchutil.ExtractPatches(p)
+			if err != nil {
+				return nil, fmt.Errorf("failed to extract patches: %w", err)
+			}
+
+			for _, part := range patches {
+				sourceRev = part.SHA
+			}
+		}
+	}
+
+	return &PullSubmission{
+		PullAt:      syntax.ATURI(fmt.Sprintf("at://%s/%s/%s", did, tangled.RepoPullNSID, rkey)),
+		RoundNumber: roundNumber,
+		Blob:        *round.PatchBlob,
+		Created:     created,
+		Patch:       patch,
+		SourceRev:   sourceRev,
+	}, nil
 }
 
 type PullSource struct {
@@ -137,6 +269,7 @@ type PullSubmission struct {
 
 	// content
 	RoundNumber int
+	Blob        lexutil.LexBlob
 	Patch       string
 	Combined    string
 	Comments    []PullComment
@@ -226,10 +359,6 @@ func (p *Pull) IsForkBased() bool {
 	return false
 }
 
-func (p *Pull) IsStacked() bool {
-	return p.StackId != ""
-}
-
 func (p *Pull) Participants() []string {
 	participantSet := make(map[string]struct{})
 	participants := []string{}
@@ -266,6 +395,21 @@ func (s PullSubmission) AsFormatPatch() []types.FormatPatch {
 	return patches
 }
 
+// empty if invalid, not otherwise
+func (s PullSubmission) ChangeId() string {
+	patches := s.AsFormatPatch()
+	if len(patches) != 1 {
+		return ""
+	}
+
+	c, err := patches[0].ChangeId()
+	if err != nil {
+		return ""
+	}
+
+	return c
+}
+
 func (s *PullSubmission) Participants() []string {
 	participantSet := make(map[string]struct{})
 	participants := []string{}
@@ -294,12 +438,27 @@ func (s PullSubmission) CombinedPatch() string {
 	return s.Combined
 }
 
+func (s *PullSubmission) GetBlob() *lexutil.LexBlob {
+	if !s.Blob.Ref.Defined() {
+		return nil
+	}
+
+	return &s.Blob
+}
+
+func (s *PullSubmission) AsRecord() *tangled.RepoPull_Round {
+	return &tangled.RepoPull_Round{
+		CreatedAt: s.Created.Format(time.RFC3339),
+		PatchBlob: s.GetBlob(),
+	}
+}
+
 type Stack []*Pull
 
 // position of this pull in the stack
 func (stack Stack) Position(pull *Pull) int {
 	return slices.IndexFunc(stack, func(p *Pull) bool {
-		return p.ChangeId == pull.ChangeId
+		return p.AtUri() == pull.AtUri()
 	})
 }
 
@@ -373,8 +532,8 @@ func (stack Stack) Mergeable() Stack {
 			break
 		}
 
-		// skip over deleted PRs
-		if p.State != PullDeleted {
+		// skip over abandoned PRs
+		if p.State != PullAbandoned {
 			mergeable = append(mergeable, p)
 		}
 	}
@@ -385,4 +544,23 @@ func (stack Stack) Mergeable() Stack {
 type BranchDeleteStatus struct {
 	Repo   *Repo
 	Branch string
+}
+
+func extractGzip(blob io.Reader) (string, error) {
+	var b bytes.Buffer
+	r, err := gzip.NewReader(blob)
+	if err != nil {
+		return "", err
+	}
+	defer r.Close()
+
+	const maxSize = 15 * 1024 * 1024
+	limitedReader := io.LimitReader(r, maxSize)
+
+	_, err = io.Copy(&b, limitedReader)
+	if err != nil {
+		return "", err
+	}
+
+	return b.String(), nil
 }
