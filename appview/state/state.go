@@ -125,6 +125,7 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 			tangled.SpindleNSID,
 			tangled.KnotNSID,
 			tangled.StringNSID,
+			tangled.RepoPullNSID,
 			tangled.RepoIssueNSID,
 			tangled.RepoIssueCommentNSID,
 			tangled.LabelDefinitionNSID,

@@ -6,9 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"maps"
+	"net/http"
+	"net/url"
 	"slices"
+	"sync"
 
 	"time"
 
@@ -17,6 +21,7 @@ import (
 	jmodels "github.com/bluesky-social/jetstream/pkg/models"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/ipfs/go-cid"
+	"golang.org/x/sync/errgroup"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
@@ -75,6 +80,8 @@ func (i *Ingester) Ingest() processFunc {
 				err = i.ingestString(e)
 			case tangled.RepoIssueNSID:
 				err = i.ingestIssue(ctx, e)
+			case tangled.RepoPullNSID:
+				err = i.ingestPull(ctx, e)
 			case tangled.RepoIssueCommentNSID:
 				err = i.ingestIssueComment(e)
 			case tangled.LabelDefinitionNSID:
@@ -939,6 +946,147 @@ func (i *Ingester) ingestIssue(ctx context.Context, e *jmodels.Event) error {
 		); err != nil {
 			l.Error("failed to delete", "err", err)
 			return fmt.Errorf("failed to delete issue record: %w", err)
+		}
+		if err := tx.Commit(); err != nil {
+			l.Error("failed to commit txn", "err", err)
+			return err
+		}
+
+		return nil
+	}
+
+	return nil
+}
+
+func (i *Ingester) ingestPull(ctx context.Context, e *jmodels.Event) error {
+	did := e.Did
+	rkey := e.Commit.RKey
+
+	var err error
+
+	l := i.Logger.With("handler", "ingestPull", "nsid", e.Commit.Collection, "did", did, "rkey", rkey)
+	l.Info("ingesting record")
+
+	ddb, ok := i.Db.Execer.(*db.DB)
+	if !ok {
+		return fmt.Errorf("failed to index pull record, invalid db cast")
+	}
+
+	switch e.Commit.Operation {
+	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
+		raw := json.RawMessage(e.Commit.Record)
+		record := tangled.RepoPull{}
+		err = json.Unmarshal(raw, &record)
+		if err != nil {
+			l.Error("invalid record", "err", err)
+			return err
+		}
+
+		ownerId, err := i.IdResolver.ResolveIdent(ctx, did)
+		if err != nil {
+			l.Error("failed to resolve did")
+			return err
+		}
+
+		// go through and fetch all blobs in parallel
+		readers := make([]*io.ReadCloser, len(record.Rounds))
+		var mu sync.Mutex
+
+		g, gctx := errgroup.WithContext(ctx)
+
+		for idx, b := range record.Rounds {
+			g.Go(func() error {
+				// for some reason, a blob is empty
+				if b.PatchBlob == nil {
+					return fmt.Errorf("missing patchBlob in round %d", idx)
+				}
+
+				ownerPds := ownerId.PDSEndpoint()
+				url, _ := url.Parse(fmt.Sprintf("%s/xrpc/com.atproto.sync.getBlob", ownerPds))
+				q := url.Query()
+				q.Set("cid", b.PatchBlob.Ref.String())
+				q.Set("did", did)
+				url.RawQuery = q.Encode()
+
+				req, err := http.NewRequestWithContext(gctx, http.MethodGet, url.String(), nil)
+				if err != nil {
+					l.Error("failed to create request")
+					return err
+				}
+				req.Header.Set("Content-Type", "application/json")
+
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					l.Error("failed to make request")
+					return err
+				}
+
+				mu.Lock()
+				readers[idx] = &resp.Body
+				mu.Unlock()
+
+				return nil
+			})
+		}
+
+		if err := g.Wait(); err != nil {
+			for _, r := range readers {
+				if r != nil && *r != nil {
+					(*r).Close()
+				}
+			}
+			return err
+		}
+
+		defer func() {
+			for _, r := range readers {
+				if r != nil && *r != nil {
+					(*r).Close()
+				}
+			}
+		}()
+
+		pull := models.PullFromRecord(did, rkey, record, readers)
+		if err := i.Validator.ValidatePull(&pull); err != nil {
+			return fmt.Errorf("failed to validate pull: %w", err)
+		}
+
+		tx, err := ddb.BeginTx(ctx, nil)
+		if err != nil {
+			l.Error("failed to begin transaction", "err", err)
+			return err
+		}
+		defer tx.Rollback()
+
+		err = db.PutPull(tx, &pull)
+		if err != nil {
+			l.Error("failed to create pull", "err", err)
+			return err
+		}
+
+		err = tx.Commit()
+		if err != nil {
+			l.Error("failed to commit txn", "err", err)
+			return err
+		}
+
+		return nil
+
+	case jmodels.CommitOperationDelete:
+		tx, err := ddb.BeginTx(ctx, nil)
+		if err != nil {
+			l.Error("failed to begin transaction", "err", err)
+			return err
+		}
+		defer tx.Rollback()
+
+		if err := db.AbandonPulls(
+			tx,
+			orm.FilterEq("owner_did", did),
+			orm.FilterEq("rkey", rkey),
+		); err != nil {
+			l.Error("failed to abandon", "err", err)
+			return fmt.Errorf("failed to abandon pull record: %w", err)
 		}
 		if err := tx.Commit(); err != nil {
 			l.Error("failed to commit txn", "err", err)
