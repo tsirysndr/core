@@ -1367,6 +1367,48 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "add-blob-data-to-pull-submissions", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			alter table pull_submissions add column patch_blob_ref text;
+			alter table pull_submissions add column patch_blob_mime text;
+			alter table pull_submissions add column patch_blob_size integer;
+		`)
+		return err
+	})
+
+	orm.RunMigration(conn, logger, "replace-parent-change-id-with-aturi", func(tx *sql.Tx) error {
+		// add new column
+		_, err := tx.Exec(`
+			alter table pulls add column dependent_on text;
+		`)
+		if err != nil {
+			return err
+		}
+
+		// populate dependent_on with at_uri of the parent
+		_, err = tx.Exec(`
+			update pulls
+			set dependent_on = (
+				select at_uri
+				from pulls as parent
+				where parent.stack_id = pulls.stack_id
+				and parent.change_id = pulls.parent_change_id
+			)
+			where parent_change_id is not null;
+		`)
+		if err != nil {
+			return err
+		}
+
+		// drop old columns
+		_, err = tx.Exec(`
+			alter table pulls drop column parent_change_id;
+			alter table pulls drop column stack_id;
+		`)
+
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,

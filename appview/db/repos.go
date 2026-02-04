@@ -272,7 +272,7 @@ func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 		models.PullOpen,
 		models.PullMerged,
 		models.PullClosed,
-		models.PullDeleted,
+		models.PullAbandoned,
 	}, args...)
 
 	rows, err = e.Query(pullCountQuery, pullArgs...)

@@ -12,12 +12,112 @@ import (
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	lexutil "github.com/bluesky-social/indigo/lex/util"
+	"github.com/ipfs/go-cid"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pagination"
 	"tangled.org/core/orm"
+	"tangled.org/core/sets"
 )
 
-func NewPull(tx *sql.Tx, pull *models.Pull) error {
+func comparePullSource(existing, new *models.PullSource) bool {
+	if existing == nil && new == nil {
+		return true
+	}
+	if existing == nil || new == nil {
+		return false
+	}
+	if existing.Branch != new.Branch {
+		return false
+	}
+	if existing.RepoAt == nil && new.RepoAt == nil {
+		return true
+	}
+	if existing.RepoAt == nil || new.RepoAt == nil {
+		return false
+	}
+	return *existing.RepoAt == *new.RepoAt
+}
+
+func compareSubmissions(existing, new []*models.PullSubmission) bool {
+	if len(existing) != len(new) {
+		return false
+	}
+	for i := range existing {
+		if existing[i].Blob.Ref.String() != new[i].Blob.Ref.String() {
+			return false
+		}
+		if existing[i].Blob.MimeType != new[i].Blob.MimeType {
+			return false
+		}
+		if existing[i].Blob.Size != new[i].Blob.Size {
+			return false
+		}
+	}
+	return true
+}
+
+func PutPull(tx *sql.Tx, pull *models.Pull) error {
+	// ensure sequence exists
+	_, err := tx.Exec(`
+		insert or ignore into repo_pull_seqs (repo_at, next_pull_id)
+		values (?, 1)
+		`, pull.RepoAt)
+	if err != nil {
+		return err
+	}
+
+	pulls, err := GetPulls(
+		tx,
+		orm.FilterEq("owner_did", pull.OwnerDid),
+		orm.FilterEq("rkey", pull.Rkey),
+	)
+	switch {
+	case err != nil:
+		return err
+	case len(pulls) == 0:
+		return createNewPull(tx, pull)
+	case len(pulls) != 1: // should be unreachable
+		return fmt.Errorf("invalid number of pulls returned: %d", len(pulls))
+	default:
+		existingPull := pulls[0]
+		if existingPull.State == models.PullMerged {
+			return nil
+		}
+
+		dependentOnEqual := (existingPull.DependentOn == nil && pull.DependentOn == nil) ||
+			(existingPull.DependentOn != nil && pull.DependentOn != nil && *existingPull.DependentOn == *pull.DependentOn)
+
+		pullSourceEqual := comparePullSource(existingPull.PullSource, pull.PullSource)
+		submissionsEqual := compareSubmissions(existingPull.Submissions, pull.Submissions)
+
+		if existingPull.Title == pull.Title &&
+			existingPull.Body == pull.Body &&
+			existingPull.TargetBranch == pull.TargetBranch &&
+			existingPull.RepoAt == pull.RepoAt &&
+			dependentOnEqual &&
+			pullSourceEqual &&
+			submissionsEqual {
+			return nil
+		}
+
+		isLonger := len(existingPull.Submissions) < len(pull.Submissions)
+		if isLonger {
+			isAppendOnly := compareSubmissions(existingPull.Submissions, pull.Submissions[:len(existingPull.Submissions)])
+			if !isAppendOnly {
+				return fmt.Errorf("the new pull does not treat submissions as append-only")
+			}
+		} else if !submissionsEqual {
+			return fmt.Errorf("the new pull does not treat submissions as append-only")
+		}
+
+		pull.ID = existingPull.ID
+		pull.PullId = existingPull.PullId
+		return updatePull(tx, pull, existingPull)
+	}
+}
+
+func createNewPull(tx *sql.Tx, pull *models.Pull) error {
 	_, err := tx.Exec(`
 		insert or ignore into repo_pull_seqs (repo_at, next_pull_id)
 		values (?, 1)
@@ -49,23 +149,22 @@ func NewPull(tx *sql.Tx, pull *models.Pull) error {
 		}
 	}
 
-	var stackId, changeId, parentChangeId *string
-	if pull.StackId != "" {
-		stackId = &pull.StackId
-	}
-	if pull.ChangeId != "" {
-		changeId = &pull.ChangeId
-	}
-	if pull.ParentChangeId != "" {
-		parentChangeId = &pull.ParentChangeId
-	}
-
 	result, err := tx.Exec(
 		`
 		insert into pulls (
-			repo_at, owner_did, pull_id, title, target_branch, body, rkey, state, source_branch, source_repo_at, stack_id, change_id, parent_change_id
+			repo_at,
+			owner_did,
+			pull_id,
+			title,
+			target_branch,
+			body,
+			rkey,
+			state,
+			dependent_on,
+			source_branch,
+			source_repo_at
 		)
-		values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		pull.RepoAt,
 		pull.OwnerDid,
 		pull.PullId,
@@ -74,11 +173,9 @@ func NewPull(tx *sql.Tx, pull *models.Pull) error {
 		pull.Body,
 		pull.Rkey,
 		pull.State,
+		pull.DependentOn,
 		sourceBranch,
 		sourceRepoAt,
-		stackId,
-		changeId,
-		parentChangeId,
 	)
 	if err != nil {
 		return err
@@ -91,12 +188,32 @@ func NewPull(tx *sql.Tx, pull *models.Pull) error {
 	}
 	pull.ID = int(id)
 
-	_, err = tx.Exec(`
-		insert into pull_submissions (pull_at, round_number, patch, combined, source_rev)
-		values (?, ?, ?, ?, ?)
-	`, pull.AtUri(), 0, pull.Submissions[0].Patch, pull.Submissions[0].Combined, pull.Submissions[0].SourceRev)
-	if err != nil {
-		return err
+	for i, s := range pull.Submissions {
+		_, err = tx.Exec(`
+			insert into pull_submissions (
+				pull_at,
+				round_number,
+				patch,
+				combined,
+				source_rev,
+				patch_blob_ref,
+				patch_blob_mime,
+				patch_blob_size
+			)
+			values (?, ?, ?, ?, ?, ?, ?, ?)
+		`,
+			pull.AtUri(),
+			i,
+			s.Patch,
+			s.Combined,
+			s.SourceRev,
+			s.Blob.Ref.String(),
+			s.Blob.MimeType,
+			s.Blob.Size,
+		)
+		if err != nil {
+			return err
+		}
 	}
 
 	if err := putReferences(tx, pull.AtUri(), pull.References); err != nil {
@@ -106,12 +223,64 @@ func NewPull(tx *sql.Tx, pull *models.Pull) error {
 	return nil
 }
 
-func GetPullAt(e Execer, repoAt syntax.ATURI, pullId int) (syntax.ATURI, error) {
-	pull, err := GetPull(e, repoAt, pullId)
-	if err != nil {
-		return "", err
+func updatePull(tx *sql.Tx, pull *models.Pull, existingPull *models.Pull) error {
+	var sourceBranch, sourceRepoAt *string
+	if pull.PullSource != nil {
+		sourceBranch = &pull.PullSource.Branch
+		if pull.PullSource.RepoAt != nil {
+			x := pull.PullSource.RepoAt.String()
+			sourceRepoAt = &x
+		}
 	}
-	return pull.AtUri(), err
+
+	_, err := tx.Exec(`
+		update pulls set
+			title = ?,
+			body = ?,
+			target_branch = ?,
+			dependent_on = ?,
+			source_branch = ?,
+			source_repo_at = ?
+		where owner_did = ? and rkey = ?
+	`, pull.Title, pull.Body, pull.TargetBranch, pull.DependentOn, sourceBranch, sourceRepoAt, pull.OwnerDid, pull.Rkey)
+	if err != nil {
+		return err
+	}
+
+	// insert new submissions (append-only)
+	for i := len(existingPull.Submissions); i < len(pull.Submissions); i++ {
+		s := pull.Submissions[i]
+		_, err = tx.Exec(`
+			insert into pull_submissions (
+				pull_at,
+				round_number,
+				patch,
+				combined,
+				source_rev,
+				patch_blob_ref,
+				patch_blob_mime,
+				patch_blob_size
+			)
+			values (?, ?, ?, ?, ?, ?, ?, ?)
+		`,
+			pull.AtUri(),
+			i,
+			s.Patch,
+			s.Combined,
+			s.SourceRev,
+			s.Blob.Ref.String(),
+			s.Blob.MimeType,
+			s.Blob.Size,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := putReferences(tx, pull.AtUri(), pull.References); err != nil {
+		return fmt.Errorf("put reference_links: %w", err)
+	}
+	return nil
 }
 
 func NextPullId(e Execer, repoAt syntax.ATURI) (int, error) {
@@ -157,9 +326,7 @@ func GetPullsPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 			rkey,
 			source_branch,
 			source_repo_at,
-			stack_id,
-			change_id,
-			parent_change_id
+			dependent_on
 		from
 			pulls
 		%s
@@ -177,7 +344,7 @@ func GetPullsPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 	for rows.Next() {
 		var pull models.Pull
 		var createdAt string
-		var sourceBranch, sourceRepoAt, stackId, changeId, parentChangeId sql.NullString
+		var sourceBranch, sourceRepoAt, dependentOn sql.NullString
 		err := rows.Scan(
 			&pull.ID,
 			&pull.OwnerDid,
@@ -191,9 +358,7 @@ func GetPullsPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 			&pull.Rkey,
 			&sourceBranch,
 			&sourceRepoAt,
-			&stackId,
-			&changeId,
-			&parentChangeId,
+			&dependentOn,
 		)
 		if err != nil {
 			return nil, err
@@ -218,14 +383,9 @@ func GetPullsPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 			}
 		}
 
-		if stackId.Valid {
-			pull.StackId = stackId.String
-		}
-		if changeId.Valid {
-			pull.ChangeId = changeId.String
-		}
-		if parentChangeId.Valid {
-			pull.ParentChangeId = parentChangeId.String
+		if dependentOn.Valid {
+			x := syntax.ATURI(dependentOn.String)
+			pull.DependentOn = &x
 		}
 
 		pulls[pull.AtUri()] = &pull
@@ -257,24 +417,32 @@ func GetPullsPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 		}
 	}
 
-	// collect pull source for all pulls that need it
-	var sourceAts []syntax.ATURI
+	// build up reverse mappings: p.Repo and p.PullSource
+	var repoAts []syntax.ATURI
 	for _, p := range pulls {
+		repoAts = append(repoAts, p.RepoAt)
 		if p.PullSource != nil && p.PullSource.RepoAt != nil {
-			sourceAts = append(sourceAts, *p.PullSource.RepoAt)
+			repoAts = append(repoAts, *p.PullSource.RepoAt)
 		}
 	}
-	sourceRepos, err := GetRepos(e, orm.FilterIn("at_uri", sourceAts))
+
+	repos, err := GetRepos(e, orm.FilterIn("at_uri", repoAts))
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("failed to get source repos: %w", err)
 	}
-	sourceRepoMap := make(map[syntax.ATURI]*models.Repo)
-	for _, r := range sourceRepos {
-		sourceRepoMap[r.RepoAt()] = &r
+
+	repoMap := make(map[syntax.ATURI]*models.Repo)
+	for _, r := range repos {
+		repoMap[r.RepoAt()] = &r
 	}
+
 	for _, p := range pulls {
+		if repo, ok := repoMap[p.RepoAt]; ok {
+			p.Repo = repo
+		}
+
 		if p.PullSource != nil && p.PullSource.RepoAt != nil {
-			if sourceRepo, ok := sourceRepoMap[*p.PullSource.RepoAt]; ok {
+			if sourceRepo, ok := repoMap[*p.PullSource.RepoAt]; ok {
 				p.PullSource.Repo = sourceRepo
 			}
 		}
@@ -305,8 +473,8 @@ func GetPulls(e Execer, filters ...orm.Filter) ([]*models.Pull, error) {
 	return GetPullsPaginated(e, pagination.Page{}, filters...)
 }
 
-func GetPull(e Execer, repoAt syntax.ATURI, pullId int) (*models.Pull, error) {
-	pulls, err := GetPullsPaginated(e, pagination.Page{Limit: 1}, orm.FilterEq("repo_at", repoAt), orm.FilterEq("pull_id", pullId))
+func GetPull(e Execer, filters ...orm.Filter) (*models.Pull, error) {
+	pulls, err := GetPullsPaginated(e, pagination.Page{Limit: 1}, filters...)
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +507,10 @@ func GetPullSubmissions(e Execer, filters ...orm.Filter) (map[syntax.ATURI][]*mo
 			patch,
 			combined,
 			created,
-			source_rev
+			source_rev,
+			patch_blob_ref,
+			patch_blob_mime,
+			patch_blob_size
 		from
 			pull_submissions
 		%s
@@ -358,7 +529,9 @@ func GetPullSubmissions(e Execer, filters ...orm.Filter) (map[syntax.ATURI][]*mo
 	for rows.Next() {
 		var submission models.PullSubmission
 		var submissionCreatedStr string
-		var submissionSourceRev, submissionCombined sql.NullString
+		var submissionSourceRev, submissionCombined sql.Null[string]
+		var patchBlobRef, patchBlobMime sql.Null[string]
+		var patchBlobSize sql.Null[int64]
 		err := rows.Scan(
 			&submission.ID,
 			&submission.PullAt,
@@ -367,6 +540,9 @@ func GetPullSubmissions(e Execer, filters ...orm.Filter) (map[syntax.ATURI][]*mo
 			&submissionCombined,
 			&submissionCreatedStr,
 			&submissionSourceRev,
+			&patchBlobRef,
+			&patchBlobMime,
+			&patchBlobSize,
 		)
 		if err != nil {
 			return nil, err
@@ -377,11 +553,23 @@ func GetPullSubmissions(e Execer, filters ...orm.Filter) (map[syntax.ATURI][]*mo
 		}
 
 		if submissionSourceRev.Valid {
-			submission.SourceRev = submissionSourceRev.String
+			submission.SourceRev = submissionSourceRev.V
 		}
 
 		if submissionCombined.Valid {
-			submission.Combined = submissionCombined.String
+			submission.Combined = submissionCombined.V
+		}
+
+		if patchBlobRef.Valid {
+			submission.Blob.Ref = lexutil.LexLink(cid.MustParse(patchBlobRef.V))
+		}
+
+		if patchBlobMime.Valid {
+			submission.Blob.MimeType = patchBlobMime.V
+		}
+
+		if patchBlobSize.Valid {
+			submission.Blob.Size = patchBlobSize.V
 		}
 
 		submissionMap[submission.ID] = &submission
@@ -612,77 +800,77 @@ func NewPullComment(tx *sql.Tx, comment *models.PullComment) (int64, error) {
 	return i, nil
 }
 
-func SetPullState(e Execer, repoAt syntax.ATURI, pullId int, pullState models.PullState) error {
-	_, err := e.Exec(
-		`update pulls set state = ? where repo_at = ? and pull_id = ? and (state <> ? and state <> ?)`,
-		pullState,
-		repoAt,
-		pullId,
-		models.PullDeleted, // only update state of non-deleted pulls
-		models.PullMerged,  // only update state of non-merged pulls
-	)
-	return err
-}
-
-func ClosePull(e Execer, repoAt syntax.ATURI, pullId int) error {
-	err := SetPullState(e, repoAt, pullId, models.PullClosed)
-	return err
-}
-
-func ReopenPull(e Execer, repoAt syntax.ATURI, pullId int) error {
-	err := SetPullState(e, repoAt, pullId, models.PullOpen)
-	return err
-}
-
-func MergePull(e Execer, repoAt syntax.ATURI, pullId int) error {
-	err := SetPullState(e, repoAt, pullId, models.PullMerged)
-	return err
-}
-
-func DeletePull(e Execer, repoAt syntax.ATURI, pullId int) error {
-	err := SetPullState(e, repoAt, pullId, models.PullDeleted)
-	return err
-}
-
-func ResubmitPull(e Execer, pullAt syntax.ATURI, newRoundNumber int, newPatch string, combinedPatch string, newSourceRev string) error {
-	_, err := e.Exec(`
-		insert into pull_submissions (pull_at, round_number, patch, combined, source_rev)
-		values (?, ?, ?, ?, ?)
-	`, pullAt, newRoundNumber, newPatch, combinedPatch, newSourceRev)
-
-	return err
-}
-
-func SetPullParentChangeId(e Execer, parentChangeId string, filters ...orm.Filter) error {
+// use with transaction
+func SetPullsState(e Execer, pullState models.PullState, filters ...orm.Filter) error {
 	var conditions []string
 	var args []any
 
-	args = append(args, parentChangeId)
-
+	args = append(args, pullState)
 	for _, filter := range filters {
 		conditions = append(conditions, filter.Condition())
 		args = append(args, filter.Arg()...)
 	}
+	args = append(args, models.PullAbandoned) // only update state of non-deleted pulls
+	args = append(args, models.PullMerged)    // only update state of non-merged pulls
 
 	whereClause := ""
 	if conditions != nil {
 		whereClause = " where " + strings.Join(conditions, " and ")
 	}
 
-	query := fmt.Sprintf("update pulls set parent_change_id = ? %s", whereClause)
+	query := fmt.Sprintf("update pulls set state = ? %s and state <> ? and state <> ?", whereClause)
+
 	_, err := e.Exec(query, args...)
+	return err
+}
+
+func ClosePulls(e Execer, filters ...orm.Filter) error {
+	return SetPullsState(e, models.PullClosed, filters...)
+}
+
+func ReopenPulls(e Execer, filters ...orm.Filter) error {
+	return SetPullsState(e, models.PullOpen, filters...)
+}
+
+func MergePulls(e Execer, filters ...orm.Filter) error {
+	return SetPullsState(e, models.PullMerged, filters...)
+}
+
+func AbandonPulls(e Execer, filters ...orm.Filter) error {
+	return SetPullsState(e, models.PullAbandoned, filters...)
+}
+
+func ResubmitPull(
+	e Execer,
+	pullAt syntax.ATURI,
+	newRoundNumber int,
+	newPatch string,
+	combinedPatch string,
+	newSourceRev string,
+	blob *lexutil.LexBlob,
+) error {
+	_, err := e.Exec(`
+		insert into pull_submissions (
+			pull_at,
+			round_number,
+			patch,
+			combined,
+			source_rev,
+			patch_blob_ref,
+			patch_blob_mime,
+			patch_blob_size
+		)
+		values (?, ?, ?, ?, ?, ?, ?, ?)
+	`, pullAt, newRoundNumber, newPatch, combinedPatch, newSourceRev, blob.Ref.String(), blob.MimeType, blob.Size)
 
 	return err
 }
 
-// Only used when stacking to update contents in the event of a rebase (the interdiff should be empty).
-// otherwise submissions are immutable
-func UpdatePull(e Execer, newPatch, sourceRev string, filters ...orm.Filter) error {
+func SetDependentOn(e Execer, dependentOn syntax.ATURI, filters ...orm.Filter) error {
 	var conditions []string
 	var args []any
 
-	args = append(args, sourceRev)
-	args = append(args, newPatch)
+	args = append(args, dependentOn)
 
 	for _, filter := range filters {
 		conditions = append(conditions, filter.Condition())
@@ -694,7 +882,7 @@ func UpdatePull(e Execer, newPatch, sourceRev string, filters ...orm.Filter) err
 		whereClause = " where " + strings.Join(conditions, " and ")
 	}
 
-	query := fmt.Sprintf("update pull_submissions set source_rev = ?, patch = ? %s", whereClause)
+	query := fmt.Sprintf("update pulls set dependent_on = ? %s", whereClause)
 	_, err := e.Exec(query, args...)
 
 	return err
@@ -712,7 +900,7 @@ func GetPullCount(e Execer, repoAt syntax.ATURI) (models.PullCount, error) {
 		models.PullOpen,
 		models.PullMerged,
 		models.PullClosed,
-		models.PullDeleted,
+		models.PullAbandoned,
 		repoAt,
 	)
 
@@ -724,37 +912,84 @@ func GetPullCount(e Execer, repoAt syntax.ATURI) (models.PullCount, error) {
 	return count, nil
 }
 
-//	change-id     parent-change-id
+//	change-id     dependent_on
 //
-// 4       w      ,-------- z          (TOP)
-// 3       z <----',------- y
-// 2       y <-----',------ x
+// 4       w      ,-------- at_uri(z)  (TOP)
+// 3       z <----',------- at_uri(y)
+// 2       y <-----',------ at_uri(x)
 // 1       x <------'      nil         (BOT)
 //
-// `w` is parent of none, so it is the top of the stack
-func GetStack(e Execer, stackId string) (models.Stack, error) {
-	unorderedPulls, err := GetPulls(
-		e,
-		orm.FilterEq("stack_id", stackId),
-		orm.FilterNotEq("state", models.PullDeleted),
-	)
+// `w` has no dependents, so it is the top of the stack
+//
+// this unfortunately does a db query for *each* pull of the stack,
+// ideally this would be a recursive query, but in the interest of implementation simplicity,
+// we took the less performant route
+//
+// TODO: make this less bad
+func GetStack(e Execer, atUri syntax.ATURI) (models.Stack, error) {
+	// first get the pull for the given at-uri
+	pull, err := GetPull(e, orm.FilterEq("at_uri", atUri))
 	if err != nil {
 		return nil, err
 	}
-	// map of parent-change-id to pull
-	changeIdMap := make(map[string]*models.Pull, len(unorderedPulls))
-	parentMap := make(map[string]*models.Pull, len(unorderedPulls))
-	for _, p := range unorderedPulls {
-		changeIdMap[p.ChangeId] = p
-		if p.ParentChangeId != "" {
-			parentMap[p.ParentChangeId] = p
+
+	// Collect all pulls in the stack by traversing up and down
+	allPulls := []*models.Pull{pull}
+	visited := sets.New[syntax.ATURI]()
+
+	// Traverse up to find all dependents
+	current := pull
+	for {
+		dependent, err := GetPull(e,
+			orm.FilterEq("dependent_on", current.AtUri()),
+			orm.FilterNotEq("state", models.PullAbandoned),
+		)
+		if err != nil || dependent == nil {
+			break
+		}
+		if visited.Contains(dependent.AtUri()) {
+			return allPulls, fmt.Errorf("circular dependency detected in stack")
+		}
+		allPulls = append(allPulls, dependent)
+		visited.Insert(dependent.AtUri())
+		current = dependent
+	}
+
+	// Traverse down to find all dependencies
+	current = pull
+	for current.DependentOn != nil {
+		dependency, err := GetPull(
+			e,
+			orm.FilterEq("at_uri", current.DependentOn),
+			orm.FilterNotEq("state", models.PullAbandoned),
+		)
+
+		if err != nil {
+			return allPulls, fmt.Errorf("failed to find parent pull request, stack is malformed, missing PR: %s", current.DependentOn)
+		}
+		if visited.Contains(dependency.AtUri()) {
+			return allPulls, fmt.Errorf("circular dependency detected in stack")
+		}
+		allPulls = append(allPulls, dependency)
+		visited.Insert(dependency.AtUri())
+		current = dependency
+	}
+
+	// sort the list: find the top and build ordered list
+	atUriMap := make(map[syntax.ATURI]*models.Pull, len(allPulls))
+	dependentMap := make(map[syntax.ATURI]*models.Pull, len(allPulls))
+
+	for _, p := range allPulls {
+		atUriMap[p.AtUri()] = p
+		if p.DependentOn != nil {
+			dependentMap[*p.DependentOn] = p
 		}
 	}
 
-	// the top of the stack is the pull that is not a parent of any pull
+	// the top of the stack is the pull that no other pull depends on
 	var topPull *models.Pull
-	for _, maybeTop := range unorderedPulls {
-		if _, ok := parentMap[maybeTop.ChangeId]; !ok {
+	for _, maybeTop := range allPulls {
+		if _, ok := dependentMap[maybeTop.AtUri()]; !ok {
 			topPull = maybeTop
 			break
 		}
@@ -763,11 +998,11 @@ func GetStack(e Execer, stackId string) (models.Stack, error) {
 	pulls := []*models.Pull{}
 	for {
 		pulls = append(pulls, topPull)
-		if topPull.ParentChangeId != "" {
-			if next, ok := changeIdMap[topPull.ParentChangeId]; ok {
+		if topPull.DependentOn != nil {
+			if next, ok := atUriMap[*topPull.DependentOn]; ok {
 				topPull = next
 			} else {
-				return nil, fmt.Errorf("failed to find parent pull request, stack is malformed")
+				return pulls, fmt.Errorf("failed to find parent pull request, stack is malformed")
 			}
 		} else {
 			break
@@ -777,15 +1012,18 @@ func GetStack(e Execer, stackId string) (models.Stack, error) {
 	return pulls, nil
 }
 
-func GetAbandonedPulls(e Execer, stackId string) ([]*models.Pull, error) {
-	pulls, err := GetPulls(
-		e,
-		orm.FilterEq("stack_id", stackId),
-		orm.FilterEq("state", models.PullDeleted),
-	)
+func GetAbandonedPulls(e Execer, atUri syntax.ATURI) ([]*models.Pull, error) {
+	stack, err := GetStack(e, atUri)
 	if err != nil {
 		return nil, err
 	}
 
-	return pulls, nil
+	var abandoned []*models.Pull
+	for _, p := range stack {
+		if p.State == models.PullAbandoned {
+			abandoned = append(abandoned, p)
+		}
+	}
+
+	return abandoned, nil
 }
