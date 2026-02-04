@@ -8,7 +8,7 @@
   {{ else if .IsMerged }}
     {{ $fgColor = "text-purple-600 dark:text-purple-500" }}
     {{ $icon = "git-merge" }}
-  {{ else if .IsDeleted }}
+  {{ else if .IsAbandoned }}
     {{ $fgColor = "text-red-600 dark:text-red-500" }}
     {{ $icon = "git-pull-request-closed" }}
   {{ end }}

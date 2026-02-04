@@ -6,7 +6,7 @@
   {{ $totalPulls := sub 0 1 }}
   {{ $below := sub 0 1 }}
   {{ $stackCount := "" }}
-  {{ if .Pull.IsStacked }}
+  {{ if (gt (len .Stack) 1) }}
     {{ $totalPulls = len $stack }}
     {{ $below = $stack.Below .Pull }}
     {{ $mergeable := len $below.Mergeable }}

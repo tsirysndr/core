@@ -1241,7 +1241,7 @@ type RepoPullsParams struct {
 	Active       string
 	FilterState  string
 	FilterQuery  string
-	Stacks       map[string]models.Stack
+	Stacks       []models.Stack
 	Pipelines    map[string]models.Pipeline
 	LabelDefs    map[string]*models.LabelDefinition
 	Page         pagination.Page
@@ -1277,7 +1277,6 @@ type RepoSinglePullParams struct {
 	Active             string
 	Pull               *models.Pull
 	Stack              models.Stack
-	AbandonedPulls     []*models.Pull
 	Backlinks          []models.RichReferenceLink
 	BranchDeleteStatus *models.BranchDeleteStatus
 	MergeCheck         types.MergeCheckResponse

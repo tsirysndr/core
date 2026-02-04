@@ -108,7 +108,7 @@
 
 {{ define "repoContent" }}
   {{ template "repo/pulls/fragments/pullHeader" . }}
-  {{ if .Pull.IsStacked }}
+  {{ if (gt (len .Stack) 1) }}
     <div class="mt-8">
       {{ template "repo/pulls/fragments/pullStack" . }}
     </div>
@@ -164,7 +164,7 @@
     {{ $bgColor = "bg-green-600 dark:bg-green-700" }}
   {{ else if $pull.State.IsMerged }}
     {{ $bgColor = "bg-purple-600 dark:bg-purple-700" }}
-  {{ else if $pull.State.IsDeleted }}
+  {{ else if $pull.State.IsAbandoned }}
     {{ $bgColor = "bg-red-600 dark:bg-red-700" }}
   {{ end }}
 
@@ -503,7 +503,7 @@
       >
     </div>
   </div>
-  {{ else if .Pull.State.IsDeleted }}
+  {{ else if .Pull.State.IsAbandoned }}
   <div class="bg-red-50 dark:bg-red-900 border border-red-500 rounded drop-shadow-sm px-6 py-2 relative">
     <div class="flex items-center gap-2 text-red-500 dark:text-red-300">
       {{ i "git-pull-request-closed" "w-4 h-4" }}
