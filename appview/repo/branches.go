@@ -21,18 +21,11 @@ func (rp *Repo) Branches(w http.ResponseWriter, r *http.Request) {
 		l.Error("failed to get repo and knot", "err", err)
 		return
 	}
-	scheme := "http"
-	if !rp.config.Core.Dev {
-		scheme = "https"
-	}
-	host := fmt.Sprintf("%s://%s", scheme, f.Knot)
-	xrpcc := &indigoxrpc.Client{
-		Host: host,
-	}
-	repo := fmt.Sprintf("%s/%s", f.Did, f.Name)
-	xrpcBytes, err := tangled.RepoBranches(r.Context(), xrpcc, "", 0, repo)
-	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-		l.Error("failed to call XRPC repo.branches", "err", xrpcerr)
+	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+
+	xrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
+	if err != nil {
+		l.Error("failed to call XRPC repo.branches", "err", err)
 		rp.pages.Error503(w)
 		return
 	}

@@ -199,6 +199,20 @@ func (g *GitRepo) RawContent(path string) ([]byte, error) {
 	return io.ReadAll(reader)
 }
 
+func (g *GitRepo) File(path string) (*object.File, error) {
+	c, err := g.r.CommitObject(g.h)
+	if err != nil {
+		return nil, fmt.Errorf("commit object: %w", err)
+	}
+
+	tree, err := c.Tree()
+	if err != nil {
+		return nil, fmt.Errorf("file tree: %w", err)
+	}
+
+	return tree.File(path)
+}
+
 // read and parse .gitmodules
 func (g *GitRepo) Submodules() (*config.Modules, error) {
 	c, err := g.r.CommitObject(g.h)

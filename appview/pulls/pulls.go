@@ -411,16 +411,8 @@ func (s *Pulls) branchDeleteStatus(r *http.Request, repo *models.Repo, pull *mod
 		return nil
 	}
 
-	scheme := "http"
-	if !s.config.Core.Dev {
-		scheme = "https"
-	}
-	host := fmt.Sprintf("%s://%s", scheme, repo.Knot)
-	xrpcc := &indigoxrpc.Client{
-		Host: host,
-	}
-
-	resp, err := tangled.RepoBranch(r.Context(), xrpcc, branch, fmt.Sprintf("%s/%s", repo.Did, repo.Name))
+	xrpcc := &indigoxrpc.Client{Host: s.config.KnotMirror.Url}
+	resp, err := tangled.GitTempGetBranch(r.Context(), xrpcc, branch, repo.RepoAt().String())
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		return nil
 	}
@@ -436,37 +428,17 @@ func (s *Pulls) resubmitCheck(r *http.Request, repo *models.Repo, pull *models.P
 		return pages.Unknown
 	}
 
-	var knot, ownerDid, repoName string
-
+	var sourceRepo syntax.ATURI
 	if pull.PullSource.RepoAt != nil {
 		// fork-based pulls
-		sourceRepo, err := db.GetRepoByAtUri(s.db, pull.PullSource.RepoAt.String())
-		if err != nil {
-			log.Println("failed to get source repo", err)
-			return pages.Unknown
-		}
-
-		knot = sourceRepo.Knot
-		ownerDid = sourceRepo.Did
-		repoName = sourceRepo.Name
+		sourceRepo = *pull.PullSource.RepoAt
 	} else {
 		// pulls within the same repo
-		knot = repo.Knot
-		ownerDid = repo.Did
-		repoName = repo.Name
+		sourceRepo = repo.RepoAt()
 	}
 
-	scheme := "http"
-	if !s.config.Core.Dev {
-		scheme = "https"
-	}
-	host := fmt.Sprintf("%s://%s", scheme, knot)
-	xrpcc := &indigoxrpc.Client{
-		Host: host,
-	}
-
-	didSlashName := fmt.Sprintf("%s/%s", ownerDid, repoName)
-	branchResp, err := tangled.RepoBranch(r.Context(), xrpcc, pull.PullSource.Branch, didSlashName)
+	xrpcc := &indigoxrpc.Client{Host: s.config.KnotMirror.Url}
+	branchResp, err := tangled.GitTempGetBranch(r.Context(), xrpcc, pull.PullSource.Branch, sourceRepo.String())
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 			log.Println("failed to call XRPC repo.branches", xrpcerr)
@@ -904,17 +876,9 @@ func (s *Pulls) NewPull(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		scheme := "http"
-		if !s.config.Core.Dev {
-			scheme = "https"
-		}
-		host := fmt.Sprintf("%s://%s", scheme, f.Knot)
-		xrpcc := &indigoxrpc.Client{
-			Host: host,
-		}
+		xrpcc := &indigoxrpc.Client{Host: s.config.KnotMirror.Url}
 
-		repo := fmt.Sprintf("%s/%s", f.Did, f.Name)
-		xrpcBytes, err := tangled.RepoBranches(r.Context(), xrpcc, "", 0, repo)
+		xrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
 		if err != nil {
 			if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 				log.Println("failed to call XRPC repo.branches", xrpcerr)
@@ -1535,24 +1499,12 @@ func (s *Pulls) CompareBranchesFragment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	scheme := "http"
-	if !s.config.Core.Dev {
-		scheme = "https"
-	}
-	host := fmt.Sprintf("%s://%s", scheme, f.Knot)
-	xrpcc := &indigoxrpc.Client{
-		Host: host,
-	}
+	xrpcc := &indigoxrpc.Client{Host: s.config.KnotMirror.Url}
 
-	repo := fmt.Sprintf("%s/%s", f.Did, f.Name)
-	xrpcBytes, err := tangled.RepoBranches(r.Context(), xrpcc, "", 0, repo)
+	xrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
 	if err != nil {
-		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-			log.Println("failed to call XRPC repo.branches", xrpcerr)
-			s.pages.Error503(w)
-			return
-		}
 		log.Println("failed to fetch branches", err)
+		s.pages.Error503(w)
 		return
 	}
 
@@ -1607,6 +1559,8 @@ func (s *Pulls) CompareForksBranchesFragment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	xrpcc := &indigoxrpc.Client{Host: s.config.KnotMirror.Url}
+
 	forkVal := r.URL.Query().Get("fork")
 	repoString := strings.SplitN(forkVal, "/", 2)
 	forkOwnerDid := repoString[0]
@@ -1622,17 +1576,7 @@ func (s *Pulls) CompareForksBranchesFragment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	sourceScheme := "http"
-	if !s.config.Core.Dev {
-		sourceScheme = "https"
-	}
-	sourceHost := fmt.Sprintf("%s://%s", sourceScheme, repo.Knot)
-	sourceXrpcc := &indigoxrpc.Client{
-		Host: sourceHost,
-	}
-
-	sourceRepo := fmt.Sprintf("%s/%s", forkOwnerDid, repo.Name)
-	sourceXrpcBytes, err := tangled.RepoBranches(r.Context(), sourceXrpcc, "", 0, sourceRepo)
+	sourceXrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, repo.RepoAt().String())
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 			log.Println("failed to call XRPC repo.branches for source", xrpcerr)
@@ -1651,17 +1595,7 @@ func (s *Pulls) CompareForksBranchesFragment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	targetScheme := "http"
-	if !s.config.Core.Dev {
-		targetScheme = "https"
-	}
-	targetHost := fmt.Sprintf("%s://%s", targetScheme, f.Knot)
-	targetXrpcc := &indigoxrpc.Client{
-		Host: targetHost,
-	}
-
-	targetRepo := fmt.Sprintf("%s/%s", f.Did, f.Name)
-	targetXrpcBytes, err := tangled.RepoBranches(r.Context(), targetXrpcc, "", 0, targetRepo)
+	targetXrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 			log.Println("failed to call XRPC repo.branches for target", xrpcerr)

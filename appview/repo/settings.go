@@ -386,17 +386,9 @@ func (rp *Repo) generalSettings(w http.ResponseWriter, r *http.Request) {
 	f, err := rp.repoResolver.Resolve(r)
 	user := rp.oauth.GetMultiAccountUser(r)
 
-	scheme := "http"
-	if !rp.config.Core.Dev {
-		scheme = "https"
-	}
-	host := fmt.Sprintf("%s://%s", scheme, f.Knot)
-	xrpcc := &indigoxrpc.Client{
-		Host: host,
-	}
+	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
 
-	repo := fmt.Sprintf("%s/%s", f.Did, f.Name)
-	xrpcBytes, err := tangled.RepoBranches(r.Context(), xrpcc, "", 0, repo)
+	xrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
 	var result types.RepoBranchesResponse
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		l.Error("failed to call XRPC repo.branches", "err", xrpcerr)

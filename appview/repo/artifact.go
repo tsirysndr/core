@@ -313,17 +313,9 @@ func (rp *Repo) resolveTag(ctx context.Context, f *models.Repo, tagParam string)
 		return nil, err
 	}
 
-	scheme := "http"
-	if !rp.config.Core.Dev {
-		scheme = "https"
-	}
-	host := fmt.Sprintf("%s://%s", scheme, f.Knot)
-	xrpcc := &indigoxrpc.Client{
-		Host: host,
-	}
+	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
 
-	repo := fmt.Sprintf("%s/%s", f.Did, f.Name)
-	xrpcBytes, err := tangled.RepoTags(ctx, xrpcc, "", 0, repo)
+	xrpcBytes, err := tangled.GitTempListTags(ctx, xrpcc, "", 0, f.RepoAt().String())
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 			l.Error("failed to call XRPC repo.tags", "err", xrpcerr)

@@ -7,11 +7,14 @@ import (
 	_ "net/http/pprof"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"tangled.org/core/idresolver"
 	"tangled.org/core/knotmirror/config"
 	"tangled.org/core/knotmirror/db"
 	"tangled.org/core/knotmirror/knotstream"
 	"tangled.org/core/knotmirror/models"
+	"tangled.org/core/knotmirror/xrpc"
 	"tangled.org/core/log"
 )
 
@@ -26,6 +29,8 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("initializing db: %w", err)
 	}
+
+	resolver := idresolver.DefaultResolver(cfg.PlcUrl)
 
 	// NOTE: using plain git-cli for clone/fetch as go-git is too memory-intensive.
 	gitm := NewCliGitMirrorManager(cfg.GitRepoBasePath, cfg.KnotUseSSL)
@@ -44,6 +49,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	}
 	logger.Info(fmt.Sprintf("clearing resyning states: %d records updated", rows))
 
+	xrpc := xrpc.New(logger, cfg, db, resolver)
 	knotstream := knotstream.NewKnotStream(logger, db, cfg)
 	crawler := NewCrawler(logger, db)
 	resyncer := NewResyncer(logger, db, gitm, cfg)
@@ -52,6 +58,21 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	// maintain repository list with tap
 	// NOTE: this can be removed once we introduce did-for-repo because then we can just listen to KnotStream for #identity events.
 	tap := NewTapClient(logger, cfg, db, gitm, knotstream)
+
+	// start http server
+	go func() {
+		logger.Info("starting http server", "addr", cfg.Listen)
+
+		mux := chi.NewRouter()
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("Welcome to a knotmirror server.\n"))
+		})
+		mux.Mount("/xrpc", xrpc.Router())
+
+		if err := http.ListenAndServe(cfg.Listen, mux); err != nil {
+			logger.Error("xrpc server failed", "error", err)
+		}
+	}()
 
 	// start metrics endpoint
 	go func() {

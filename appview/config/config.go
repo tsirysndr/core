@@ -46,6 +46,10 @@ type PlcConfig struct {
 	PLCURL string `env:"URL, default=https://plc.directory"`
 }
 
+type KnotMirrorConfig struct {
+	Url string `env:"URL, required"`
+}
+
 type JetstreamConfig struct {
 	Endpoint string `env:"ENDPOINT, default=wss://jetstream1.us-east.bsky.network/subscribe"`
 }
@@ -150,22 +154,23 @@ func (cfg RedisConfig) ToURL() string {
 }
 
 type Config struct {
-	Core          CoreConfig      `env:",prefix=TANGLED_"`
-	Jetstream     JetstreamConfig `env:",prefix=TANGLED_JETSTREAM_"`
-	Knotstream    ConsumerConfig  `env:",prefix=TANGLED_KNOTSTREAM_"`
-	Spindlestream ConsumerConfig  `env:",prefix=TANGLED_SPINDLESTREAM_"`
-	Resend        ResendConfig    `env:",prefix=TANGLED_RESEND_"`
-	Posthog       PosthogConfig   `env:",prefix=TANGLED_POSTHOG_"`
-	Camo          CamoConfig      `env:",prefix=TANGLED_CAMO_"`
-	Avatar        AvatarConfig    `env:",prefix=TANGLED_AVATAR_"`
-	OAuth         OAuthConfig     `env:",prefix=TANGLED_OAUTH_"`
-	Redis         RedisConfig     `env:",prefix=TANGLED_REDIS_"`
-	Plc           PlcConfig       `env:",prefix=TANGLED_PLC_"`
-	Pds           PdsConfig       `env:",prefix=TANGLED_PDS_"`
-	Cloudflare    Cloudflare      `env:",prefix=TANGLED_CLOUDFLARE_"`
-	Label         LabelConfig     `env:",prefix=TANGLED_LABEL_"`
-	Bluesky       BlueskyConfig   `env:",prefix=TANGLED_BLUESKY_"`
-	Sites         SitesConfig     `env:",prefix=TANGLED_SITES_"`
+	Core          CoreConfig       `env:",prefix=TANGLED_"`
+	Jetstream     JetstreamConfig  `env:",prefix=TANGLED_JETSTREAM_"`
+	Knotstream    ConsumerConfig   `env:",prefix=TANGLED_KNOTSTREAM_"`
+	Spindlestream ConsumerConfig   `env:",prefix=TANGLED_SPINDLESTREAM_"`
+	Resend        ResendConfig     `env:",prefix=TANGLED_RESEND_"`
+	Posthog       PosthogConfig    `env:",prefix=TANGLED_POSTHOG_"`
+	Camo          CamoConfig       `env:",prefix=TANGLED_CAMO_"`
+	Avatar        AvatarConfig     `env:",prefix=TANGLED_AVATAR_"`
+	OAuth         OAuthConfig      `env:",prefix=TANGLED_OAUTH_"`
+	Redis         RedisConfig      `env:",prefix=TANGLED_REDIS_"`
+	Plc           PlcConfig        `env:",prefix=TANGLED_PLC_"`
+	Pds           PdsConfig        `env:",prefix=TANGLED_PDS_"`
+	Cloudflare    Cloudflare       `env:",prefix=TANGLED_CLOUDFLARE_"`
+	Label         LabelConfig      `env:",prefix=TANGLED_LABEL_"`
+	Bluesky       BlueskyConfig    `env:",prefix=TANGLED_BLUESKY_"`
+	Sites         SitesConfig      `env:",prefix=TANGLED_SITES_"`
+	KnotMirror    KnotMirrorConfig `env:",prefix=TANGLED_KNOTMIRROR_"`
 }
 
 func LoadConfig(ctx context.Context) (*Config, error) {

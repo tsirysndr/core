@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"tangled.org/core/api/tangled"
 )
 
 func (rp *Repo) DownloadArchive(w http.ResponseWriter, r *http.Request) {
@@ -20,30 +21,19 @@ func (rp *Repo) DownloadArchive(w http.ResponseWriter, r *http.Request) {
 		l.Error("failed to get repo and knot", "err", err)
 		return
 	}
-	scheme := "http"
-	if !rp.config.Core.Dev {
-		scheme = "https"
-	}
-	host := fmt.Sprintf("%s://%s", scheme, f.Knot)
-	didSlashRepo := f.DidSlashRepo()
 
 	// build the xrpc url
-	u, err := url.Parse(host)
-	if err != nil {
-		l.Error("failed to parse host URL", "err", err)
-		rp.pages.Error503(w)
-		return
-	}
-
-	u.Path = "/xrpc/sh.tangled.repo.archive"
 	query := url.Values{}
+	query.Set("repo", f.RepoAt().String())
+	query.Set("ref", ref)
 	query.Set("format", "tar.gz")
 	query.Set("prefix", r.URL.Query().Get("prefix"))
-	query.Set("ref", ref)
-	query.Set("repo", didSlashRepo)
-	u.RawQuery = query.Encode()
-
-	xrpcURL := u.String()
+	xrpcURL := fmt.Sprintf(
+		"%s/xrpc/%s?%s",
+		rp.config.KnotMirror.Url,
+		tangled.GitTempGetArchiveNSID,
+		query.Encode(),
+	)
 
 	// make the get request
 	resp, err := http.Get(xrpcURL)

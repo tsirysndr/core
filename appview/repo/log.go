@@ -40,14 +40,7 @@ func (rp *Repo) Log(w http.ResponseWriter, r *http.Request) {
 	ref := chi.URLParam(r, "ref")
 	ref, _ = url.PathUnescape(ref)
 
-	scheme := "http"
-	if !rp.config.Core.Dev {
-		scheme = "https"
-	}
-	host := fmt.Sprintf("%s://%s", scheme, f.Knot)
-	xrpcc := &indigoxrpc.Client{
-		Host: host,
-	}
+	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
 
 	limit := int64(60)
 	cursor := ""
@@ -57,10 +50,9 @@ func (rp *Repo) Log(w http.ResponseWriter, r *http.Request) {
 		cursor = strconv.Itoa(offset)
 	}
 
-	repo := fmt.Sprintf("%s/%s", f.Did, f.Name)
-	xrpcBytes, err := tangled.RepoLog(r.Context(), xrpcc, cursor, limit, "", ref, repo)
-	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-		l.Error("failed to call XRPC repo.log", "err", xrpcerr)
+	xrpcBytes, err := tangled.GitTempListCommits(r.Context(), xrpcc, cursor, limit, ref, f.RepoAt().String())
+	if err != nil {
+		l.Error("failed to call XRPC repo.log", "err", err)
 		rp.pages.Error503(w)
 		return
 	}
@@ -72,9 +64,9 @@ func (rp *Repo) Log(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tagBytes, err := tangled.RepoTags(r.Context(), xrpcc, "", 0, repo)
-	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-		l.Error("failed to call XRPC repo.tags", "err", xrpcerr)
+	tagBytes, err := tangled.GitTempListTags(r.Context(), xrpcc, "", 0, f.RepoAt().String())
+	if err != nil {
+		l.Error("failed to call XRPC repo.tags", "err", err)
 		rp.pages.Error503(w)
 		return
 	}
@@ -93,9 +85,9 @@ func (rp *Repo) Log(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	branchBytes, err := tangled.RepoBranches(r.Context(), xrpcc, "", 0, repo)
-	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-		l.Error("failed to call XRPC repo.branches", "err", xrpcerr)
+	branchBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
+	if err != nil {
+		l.Error("failed to call XRPC repo.branches", "err", err)
 		rp.pages.Error503(w)
 		return
 	}

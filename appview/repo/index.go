@@ -22,7 +22,6 @@ import (
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pages"
-	"tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/orm"
 	"tangled.org/core/types"
 
@@ -42,37 +41,18 @@ func (rp *Repo) Index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	scheme := "http"
-	if !rp.config.Core.Dev {
-		scheme = "https"
-	}
-	host := fmt.Sprintf("%s://%s", scheme, f.Knot)
-	xrpcc := &indigoxrpc.Client{
-		Host: host,
-	}
-
 	user := rp.oauth.GetMultiAccountUser(r)
 
 	// Build index response from multiple XRPC calls
-	result, err := rp.buildIndexResponse(r.Context(), xrpcc, f, ref)
-	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-		if errors.Is(xrpcerr, xrpcclient.ErrXrpcUnsupported) {
-			l.Error("failed to call XRPC repo.index", "err", err)
-			rp.pages.RepoIndexPage(w, pages.RepoIndexParams{
-				LoggedInUser:     user,
-				NeedsKnotUpgrade: true,
-				RepoInfo:         rp.repoResolver.GetRepoInfo(r, user),
-			})
-			return
-		} else {
-			l.Error("failed to build index response", "err", err)
-			rp.pages.RepoIndexPage(w, pages.RepoIndexParams{
-				LoggedInUser:    user,
-				KnotUnreachable: true,
-				RepoInfo:        rp.repoResolver.GetRepoInfo(r, user),
-			})
-			return
-		}
+	result, err := rp.buildIndexResponse(r.Context(), f, ref)
+	if err != nil {
+		l.Error("failed to build index response", "err", err)
+		rp.pages.RepoIndexPage(w, pages.RepoIndexParams{
+			LoggedInUser:    user,
+			KnotUnreachable: true,
+			RepoInfo:        rp.repoResolver.GetRepoInfo(r, user),
+		})
+		return
 	}
 
 	tagMap := make(map[string][]string)
@@ -133,7 +113,7 @@ func (rp *Repo) Index(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO: a bit dirty
-	languageInfo, err := rp.getLanguageInfo(r.Context(), l, f, xrpcc, result.Ref, ref == "")
+	languageInfo, err := rp.getLanguageInfo(r.Context(), l, f, result.Ref, ref == "")
 	if err != nil {
 		l.Warn("failed to compute language percentages", "err", err)
 		// non-fatal
@@ -169,7 +149,6 @@ func (rp *Repo) getLanguageInfo(
 	ctx context.Context,
 	l *slog.Logger,
 	repo *models.Repo,
-	xrpcc *indigoxrpc.Client,
 	currentRef string,
 	isDefaultRef bool,
 ) ([]types.RepoLanguageDetails, error) {
@@ -182,14 +161,10 @@ func (rp *Repo) getLanguageInfo(
 
 	if err != nil || langs == nil {
 		// non-fatal, fetch langs from ks via XRPC
-		didSlashRepo := fmt.Sprintf("%s/%s", repo.Did, repo.Name)
-		ls, err := tangled.RepoLanguages(ctx, xrpcc, currentRef, didSlashRepo)
+		xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+		ls, err := tangled.GitTempListLanguages(ctx, xrpcc, currentRef, repo.RepoAt().String())
 		if err != nil {
-			if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-				l.Error("failed to call XRPC repo.languages", "err", xrpcerr)
-				return nil, xrpcerr
-			}
-			return nil, err
+			return nil, fmt.Errorf("calling knotmirror git.listLanguages: %w", err)
 		}
 
 		if ls == nil || ls.Languages == nil {
@@ -258,13 +233,13 @@ func (rp *Repo) getLanguageInfo(
 }
 
 // buildIndexResponse creates a RepoIndexResponse by combining multiple xrpc calls in parallel
-func (rp *Repo) buildIndexResponse(ctx context.Context, xrpcc *indigoxrpc.Client, repo *models.Repo, ref string) (*types.RepoIndexResponse, error) {
-	didSlashRepo := fmt.Sprintf("%s/%s", repo.Did, repo.Name)
+func (rp *Repo) buildIndexResponse(ctx context.Context, repo *models.Repo, ref string) (*types.RepoIndexResponse, error) {
+	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
 
 	// first get branches to determine the ref if not specified
-	branchesBytes, err := tangled.RepoBranches(ctx, xrpcc, "", 0, didSlashRepo)
+	branchesBytes, err := tangled.GitTempListBranches(ctx, xrpcc, "", 0, repo.RepoAt().String())
 	if err != nil {
-		return nil, fmt.Errorf("failed to call repoBranches: %w", err)
+		return nil, fmt.Errorf("calling knotmirror git.listBranches: %w", err)
 	}
 
 	var branchesResp types.RepoBranchesResponse
@@ -296,7 +271,7 @@ func (rp *Repo) buildIndexResponse(ctx context.Context, xrpcc *indigoxrpc.Client
 
 	var (
 		tagsResp       types.RepoTagsResponse
-		treeResp       *tangled.RepoTree_Output
+		treeResp       *tangled.GitTempGetTree_Output
 		logResp        types.RepoLogResponse
 		readmeContent  string
 		readmeFileName string
@@ -304,22 +279,22 @@ func (rp *Repo) buildIndexResponse(ctx context.Context, xrpcc *indigoxrpc.Client
 
 	// tags
 	wg.Go(func() {
-		tagsBytes, err := tangled.RepoTags(ctx, xrpcc, "", 0, didSlashRepo)
+		tagsBytes, err := tangled.GitTempListTags(ctx, xrpcc, "", 0, repo.RepoAt().String())
 		if err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to call repoTags: %w", err))
+			errs = errors.Join(errs, fmt.Errorf("failed to call git.ListTags: %w", err))
 			return
 		}
 
 		if err := json.Unmarshal(tagsBytes, &tagsResp); err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to unmarshal repoTags: %w", err))
+			errs = errors.Join(errs, fmt.Errorf("failed to unmarshal git.ListTags: %w", err))
 		}
 	})
 
 	// tree/files
 	wg.Go(func() {
-		resp, err := tangled.RepoTree(ctx, xrpcc, "", ref, didSlashRepo)
+		resp, err := tangled.GitTempGetTree(ctx, xrpcc, "", ref, repo.RepoAt().String())
 		if err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to call repoTree: %w", err))
+			errs = errors.Join(errs, fmt.Errorf("failed to call git.GetTree: %w", err))
 			return
 		}
 		treeResp = resp
@@ -327,14 +302,14 @@ func (rp *Repo) buildIndexResponse(ctx context.Context, xrpcc *indigoxrpc.Client
 
 	// commits
 	wg.Go(func() {
-		logBytes, err := tangled.RepoLog(ctx, xrpcc, "", 50, "", ref, didSlashRepo)
+		logBytes, err := tangled.GitTempListCommits(ctx, xrpcc, "", 50, ref, repo.RepoAt().String())
 		if err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to call repoLog: %w", err))
+			errs = errors.Join(errs, fmt.Errorf("failed to call git.ListCommits: %w", err))
 			return
 		}
 
 		if err := json.Unmarshal(logBytes, &logResp); err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to unmarshal repoLog: %w", err))
+			errs = errors.Join(errs, fmt.Errorf("failed to unmarshal git.ListCommits: %w", err))
 		}
 	})
 
@@ -376,7 +351,7 @@ func (rp *Repo) buildIndexResponse(ctx context.Context, xrpcc *indigoxrpc.Client
 		Readme:         readmeContent,
 		ReadmeFileName: readmeFileName,
 		Commits:        logResp.Commits,
-		Description:    logResp.Description,
+		Description:    "",
 		Files:          files,
 		Branches:       branchesResp.Branches,
 		Tags:           tagsResp.Tags,

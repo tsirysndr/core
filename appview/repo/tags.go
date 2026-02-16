@@ -27,18 +27,10 @@ func (rp *Repo) Tags(w http.ResponseWriter, r *http.Request) {
 		l.Error("failed to get repo and knot", "err", err)
 		return
 	}
-	scheme := "http"
-	if !rp.config.Core.Dev {
-		scheme = "https"
-	}
-	host := fmt.Sprintf("%s://%s", scheme, f.Knot)
-	xrpcc := &indigoxrpc.Client{
-		Host: host,
-	}
-	repo := fmt.Sprintf("%s/%s", f.Did, f.Name)
-	xrpcBytes, err := tangled.RepoTags(r.Context(), xrpcc, "", 0, repo)
-	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-		l.Error("failed to call XRPC repo.tags", "err", xrpcerr)
+	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+	xrpcBytes, err := tangled.GitTempListTags(r.Context(), xrpcc, "", 0, f.RepoAt().String())
+	if err != nil {
+		l.Error("failed to call XRPC repo.tags", "err", err)
 		rp.pages.Error503(w)
 		return
 	}
@@ -90,23 +82,16 @@ func (rp *Repo) Tag(w http.ResponseWriter, r *http.Request) {
 		l.Error("failed to get repo and knot", "err", err)
 		return
 	}
-	scheme := "http"
-	if !rp.config.Core.Dev {
-		scheme = "https"
-	}
-	host := fmt.Sprintf("%s://%s", scheme, f.Knot)
-	xrpcc := &indigoxrpc.Client{
-		Host: host,
-	}
-	repo := fmt.Sprintf("%s/%s", f.Did, f.Name)
 	tag := chi.URLParam(r, "tag")
 
-	xrpcBytes, err := tangled.RepoTag(r.Context(), xrpcc, repo, tag)
+	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+
+	xrpcBytes, err := tangled.GitTempGetTag(r.Context(), xrpcc, f.RepoAt().String(), tag)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		// if we don't match an existing tag, and the tag we're trying
 		// to match is "latest", resolve to the most recent tag
 		if tag == "latest" {
-			tagsBytes, err := tangled.RepoTags(r.Context(), xrpcc, "", 1, repo)
+			tagsBytes, err := tangled.GitTempListTags(r.Context(), xrpcc, "", 1, f.RepoAt().String())
 			if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 				l.Error("failed to call XRPC repo.tags for latest", "err", xrpcerr)
 				rp.pages.Error503(w)
