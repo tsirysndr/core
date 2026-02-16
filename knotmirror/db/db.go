@@ -37,13 +37,13 @@ func Make(ctx context.Context, dbUrl string, maxConns int) (*sql.DB, error) {
 			did text not null,
 			rkey text not null,
 			at_uri text generated always as ('at://' || did || '/' || 'sh.tangled.repo' || '/' || rkey) stored,
-			cid text not null,
+			cid text,
 
 			-- record content
 			name text not null,
 			knot_domain text not null,
 
-			-- sync data
+			-- sync info
 			git_rev text not null,
 			repo_sha text not null,
 			state text not null default 'pending',
