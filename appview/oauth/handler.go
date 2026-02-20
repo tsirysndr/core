@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
@@ -91,6 +92,7 @@ func (o *OAuth) callback(w http.ResponseWriter, r *http.Request) {
 	go o.addToDefaultKnot(sessData.AccountDID.String())
 	go o.addToDefaultSpindle(sessData.AccountDID.String())
 	go o.ensureTangledProfile(sessData)
+	go o.autoClaimTnglShDomain(sessData.AccountDID.String())
 
 	if !o.Config.Core.Dev {
 		err = o.Posthog.Enqueue(posthog.Capture{
@@ -411,6 +413,33 @@ func (s *AppPasswordSession) putRecord(record any, collection string) error {
 	}
 
 	return nil
+}
+
+// autoClaimTnglShDomain checks if the user has a .tngl.sh handle and, if so,
+// ensures their corresponding sites domain is claimed. This is idempotent —
+// ClaimDomain is a no-op if the claim already exists.
+func (o *OAuth) autoClaimTnglShDomain(did string) {
+	l := o.Logger.With("did", did)
+
+	pdsDomain := strings.TrimPrefix(o.Config.Pds.Host, "https://")
+	pdsDomain = strings.TrimPrefix(pdsDomain, "http://")
+
+	resolved, err := o.IdResolver.ResolveIdent(context.Background(), did)
+	if err != nil {
+		l.Error("autoClaimTnglShDomain: failed to resolve ident", "err", err)
+		return
+	}
+
+	handle := resolved.Handle.String()
+	if !strings.HasSuffix(handle, "."+pdsDomain) {
+		return
+	}
+
+	if err := db.ClaimDomain(o.Db, did, handle); err != nil {
+		l.Warn("autoClaimTnglShDomain: failed to claim domain", "domain", handle, "err", err)
+	} else {
+		l.Info("autoClaimTnglShDomain: claimed domain", "domain", handle)
+	}
 }
 
 // getAppPasswordSession returns a cached AppPasswordSession, creating one if needed.

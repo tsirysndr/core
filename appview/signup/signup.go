@@ -311,6 +311,24 @@ func (s *Signup) executeSignupTransaction(ctx context.Context, username, passwor
 	}
 	emailAdded = true
 
+	// step 4: auto-claim <username>.<pds-domain> for this user.
+	// All signups through this flow receive a <username>.tngl.sh handle
+	// (or whatever the configured PDS host is), so we claim the matching
+	// sites subdomain on their behalf. This is the only way to obtain a
+	// *.tngl.sh sites domain; it cannot be claimed manually via settings.
+	pdsDomain := strings.TrimPrefix(s.config.Pds.Host, "https://")
+	pdsDomain = strings.TrimPrefix(pdsDomain, "http://")
+	autoClaimDomain := username + "." + pdsDomain
+	if err := db.ClaimDomain(s.db, did, autoClaimDomain); err != nil {
+		s.l.Warn("failed to auto-claim sites domain at signup",
+			"domain", autoClaimDomain,
+			"did", did,
+			"error", err,
+		)
+	} else {
+		s.l.Info("auto-claimed sites domain at signup", "domain", autoClaimDomain, "did", did)
+	}
+
 	// if we get here, we've successfully created the account and added the email
 	success = true
 
