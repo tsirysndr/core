@@ -10,11 +10,12 @@ type DomainClaim struct {
 }
 
 type RepoSite struct {
-	ID      int64
-	RepoAt  string
-	Branch  string
-	Dir     string
-	IsIndex bool
-	Created time.Time
-	Updated time.Time
+	ID       int64
+	RepoAt   string
+	RepoName string // populated when joined with repos table
+	Branch   string
+	Dir      string
+	IsIndex  bool
+	Created  time.Time
+	Updated  time.Time
 }

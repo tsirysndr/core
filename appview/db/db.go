@@ -616,6 +616,30 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			deleted text -- timestamp when the domain was released/unclaimed; null means actively claimed
 		);
 
+		create table if not exists repo_sites (
+			id integer primary key autoincrement,
+			repo_at text not null unique,
+			branch text not null,
+			dir text not null default '/',
+			is_index integer not null default 0,
+			created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+			updated text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+			foreign key (repo_at) references repos(at_uri) on delete cascade
+		);
+
+		create table if not exists site_deploys (
+			id integer primary key autoincrement,
+			repo_at text not null,
+			branch text not null,
+			dir text not null default '/',
+			commit_sha text not null default '',
+			status text not null check (status in ('success', 'failure')),
+			trigger text not null check (trigger in ('config_change', 'push')),
+			error text not null default '',
+			created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+			foreign key (repo_at) references repos(at_uri) on delete cascade
+		);
+
 		create table if not exists migrations (
 			id integer primary key autoincrement,
 			name text unique
@@ -635,6 +659,7 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		create index if not exists idx_references_to_at on reference_links(to_at);
 		create index if not exists idx_webhooks_repo_at on webhooks(repo_at);
 		create index if not exists idx_webhook_deliveries_webhook_id on webhook_deliveries(webhook_id);
+		create index if not exists idx_site_deploys_repo_at on site_deploys(repo_at);
 	`)
 	if err != nil {
 		return nil, err
@@ -1258,22 +1283,6 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 
 		-- rename new table
 		alter table profile_stats_new rename to profile_stats;
-		`)
-		return err
-	})
-
-	orm.RunMigration(conn, logger, "add-repo-sites-table", func(tx *sql.Tx) error {
-		_, err := tx.Exec(`
-			create table if not exists repo_sites (
-				id integer primary key autoincrement,
-				repo_at text not null unique,
-				branch text not null,
-				dir text not null default '/',
-				is_index integer not null default 0,
-				created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-				updated text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-				foreign key (repo_at) references repos(at_uri) on delete cascade
-			);
 		`)
 		return err
 	})

@@ -196,3 +196,75 @@ func DeleteRepoSiteConfig(e Execer, repoAt string) error {
 	_, err := e.Exec(`delete from repo_sites where repo_at = ?`, repoAt)
 	return err
 }
+
+// GetRepoSiteConfigsForDid returns all site configurations for repos owned by a DID.
+// RepoName is populated on each returned RepoSite.
+func GetRepoSiteConfigsForDid(e Execer, did string) ([]*models.RepoSite, error) {
+	rows, err := e.Query(`
+		select rs.id, rs.repo_at, r.name, rs.branch, rs.dir, rs.is_index, rs.created, rs.updated
+		from repo_sites rs
+		join repos r on r.at_uri = rs.repo_at
+		where r.did = ?
+	`, did)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sites []*models.RepoSite
+	for rows.Next() {
+		var s models.RepoSite
+		var isIndex int
+		var createdStr, updatedStr string
+		if err := rows.Scan(&s.ID, &s.RepoAt, &s.RepoName, &s.Branch, &s.Dir, &isIndex, &createdStr, &updatedStr); err != nil {
+			return nil, err
+		}
+		s.IsIndex = isIndex != 0
+		s.Created, err = time.Parse(time.RFC3339, createdStr)
+		if err != nil {
+			return nil, fmt.Errorf("parsing created timestamp: %w", err)
+		}
+		s.Updated, err = time.Parse(time.RFC3339, updatedStr)
+		if err != nil {
+			return nil, fmt.Errorf("parsing updated timestamp: %w", err)
+		}
+		sites = append(sites, &s)
+	}
+	return sites, rows.Err()
+}
+
+// DeleteRepoSiteConfigsForDid removes all site configurations for repos owned by a DID.
+func DeleteRepoSiteConfigsForDid(e Execer, did string) error {
+	_, err := e.Exec(`
+		delete from repo_sites
+		where repo_at in (
+			select at_uri from repos where did = ?
+		)
+	`, did)
+	return err
+}
+
+// GetIndexRepoAtForDid returns the repo_at of the repo that currently holds
+// is_index=1 for the given DID, excluding excludeRepoAt (the current repo).
+// Returns "", nil if no other repo is the index site.
+func GetIndexRepoAtForDid(e Execer, did, excludeRepoAt string) (string, error) {
+	row := e.QueryRow(`
+		select rs.repo_at
+		from repo_sites rs
+		join repos r on r.at_uri = rs.repo_at
+		where r.did = ?
+		  and rs.is_index = 1
+		  and rs.repo_at != ?
+		limit 1
+	`, did, excludeRepoAt)
+
+	var repoAt string
+	err := row.Scan(&repoAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return repoAt, nil
+}
