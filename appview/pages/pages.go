@@ -1016,6 +1016,24 @@ func (p *Pages) WebhookDeliveriesList(w io.Writer, params WebhookDeliveriesListP
 	return tpl.ExecuteTemplate(w, "repo/settings/fragments/webhookDeliveries", params)
 }
 
+type RepoSiteSettingsParams struct {
+	LoggedInUser     *oauth.MultiAccountUser
+	RepoInfo         repoinfo.RepoInfo
+	Active           string
+	Tab              string
+	Branches         []types.Branch
+	SiteConfig       *models.RepoSite
+	OwnerClaim       *models.DomainClaim
+	Deploys          []models.SiteDeploy
+	IndexSiteTakenBy string // repo_at of another repo that already holds is_index, or ""
+}
+
+func (p *Pages) RepoSiteSettings(w io.Writer, params RepoSiteSettingsParams) error {
+	params.Active = "settings"
+	params.Tab = "sites"
+	return p.executeRepo("repo/settings/sites", w, params)
+}
+
 type RepoIssuesParams struct {
 	LoggedInUser *oauth.MultiAccountUser
 	RepoInfo     repoinfo.RepoInfo

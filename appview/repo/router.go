@@ -87,6 +87,10 @@ func (rp *Repo) Router(mw *middleware.Middleware) http.Handler {
 			r.Put("/branches/default", rp.SetDefaultBranch)
 			r.Put("/secrets", rp.Secrets)
 			r.Delete("/secrets", rp.Secrets)
+			r.With(mw.RepoPermissionMiddleware("repo:owner")).Route("/sites", func(r chi.Router) {
+				r.Put("/", rp.SaveRepoSiteConfig)
+				r.Delete("/", rp.DeleteRepoSiteConfig)
+			})
 			r.With(mw.RepoPermissionMiddleware("repo:owner")).Route("/hooks", func(r chi.Router) {
 				r.Get("/", rp.Webhooks)
 				r.Post("/", rp.AddWebhook)

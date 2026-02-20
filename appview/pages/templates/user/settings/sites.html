@@ -1,0 +1,138 @@
+{{ define "title" }}{{ .Tab }} settings{{ end }}
+
+{{ define "content" }}
+  <div class="p-6">
+    <p class="text-xl font-bold dark:text-white">Settings</p>
+  </div>
+  <div class="bg-white dark:bg-gray-800 p-6 rounded relative w-full mx-auto drop-shadow-sm dark:text-white">
+    <section class="w-full grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div class="col-span-1">
+        {{ template "user/settings/fragments/sidebar" . }}
+      </div>
+      <div class="col-span-1 md:col-span-3 flex flex-col gap-6">
+        {{ template "sitesSettings" . }}
+      </div>
+    </section>
+  </div>
+{{ end }}
+
+{{ define "sitesSettings" }}
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+    <div class="col-span-1 md:col-span-2">
+      <h2 class="text-sm pb-2 uppercase font-bold">Git Sites</h2>
+      {{ if .IsTnglHandle }}
+      <p class="text-gray-500 dark:text-gray-400">
+        Since your handle is on <code>tngl.sh</code>, it doubles as your sites domain&mdash;your site will be served from that subdomain automatically.
+      </p>
+      {{ else }}
+      <p class="text-gray-500 dark:text-gray-400">
+        Claim a subdomain of <code>{{ .SitesDomain }}</code> to serve a repository as a static site.
+        Each account may hold one domain at a time. A released domain enters a 30-day cooldown before it can be claimed again.
+      </p>
+      {{ end }}
+    </div>
+    {{ if not .Claim }}
+    <div class="col-span-1 md:col-span-1 md:justify-self-end">
+      {{ template "claimDomainButton" . }}
+    </div>
+    {{ end }}
+  </div>
+
+  <div class="flex flex-col rounded border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700 w-full">
+    {{ if .Claim }}
+      {{ template "activeClaim" . }}
+    {{ else }}
+      <div class="flex items-center justify-center p-2 text-gray-500">
+        no domain claimed yet
+      </div>
+    {{ end }}
+  </div>
+
+
+  {{ if .Claim }}
+  <p class="text-gray-500 dark:text-gray-400">
+    To deploy your site on this domain, <a href="https://docs.tangled.org/TODO">read the docs</a>.
+  </p>
+  {{ end }}
+{{ end }}
+
+{{ define "activeClaim" }}
+  <div class="flex items-center justify-between p-2">
+    <div class="flex items-center gap-3">
+      {{ i "globe" "size-4 text-gray-400 dark:text-gray-500 flex-shrink-0" }}
+      <div class="flex items-center gap-2">
+        <span class="font-mono">{{ .Claim.Domain }}</span>
+        <span class="inline-flex items-center gap-1 text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-2 py-1 rounded">{{ i "circle-check" "size-3" }} active</span>
+      </div>
+    </div>
+    <form
+      hx-delete="/settings/sites"
+      hx-confirm="Release {{ .Claim.Domain }}? The domain will enter a 30-day cooldown before it can be claimed by anyone else."
+      hx-swap="none"
+    >
+      <input type="hidden" name="domain" value="{{ .Claim.Domain }}" />
+      <button
+        type="submit"
+        class="btn flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+        {{ i "trash-2" "size-4" }}
+        release
+      </button>
+    </form>
+  </div>
+{{ end }}
+
+{{ define "claimDomainButton" }}
+  <button
+    class="btn flex items-center gap-2"
+    popovertarget="claim-domain-modal"
+    popovertargetaction="toggle">
+    {{ i "plus" "size-4" }}
+    claim domain
+  </button>
+  <div
+    id="claim-domain-modal"
+    popover
+    class="bg-white w-full md:w-96 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 drop-shadow dark:text-white backdrop:bg-gray-400/50 dark:backdrop:bg-gray-800/50">
+    {{ template "claimDomainModal" . }}
+  </div>
+{{ end }}
+
+{{ define "claimDomainModal" }}
+<form
+  hx-put="/settings/sites"
+  hx-indicator="#claim-spinner"
+  hx-swap="none"
+  class="flex flex-col gap-2"
+>
+  <label class="uppercase p-0">claim a subdomain</label>
+  <p class="text-gray-500 dark:text-gray-400">Choose a subdomain under <code>{{ .SitesDomain }}</code>. Only lowercase letters, digits, and hyphens are allowed.</p>
+  <div class="flex items-stretch rounded border border-gray-200 dark:border-gray-600 overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 dark:bg-gray-700">
+    <input
+      type="text"
+      name="subdomain"
+      required
+      placeholder="yourname"
+      pattern="[a-z0-9][a-z0-9\-]{0,61}[a-z0-9]"
+      class="flex-1 px-2 py-1.5 bg-transparent dark:text-white border-0 focus:outline-none focus:ring-0 min-w-0"
+    />
+    <span class="px-2 py-1.5 bg-gray-100 dark:bg-gray-600 text-gray-500 dark:text-gray-300 select-none whitespace-nowrap border-l border-gray-200 dark:border-gray-600">.{{ .SitesDomain }}</span>
+  </div>
+  <div class="flex gap-2 pt-2">
+    <button
+      type="button"
+      popovertarget="claim-domain-modal"
+      popovertargetaction="hide"
+      class="btn w-1/2 flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+      {{ i "x" "size-4" }} cancel
+    </button>
+    <button type="submit" class="btn w-1/2 flex items-center">
+      <span class="inline-flex gap-2 items-center">{{ i "plus" "size-4" }} claim</span>
+      <span id="claim-spinner" class="group">
+        {{ i "loader-circle" "ml-2 w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+      </span>
+    </button>
+  </div>
+  <div id="settings-sites-error" class="text-red-500 dark:text-red-400"></div>
+  <div id="settings-sites-success" class="text-green-500 dark:text-green-400"></div>
+</form>
+{{ end }}

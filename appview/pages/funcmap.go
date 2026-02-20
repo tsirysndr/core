@@ -475,6 +475,7 @@ func (p *Pages) funcMap() template.FuncMap {
 					{"Name": "access", "Icon": "users"},
 					{"Name": "pipelines", "Icon": "layers-2"},
 					{"Name": "hooks", "Icon": "webhook"},
+					{"Name": "sites", "Icon": "globe"},
 				},
 			}
 		},

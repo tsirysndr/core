@@ -1,18 +1,22 @@
 package repo
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path"
 	"slices"
 	"strings"
 	"time"
 
 	"tangled.org/core/api/tangled"
+
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
+	"tangled.org/core/appview/sites"
 	xrpcclient "tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/orm"
 	"tangled.org/core/types"
@@ -170,7 +174,210 @@ func (rp *Repo) Settings(w http.ResponseWriter, r *http.Request) {
 
 	case "hooks":
 		rp.Webhooks(w, r)
+
+	case "sites":
+		rp.sitesSettings(w, r)
 	}
+}
+
+func (rp *Repo) sitesSettings(w http.ResponseWriter, r *http.Request) {
+	l := rp.logger.With("handler", "sitesSettings")
+
+	f, err := rp.repoResolver.Resolve(r)
+	if err != nil {
+		l.Error("failed to get repo and knot", "err", err)
+		return
+	}
+	user := rp.oauth.GetMultiAccountUser(r)
+
+	scheme := "http"
+	if !rp.config.Core.Dev {
+		scheme = "https"
+	}
+	host := fmt.Sprintf("%s://%s", scheme, f.Knot)
+	xrpcc := &indigoxrpc.Client{Host: host}
+
+	repo := fmt.Sprintf("%s/%s", f.Did, f.Name)
+	xrpcBytes, err := tangled.RepoBranches(r.Context(), xrpcc, "", 0, repo)
+	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+		l.Error("failed to call XRPC repo.branches", "err", xrpcerr)
+		rp.pages.Error503(w)
+		return
+	}
+
+	var result types.RepoBranchesResponse
+	if err := json.Unmarshal(xrpcBytes, &result); err != nil {
+		l.Error("failed to decode XRPC response", "err", err)
+		rp.pages.Error503(w)
+		return
+	}
+
+	siteConfig, err := db.GetRepoSiteConfig(rp.db, f.RepoAt().String())
+	if err != nil {
+		l.Error("failed to get site config", "err", err)
+		rp.pages.Error503(w)
+		return
+	}
+
+	ownerClaim, err := db.GetActiveDomainClaimForDid(rp.db, f.Did)
+	if err != nil {
+		l.Error("failed to get owner domain claim", "err", err)
+		// non-fatal — just show no claim
+		ownerClaim = nil
+	}
+
+	deploys, err := db.GetSiteDeploys(rp.db, f.RepoAt().String(), 20)
+	if err != nil {
+		l.Error("failed to get site deploys", "err", err)
+		// non-fatal
+		deploys = nil
+	}
+
+	indexSiteTakenBy, err := db.GetIndexRepoAtForDid(rp.db, f.Did, f.RepoAt().String())
+	if err != nil {
+		l.Error("failed to get index site owner", "err", err)
+		// non-fatal
+		indexSiteTakenBy = ""
+	}
+
+	rp.pages.RepoSiteSettings(w, pages.RepoSiteSettingsParams{
+		LoggedInUser:     user,
+		RepoInfo:         rp.repoResolver.GetRepoInfo(r, user),
+		Branches:         result.Branches,
+		SiteConfig:       siteConfig,
+		OwnerClaim:       ownerClaim,
+		Deploys:          deploys,
+		IndexSiteTakenBy: indexSiteTakenBy,
+	})
+}
+
+func (rp *Repo) SaveRepoSiteConfig(w http.ResponseWriter, r *http.Request) {
+	l := rp.logger.With("handler", "SaveRepoSiteConfig")
+
+	noticeId := "repo-sites-error"
+
+	f, err := rp.repoResolver.Resolve(r)
+	if err != nil {
+		l.Error("failed to get repo and knot", "err", err)
+		rp.pages.Notice(w, noticeId, "Failed to load repository.")
+		return
+	}
+
+	branch := strings.TrimSpace(r.FormValue("branch"))
+	if branch == "" {
+		rp.pages.Notice(w, noticeId, "Branch cannot be empty.")
+		return
+	}
+
+	dir := strings.TrimSpace(r.FormValue("dir"))
+	if dir == "" {
+		dir = "/"
+	}
+
+	// Normalise: always starts with /, no trailing slash (except root), no ".."
+	dir = path.Clean("/" + dir)
+	if dir != "/" && strings.Contains(dir, "..") {
+		rp.pages.Notice(w, noticeId, "Invalid directory path.")
+		return
+	}
+
+	isIndex := r.FormValue("is_index") == "true"
+
+	if err := db.SetRepoSiteConfig(rp.db, f.RepoAt().String(), branch, dir, isIndex); err != nil {
+		l.Error("failed to save site config", "err", err)
+		rp.pages.Notice(w, noticeId, "Failed to save site configuration.")
+		return
+	}
+
+	// Trigger an initial deploy asynchronously so the handler returns promptly.
+	// Skip entirely if there is no active domain claim — the site cannot be served anyway.
+	ownerClaim, _ := db.GetActiveDomainClaimForDid(rp.db, f.Did)
+	if ownerClaim == nil {
+		rp.logger.Info("skipping deploy: no active domain claim", "repo", f.DidSlashRepo())
+	} else if rp.cfClient.Enabled() {
+		scheme := "http"
+		if !rp.config.Core.Dev {
+			scheme = "https"
+		}
+		knotHost := fmt.Sprintf("%s://%s", scheme, f.Knot)
+
+		go func() {
+			ctx := context.Background()
+
+			deploy := &models.SiteDeploy{
+				RepoAt:  f.RepoAt().String(),
+				Branch:  branch,
+				Dir:     dir,
+				Trigger: models.SiteDeployTriggerConfigChange,
+			}
+
+			deployErr := sites.Deploy(ctx, rp.cfClient, knotHost, f.Did, f.Name, branch, dir)
+			if deployErr != nil {
+				l.Error("sites: initial R2 sync failed", "repo", f.DidSlashRepo(), "err", deployErr)
+				deploy.Status = models.SiteDeployStatusFailure
+				deploy.Error = deployErr.Error()
+			} else {
+				deploy.Status = models.SiteDeployStatusSuccess
+			}
+
+			if err := db.AddSiteDeploy(rp.db, deploy); err != nil {
+				l.Error("sites: failed to record deploy", "repo", f.DidSlashRepo(), "err", err)
+			}
+
+			if deployErr == nil {
+				if err := sites.PutDomainMapping(ctx, rp.cfClient, ownerClaim.Domain, f.Did, f.Name, isIndex); err != nil {
+					l.Error("sites: KV write failed", "domain", ownerClaim.Domain, "err", err)
+				}
+				rp.logger.Info("site deployed to r2", "repo", f.DidSlashRepo(), "is_index", isIndex)
+			}
+		}()
+	} else {
+		rp.logger.Warn("cloudflare integration is disabled; site won't be deployed", "repo", f.DidSlashRepo())
+	}
+
+	rp.pages.HxRefresh(w)
+}
+
+func (rp *Repo) DeleteRepoSiteConfig(w http.ResponseWriter, r *http.Request) {
+	l := rp.logger.With("handler", "DeleteRepoSiteConfig")
+
+	noticeId := "repo-sites-error"
+
+	f, err := rp.repoResolver.Resolve(r)
+	if err != nil {
+		l.Error("failed to get repo and knot", "err", err)
+		rp.pages.Notice(w, noticeId, "Failed to load repository.")
+		return
+	}
+
+	// Fetch the current config before deleting so we know the isIndex flag for
+	// the KV key and the domain mapping to clean up.
+	existingConfig, _ := db.GetRepoSiteConfig(rp.db, f.RepoAt().String())
+
+	if err := db.DeleteRepoSiteConfig(rp.db, f.RepoAt().String()); err != nil {
+		l.Error("failed to delete site config", "err", err)
+		rp.pages.Notice(w, noticeId, "Failed to remove site configuration.")
+		return
+	}
+
+	// Clean up R2 objects and KV entry asynchronously.
+	if rp.cfClient.Enabled() && existingConfig != nil {
+		ownerClaim, _ := db.GetActiveDomainClaimForDid(rp.db, f.Did)
+
+		go func() {
+			ctx := context.Background()
+			if err := sites.Delete(ctx, rp.cfClient, f.Did, f.Name); err != nil {
+				l.Error("sites: R2 delete failed", "repo", f.DidSlashRepo(), "err", err)
+			}
+			if ownerClaim != nil {
+				if err := sites.DeleteDomainMapping(ctx, rp.cfClient, ownerClaim.Domain, f.Name); err != nil {
+					l.Error("sites: KV delete failed", "domain", ownerClaim.Domain, "err", err)
+				}
+			}
+		}()
+	}
+
+	rp.pages.HxRefresh(w)
 }
 
 func (rp *Repo) generalSettings(w http.ResponseWriter, r *http.Request) {

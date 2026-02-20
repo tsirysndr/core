@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"tangled.org/core/appview/cloudflare"
+
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
@@ -50,6 +52,7 @@ type Repo struct {
 	logger        *slog.Logger
 	serviceAuth   *serviceauth.ServiceAuth
 	validator     *validator.Validator
+	cfClient      *cloudflare.Client
 }
 
 func New(
@@ -64,8 +67,10 @@ func New(
 	enforcer *rbac.Enforcer,
 	logger *slog.Logger,
 	validator *validator.Validator,
+	cfClient *cloudflare.Client,
 ) *Repo {
-	return &Repo{oauth: oauth,
+	return &Repo{
+		oauth:         oauth,
 		repoResolver:  repoResolver,
 		pages:         pages,
 		idResolver:    idResolver,
@@ -76,6 +81,7 @@ func New(
 		enforcer:      enforcer,
 		logger:        logger,
 		validator:     validator,
+		cfClient:      cfClient,
 	}
 }
 
