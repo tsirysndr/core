@@ -210,10 +210,12 @@ func (s *State) Core() http.HandlerFunc {
 
 func (s *State) SettingsRouter() http.Handler {
 	settings := &settings.Settings{
-		Db:     s.db,
-		OAuth:  s.oauth,
-		Pages:  s.pages,
-		Config: s.config,
+		Db:       s.db,
+		OAuth:    s.oauth,
+		Pages:    s.pages,
+		Config:   s.config,
+		CfClient: s.cfClient,
+		Logger:   log.SubLogger(s.logger, "settings"),
 	}
 
 	return settings.Router()
@@ -316,6 +318,7 @@ func (s *State) RepoRouter(mw *middleware.Middleware) http.Handler {
 		s.enforcer,
 		log.SubLogger(s.logger, "repo"),
 		s.validator,
+		s.cfClient,
 	)
 	return repo.Router(mw)
 }

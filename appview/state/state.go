@@ -13,6 +13,7 @@ import (
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview"
 	"tangled.org/core/appview/bsky"
+	"tangled.org/core/appview/cloudflare"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/indexer"
@@ -63,6 +64,7 @@ type State struct {
 	spindlestream    *eventconsumer.Consumer
 	logger           *slog.Logger
 	validator        *validator.Validator
+	cfClient         *cloudflare.Client
 }
 
 func Make(ctx context.Context, config *config.Config) (*State, error) {
@@ -172,7 +174,16 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 	notifier := notify.NewMergedNotifier(notifiers)
 	notifier = notify.NewLoggingNotifier(notifier, tlog.SubLogger(logger, "notify"))
 
-	knotstream, err := Knotstream(ctx, config, d, enforcer, posthog, notifier)
+	var cfClient *cloudflare.Client
+	if config.Cloudflare.ApiToken != "" {
+		cfClient, err = cloudflare.New(config)
+		if err != nil {
+			logger.Warn("failed to create cloudflare client, sites upload will be disabled", "err", err)
+			cfClient = nil
+		}
+	}
+
+	knotstream, err := Knotstream(ctx, config, d, enforcer, posthog, notifier, cfClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start knotstream consumer: %w", err)
 	}
@@ -185,22 +196,23 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 	spindlestream.Start(ctx)
 
 	state := &State{
-		d,
-		notifier,
-		indexer,
-		oauth,
-		enforcer,
-		pages,
-		res,
-		mentionsResolver,
-		posthog,
-		jc,
-		config,
-		repoResolver,
-		knotstream,
-		spindlestream,
-		logger,
-		validator,
+		db:               d,
+		notifier:         notifier,
+		indexer:          indexer,
+		oauth:            oauth,
+		enforcer:         enforcer,
+		pages:            pages,
+		idResolver:       res,
+		mentionsResolver: mentionsResolver,
+		posthog:          posthog,
+		jc:               jc,
+		config:           config,
+		repoResolver:     repoResolver,
+		knotstream:       knotstream,
+		spindlestream:    spindlestream,
+		logger:           logger,
+		validator:        validator,
+		cfClient:         cfClient,
 	}
 
 	// fetch initial bluesky posts if configured

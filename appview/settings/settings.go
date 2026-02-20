@@ -1,10 +1,12 @@
 package settings
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/appview/cloudflare"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/email"
@@ -19,6 +22,7 @@ import (
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
+	"tangled.org/core/appview/sites"
 	"tangled.org/core/tid"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
@@ -29,10 +33,12 @@ import (
 )
 
 type Settings struct {
-	Db     *db.DB
-	OAuth  *oauth.OAuth
-	Pages  *pages.Pages
-	Config *config.Config
+	Db       *db.DB
+	OAuth    *oauth.OAuth
+	Pages    *pages.Pages
+	Config   *config.Config
+	CfClient *cloudflare.Client
+	Logger   *slog.Logger
 }
 
 func (s *Settings) Router() http.Handler {
@@ -239,7 +245,7 @@ func (s *Settings) notificationsSettings(w http.ResponseWriter, r *http.Request)
 
 	prefs, err := db.GetNotificationPreference(s.Db, did)
 	if err != nil {
-		log.Printf("failed to get notification preferences: %s", err)
+		s.Logger.Error("failed to get notification preferences", "err", err)
 		s.Pages.Notice(w, "settings-notifications-error", "Unable to load notification preferences.")
 		return
 	}
@@ -269,7 +275,7 @@ func (s *Settings) updateNotificationPreferences(w http.ResponseWriter, r *http.
 
 	err := s.Db.UpdateNotificationPreferences(r.Context(), prefs)
 	if err != nil {
-		log.Printf("failed to update notification preferences: %s", err)
+		s.Logger.Error("failed to update notification preferences", "err", err)
 		s.Pages.Notice(w, "settings-notifications-error", "Unable to save notification preferences.")
 		return
 	}
@@ -281,7 +287,7 @@ func (s *Settings) keysSettings(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
 	pubKeys, err := db.GetPublicKeysForDid(s.Db, user.Active.Did)
 	if err != nil {
-		log.Println(err)
+		s.Logger.Error("keys settings", "err", err)
 	}
 
 	s.Pages.UserKeysSettings(w, pages.UserKeysSettingsParams{
@@ -294,7 +300,7 @@ func (s *Settings) emailsSettings(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
 	emails, err := db.GetAllEmails(s.Db, user.Active.Did)
 	if err != nil {
-		log.Println(err)
+		s.Logger.Error("emails settings", "err", err)
 	}
 
 	s.Pages.UserEmailsSettings(w, pages.UserEmailsSettingsParams{
@@ -325,7 +331,7 @@ func (s *Settings) sendVerificationEmail(w http.ResponseWriter, did, emailAddr, 
 
 	err := email.SendEmail(emailToSend)
 	if err != nil {
-		log.Printf("sending email: %s", err)
+		s.Logger.Error("sending email", "err", err)
 		s.Pages.Notice(w, "settings-emails-error", fmt.Sprintf("Unable to send verification email at this moment, try again later. %s", errorContext))
 		return err
 	}
@@ -337,7 +343,7 @@ func (s *Settings) emails(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		s.Pages.Notice(w, "settings-emails", "Unimplemented.")
-		log.Println("unimplemented")
+		s.Logger.Warn("emails: unimplemented method")
 		return
 	case http.MethodPut:
 		did := s.OAuth.GetDid(r)
@@ -352,7 +358,7 @@ func (s *Settings) emails(w http.ResponseWriter, r *http.Request) {
 		// check if email already exists in database
 		existingEmail, err := db.GetEmail(s.Db, did, emAddr)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			log.Printf("checking for existing email: %s", err)
+			s.Logger.Error("checking for existing email", "err", err)
 			s.Pages.Notice(w, "settings-emails-error", "Unable to add email at this moment, try again later.")
 			return
 		}
@@ -372,7 +378,7 @@ func (s *Settings) emails(w http.ResponseWriter, r *http.Request) {
 		// Begin transaction
 		tx, err := s.Db.Begin()
 		if err != nil {
-			log.Printf("failed to start transaction: %s", err)
+			s.Logger.Error("failed to start transaction", "err", err)
 			s.Pages.Notice(w, "settings-emails-error", "Unable to add email at this moment, try again later.")
 			return
 		}
@@ -384,7 +390,7 @@ func (s *Settings) emails(w http.ResponseWriter, r *http.Request) {
 			Verified:         false,
 			VerificationCode: code,
 		}); err != nil {
-			log.Printf("adding email: %s", err)
+			s.Logger.Error("adding email", "err", err)
 			s.Pages.Notice(w, "settings-emails-error", "Unable to add email at this moment, try again later.")
 			return
 		}
@@ -395,7 +401,7 @@ func (s *Settings) emails(w http.ResponseWriter, r *http.Request) {
 
 		// Commit transaction
 		if err := tx.Commit(); err != nil {
-			log.Printf("failed to commit transaction: %s", err)
+			s.Logger.Error("failed to commit add-email transaction", "err", err)
 			s.Pages.Notice(w, "settings-emails-error", "Unable to add email at this moment, try again later.")
 			return
 		}
@@ -410,21 +416,21 @@ func (s *Settings) emails(w http.ResponseWriter, r *http.Request) {
 		// Begin transaction
 		tx, err := s.Db.Begin()
 		if err != nil {
-			log.Printf("failed to start transaction: %s", err)
+			s.Logger.Error("failed to start transaction", "err", err)
 			s.Pages.Notice(w, "settings-emails-error", "Unable to delete email at this moment, try again later.")
 			return
 		}
 		defer tx.Rollback()
 
 		if err := db.DeleteEmail(tx, did, emailAddr); err != nil {
-			log.Printf("deleting email: %s", err)
+			s.Logger.Error("deleting email", "err", err)
 			s.Pages.Notice(w, "settings-emails-error", "Unable to delete email at this moment, try again later.")
 			return
 		}
 
 		// Commit transaction
 		if err := tx.Commit(); err != nil {
-			log.Printf("failed to commit transaction: %s", err)
+			s.Logger.Error("failed to commit delete-email transaction", "err", err)
 			s.Pages.Notice(w, "settings-emails-error", "Unable to delete email at this moment, try again later.")
 			return
 		}
@@ -454,7 +460,7 @@ func (s *Settings) emailsVerify(w http.ResponseWriter, r *http.Request) {
 
 	valid, err := db.CheckValidVerificationCode(s.Db, did, emailAddr, code)
 	if err != nil {
-		log.Printf("checking email verification: %s", err)
+		s.Logger.Error("checking email verification", "err", err)
 		s.Pages.Notice(w, "settings-emails-error", "Error verifying email. Please try again later.")
 		return
 	}
@@ -466,7 +472,7 @@ func (s *Settings) emailsVerify(w http.ResponseWriter, r *http.Request) {
 
 	// Mark email as verified in the database
 	if err := db.MarkEmailVerified(s.Db, did, emailAddr); err != nil {
-		log.Printf("marking email as verified: %s", err)
+		s.Logger.Error("marking email as verified", "err", err)
 		s.Pages.Notice(w, "settings-emails-error", "Error updating email verification status. Please try again later.")
 		return
 	}
@@ -495,7 +501,7 @@ func (s *Settings) emailsVerifyResend(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, sql.ErrNoRows) {
 			s.Pages.Notice(w, "settings-emails-error", "Email not found. Please add it first.")
 		} else {
-			log.Printf("checking for existing email: %s", err)
+			s.Logger.Error("checking for existing email", "err", err)
 			s.Pages.Notice(w, "settings-emails-error", "Unable to resend verification email at this moment, try again later.")
 		}
 		return
@@ -522,7 +528,7 @@ func (s *Settings) emailsVerifyResend(w http.ResponseWriter, r *http.Request) {
 	// Begin transaction
 	tx, err := s.Db.Begin()
 	if err != nil {
-		log.Printf("failed to start transaction: %s", err)
+		s.Logger.Error("failed to start transaction", "err", err)
 		s.Pages.Notice(w, "settings-emails-error", "Unable to resend verification email at this moment, try again later.")
 		return
 	}
@@ -530,7 +536,7 @@ func (s *Settings) emailsVerifyResend(w http.ResponseWriter, r *http.Request) {
 
 	// Update the verification code and last sent time
 	if err := db.UpdateVerificationCode(tx, did, emAddr, code); err != nil {
-		log.Printf("updating email verification: %s", err)
+		s.Logger.Error("updating email verification code", "err", err)
 		s.Pages.Notice(w, "settings-emails-error", "Unable to resend verification email at this moment, try again later.")
 		return
 	}
@@ -542,7 +548,7 @@ func (s *Settings) emailsVerifyResend(w http.ResponseWriter, r *http.Request) {
 
 	// Commit transaction
 	if err := tx.Commit(); err != nil {
-		log.Printf("failed to commit transaction: %s", err)
+		s.Logger.Error("failed to commit resend-verification transaction", "err", err)
 		s.Pages.Notice(w, "settings-emails-error", "Unable to resend verification email at this moment, try again later.")
 		return
 	}
@@ -561,7 +567,7 @@ func (s *Settings) emailsPrimary(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := db.MakeEmailPrimary(s.Db, did, emailAddr); err != nil {
-		log.Printf("setting primary email: %s", err)
+		s.Logger.Error("setting primary email", "err", err)
 		s.Pages.Notice(w, "settings-emails-error", "Error setting primary email. Please try again later.")
 		return
 	}
@@ -573,7 +579,7 @@ func (s *Settings) keys(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		s.Pages.Notice(w, "settings-keys", "Unimplemented.")
-		log.Println("unimplemented")
+		s.Logger.Warn("keys: unimplemented method")
 		return
 	case http.MethodPut:
 		did := s.OAuth.GetDid(r)
@@ -588,7 +594,7 @@ func (s *Settings) keys(w http.ResponseWriter, r *http.Request) {
 
 		_, _, _, _, err = ssh.ParseAuthorizedKey([]byte(key))
 		if err != nil {
-			log.Printf("parsing public key: %s", err)
+			s.Logger.Error("parsing public key", "err", err)
 			s.Pages.Notice(w, "settings-keys", "That doesn't look like a valid public key. Make sure it's a <strong>public</strong> key.")
 			return
 		}
@@ -597,14 +603,14 @@ func (s *Settings) keys(w http.ResponseWriter, r *http.Request) {
 
 		tx, err := s.Db.Begin()
 		if err != nil {
-			log.Printf("failed to start tx; adding public key: %s", err)
+			s.Logger.Error("failed to start transaction for adding public key", "err", err)
 			s.Pages.Notice(w, "settings-keys", "Unable to add public key at this moment, try again later.")
 			return
 		}
 		defer tx.Rollback()
 
 		if err := db.AddPublicKey(tx, did, name, key, rkey); err != nil {
-			log.Printf("adding public key: %s", err)
+			s.Logger.Error("adding public key", "err", err)
 			s.Pages.Notice(w, "settings-keys", "Failed to add public key.")
 			return
 		}
@@ -623,16 +629,16 @@ func (s *Settings) keys(w http.ResponseWriter, r *http.Request) {
 		})
 		// invalid record
 		if err != nil {
-			log.Printf("failed to create record: %s", err)
+			s.Logger.Error("failed to create atproto record", "err", err)
 			s.Pages.Notice(w, "settings-keys", "Failed to create record.")
 			return
 		}
 
-		log.Println("created atproto record: ", resp.Uri)
+		s.Logger.Info("created atproto record", "uri", resp.Uri)
 
 		err = tx.Commit()
 		if err != nil {
-			log.Printf("failed to commit tx; adding public key: %s", err)
+			s.Logger.Error("failed to commit add-key transaction", "err", err)
 			s.Pages.Notice(w, "settings-keys", "Unable to add public key at this moment, try again later.")
 			return
 		}
@@ -648,19 +654,17 @@ func (s *Settings) keys(w http.ResponseWriter, r *http.Request) {
 		rkey := q.Get("rkey")
 		key := q.Get("key")
 
-		log.Println(name)
-		log.Println(rkey)
-		log.Println(key)
+		s.Logger.Debug("deleting key", "name", name, "rkey", rkey, "key", key)
 
 		client, err := s.OAuth.AuthorizedClient(r)
 		if err != nil {
-			log.Printf("failed to authorize client: %s", err)
+			s.Logger.Error("failed to authorize client", "err", err)
 			s.Pages.Notice(w, "settings-keys", "Failed to authorize client.")
 			return
 		}
 
 		if err := db.DeletePublicKey(s.Db, did, name, key); err != nil {
-			log.Printf("removing public key: %s", err)
+			s.Logger.Error("removing public key", "err", err)
 			s.Pages.Notice(w, "settings-keys", "Failed to remove public key.")
 			return
 		}
@@ -675,12 +679,12 @@ func (s *Settings) keys(w http.ResponseWriter, r *http.Request) {
 
 			// invalid record
 			if err != nil {
-				log.Printf("failed to delete record from PDS: %s", err)
+				s.Logger.Error("failed to delete record from PDS", "err", err)
 				s.Pages.Notice(w, "settings-keys", "Failed to remove key from PDS.")
 				return
 			}
 		}
-		log.Println("deleted successfully")
+		s.Logger.Info("deleted key successfully", "name", name)
 
 		s.Pages.HxLocation(w, "/settings/keys")
 		return

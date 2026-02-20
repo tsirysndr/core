@@ -14,9 +14,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/posthog/posthog-go"
+	"tangled.org/core/appview/cloudflare"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
-	"tangled.org/core/appview/dns"
 	"tangled.org/core/appview/email"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pages"
@@ -27,7 +27,7 @@ import (
 type Signup struct {
 	config              *config.Config
 	db                  *db.DB
-	cf                  *dns.Cloudflare
+	cf                  *cloudflare.Client
 	posthog             posthog.Client
 	idResolver          *idresolver.Resolver
 	pages               *pages.Pages
@@ -36,10 +36,10 @@ type Signup struct {
 }
 
 func New(cfg *config.Config, database *db.DB, pc posthog.Client, idResolver *idresolver.Resolver, pages *pages.Pages, l *slog.Logger) *Signup {
-	var cf *dns.Cloudflare
-	if cfg.Cloudflare.ApiToken != "" && cfg.Cloudflare.ZoneId != "" {
+	var cf *cloudflare.Client
+	if cfg.Cloudflare.ApiToken != "" {
 		var err error
-		cf, err = dns.NewCloudflare(cfg)
+		cf, err = cloudflare.New(cfg)
 		if err != nil {
 			l.Warn("failed to create cloudflare client, signup will be disabled", "error", err)
 		}
@@ -120,7 +120,7 @@ func (s *Signup) signup(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		emailId := r.URL.Query().Get("id")
 		s.pages.Signup(w, pages.SignupParams{
-			CloudflareSiteKey: s.config.Cloudflare.TurnstileSiteKey,
+			CloudflareSiteKey: s.config.Cloudflare.Turnstile.SiteKey,
 			EmailId:           emailId,
 		})
 	case http.MethodPost:
@@ -284,18 +284,18 @@ func (s *Signup) executeSignupTransaction(ctx context.Context, username, passwor
 
 	// XXX: we have a wildcard *.tngl.sh record now
 	// step 2: create DNS record with actual DID
-	// recordID, err = s.cf.CreateDNSRecord(ctx, dns.Record{
-	// 	Type:    "TXT",
-	// 	Name:    "_atproto." + username,
-	// 	Content: fmt.Sprintf(`"did=%s"`, did),
-	// 	TTL:     6400,
-	// 	Proxied: false,
-	// })
-	// if err != nil {
-	// 	s.l.Error("failed to create DNS record", "error", err)
-	// 	s.pages.Notice(w, "signup-error", "Failed to create DNS record for your handle. Please contact support.")
-	// 	return err
-	// }
+	//	recordID, err = s.cf.CreateDNSRecord(ctx, cloudflare.DNSRecord{
+	// 		Type:    "TXT",
+	// 		Name:    "_atproto." + username,
+	// 		Content: fmt.Sprintf(`"did=%s"`, did),
+	// 		TTL:     6400,
+	// 		Proxied: false,
+	// 	})
+	// 	if err != nil {
+	// 		s.l.Error("failed to create DNS record", "error", err)
+	// 		s.pages.Notice(w, "signup-error", "Failed to create DNS record for your handle. Please contact support.")
+	// 		return err
+	// 	}
 
 	// step 3: add email to database
 	err = db.AddEmail(s.db, models.Email{
@@ -358,12 +358,12 @@ func (s *Signup) validateCaptcha(cfToken string, r *http.Request) error {
 		return errors.New("captcha token is empty")
 	}
 
-	if s.config.Cloudflare.TurnstileSecretKey == "" {
+	if s.config.Cloudflare.Turnstile.SecretKey == "" {
 		return errors.New("turnstile secret key not configured")
 	}
 
 	data := url.Values{}
-	data.Set("secret", s.config.Cloudflare.TurnstileSecretKey)
+	data.Set("secret", s.config.Cloudflare.Turnstile.SecretKey)
 	data.Set("response", cfToken)
 
 	// include the client IP if we have it
