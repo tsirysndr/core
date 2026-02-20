@@ -64,7 +64,159 @@ func (s *Settings) Router() http.Handler {
 		r.Put("/", s.updateNotificationPreferences)
 	})
 
+	r.Route("/sites", func(r chi.Router) {
+		r.Get("/", s.sitesSettings)
+		r.Put("/", s.claimSitesDomain)
+		r.Delete("/", s.releaseSitesDomain)
+	})
+
 	return r
+}
+
+func (s *Settings) sitesSettings(w http.ResponseWriter, r *http.Request) {
+	user := s.OAuth.GetMultiAccountUser(r)
+	did := s.OAuth.GetDid(r)
+
+	claim, err := db.GetActiveDomainClaimForDid(s.Db, did)
+	if err != nil {
+		s.Logger.Error("failed to get domain claim", "err", err)
+		claim = nil
+	}
+
+	// determine whether the active account has a tngl.sh handle, in which
+	// case their sites domain is automatically their handle domain.
+	pdsDomain := strings.TrimPrefix(s.Config.Pds.Host, "https://")
+	pdsDomain = strings.TrimPrefix(pdsDomain, "http://")
+	isTnglHandle := false
+	for _, acc := range user.Accounts {
+		if acc.Did == did && strings.HasSuffix(acc.Handle, "."+pdsDomain) {
+			isTnglHandle = true
+			break
+		}
+	}
+
+	s.Pages.UserSiteSettings(w, pages.UserSiteSettingsParams{
+		LoggedInUser: user,
+		Claim:        claim,
+		SitesDomain:  s.Config.Sites.Domain,
+		IsTnglHandle: isTnglHandle,
+	})
+}
+
+func (s *Settings) claimSitesDomain(w http.ResponseWriter, r *http.Request) {
+	did := s.OAuth.GetDid(r)
+
+	subdomain := strings.TrimSpace(r.FormValue("subdomain"))
+	if subdomain == "" {
+		s.Pages.Notice(w, "settings-sites-error", "Subdomain cannot be empty.")
+		return
+	}
+
+	if !isValidSubdomain(subdomain) {
+		s.Pages.Notice(w, "settings-sites-error", "Invalid subdomain. Use only lowercase letters, digits, and hyphens. Cannot start or end with a hyphen.")
+		return
+	}
+
+	sitesDomain := s.Config.Sites.Domain
+
+	if subdomain == sitesDomain {
+		s.Pages.Notice(w, "settings-sites-error", fmt.Sprintf("You cannot claim the root domain %q.", sitesDomain))
+		return
+	}
+
+	fullDomain := subdomain + "." + sitesDomain
+
+	if err := db.ClaimDomain(s.Db, did, fullDomain); err != nil {
+		switch {
+		case errors.Is(err, db.ErrDomainTaken):
+			s.Pages.Notice(w, "settings-sites-error", "That domain is already claimed by another user.")
+		case errors.Is(err, db.ErrDomainCooldown):
+			s.Pages.Notice(w, "settings-sites-error", "That domain was recently released and is in a 30-day cooldown period. Please try again later.")
+		case errors.Is(err, db.ErrAlreadyClaimed):
+			s.Pages.Notice(w, "settings-sites-error", "You already have a domain claimed. Release it before claiming a new one.")
+		default:
+			s.Logger.Error("claiming domain", "err", err)
+			s.Pages.Notice(w, "settings-sites-error", "Unable to claim domain at this moment. Try again later.")
+		}
+		return
+	}
+
+	s.Pages.HxRefresh(w)
+}
+
+func (s *Settings) releaseSitesDomain(w http.ResponseWriter, r *http.Request) {
+	did := s.OAuth.GetDid(r)
+	domain := strings.TrimSpace(r.FormValue("domain"))
+
+	if domain == "" {
+		s.Pages.Notice(w, "settings-sites-error", "Domain cannot be empty.")
+		return
+	}
+
+	pdsDomain := strings.TrimPrefix(s.Config.Pds.Host, "https://")
+	pdsDomain = strings.TrimPrefix(pdsDomain, "http://")
+	user := s.OAuth.GetMultiAccountUser(r)
+	for _, acc := range user.Accounts {
+		if acc.Did == did && strings.HasSuffix(acc.Handle, "."+pdsDomain) {
+			if strings.HasSuffix(domain, "."+pdsDomain) {
+				s.Pages.Notice(w, "settings-sites-error", "Your tngl.sh domain is tied to your handle and cannot be released here.")
+				return
+			}
+		}
+	}
+
+	if err := db.ReleaseDomain(s.Db, did, domain); err != nil {
+		s.Logger.Error("releasing domain", "err", err)
+		s.Pages.Notice(w, "settings-sites-error", "Unable to release domain. Make sure it belongs to your account.")
+		return
+	}
+
+	// Clean up all site data for this DID asynchronously.
+	if s.CfClient.Enabled() {
+		siteConfigs, err := db.GetRepoSiteConfigsForDid(s.Db, did)
+		if err != nil {
+			s.Logger.Error("releaseSitesDomain: fetching site configs for cleanup", "err", err)
+		}
+
+		if err := db.DeleteRepoSiteConfigsForDid(s.Db, did); err != nil {
+			s.Logger.Error("releaseSitesDomain: deleting site configs from db", "err", err)
+		}
+
+		go func() {
+			ctx := context.Background()
+
+			// Delete each repo's R2 objects.
+			for _, sc := range siteConfigs {
+				if err := sites.Delete(ctx, s.CfClient, did, sc.RepoName); err != nil {
+					s.Logger.Error("releaseSitesDomain: R2 delete failed", "did", did, "repo", sc.RepoName, "err", err)
+				}
+			}
+
+			// Delete the single KV entry for the domain.
+			if err := sites.DeleteAllDomainMappings(ctx, s.CfClient, domain); err != nil {
+				s.Logger.Error("releaseSitesDomain: KV delete failed", "domain", domain, "err", err)
+			}
+		}()
+	}
+
+	s.Pages.HxLocation(w, "/settings/sites")
+}
+
+// isValidSubdomain checks that a subdomain label uses only lowercase letters,
+// digits, and hyphens, and does not start or end with a hyphen.
+func isValidSubdomain(s string) bool {
+	if len(s) == 0 || len(s) > 63 {
+		return false
+	}
+	if s[0] == '-' || s[len(s)-1] == '-' {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Settings) profileSettings(w http.ResponseWriter, r *http.Request) {
