@@ -609,6 +609,13 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			quote_count integer not null default 0
 		);
 
+		create table if not exists domain_claims (
+			id integer primary key autoincrement,
+			did text not null unique,
+			domain text not null unique,
+			deleted text -- timestamp when the domain was released/unclaimed; null means actively claimed
+		);
+
 		create table if not exists migrations (
 			id integer primary key autoincrement,
 			name text unique
@@ -1251,6 +1258,22 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 
 		-- rename new table
 		alter table profile_stats_new rename to profile_stats;
+		`)
+		return err
+	})
+
+	orm.RunMigration(conn, logger, "add-repo-sites-table", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			create table if not exists repo_sites (
+				id integer primary key autoincrement,
+				repo_at text not null unique,
+				branch text not null,
+				dir text not null default '/',
+				is_index integer not null default 0,
+				created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				updated text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				foreign key (repo_at) references repos(at_uri) on delete cascade
+			);
 		`)
 		return err
 	})
