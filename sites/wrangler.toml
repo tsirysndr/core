@@ -1,0 +1,27 @@
+name = "sites"
+main = "build/index.js"
+compatibility_date = "2026-02-27"
+
+[build]
+command = "worker-build --release"
+
+[[routes]]
+pattern = "*.tngl.io/*"
+zone_name = "tngl.io"
+
+[[routes]]
+pattern = "*.tngl.sh/*"
+zone_name = "tngl.sh"
+
+[[kv_namespaces]]
+binding = "SITES"
+id = "252122843e3a4b6396e90f15d204659c"
+
+[[r2_buckets]]
+binding = "SITES_BUCKET"
+bucket_name = "tangled-sites"
+
+[observability]
+[observability.logs]
+enabled = true
+invocation_logs = true

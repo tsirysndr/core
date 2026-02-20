@@ -3,6 +3,10 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    fenix = {
+      url = "github:nix-community/fenix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     gomod2nix = {
       url = "github:nix-community/gomod2nix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -54,6 +58,7 @@
   outputs = {
     self,
     nixpkgs,
+    fenix,
     gomod2nix,
     indigo,
     htmx-src,
@@ -185,6 +190,16 @@
           pkgs.tailwindcss
           pkgs.nixos-shell
           pkgs.redis
+          pkgs.worker-build
+          pkgs.cargo-generate
+          (fenix.packages.${system}.combine [
+            fenix.packages.${system}.stable.cargo
+            fenix.packages.${system}.stable.rustc
+            fenix.packages.${system}.stable.rust-src
+            fenix.packages.${system}.stable.clippy
+            fenix.packages.${system}.stable.rustfmt
+            fenix.packages.${system}.targets.wasm32-unknown-unknown.stable.rust-std
+          ])
           pkgs.coreutils # for those of us who are on systems that use busybox (alpine)
           packages'.lexgen
           packages'.treefmt-wrapper

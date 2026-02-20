@@ -1,0 +1,18 @@
+[package]
+name = "sites"
+version = "0.1.0"
+edition = "2024"
+authors = ["Anirudh Oppiliappan <anirudh@tangled.org>"]
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+worker = "0.7.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
