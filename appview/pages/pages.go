@@ -432,6 +432,19 @@ func (p *Pages) UserNotificationSettings(w io.Writer, params UserNotificationSet
 	return p.execute("user/settings/notifications", w, params)
 }
 
+type UserSiteSettingsParams struct {
+	LoggedInUser *oauth.MultiAccountUser
+	Claim        *models.DomainClaim
+	SitesDomain  string
+	IsTnglHandle bool
+	Tab          string
+}
+
+func (p *Pages) UserSiteSettings(w io.Writer, params UserSiteSettingsParams) error {
+	params.Tab = "sites"
+	return p.execute("user/settings/sites", w, params)
+}
+
 type UpgradeBannerParams struct {
 	Registrations []models.Registration
 	Spindles      []models.Spindle

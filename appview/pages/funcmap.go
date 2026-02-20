@@ -468,6 +468,7 @@ func (p *Pages) funcMap() template.FuncMap {
 					{"Name": "notifications", "Icon": "bell"},
 					{"Name": "knots", "Icon": "volleyball"},
 					{"Name": "spindles", "Icon": "spool"},
+					{"Name": "sites", "Icon": "globe"},
 				},
 				"RepoSettingsTabs": []tab{
 					{"Name": "general", "Icon": "sliders-horizontal"},
