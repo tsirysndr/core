@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"tangled.org/core/appview/cloudflare"
 	"tangled.org/core/appview/notify"
 
 	"tangled.org/core/api/tangled"
@@ -15,6 +16,7 @@ import (
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
+	"tangled.org/core/appview/sites"
 	ec "tangled.org/core/eventconsumer"
 	"tangled.org/core/eventconsumer/cursor"
 	"tangled.org/core/log"
@@ -27,7 +29,7 @@ import (
 	"github.com/posthog/posthog-go"
 )
 
-func Knotstream(ctx context.Context, c *config.Config, d *db.DB, enforcer *rbac.Enforcer, posthog posthog.Client, notifier notify.Notifier) (*ec.Consumer, error) {
+func Knotstream(ctx context.Context, c *config.Config, d *db.DB, enforcer *rbac.Enforcer, posthog posthog.Client, notifier notify.Notifier, cfClient *cloudflare.Client) (*ec.Consumer, error) {
 	logger := log.FromContext(ctx)
 	logger = log.SubLogger(logger, "knotstream")
 
@@ -50,7 +52,7 @@ func Knotstream(ctx context.Context, c *config.Config, d *db.DB, enforcer *rbac.
 
 	cfg := ec.ConsumerConfig{
 		Sources:           srcs,
-		ProcessFunc:       knotIngester(d, enforcer, posthog, notifier, c.Core.Dev),
+		ProcessFunc:       knotIngester(d, enforcer, posthog, notifier, c.Core.Dev, c, cfClient),
 		RetryInterval:     c.Knotstream.RetryInterval,
 		MaxRetryInterval:  c.Knotstream.MaxRetryInterval,
 		ConnectionTimeout: c.Knotstream.ConnectionTimeout,
@@ -64,11 +66,11 @@ func Knotstream(ctx context.Context, c *config.Config, d *db.DB, enforcer *rbac.
 	return ec.NewConsumer(cfg), nil
 }
 
-func knotIngester(d *db.DB, enforcer *rbac.Enforcer, posthog posthog.Client, notifier notify.Notifier, dev bool) ec.ProcessFunc {
+func knotIngester(d *db.DB, enforcer *rbac.Enforcer, posthog posthog.Client, notifier notify.Notifier, dev bool, c *config.Config, cfClient *cloudflare.Client) ec.ProcessFunc {
 	return func(ctx context.Context, source ec.Source, msg ec.Message) error {
 		switch msg.Nsid {
 		case tangled.GitRefUpdateNSID:
-			return ingestRefUpdate(d, enforcer, posthog, notifier, dev, source, msg, ctx)
+			return ingestRefUpdate(ctx, d, enforcer, posthog, notifier, dev, c, cfClient, source, msg)
 		case tangled.PipelineNSID:
 			return ingestPipeline(d, source, msg)
 		}
@@ -77,7 +79,7 @@ func knotIngester(d *db.DB, enforcer *rbac.Enforcer, posthog posthog.Client, not
 	}
 }
 
-func ingestRefUpdate(d *db.DB, enforcer *rbac.Enforcer, pc posthog.Client, notifier notify.Notifier, dev bool, source ec.Source, msg ec.Message, ctx context.Context) error {
+func ingestRefUpdate(ctx context.Context, d *db.DB, enforcer *rbac.Enforcer, pc posthog.Client, notifier notify.Notifier, dev bool, c *config.Config, cfClient *cloudflare.Client, source ec.Source, msg ec.Message) error {
 	logger := log.FromContext(ctx)
 
 	var record tangled.GitRefUpdate
@@ -126,7 +128,74 @@ func ingestRefUpdate(d *db.DB, enforcer *rbac.Enforcer, pc posthog.Client, notif
 		})
 	}
 
+	// Trigger a sites redeploy if this push is to the configured sites branch.
+	if cfClient.Enabled() {
+		go triggerSitesDeployIfNeeded(ctx, d, cfClient, c, record, source)
+	}
+
 	return errors.Join(errWebhook, errPunchcard, errLanguages, errPosthog)
+}
+
+// triggerSitesDeployIfNeeded checks whether the pushed ref matches the sites
+// branch configured for this repo and, if so, syncs the site to R2
+func triggerSitesDeployIfNeeded(ctx context.Context, d *db.DB, cfClient *cloudflare.Client, c *config.Config, record tangled.GitRefUpdate, source ec.Source) {
+	logger := log.FromContext(ctx)
+
+	ref := plumbing.ReferenceName(record.Ref)
+	if !ref.IsBranch() {
+		return
+	}
+	pushedBranch := ref.Short()
+
+	repos, err := db.GetRepos(
+		d,
+		0,
+		orm.FilterEq("did", record.RepoDid),
+		orm.FilterEq("name", record.RepoName),
+	)
+	if err != nil || len(repos) != 1 {
+		return
+	}
+	repo := repos[0]
+
+	siteConfig, err := db.GetRepoSiteConfig(d, repo.RepoAt().String())
+	if err != nil || siteConfig == nil {
+		return
+	}
+	if siteConfig.Branch != pushedBranch {
+		return
+	}
+
+	scheme := "https"
+	if c.Core.Dev {
+		scheme = "http"
+	}
+	knotHost := fmt.Sprintf("%s://%s", scheme, source.Key())
+
+	deploy := &models.SiteDeploy{
+		RepoAt:    repo.RepoAt().String(),
+		Branch:    siteConfig.Branch,
+		Dir:       siteConfig.Dir,
+		CommitSHA: record.NewSha,
+		Trigger:   models.SiteDeployTriggerPush,
+	}
+
+	deployErr := sites.Deploy(ctx, cfClient, knotHost, record.RepoDid, record.RepoName, siteConfig.Branch, siteConfig.Dir)
+	if deployErr != nil {
+		logger.Error("sites: R2 sync failed on push", "repo", record.RepoDid+"/"+record.RepoName, "err", deployErr)
+		deploy.Status = models.SiteDeployStatusFailure
+		deploy.Error = deployErr.Error()
+	} else {
+		deploy.Status = models.SiteDeployStatusSuccess
+	}
+
+	if err := db.AddSiteDeploy(d, deploy); err != nil {
+		logger.Error("sites: failed to record deploy", "repo", record.RepoDid+"/"+record.RepoName, "err", err)
+	}
+
+	if deployErr == nil {
+		logger.Info("site deployed to r2", "repo", record.RepoDid+"/"+record.RepoName)
+	}
 }
 
 func populatePunchcard(d *db.DB, record tangled.GitRefUpdate) error {
