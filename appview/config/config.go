@@ -91,21 +91,34 @@ type PdsConfig struct {
 type R2Config struct {
 	AccessKeyID     string `env:"ACCESS_KEY_ID"`
 	SecretAccessKey string `env:"SECRET_ACCESS_KEY"`
-	Bucket          string `env:"BUCKET, default=tangled-pages"`
+	Bucket          string `env:"BUCKET, default=tangled-sites"`
+}
+
+type TurnstileConfig struct {
+	SiteKey   string `env:"SITE_KEY"`
+	SecretKey string `env:"SECRET_KEY"`
+}
+
+type KVConfig struct {
+	NamespaceId string `env:"NAMESPACE_ID"`
+	ApiToken    string `env:"API_TOKEN"`
 }
 
 type Cloudflare struct {
-	ApiToken           string   `env:"API_TOKEN"`
-	ZoneId             string   `env:"ZONE_ID"`
-	AccountID          string   `env:"ACCOUNT_ID"`
-	KVNamespaceID      string   `env:"KV_NAMESPACE_ID"`
-	TurnstileSiteKey   string   `env:"TURNSTILE_SITE_KEY"`
-	TurnstileSecretKey string   `env:"TURNSTILE_SECRET_KEY"`
-	R2                 R2Config `env:",prefix=R2_"`
+	// Legacy top-level API token. For services like Workers KV, we
+	// now use a scoped Account API token configured under the relevant
+	// sub-struct.
+	ApiToken  string `env:"API_TOKEN"`
+	ZoneId    string `env:"ZONE_ID"`
+	AccountId string `env:"ACCOUNT_ID"`
+
+	KV        KVConfig        `env:",prefix=KV_"`
+	Turnstile TurnstileConfig `env:",prefix=TURNSTILE_"`
+	R2        R2Config        `env:",prefix=R2_"`
 }
 
 type SitesConfig struct {
-	Domain string `env:"DOMAIN, default=tngl.page"`
+	Domain string `env:"DOMAIN, default=tngl.io"`
 }
 
 type LabelConfig struct {
