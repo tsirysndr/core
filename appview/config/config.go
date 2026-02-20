@@ -88,11 +88,24 @@ type PdsConfig struct {
 	AdminSecret string `env:"ADMIN_SECRET"`
 }
 
+type R2Config struct {
+	AccessKeyID     string `env:"ACCESS_KEY_ID"`
+	SecretAccessKey string `env:"SECRET_ACCESS_KEY"`
+	Bucket          string `env:"BUCKET, default=tangled-pages"`
+}
+
 type Cloudflare struct {
-	ApiToken           string `env:"API_TOKEN"`
-	ZoneId             string `env:"ZONE_ID"`
-	TurnstileSiteKey   string `env:"TURNSTILE_SITE_KEY"`
-	TurnstileSecretKey string `env:"TURNSTILE_SECRET_KEY"`
+	ApiToken           string   `env:"API_TOKEN"`
+	ZoneId             string   `env:"ZONE_ID"`
+	AccountID          string   `env:"ACCOUNT_ID"`
+	KVNamespaceID      string   `env:"KV_NAMESPACE_ID"`
+	TurnstileSiteKey   string   `env:"TURNSTILE_SITE_KEY"`
+	TurnstileSecretKey string   `env:"TURNSTILE_SECRET_KEY"`
+	R2                 R2Config `env:",prefix=R2_"`
+}
+
+type SitesConfig struct {
+	Domain string `env:"DOMAIN, default=tngl.page"`
 }
 
 type LabelConfig struct {
@@ -134,6 +147,7 @@ type Config struct {
 	Cloudflare    Cloudflare      `env:",prefix=TANGLED_CLOUDFLARE_"`
 	Label         LabelConfig     `env:",prefix=TANGLED_LABEL_"`
 	Bluesky       BlueskyConfig   `env:",prefix=TANGLED_BLUESKY_"`
+	Sites         SitesConfig     `env:",prefix=TANGLED_SITES_"`
 }
 
 func LoadConfig(ctx context.Context) (*Config, error) {
