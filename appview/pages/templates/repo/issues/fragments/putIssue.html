@@ -6,6 +6,7 @@
   {{ else }}
     hx-post="/{{ .RepoInfo.FullName }}/issues/new"
   {{ end }}
+  hx-trigger="submit, keydown[(ctrlKey || metaKey) && key=='Enter'] from:(#title,#body)"
   hx-swap="none"
   hx-indicator="#spinner">
   <div class="flex flex-col gap-2">
