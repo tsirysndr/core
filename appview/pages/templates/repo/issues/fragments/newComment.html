@@ -3,6 +3,9 @@
   <form
       id="comment-form"
       hx-post="/{{ .RepoInfo.FullName }}/issues/{{ .Issue.IssueId }}/comment"
+      hx-trigger="submit, keydown[commentButtonEnabled() && (ctrlKey || metaKey) && key=='Enter'] from:#comment-textarea"
+      hx-indicator="#comment-button"
+      hx-disabled-elt="#comment-form button"
       hx-on::after-request="if(event.detail.successful) this.reset()"
   >
     <div class="bg-white dark:bg-gray-800 rounded drop-shadow-sm py-4 px-4 relative w-full">
@@ -24,9 +27,7 @@
     <div class="flex gap-2 mt-2">
         <button
             id="comment-button"
-            hx-post="/{{ .RepoInfo.FullName }}/issues/{{ .Issue.IssueId }}/comment"
             type="submit"
-            hx-disabled-elt="#comment-button"
             class="btn-create p-2 flex items-center gap-2 no-underline hover:no-underline group"
             disabled
         >
@@ -101,6 +102,11 @@
         {{ end }}
 
         <script>
+        function commentButtonEnabled() {
+            const commentButton = document.getElementById('comment-button');
+            return !commentButton.hasAttribute('disabled');
+        }
+
         function updateCommentForm() {
             const textarea = document.getElementById('comment-textarea');
             const commentButton = document.getElementById('comment-button');
