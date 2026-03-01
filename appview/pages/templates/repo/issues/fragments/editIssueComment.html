@@ -22,6 +22,7 @@
   <button
     class="btn-create py-0 flex gap-1 items-center group text-sm"
     hx-post="/{{ .RepoInfo.FullName }}/issues/{{ .Issue.IssueId }}/comment/{{ .Comment.Id }}/edit"
+    hx-trigger="click, keydown[(ctrlKey || metaKey) && key=='Enter'] from:#edit-textarea-{{ .Comment.Id }}"
     hx-include="#edit-textarea-{{ .Comment.Id }}"
     hx-target="#comment-body-{{ .Comment.Id }}"
     hx-swap="outerHTML">
