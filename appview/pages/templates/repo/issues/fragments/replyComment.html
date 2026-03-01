@@ -3,6 +3,7 @@
       class="p-2 group w-full border-t border-gray-200 dark:border-gray-700 flex flex-col gap-2"
       id="reply-form-{{ .Comment.Id }}"
       hx-post="/{{ .RepoInfo.FullName }}/issues/{{ .Issue.IssueId }}/comment"
+      hx-trigger="submit, keydown[(ctrlKey || metaKey) && key=='Enter'] from:#reply-{{.Comment.Id}}-textarea"
       hx-on::after-request="if(event.detail.successful) this.reset()"
       hx-disabled-elt="#reply-{{ .Comment.Id }}"
   >
@@ -13,11 +14,7 @@
         class="w-full p-2"
         placeholder="Leave a reply..."
         autofocus
-        rows="3"
-        hx-trigger="keydown[ctrlKey&&key=='Enter']"
-        hx-target="#reply-form-{{ .Comment.Id }}"
-        hx-get="#"
-        hx-on:htmx:before-request="event.preventDefault(); document.getElementById('reply-form-{{ .Comment.Id }}').requestSubmit()"></textarea>
+        rows="3"></textarea>
 
       <input
           type="text"
