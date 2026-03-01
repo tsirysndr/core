@@ -139,11 +139,12 @@ schema = 3
     hash = "sha256-GWm5i1ukuBukV0GMF1rffpbOSSXZdfg6/0pABMiGzLQ="
     replaced = "tangled.sh/oppi.li/go-gitdiff"
   [mod."github.com/bluesky-social/indigo"]
-    version = "v0.0.0-20251003000214-3259b215110e"
-    hash = "sha256-qi/GrquJznbLnnHVpd7IqoryCESbi6xE4X1SiEM2qlo="
+    version = "v0.0.0-20260315101958-fb1dfa36fed2"
+    hash = "sha256-R5Dmcsi1a5LquA/a30YyjLAh7Mjg17EuTNVCDxyw4JE="
+    replaced = "github.com/boltlessengineer/indigo"
   [mod."github.com/bluesky-social/jetstream"]
-    version = "v0.0.0-20241210005130-ea96859b93d1"
-    hash = "sha256-AiapbrkjXboIKc5QNiWH0KyNs0zKnn6UlGwWFlkUfm0="
+    version = "v0.0.0-20260226214936-e0274250f654"
+    hash = "sha256-VE93NvI3PreteLHnlv7WT6GgH2vSjtoFjMygCmrznfg="
   [mod."github.com/bmatcuk/doublestar/v4"]
     version = "v4.9.1"
     hash = "sha256-0iyHjyTAsfhgYSsE+NKxSNGBuM3Id615VWeQhssTShE="
@@ -225,6 +226,9 @@ schema = 3
   [mod."github.com/dustin/go-humanize"]
     version = "v1.0.1"
     hash = "sha256-yuvxYYngpfVkUg9yAmG99IUVmADTQA0tMbBXe0Fq0Mc="
+  [mod."github.com/earthboundkid/versioninfo/v2"]
+    version = "v2.24.1"
+    hash = "sha256-nbRdiX9WN2y1aiw1CR/DQ6AYqztow8FazndwY3kByHM="
   [mod."github.com/emirpasic/gods"]
     version = "v1.18.1"
     hash = "sha256-hGDKddjLj+5dn2woHtXKUdd49/3xdsqnhx7VEdCu1m4="
@@ -558,8 +562,8 @@ schema = 3
     version = "v1.2.5"
     hash = "sha256-OYGNolkmL7E1Qs2qrQ3IVpQp5gkcHNU/AB/z2O+Myps="
   [mod."github.com/urfave/cli/v3"]
-    version = "v3.3.3"
-    hash = "sha256-FdPiu7koY1qBinkfca4A05zCrX+Vu4eRz8wlRDZJyGg="
+    version = "v3.4.1"
+    hash = "sha256-cDMaQrIVMthUhdyI1mKXzDC5/wIK151073lzRl92RnA="
   [mod."github.com/vmihailenco/go-tinylfu"]
     version = "v0.2.2"
     hash = "sha256-ZHr4g7DJAV6rLcfrEWZwo9wJSeZcXB9KSP38UIOFfaM="

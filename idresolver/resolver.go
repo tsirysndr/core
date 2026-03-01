@@ -60,7 +60,7 @@ func DefaultResolver(plcUrl string) *Resolver {
 	base := BaseDirectory(plcUrl)
 	cached := identity.NewCacheDirectory(base, 250_000, time.Hour*24, time.Minute*2, time.Minute*5)
 	return &Resolver{
-		directory: &cached,
+		directory: cached,
 	}
 }
 
@@ -80,7 +80,7 @@ func (r *Resolver) ResolveIdent(ctx context.Context, arg string) (*identity.Iden
 		return nil, err
 	}
 
-	return r.directory.Lookup(ctx, *id)
+	return r.directory.Lookup(ctx, id)
 }
 
 func (r *Resolver) ResolveIdents(ctx context.Context, idents []string) []*identity.Identity {
@@ -117,7 +117,7 @@ func (r *Resolver) InvalidateIdent(ctx context.Context, arg string) error {
 		return err
 	}
 
-	return r.directory.Purge(ctx, *id)
+	return r.directory.Purge(ctx, id)
 }
 
 func (r *Resolver) Directory() identity.Directory {

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
-	atpclient "github.com/bluesky-social/indigo/atproto/client"
+	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 	"github.com/go-chi/chi/v5"
@@ -1098,7 +1098,7 @@ func (rp *Issues) NewIssue(w http.ResponseWriter, r *http.Request) {
 // this is used to rollback changes made to the PDS
 //
 // it is a no-op if the provided ATURI is empty
-func rollbackRecord(ctx context.Context, aturi string, client *atpclient.APIClient) error {
+func rollbackRecord(ctx context.Context, aturi string, client *atclient.APIClient) error {
 	if aturi == "" {
 		return nil
 	}

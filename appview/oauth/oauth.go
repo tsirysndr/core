@@ -11,9 +11,9 @@ import (
 	"time"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
+	"github.com/bluesky-social/indigo/atproto/atclient"
+	"github.com/bluesky-social/indigo/atproto/atcrypto"
 	"github.com/bluesky-social/indigo/atproto/auth/oauth"
-	atpclient "github.com/bluesky-social/indigo/atproto/client"
-	atcrypto "github.com/bluesky-social/indigo/atproto/crypto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	xrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/gorilla/sessions"
@@ -262,7 +262,7 @@ func (o *OAuth) GetDid(r *http.Request) string {
 	return ""
 }
 
-func (o *OAuth) AuthorizedClient(r *http.Request) (*atpclient.APIClient, error) {
+func (o *OAuth) AuthorizedClient(r *http.Request) (*atclient.APIClient, error) {
 	session, err := o.ResumeSession(r)
 	if err != nil {
 		return nil, fmt.Errorf("error getting session: %w", err)

@@ -12,8 +12,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.96.0
 	github.com/blevesearch/bleve/v2 v2.5.3
 	github.com/bluekeyes/go-gitdiff v0.8.1
-	github.com/bluesky-social/indigo v0.0.0-20251003000214-3259b215110e
-	github.com/bluesky-social/jetstream v0.0.0-20241210005130-ea96859b93d1
+	github.com/bluesky-social/indigo v0.0.0-20260220055544-bf41e2ee75ab
+	github.com/bluesky-social/jetstream v0.0.0-20260226214936-e0274250f654
 	github.com/bmatcuk/doublestar/v4 v4.9.1
 	github.com/carlmjohnson/versioninfo v0.22.5
 	github.com/casbin/casbin/v2 v2.103.0
@@ -45,7 +45,7 @@ require (
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	github.com/stretchr/testify v1.10.0
-	github.com/urfave/cli/v3 v3.3.3
+	github.com/urfave/cli/v3 v3.4.1
 	github.com/whyrusleeping/cbor-gen v0.3.1
 	github.com/yuin/goldmark v1.7.13
 	github.com/yuin/goldmark-emoji v1.0.6
@@ -116,6 +116,7 @@ require (
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
+	github.com/earthboundkid/versioninfo/v2 v2.24.1 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
@@ -245,6 +246,8 @@ replace github.com/go-git/go-git/v5 => github.com/oppiliappan/go-git/v5 v5.17.0
 replace github.com/bluekeyes/go-gitdiff => tangled.sh/oppi.li/go-gitdiff v0.8.2
 
 replace github.com/alecthomas/chroma/v2 => github.com/oppiliappan/chroma/v2 v2.24.2
+
+replace github.com/bluesky-social/indigo => github.com/boltlessengineer/indigo v0.0.0-20260315101958-fb1dfa36fed2
 
 // from bluesky-social/indigo
 replace github.com/gocql/gocql => github.com/scylladb/gocql v1.14.4

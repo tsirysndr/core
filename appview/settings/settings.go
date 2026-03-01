@@ -28,7 +28,7 @@ import (
 	"tangled.org/core/tid"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
-	atpclient "github.com/bluesky-social/indigo/atproto/client"
+	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 	"github.com/gliderlabs/ssh"
@@ -816,7 +816,7 @@ func (s *Settings) updateHandle(w http.ResponseWriter, r *http.Request) {
 
 		log.Printf("failed to update handle: %s", err)
 		msg := err.Error()
-		var apiErr *atpclient.APIError
+		var apiErr *atclient.APIError
 		if errors.As(err, &apiErr) && apiErr.Message != "" {
 			msg = apiErr.Message
 		}
