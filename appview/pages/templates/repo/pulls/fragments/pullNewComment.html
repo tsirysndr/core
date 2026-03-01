@@ -5,12 +5,14 @@
   {{ template "user/fragments/picHandleLink" .LoggedInUser.Did }}
   <form
     hx-post="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/round/{{ .RoundNumber }}/comment"
+    hx-trigger="submit, keydown[(ctrlKey || metaKey) && key=='Enter'] from:#pull-comment-textarea"
     hx-swap="none"
     hx-on::after-request="if(event.detail.successful) this.reset()"
     hx-disabled-elt="#reply-{{ .RoundNumber }}"
     class="w-full flex flex-wrap gap-2 group"
   >
     <textarea
+        id="pull-comment-textarea"
         name="body"
         class="w-full p-2 rounded border"
         rows=8
