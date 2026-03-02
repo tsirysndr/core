@@ -353,6 +353,16 @@
 
       services.tangled.appview.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.appview;
     };
+    nixosModules.knotmirror = {
+      lib,
+      pkgs,
+      ...
+    }: {
+      imports = [./nix/modules/knotmirror.nix];
+
+      services.tangled.knotmirror.tap-package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.tap;
+      services.tangled.knotmirror.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.knotmirror;
+    };
     nixosModules.knot = {
       lib,
       pkgs,
