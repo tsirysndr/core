@@ -236,7 +236,7 @@ func (s *Signup) complete(w http.ResponseWriter, r *http.Request) {
 
 // executeSignupTransaction performs the signup process transactionally with rollback
 func (s *Signup) executeSignupTransaction(ctx context.Context, username, password, email, code string, w http.ResponseWriter) error {
-	var recordID string
+	// var recordID string
 	var did string
 	var emailAdded bool
 
@@ -246,13 +246,13 @@ func (s *Signup) executeSignupTransaction(ctx context.Context, username, passwor
 			s.l.Info("rolling back signup transaction", "username", username, "did", did)
 
 			// Rollback DNS record
-			if recordID != "" {
-				if err := s.cf.DeleteDNSRecord(ctx, recordID); err != nil {
-					s.l.Error("failed to rollback DNS record", "error", err, "recordID", recordID)
-				} else {
-					s.l.Info("successfully rolled back DNS record", "recordID", recordID)
-				}
-			}
+			// if recordID != "" {
+			// 	if err := s.cf.DeleteDNSRecord(ctx, recordID); err != nil {
+			// 		s.l.Error("failed to rollback DNS record", "error", err, "recordID", recordID)
+			// 	} else {
+			// 		s.l.Info("successfully rolled back DNS record", "recordID", recordID)
+			// 	}
+			// }
 
 			// Rollback PDS account
 			if did != "" {
@@ -282,19 +282,20 @@ func (s *Signup) executeSignupTransaction(ctx context.Context, username, passwor
 		return err
 	}
 
+	// XXX: we have a wildcard *.tngl.sh record now
 	// step 2: create DNS record with actual DID
-	recordID, err = s.cf.CreateDNSRecord(ctx, dns.Record{
-		Type:    "TXT",
-		Name:    "_atproto." + username,
-		Content: fmt.Sprintf(`"did=%s"`, did),
-		TTL:     6400,
-		Proxied: false,
-	})
-	if err != nil {
-		s.l.Error("failed to create DNS record", "error", err)
-		s.pages.Notice(w, "signup-error", "Failed to create DNS record for your handle. Please contact support.")
-		return err
-	}
+	// recordID, err = s.cf.CreateDNSRecord(ctx, dns.Record{
+	// 	Type:    "TXT",
+	// 	Name:    "_atproto." + username,
+	// 	Content: fmt.Sprintf(`"did=%s"`, did),
+	// 	TTL:     6400,
+	// 	Proxied: false,
+	// })
+	// if err != nil {
+	// 	s.l.Error("failed to create DNS record", "error", err)
+	// 	s.pages.Notice(w, "signup-error", "Failed to create DNS record for your handle. Please contact support.")
+	// 	return err
+	// }
 
 	// step 3: add email to database
 	err = db.AddEmail(s.db, models.Email{
