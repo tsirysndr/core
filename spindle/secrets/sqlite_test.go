@@ -22,7 +22,7 @@ func createTestSecret(repo, key, value, createdBy string) UnlockedSecret {
 	return UnlockedSecret{
 		Key:       key,
 		Value:     value,
-		Repo:      DidSlashRepo(repo),
+		Repo:      RepoIdentifier(repo),
 		CreatedAt: time.Now(),
 		CreatedBy: syntax.DID(createdBy),
 	}
@@ -147,7 +147,7 @@ func TestSqliteManager_RemoveSecret(t *testing.T) {
 			},
 			removeSecret: Secret[any]{
 				Key:  "api_key",
-				Repo: DidSlashRepo("did:plc:foo/repo"),
+				Repo: RepoIdentifier("did:plc:foo/repo"),
 			},
 			expectError: nil,
 		},
@@ -158,7 +158,7 @@ func TestSqliteManager_RemoveSecret(t *testing.T) {
 			},
 			removeSecret: Secret[any]{
 				Key:  "non_existent_key",
-				Repo: DidSlashRepo("did:plc:foo/repo"),
+				Repo: RepoIdentifier("did:plc:foo/repo"),
 			},
 			expectError: ErrKeyNotFound,
 		},
@@ -167,7 +167,7 @@ func TestSqliteManager_RemoveSecret(t *testing.T) {
 			setupSecrets: []UnlockedSecret{},
 			removeSecret: Secret[any]{
 				Key:  "any_key",
-				Repo: DidSlashRepo("did:plc:foo/repo"),
+				Repo: RepoIdentifier("did:plc:foo/repo"),
 			},
 			expectError: ErrKeyNotFound,
 		},
@@ -178,7 +178,7 @@ func TestSqliteManager_RemoveSecret(t *testing.T) {
 			},
 			removeSecret: Secret[any]{
 				Key:  "api_key",
-				Repo: DidSlashRepo("other.com/repo"),
+				Repo: RepoIdentifier("other.com/repo"),
 			},
 			expectError: ErrKeyNotFound,
 		},
@@ -209,7 +209,7 @@ func TestSqliteManager_GetSecretsLocked(t *testing.T) {
 	tests := []struct {
 		name          string
 		setupSecrets  []UnlockedSecret
-		queryRepo     DidSlashRepo
+		queryRepo     RepoIdentifier
 		expectedCount int
 		expectedKeys  []string
 		expectError   bool
@@ -221,7 +221,7 @@ func TestSqliteManager_GetSecretsLocked(t *testing.T) {
 				createTestSecret("did:plc:foo/repo", "key2", "value2", "did:plc:user2"),
 				createTestSecret("other.com/repo", "key3", "value3", "did:plc:user3"),
 			},
-			queryRepo:     DidSlashRepo("did:plc:foo/repo"),
+			queryRepo:     RepoIdentifier("did:plc:foo/repo"),
 			expectedCount: 2,
 			expectedKeys:  []string{"key1", "key2"},
 			expectError:   false,
@@ -232,7 +232,7 @@ func TestSqliteManager_GetSecretsLocked(t *testing.T) {
 				createTestSecret("did:plc:foo/repo", "single_key", "single_value", "did:plc:user1"),
 				createTestSecret("other.com/repo", "other_key", "other_value", "did:plc:user2"),
 			},
-			queryRepo:     DidSlashRepo("did:plc:foo/repo"),
+			queryRepo:     RepoIdentifier("did:plc:foo/repo"),
 			expectedCount: 1,
 			expectedKeys:  []string{"single_key"},
 			expectError:   false,
@@ -242,7 +242,7 @@ func TestSqliteManager_GetSecretsLocked(t *testing.T) {
 			setupSecrets: []UnlockedSecret{
 				createTestSecret("did:plc:foo/repo", "key1", "value1", "did:plc:user1"),
 			},
-			queryRepo:     DidSlashRepo("nonexistent.com/repo"),
+			queryRepo:     RepoIdentifier("nonexistent.com/repo"),
 			expectedCount: 0,
 			expectedKeys:  []string{},
 			expectError:   false,
@@ -250,7 +250,7 @@ func TestSqliteManager_GetSecretsLocked(t *testing.T) {
 		{
 			name:          "get secrets from empty database",
 			setupSecrets:  []UnlockedSecret{},
-			queryRepo:     DidSlashRepo("did:plc:foo/repo"),
+			queryRepo:     RepoIdentifier("did:plc:foo/repo"),
 			expectedCount: 0,
 			expectedKeys:  []string{},
 			expectError:   false,
@@ -311,7 +311,7 @@ func TestSqliteManager_GetSecretsUnlocked(t *testing.T) {
 	tests := []struct {
 		name            string
 		setupSecrets    []UnlockedSecret
-		queryRepo       DidSlashRepo
+		queryRepo       RepoIdentifier
 		expectedCount   int
 		expectedSecrets map[string]string // key -> value
 		expectError     bool
@@ -323,7 +323,7 @@ func TestSqliteManager_GetSecretsUnlocked(t *testing.T) {
 				createTestSecret("did:plc:foo/repo", "key2", "value2", "did:plc:user2"),
 				createTestSecret("other.com/repo", "key3", "value3", "did:plc:user3"),
 			},
-			queryRepo:     DidSlashRepo("did:plc:foo/repo"),
+			queryRepo:     RepoIdentifier("did:plc:foo/repo"),
 			expectedCount: 2,
 			expectedSecrets: map[string]string{
 				"key1": "value1",
@@ -337,7 +337,7 @@ func TestSqliteManager_GetSecretsUnlocked(t *testing.T) {
 				createTestSecret("did:plc:foo/repo", "single_key", "single_value", "did:plc:user1"),
 				createTestSecret("other.com/repo", "other_key", "other_value", "did:plc:user2"),
 			},
-			queryRepo:     DidSlashRepo("did:plc:foo/repo"),
+			queryRepo:     RepoIdentifier("did:plc:foo/repo"),
 			expectedCount: 1,
 			expectedSecrets: map[string]string{
 				"single_key": "single_value",
@@ -349,7 +349,7 @@ func TestSqliteManager_GetSecretsUnlocked(t *testing.T) {
 			setupSecrets: []UnlockedSecret{
 				createTestSecret("did:plc:foo/repo", "key1", "value1", "did:plc:user1"),
 			},
-			queryRepo:       DidSlashRepo("nonexistent.com/repo"),
+			queryRepo:       RepoIdentifier("nonexistent.com/repo"),
 			expectedCount:   0,
 			expectedSecrets: map[string]string{},
 			expectError:     false,
@@ -357,7 +357,7 @@ func TestSqliteManager_GetSecretsUnlocked(t *testing.T) {
 		{
 			name:            "get unlocked secrets from empty database",
 			setupSecrets:    []UnlockedSecret{},
-			queryRepo:       DidSlashRepo("did:plc:foo/repo"),
+			queryRepo:       RepoIdentifier("did:plc:foo/repo"),
 			expectedCount:   0,
 			expectedSecrets: map[string]string{},
 			expectError:     false,
@@ -429,17 +429,17 @@ func TestManagerInterface_Usage(t *testing.T) {
 					return m.AddSecret(context.Background(), secret)
 				},
 				func(m Manager) error {
-					_, err := m.GetSecretsLocked(context.Background(), DidSlashRepo("interface.test/repo"))
+					_, err := m.GetSecretsLocked(context.Background(), RepoIdentifier("interface.test/repo"))
 					return err
 				},
 				func(m Manager) error {
-					_, err := m.GetSecretsUnlocked(context.Background(), DidSlashRepo("interface.test/repo"))
+					_, err := m.GetSecretsUnlocked(context.Background(), RepoIdentifier("interface.test/repo"))
 					return err
 				},
 				func(m Manager) error {
 					secret := Secret[any]{
 						Key:  "test_key",
-						Repo: DidSlashRepo("interface.test/repo"),
+						Repo: RepoIdentifier("interface.test/repo"),
 					}
 					return m.RemoveSecret(context.Background(), secret)
 				},
@@ -498,8 +498,8 @@ func TestSqliteManager_Integration(t *testing.T) {
 		{
 			name: "multi-repo secret management",
 			scenario: func(t *testing.T, manager *SqliteManager) {
-				repo1 := DidSlashRepo("example1.com/repo")
-				repo2 := DidSlashRepo("example2.com/repo")
+				repo1 := RepoIdentifier("example1.com/repo")
+				repo2 := RepoIdentifier("example2.com/repo")
 
 				secrets := []UnlockedSecret{
 					createTestSecret(string(repo1), "db_password", "super_secret_123", "did:plc:admin"),
@@ -543,7 +543,7 @@ func TestSqliteManager_Integration(t *testing.T) {
 		{
 			name: "empty database operations",
 			scenario: func(t *testing.T, manager *SqliteManager) {
-				repo := DidSlashRepo("empty.test/repo")
+				repo := RepoIdentifier("empty.test/repo")
 
 				// Operations on empty database should not error
 				locked, err := manager.GetSecretsLocked(context.Background(), repo)

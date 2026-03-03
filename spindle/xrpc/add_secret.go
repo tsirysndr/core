@@ -75,7 +75,7 @@ func (x *Xrpc) AddSecret(w http.ResponseWriter, r *http.Request) {
 	}
 
 	secret := secrets.UnlockedSecret{
-		Repo:      secrets.DidSlashRepo(didPath),
+		Repo:      secrets.RepoIdentifier(didPath),
 		Key:       data.Key,
 		Value:     data.Value,
 		CreatedAt: time.Now(),

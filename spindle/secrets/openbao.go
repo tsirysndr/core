@@ -149,7 +149,7 @@ func (v *OpenBaoManager) RemoveSecret(ctx context.Context, secret Secret[any]) e
 	return nil
 }
 
-func (v *OpenBaoManager) GetSecretsLocked(ctx context.Context, repo DidSlashRepo) ([]LockedSecret, error) {
+func (v *OpenBaoManager) GetSecretsLocked(ctx context.Context, repo RepoIdentifier) ([]LockedSecret, error) {
 	repoPath := v.buildRepoPath(repo)
 
 	secretsList, err := v.client.Logical().ListWithContext(ctx, fmt.Sprintf("%s/metadata/%s", v.mountPath, repoPath))
@@ -224,7 +224,7 @@ func (v *OpenBaoManager) GetSecretsLocked(ctx context.Context, repo DidSlashRepo
 	return secrets, nil
 }
 
-func (v *OpenBaoManager) GetSecretsUnlocked(ctx context.Context, repo DidSlashRepo) ([]UnlockedSecret, error) {
+func (v *OpenBaoManager) GetSecretsUnlocked(ctx context.Context, repo RepoIdentifier) ([]UnlockedSecret, error) {
 	repoPath := v.buildRepoPath(repo)
 
 	secretsList, err := v.client.Logical().ListWithContext(ctx, fmt.Sprintf("%s/metadata/%s", v.mountPath, repoPath))
@@ -307,8 +307,8 @@ func (v *OpenBaoManager) GetSecretsUnlocked(ctx context.Context, repo DidSlashRe
 }
 
 // buildRepoPath creates a safe path for a repository
-func (v *OpenBaoManager) buildRepoPath(repo DidSlashRepo) string {
-	// convert DidSlashRepo to a safe path by replacing special characters
+func (v *OpenBaoManager) buildRepoPath(repo RepoIdentifier) string {
+	// convert RepoIdentifier to a safe path by replacing special characters
 	repoPath := strings.ReplaceAll(string(repo), "/", "_")
 	repoPath = strings.ReplaceAll(repoPath, ":", "_")
 	repoPath = strings.ReplaceAll(repoPath, ".", "_")
@@ -316,6 +316,6 @@ func (v *OpenBaoManager) buildRepoPath(repo DidSlashRepo) string {
 }
 
 // buildSecretPath creates a path for a specific secret
-func (v *OpenBaoManager) buildSecretPath(repo DidSlashRepo, key string) string {
+func (v *OpenBaoManager) buildSecretPath(repo RepoIdentifier, key string) string {
 	return path.Join(v.buildRepoPath(repo), key)
 }

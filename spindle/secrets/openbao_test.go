@@ -32,7 +32,7 @@ func (m *MockOpenBaoManager) ClearError() {
 	m.errorToReturn = nil
 }
 
-func (m *MockOpenBaoManager) buildKey(repo DidSlashRepo, key string) string {
+func (m *MockOpenBaoManager) buildKey(repo RepoIdentifier, key string) string {
 	return string(repo) + "_" + key
 }
 
@@ -64,7 +64,7 @@ func (m *MockOpenBaoManager) RemoveSecret(ctx context.Context, secret Secret[any
 	return nil
 }
 
-func (m *MockOpenBaoManager) GetSecretsLocked(ctx context.Context, repo DidSlashRepo) ([]LockedSecret, error) {
+func (m *MockOpenBaoManager) GetSecretsLocked(ctx context.Context, repo RepoIdentifier) ([]LockedSecret, error) {
 	if m.shouldError {
 		return nil, m.errorToReturn
 	}
@@ -84,7 +84,7 @@ func (m *MockOpenBaoManager) GetSecretsLocked(ctx context.Context, repo DidSlash
 	return result, nil
 }
 
-func (m *MockOpenBaoManager) GetSecretsUnlocked(ctx context.Context, repo DidSlashRepo) ([]UnlockedSecret, error) {
+func (m *MockOpenBaoManager) GetSecretsUnlocked(ctx context.Context, repo RepoIdentifier) ([]UnlockedSecret, error) {
 	if m.shouldError {
 		return nil, m.errorToReturn
 	}
@@ -103,7 +103,7 @@ func createTestSecretForOpenBao(repo, key, value, createdBy string) UnlockedSecr
 	return UnlockedSecret{
 		Key:       key,
 		Value:     value,
-		Repo:      DidSlashRepo(repo),
+		Repo:      RepoIdentifier(repo),
 		CreatedAt: time.Now(),
 		CreatedBy: syntax.DID(createdBy),
 	}
@@ -173,19 +173,19 @@ func TestOpenBaoManager_PathBuilding(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		repo     DidSlashRepo
+		repo     RepoIdentifier
 		key      string
 		expected string
 	}{
 		{
 			name:     "simple repo path",
-			repo:     DidSlashRepo("did:plc:foo/repo"),
+			repo:     RepoIdentifier("did:plc:foo/repo"),
 			key:      "api_key",
 			expected: "repos/did_plc_foo_repo/api_key",
 		},
 		{
 			name:     "complex repo path with dots",
-			repo:     DidSlashRepo("did:web:example.com/my-repo"),
+			repo:     RepoIdentifier("did:web:example.com/my-repo"),
 			key:      "secret_key",
 			expected: "repos/did_web_example_com_my-repo/secret_key",
 		},
@@ -204,7 +204,7 @@ func TestOpenBaoManager_buildRepoPath(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		repo     DidSlashRepo
+		repo     RepoIdentifier
 		expected string
 	}{
 		{
@@ -310,7 +310,7 @@ func TestMockOpenBaoManager_RemoveSecret(t *testing.T) {
 			},
 			removeSecret: Secret[any]{
 				Key:  "API_KEY",
-				Repo: DidSlashRepo("did:plc:test/repo1"),
+				Repo: RepoIdentifier("did:plc:test/repo1"),
 			},
 			expectError: false,
 		},
@@ -319,7 +319,7 @@ func TestMockOpenBaoManager_RemoveSecret(t *testing.T) {
 			setupSecrets: []UnlockedSecret{},
 			removeSecret: Secret[any]{
 				Key:  "API_KEY",
-				Repo: DidSlashRepo("did:plc:test/repo1"),
+				Repo: RepoIdentifier("did:plc:test/repo1"),
 			},
 			expectError: true,
 		},
@@ -352,7 +352,7 @@ func TestMockOpenBaoManager_GetSecretsLocked(t *testing.T) {
 	tests := []struct {
 		name          string
 		setupSecrets  []UnlockedSecret
-		queryRepo     DidSlashRepo
+		queryRepo     RepoIdentifier
 		expectedCount int
 		expectedKeys  []string
 		expectError   bool
@@ -364,7 +364,7 @@ func TestMockOpenBaoManager_GetSecretsLocked(t *testing.T) {
 				createTestSecretForOpenBao("did:plc:test/repo1", "DB_PASSWORD", "dbpass456", "did:plc:creator"),
 				createTestSecretForOpenBao("did:plc:test/repo2", "OTHER_KEY", "other789", "did:plc:creator"),
 			},
-			queryRepo:     DidSlashRepo("did:plc:test/repo1"),
+			queryRepo:     RepoIdentifier("did:plc:test/repo1"),
 			expectedCount: 2,
 			expectedKeys:  []string{"API_KEY", "DB_PASSWORD"},
 			expectError:   false,
@@ -372,7 +372,7 @@ func TestMockOpenBaoManager_GetSecretsLocked(t *testing.T) {
 		{
 			name:          "get secrets from empty repo",
 			setupSecrets:  []UnlockedSecret{},
-			queryRepo:     DidSlashRepo("did:plc:test/empty"),
+			queryRepo:     RepoIdentifier("did:plc:test/empty"),
 			expectedCount: 0,
 			expectedKeys:  []string{},
 			expectError:   false,
@@ -417,7 +417,7 @@ func TestMockOpenBaoManager_GetSecretsUnlocked(t *testing.T) {
 	tests := []struct {
 		name            string
 		setupSecrets    []UnlockedSecret
-		queryRepo       DidSlashRepo
+		queryRepo       RepoIdentifier
 		expectedCount   int
 		expectedSecrets map[string]string // key -> value
 		expectError     bool
@@ -429,7 +429,7 @@ func TestMockOpenBaoManager_GetSecretsUnlocked(t *testing.T) {
 				createTestSecretForOpenBao("did:plc:test/repo1", "DB_PASSWORD", "dbpass456", "did:plc:creator"),
 				createTestSecretForOpenBao("did:plc:test/repo2", "OTHER_KEY", "other789", "did:plc:creator"),
 			},
-			queryRepo:     DidSlashRepo("did:plc:test/repo1"),
+			queryRepo:     RepoIdentifier("did:plc:test/repo1"),
 			expectedCount: 2,
 			expectedSecrets: map[string]string{
 				"API_KEY":     "secret123",
@@ -440,7 +440,7 @@ func TestMockOpenBaoManager_GetSecretsUnlocked(t *testing.T) {
 		{
 			name:            "get secrets from empty repo",
 			setupSecrets:    []UnlockedSecret{},
-			queryRepo:       DidSlashRepo("did:plc:test/empty"),
+			queryRepo:       RepoIdentifier("did:plc:test/empty"),
 			expectedCount:   0,
 			expectedSecrets: map[string]string{},
 			expectError:     false,
@@ -521,7 +521,7 @@ func TestMockOpenBaoManager_Integration(t *testing.T) {
 			name: "complete workflow",
 			scenario: func(t *testing.T, mock *MockOpenBaoManager) {
 				ctx := context.Background()
-				repo := DidSlashRepo("did:plc:test/integration")
+				repo := RepoIdentifier("did:plc:test/integration")
 
 				// Start with empty repo
 				secrets, err := mock.GetSecretsLocked(ctx, repo)

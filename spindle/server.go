@@ -315,10 +315,15 @@ func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source,
 		}
 
 		// filter by repos
+		repoName := ""
+		if tpl.TriggerMetadata.Repo.Repo != nil {
+			repoName = *tpl.TriggerMetadata.Repo.Repo
+		}
+
 		_, err = s.db.GetRepo(
 			tpl.TriggerMetadata.Repo.Knot,
 			tpl.TriggerMetadata.Repo.Did,
-			tpl.TriggerMetadata.Repo.Repo,
+			repoName,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to get repo: %w", err)
@@ -382,7 +387,7 @@ func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source,
 			Run: func() error {
 				engine.StartWorkflows(log.SubLogger(s.l, "engine"), s.vault, s.cfg, s.db, s.n, ctx, &models.Pipeline{
 					RepoOwner: tpl.TriggerMetadata.Repo.Did,
-					RepoName:  tpl.TriggerMetadata.Repo.Repo,
+					RepoName:  repoName,
 					Workflows: workflows,
 				}, pipelineId)
 				return nil

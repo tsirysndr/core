@@ -27,7 +27,7 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 	// extract secrets
 	var allSecrets []secrets.UnlockedSecret
 	if didSlashRepo, err := securejoin.SecureJoin(pipeline.RepoOwner, pipeline.RepoName); err == nil {
-		if res, err := vault.GetSecretsUnlocked(ctx, secrets.DidSlashRepo(didSlashRepo)); err == nil {
+		if res, err := vault.GetSecretsUnlocked(ctx, secrets.RepoIdentifier(didSlashRepo)); err == nil {
 			allSecrets = res
 		}
 	}

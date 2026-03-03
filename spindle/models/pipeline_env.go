@@ -26,7 +26,12 @@ func PipelineEnvVars(tr *tangled.Pipeline_TriggerMetadata, pipelineId PipelineId
 	if tr.Repo != nil {
 		env["TANGLED_REPO_KNOT"] = tr.Repo.Knot
 		env["TANGLED_REPO_DID"] = tr.Repo.Did
-		env["TANGLED_REPO_NAME"] = tr.Repo.Repo
+		if tr.Repo.Repo != nil {
+			env["TANGLED_REPO_NAME"] = *tr.Repo.Repo
+		}
+		if tr.Repo.RepoDid != nil {
+			env["TANGLED_REPO_REPO_DID"] = *tr.Repo.RepoDid
+		}
 		env["TANGLED_REPO_DEFAULT_BRANCH"] = tr.Repo.DefaultBranch
 		env["TANGLED_REPO_URL"] = BuildRepoURL(tr.Repo, devMode)
 	}

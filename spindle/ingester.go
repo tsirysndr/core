@@ -228,40 +228,46 @@ func (s *Spindle) ingestCollaborator(ctx context.Context, e *models.Event) error
 			return err
 		}
 
-		repoAt, err := syntax.ParseATURI(record.Repo)
-		if err != nil {
-			l.Info("rejecting record, invalid repoAt", "repoAt", record.Repo)
+		var rbacResource string
+		var ownerDid string
+		switch {
+		case record.Repo != nil:
+			repoAt, parseErr := syntax.ParseATURI(*record.Repo)
+			if parseErr != nil {
+				l.Info("rejecting record, invalid repoAt", "repoAt", *record.Repo)
+				return nil
+			}
+
+			owner, resolveErr := s.res.ResolveIdent(ctx, repoAt.Authority().String())
+			if resolveErr != nil || owner.Handle.IsInvalidHandle() {
+				return fmt.Errorf("failed to resolve handle: %w", resolveErr)
+			}
+
+			xrpcc := xrpc.Client{
+				Host: owner.PDSEndpoint(),
+			}
+
+			resp, getErr := comatproto.RepoGetRecord(ctx, &xrpcc, "", tangled.RepoNSID, repoAt.Authority().String(), repoAt.RecordKey().String())
+			if getErr != nil {
+				return getErr
+			}
+
+			repo := resp.Value.Val.(*tangled.Repo)
+			rbacResource, _ = securejoin.SecureJoin(owner.DID.String(), repo.Name)
+			ownerDid = owner.DID.String()
+
+		default:
+			l.Info("rejecting collaborator record without repo at-uri (spindle RBAC keyed by owner/name)")
 			return nil
 		}
 
-		// TODO: get rid of this entirely
-		// resolve this aturi to extract the repo record
-		owner, err := s.res.ResolveIdent(ctx, repoAt.Authority().String())
-		if err != nil || owner.Handle.IsInvalidHandle() {
-			return fmt.Errorf("failed to resolve handle: %w", err)
-		}
-
-		xrpcc := xrpc.Client{
-			Host: owner.PDSEndpoint(),
-		}
-
-		resp, err := comatproto.RepoGetRecord(ctx, &xrpcc, "", tangled.RepoNSID, repoAt.Authority().String(), repoAt.RecordKey().String())
-		if err != nil {
-			return err
-		}
-
-		repo := resp.Value.Val.(*tangled.Repo)
-		didSlashRepo, _ := securejoin.SecureJoin(owner.DID.String(), repo.Name)
-
-		// check perms for this user
-		if ok, err := s.e.IsCollaboratorInviteAllowed(owner.DID.String(), rbac.ThisServer, didSlashRepo); !ok || err != nil {
+		if ok, err := s.e.IsCollaboratorInviteAllowed(ownerDid, rbac.ThisServer, rbacResource); !ok || err != nil {
 			return fmt.Errorf("insufficient permissions: %w", err)
 		}
 
-		// add collaborator to rbac
-		if err := s.e.AddCollaborator(record.Subject, rbac.ThisServer, didSlashRepo); err != nil {
-			l.Error("failed to add repo to enforcer", "error", err)
-			return fmt.Errorf("failed to add repo: %w", err)
+		if err := s.e.AddCollaborator(record.Subject, rbac.ThisServer, rbacResource); err != nil {
+			l.Error("failed to add collaborator to enforcer", "error", err)
+			return fmt.Errorf("failed to add collaborator: %w", err)
 		}
 
 		return nil

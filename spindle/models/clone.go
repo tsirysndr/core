@@ -120,8 +120,14 @@ func BuildRepoURL(repo *tangled.Pipeline_TriggerRepo, devMode bool) string {
 		host = strings.ReplaceAll(host, "localhost", "host.docker.internal")
 	}
 
-	// Build URL: {scheme}{knot}/{did}/{repo}
-	return fmt.Sprintf("%s%s/%s/%s", scheme, host, repo.Did, repo.Repo)
+	switch {
+	case repo.RepoDid != nil:
+		return fmt.Sprintf("%s%s/%s", scheme, host, *repo.RepoDid)
+	case repo.Repo != nil:
+		return fmt.Sprintf("%s%s/%s/%s", scheme, host, repo.Did, *repo.Repo)
+	default:
+		return ""
+	}
 }
 
 // buildFetchArgs constructs the arguments for git fetch based on clone options

@@ -9,12 +9,12 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
-type DidSlashRepo string
+type RepoIdentifier string
 
 type Secret[T any] struct {
 	Key       string
 	Value     T
-	Repo      DidSlashRepo
+	Repo      RepoIdentifier
 	CreatedAt time.Time
 	CreatedBy syntax.DID
 }
@@ -29,8 +29,8 @@ type UnlockedSecret = Secret[string]
 type Manager interface {
 	AddSecret(ctx context.Context, secret UnlockedSecret) error
 	RemoveSecret(ctx context.Context, secret Secret[any]) error
-	GetSecretsLocked(ctx context.Context, repo DidSlashRepo) ([]LockedSecret, error)
-	GetSecretsUnlocked(ctx context.Context, repo DidSlashRepo) ([]UnlockedSecret, error)
+	GetSecretsLocked(ctx context.Context, repo RepoIdentifier) ([]LockedSecret, error)
+	GetSecretsUnlocked(ctx context.Context, repo RepoIdentifier) ([]UnlockedSecret, error)
 }
 
 // stopper interface for managers that need cleanup

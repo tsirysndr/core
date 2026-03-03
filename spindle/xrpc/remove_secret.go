@@ -69,7 +69,7 @@ func (x *Xrpc) RemoveSecret(w http.ResponseWriter, r *http.Request) {
 	}
 
 	secret := secrets.Secret[any]{
-		Repo: secrets.DidSlashRepo(didPath),
+		Repo: secrets.RepoIdentifier(didPath),
 		Key:  data.Key,
 	}
 	err = x.Vault.RemoveSecret(r.Context(), secret)

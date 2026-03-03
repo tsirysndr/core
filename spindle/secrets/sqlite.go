@@ -107,7 +107,7 @@ func (s *SqliteManager) RemoveSecret(ctx context.Context, secret Secret[any]) er
 	return nil
 }
 
-func (s *SqliteManager) GetSecretsLocked(ctx context.Context, didSlashRepo DidSlashRepo) ([]LockedSecret, error) {
+func (s *SqliteManager) GetSecretsLocked(ctx context.Context, didSlashRepo RepoIdentifier) ([]LockedSecret, error) {
 	query := fmt.Sprintf(`
 		select repo, key, created_at, created_by from %s where repo = ?;
 	`, s.tableName)
@@ -139,7 +139,7 @@ func (s *SqliteManager) GetSecretsLocked(ctx context.Context, didSlashRepo DidSl
 	return ls, nil
 }
 
-func (s *SqliteManager) GetSecretsUnlocked(ctx context.Context, didSlashRepo DidSlashRepo) ([]UnlockedSecret, error) {
+func (s *SqliteManager) GetSecretsUnlocked(ctx context.Context, didSlashRepo RepoIdentifier) ([]UnlockedSecret, error) {
 	query := fmt.Sprintf(`
 		select repo, key, value, created_at, created_by from %s where repo = ?;
 	`, s.tableName)
