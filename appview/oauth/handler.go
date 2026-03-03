@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"time"
@@ -130,7 +131,7 @@ func (o *OAuth) addToDefaultSpindle(did string) {
 	}
 
 	l.Debug("adding to default spindle")
-	session, err := CreateAppPasswordSession(o.IdResolver, o.Config.Core.AppPassword, consts.TangledDid, o.Config.Core.RateLimitBypass)
+	session, err := o.getAppPasswordSession()
 	if err != nil {
 		l.Error("failed to create session", "err", err)
 		return
@@ -144,6 +145,7 @@ func (o *OAuth) addToDefaultSpindle(did string) {
 	}
 
 	if err := session.putRecord(record, tangled.SpindleMemberNSID); err != nil {
+		o.invalidateAppPasswordSession()
 		l.Error("failed to add to default spindle", "err", err)
 		return
 	}
@@ -169,7 +171,7 @@ func (o *OAuth) addToDefaultKnot(did string) {
 	}
 
 	l.Debug("adding to default knot")
-	session, err := CreateAppPasswordSession(o.IdResolver, o.Config.Core.AppPassword, consts.TangledDid, o.Config.Core.RateLimitBypass)
+	session, err := o.getAppPasswordSession()
 	if err != nil {
 		l.Error("failed to create session", "err", err)
 		return
@@ -183,6 +185,7 @@ func (o *OAuth) addToDefaultKnot(did string) {
 	}
 
 	if err := session.putRecord(record, tangled.KnotMemberNSID); err != nil {
+		o.invalidateAppPasswordSession()
 		l.Error("failed to add to default knot", "err", err)
 		return
 	}
@@ -248,9 +251,10 @@ type AppPasswordSession struct {
 	PdsEndpoint     string
 	Did             string
 	RateLimitBypass string
+	Logger          *slog.Logger
 }
 
-func CreateAppPasswordSession(res *idresolver.Resolver, appPassword, did, rateLimitBypass string) (*AppPasswordSession, error) {
+func CreateAppPasswordSession(res *idresolver.Resolver, appPassword, did, rateLimitBypass string, logger *slog.Logger) (*AppPasswordSession, error) {
 	if appPassword == "" {
 		return nil, fmt.Errorf("no app password configured")
 	}
@@ -284,6 +288,8 @@ func CreateAppPasswordSession(res *idresolver.Resolver, appPassword, did, rateLi
 		sessionReq.Header.Set("x-ratelimit-bypass", rateLimitBypass)
 	}
 
+	logger.Debug("creating app password session", "url", sessionURL, "headers", sessionReq.Header)
+
 	client := &http.Client{Timeout: 30 * time.Second}
 	sessionResp, err := client.Do(sessionReq)
 	if err != nil {
@@ -303,6 +309,7 @@ func CreateAppPasswordSession(res *idresolver.Resolver, appPassword, did, rateLi
 	session.PdsEndpoint = pdsEndpoint
 	session.Did = did
 	session.RateLimitBypass = rateLimitBypass
+	session.Logger = logger
 
 	return &session, nil
 }
@@ -337,6 +344,8 @@ func (s *AppPasswordSession) putRecord(record any, collection string) error {
 		req.Header.Set("x-ratelimit-bypass", s.RateLimitBypass)
 	}
 
+	s.Logger.Debug("putting record", "url", url, "collection", collection, "headers", req.Header)
+
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -349,4 +358,30 @@ func (s *AppPasswordSession) putRecord(record any, collection string) error {
 	}
 
 	return nil
+}
+
+// getAppPasswordSession returns a cached AppPasswordSession, creating one if needed.
+func (o *OAuth) getAppPasswordSession() (*AppPasswordSession, error) {
+	o.appPasswordSessionMu.Lock()
+	defer o.appPasswordSessionMu.Unlock()
+
+	if o.appPasswordSession != nil {
+		return o.appPasswordSession, nil
+	}
+
+	session, err := CreateAppPasswordSession(o.IdResolver, o.Config.Core.AppPassword, consts.TangledDid, o.Config.Core.RateLimitBypass, o.Logger)
+	if err != nil {
+		return nil, err
+	}
+
+	o.appPasswordSession = session
+	return session, nil
+}
+
+// invalidateAppPasswordSession clears the cached session so the next call to
+// getAppPasswordSession will create a fresh one.
+func (o *OAuth) invalidateAppPasswordSession() {
+	o.appPasswordSessionMu.Lock()
+	defer o.appPasswordSessionMu.Unlock()
+	o.appPasswordSession = nil
 }

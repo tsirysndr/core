@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
@@ -33,6 +34,9 @@ type OAuth struct {
 	Enforcer   *rbac.Enforcer
 	IdResolver *idresolver.Resolver
 	Logger     *slog.Logger
+
+	appPasswordSession   *AppPasswordSession
+	appPasswordSessionMu sync.Mutex
 }
 
 func New(config *config.Config, ph posthog.Client, db *db.DB, enforcer *rbac.Enforcer, res *idresolver.Resolver, logger *slog.Logger) (*OAuth, error) {
