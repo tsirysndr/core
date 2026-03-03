@@ -37,6 +37,10 @@
       url = "git+https://tangled.org/@jakelazaroff.com/actor-typeahead";
       flake = false;
     };
+    mermaid-src = {
+      url = "https://cdn.jsdelivr.net/npm/mermaid@11.12.3/dist/mermaid.min.js";
+      flake = false;
+    };
     ibm-plex-mono-src = {
       url = "https://github.com/IBM/plex/releases/download/%40ibm%2Fplex-mono%401.1.0/ibm-plex-mono.zip";
       flake = false;
@@ -59,6 +63,7 @@
     sqlite-lib-src,
     ibm-plex-mono-src,
     actor-typeahead-src,
+    mermaid-src,
     ...
   }: let
     supportedSystems = ["x86_64-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin"];
@@ -85,7 +90,7 @@
         lexgen = self.callPackage ./nix/pkgs/lexgen.nix {inherit indigo;};
         goat = self.callPackage ./nix/pkgs/goat.nix {inherit indigo;};
         appview-static-files = self.callPackage ./nix/pkgs/appview-static-files.nix {
-          inherit htmx-src htmx-ws-src lucide-src inter-fonts-src ibm-plex-mono-src actor-typeahead-src;
+          inherit htmx-src htmx-ws-src lucide-src inter-fonts-src ibm-plex-mono-src actor-typeahead-src mermaid-src;
         };
         appview = self.callPackage ./nix/pkgs/appview.nix {};
         docs = self.callPackage ./nix/pkgs/docs.nix {

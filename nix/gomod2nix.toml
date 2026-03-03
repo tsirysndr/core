@@ -545,6 +545,9 @@ schema = 3
   [mod."gitlab.com/yawning/tuplehash"]
     version = "v0.0.0-20230713102510-df83abbf9a02"
     hash = "sha256-pehQduoaJRLchebhgvMYacVvbuNIBA++XkiqCuqdato="
+  [mod."go.abhg.dev/goldmark/mermaid"]
+    version = "v0.6.0"
+    hash = "sha256-JmjaCfzJU/M/R0TnXSzNwBaHmoLLooiXwQJeVRbZ3AQ="
   [mod."go.etcd.io/bbolt"]
     version = "v1.4.0"
     hash = "sha256-nR/YGQjwz6ue99IFbgw/01Pl8PhoOjpKiwVy5sJxlps="

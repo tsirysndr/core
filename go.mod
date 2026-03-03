@@ -48,6 +48,7 @@ require (
 	github.com/yuin/goldmark-emoji v1.0.6
 	github.com/yuin/goldmark-highlighting/v2 v2.0.0-20230729083705-37449abec8cc
 	gitlab.com/staticnoise/goldmark-callout v0.0.0-20240609120641-6366b799e4ab
+	go.abhg.dev/goldmark/mermaid v0.6.0
 	golang.org/x/crypto v0.40.0
 	golang.org/x/image v0.31.0
 	golang.org/x/net v0.42.0

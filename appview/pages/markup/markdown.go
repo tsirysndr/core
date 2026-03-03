@@ -22,6 +22,7 @@ import (
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
 	callout "gitlab.com/staticnoise/goldmark-callout"
+	"go.abhg.dev/goldmark/mermaid"
 	htmlparse "golang.org/x/net/html"
 
 	"tangled.org/core/api/tangled"
@@ -56,6 +57,10 @@ func NewMarkdown(hostname string) goldmark.Markdown {
 	md := goldmark.New(
 		goldmark.WithExtensions(
 			extension.GFM,
+			&mermaid.Extender{
+				RenderMode: mermaid.RenderModeClient,
+				NoScript:   true,
+			},
 			highlighting.NewHighlighting(
 				highlighting.WithFormatOptions(
 					chromahtml.Standalone(false),

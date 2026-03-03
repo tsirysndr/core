@@ -215,6 +215,11 @@
             @apply disabled:accent-blue-500 checked:accent-blue-500 disabled:checked:accent-blue-500;
         }
 
+        /* Mermaid diagrams */
+        .prose pre.mermaid {
+            @apply flex justify-center my-4 overflow-x-auto bg-transparent border-0;
+        }
+
         /* Base callout */
         details[data-callout] {
             @apply border-l-4 pl-3 py-2 text-gray-800 dark:text-gray-200 my-4;

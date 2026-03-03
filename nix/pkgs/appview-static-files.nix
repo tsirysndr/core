@@ -6,6 +6,7 @@
   inter-fonts-src,
   ibm-plex-mono-src,
   actor-typeahead-src,
+  mermaid-src,
   sqlite-lib,
   tailwindcss,
   dolly,
@@ -21,6 +22,7 @@ runCommandLocal "appview-static-files" {
   mkdir -p $out/{fonts,icons,logos} && cd $out
   cp -f ${htmx-src} htmx.min.js
   cp -f ${htmx-ws-src} htmx-ext-ws.min.js
+  cp -f ${mermaid-src} mermaid.min.js
   cp -rf ${lucide-src}/*.svg icons/
   cp -f ${inter-fonts-src}/web/InterVariable*.woff2 fonts/
   cp -f ${inter-fonts-src}/web/InterDisplay*.woff2 fonts/

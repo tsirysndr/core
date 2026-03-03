@@ -2,8 +2,54 @@ package markup
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 )
+
+func TestMermaidExtension(t *testing.T) {
+	tests := []struct {
+		name        string
+		markdown    string
+		contains    string
+		notContains string
+	}{
+		{
+			name:        "mermaid block produces pre.mermaid",
+			markdown:    "```mermaid\ngraph TD\n    A-->B\n```",
+			contains:    `<pre class="mermaid">`,
+			notContains: `<code class="language-mermaid"`,
+		},
+		{
+			name:     "mermaid block contains diagram source",
+			markdown: "```mermaid\ngraph TD\n    A-->B\n```",
+			contains: "graph TD",
+		},
+		{
+			name:     "non-mermaid code block is not affected",
+			markdown: "```go\nfunc main() {}\n```",
+			contains: `<pre class="chroma">`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			md := NewMarkdown("tangled.org")
+
+			var buf bytes.Buffer
+			if err := md.Convert([]byte(tt.markdown), &buf); err != nil {
+				t.Fatalf("failed to convert markdown: %v", err)
+			}
+
+			result := buf.String()
+			if !strings.Contains(result, tt.contains) {
+				t.Errorf("expected output to contain:\n%s\ngot:\n%s", tt.contains, result)
+			}
+			if tt.notContains != "" && strings.Contains(result, tt.notContains) {
+				t.Errorf("expected output NOT to contain:\n%s\ngot:\n%s", tt.notContains, result)
+			}
+		})
+	}
+}
 
 func TestAtExtension_Rendering(t *testing.T) {
 	tests := []struct {
