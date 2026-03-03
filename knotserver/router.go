@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"path/filepath"
 	"strings"
 
-	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/jetstream"
@@ -83,10 +81,13 @@ func (h *Knot) Router() http.Handler {
 
 	r.Route("/{did}", func(r chi.Router) {
 		r.Use(h.resolveDidRedirect)
-		r.Route("/{name}", func(r chi.Router) {
-			r.Use(h.resolveRepo)
 
-			// routes for git operations
+		r.Get("/info/refs", h.InfoRefs)
+		r.Post("/git-upload-archive", h.UploadArchive)
+		r.Post("/git-upload-pack", h.UploadPack)
+		r.Post("/git-receive-pack", h.ReceivePack)
+
+		r.Route("/{name}", func(r chi.Router) {
 			r.Get("/info/refs", h.InfoRefs)
 			r.Post("/git-upload-archive", h.UploadArchive)
 			r.Post("/git-upload-pack", h.UploadPack)
@@ -140,45 +141,11 @@ func (h *Knot) resolveDidRedirect(next http.Handler) http.Handler {
 		}
 
 		suffix := strings.TrimPrefix(r.URL.Path, "/"+didOrHandle)
-		newPath := fmt.Sprintf("/%s/%s?%s", id.DID.String(), suffix, r.URL.RawQuery)
+		newPath := "/" + id.DID.String() + suffix
+		if r.URL.RawQuery != "" {
+			newPath += "?" + r.URL.RawQuery
+		}
 		http.Redirect(w, r, newPath, http.StatusTemporaryRedirect)
-	})
-}
-
-type ctxRepoPathKey struct{}
-
-func repoPathFromcontext(ctx context.Context) (string, bool) {
-	v, ok := ctx.Value(ctxRepoPathKey{}).(string)
-	return v, ok
-}
-
-// resolveRepo is a http middleware that constructs git repo path from given did & name pair.
-// It will reject the requests to unknown repos (when dir doesn't exist)
-func (h *Knot) resolveRepo(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		did := chi.URLParam(r, "did")
-		name := chi.URLParam(r, "name")
-		repoPath, err := securejoin.SecureJoin(h.c.Repo.ScanPath, filepath.Join(did, name))
-		if err != nil {
-			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte("Repository not found"))
-			return
-		}
-
-		exist, err := isDir(repoPath)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("Failed to check repository path"))
-			return
-		}
-		if !exist {
-			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte("Repository not found"))
-			return
-		}
-
-		ctx := context.WithValue(r.Context(), ctxRepoPathKey{}, repoPath)
-		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 

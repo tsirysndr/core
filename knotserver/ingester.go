@@ -14,7 +14,6 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/bluesky-social/indigo/xrpc"
 	"github.com/bluesky-social/jetstream/pkg/models"
-	securejoin "github.com/cyphar/filepath-securejoin"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/knotserver/db"
 	"tangled.org/core/knotserver/git"
@@ -102,51 +101,70 @@ func (h *Knot) processPull(ctx context.Context, event *models.Event) error {
 		return fmt.Errorf("ignoring pull record: target repo is nil")
 	}
 
-	l = l.With("target_repo", record.Target.Repo)
+	l = l.With("target_repo", record.Target.Repo, "target_repo_did", record.Target.RepoDid)
 	l = l.With("target_branch", record.Target.Branch)
 
 	if record.Source == nil {
 		return fmt.Errorf("ignoring pull record: not a branch-based pull request")
 	}
 
-	if record.Source.Repo != nil {
+	if record.Source.Repo != nil || record.Source.RepoDid != nil {
 		return fmt.Errorf("ignoring pull record: fork based pull")
 	}
 
-	repoAt, err := syntax.ParseATURI(record.Target.Repo)
-	if err != nil {
-		return fmt.Errorf("failed to parse ATURI: %w", err)
-	}
+	var repoPath, ownerDid, repoName, repoDid string
+	switch {
+	case record.Target.RepoDid != nil && *record.Target.RepoDid != "":
+		repoDid = *record.Target.RepoDid
+		var lookupErr error
+		repoPath, ownerDid, repoName, lookupErr = h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
+		if lookupErr != nil {
+			return fmt.Errorf("unknown target repo DID %s: %w", repoDid, lookupErr)
+		}
 
-	// resolve this aturi to extract the repo record
-	ident, err := h.resolver.ResolveIdent(ctx, repoAt.Authority().String())
-	if err != nil || ident.Handle.IsInvalidHandle() {
-		return fmt.Errorf("failed to resolve handle: %w", err)
-	}
+	case record.Target.Repo != nil:
+		// TODO: get rid of this PDS fetch once all repos have DIDs
+		repoAt, parseErr := syntax.ParseATURI(*record.Target.Repo)
+		if parseErr != nil {
+			return fmt.Errorf("failed to parse ATURI: %w", parseErr)
+		}
 
-	xrpcc := xrpc.Client{
-		Host: ident.PDSEndpoint(),
-	}
+		ident, resolveErr := h.resolver.ResolveIdent(ctx, repoAt.Authority().String())
+		if resolveErr != nil || ident.Handle.IsInvalidHandle() {
+			return fmt.Errorf("failed to resolve handle: %w", resolveErr)
+		}
 
-	resp, err := comatproto.RepoGetRecord(ctx, &xrpcc, "", tangled.RepoNSID, repoAt.Authority().String(), repoAt.RecordKey().String())
-	if err != nil {
-		return fmt.Errorf("failed to resolver repo: %w", err)
-	}
+		xrpcc := xrpc.Client{
+			Host: ident.PDSEndpoint(),
+		}
 
-	repo := resp.Value.Val.(*tangled.Repo)
+		resp, getErr := comatproto.RepoGetRecord(ctx, &xrpcc, "", tangled.RepoNSID, repoAt.Authority().String(), repoAt.RecordKey().String())
+		if getErr != nil {
+			return fmt.Errorf("failed to resolve repo: %w", getErr)
+		}
 
-	if repo.Knot != h.c.Server.Hostname {
-		return fmt.Errorf("rejected pull record: not this knot, %s != %s", repo.Knot, h.c.Server.Hostname)
-	}
+		repo := resp.Value.Val.(*tangled.Repo)
 
-	didSlashRepo, err := securejoin.SecureJoin(ident.DID.String(), repo.Name)
-	if err != nil {
-		return fmt.Errorf("failed to construct relative repo path: %w", err)
-	}
+		if repo.Knot != h.c.Server.Hostname {
+			return fmt.Errorf("rejected pull record: not this knot, %s != %s", repo.Knot, h.c.Server.Hostname)
+		}
 
-	repoPath, err := securejoin.SecureJoin(h.c.Repo.ScanPath, didSlashRepo)
-	if err != nil {
-		return fmt.Errorf("failed to construct absolute repo path: %w", err)
+		ownerDid = ident.DID.String()
+		repoName = repo.Name
+
+		repoDid, didErr := h.db.GetRepoDid(ownerDid, repoName)
+		if didErr != nil {
+			return fmt.Errorf("failed to resolve repo DID for %s/%s: %w", ownerDid, repoName, didErr)
+		}
+
+		var lookupErr error
+		repoPath, _, _, lookupErr = h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
+		if lookupErr != nil {
+			return fmt.Errorf("failed to resolve repo on disk: %w", lookupErr)
+		}
+
+	default:
+		return fmt.Errorf("ignoring pull record: target has neither repo nor repoDid")
 	}
 
 	gr, err := git.Open(repoPath, record.Source.Sha)
@@ -189,9 +207,10 @@ func (h *Knot) processPull(ctx context.Context, event *models.Event) error {
 			Kind:        string(workflow.TriggerKindPullRequest),
 			PullRequest: &trigger,
 			Repo: &tangled.Pipeline_TriggerRepo{
-				Did:  ident.DID.String(),
-				Knot: repo.Knot,
-				Repo: repo.Name,
+				Did:     ownerDid,
+				Knot:    h.c.Server.Hostname,
+				Repo:    &repoName,
+				RepoDid: &repoDid,
 			},
 		},
 	}
@@ -226,42 +245,61 @@ func (h *Knot) processCollaborator(ctx context.Context, event *models.Event) err
 		return fmt.Errorf("failed to unmarshal record: %w", err)
 	}
 
-	repoAt, err := syntax.ParseATURI(record.Repo)
-	if err != nil {
-		return err
-	}
-
 	subjectId, err := h.resolver.ResolveIdent(ctx, record.Subject)
 	if err != nil || subjectId.Handle.IsInvalidHandle() {
 		return err
 	}
 
-	// TODO: fix this for good, we need to fetch the record here unfortunately
-	// resolve this aturi to extract the repo record
-	owner, err := h.resolver.ResolveIdent(ctx, repoAt.Authority().String())
-	if err != nil || owner.Handle.IsInvalidHandle() {
-		return fmt.Errorf("failed to resolve handle: %w", err)
+	var rbacResource string
+	switch {
+	case record.RepoDid != nil && *record.RepoDid != "":
+		ownerDid, _, lookupErr := h.db.GetRepoKeyOwner(*record.RepoDid)
+		if lookupErr != nil {
+			return fmt.Errorf("unknown repo DID %s: %w", *record.RepoDid, lookupErr)
+		}
+		if ownerDid != did {
+			return fmt.Errorf("collaborator record author %s does not own repo %s", did, *record.RepoDid)
+		}
+		rbacResource = *record.RepoDid
+
+	case record.Repo != nil:
+		// TODO: get rid of this PDS fetch once all repos have DIDs
+		repoAt, parseErr := syntax.ParseATURI(*record.Repo)
+		if parseErr != nil {
+			return parseErr
+		}
+
+		owner, resolveErr := h.resolver.ResolveIdent(ctx, repoAt.Authority().String())
+		if resolveErr != nil || owner.Handle.IsInvalidHandle() {
+			return fmt.Errorf("failed to resolve handle: %w", resolveErr)
+		}
+
+		xrpcc := xrpc.Client{
+			Host: owner.PDSEndpoint(),
+		}
+
+		resp, getErr := comatproto.RepoGetRecord(ctx, &xrpcc, "", tangled.RepoNSID, repoAt.Authority().String(), repoAt.RecordKey().String())
+		if getErr != nil {
+			return getErr
+		}
+
+		repo := resp.Value.Val.(*tangled.Repo)
+		repoDid, didErr := h.db.GetRepoDid(owner.DID.String(), repo.Name)
+		if didErr != nil {
+			return fmt.Errorf("failed to resolve repo DID for %s/%s: %w", owner.DID.String(), repo.Name, didErr)
+		}
+		rbacResource = repoDid
+
+	default:
+		return fmt.Errorf("collaborator record has neither repo nor repoDid")
 	}
 
-	xrpcc := xrpc.Client{
-		Host: owner.PDSEndpoint(),
-	}
-
-	resp, err := comatproto.RepoGetRecord(ctx, &xrpcc, "", tangled.RepoNSID, repoAt.Authority().String(), repoAt.RecordKey().String())
-	if err != nil {
-		return err
-	}
-
-	repo := resp.Value.Val.(*tangled.Repo)
-	didSlashRepo, _ := securejoin.SecureJoin(owner.DID.String(), repo.Name)
-
-	// check perms for this user
-	ok, err := h.e.IsCollaboratorInviteAllowed(did, rbac.ThisServer, didSlashRepo)
+	ok, err := h.e.IsCollaboratorInviteAllowed(did, rbac.ThisServer, rbacResource)
 	if err != nil {
 		return fmt.Errorf("failed to check permissions: %w", err)
 	}
 	if !ok {
-		return fmt.Errorf("insufficient permissions: %s, %s, %s", did, "IsCollaboratorInviteAllowed", didSlashRepo)
+		return fmt.Errorf("insufficient permissions: %s, %s, %s", did, "IsCollaboratorInviteAllowed", rbacResource)
 	}
 
 	if err := h.db.AddDid(subjectId.DID.String()); err != nil {
@@ -269,7 +307,7 @@ func (h *Knot) processCollaborator(ctx context.Context, event *models.Event) err
 	}
 	h.jc.AddDid(subjectId.DID.String())
 
-	if err := h.e.AddCollaborator(subjectId.DID.String(), rbac.ThisServer, didSlashRepo); err != nil {
+	if err := h.e.AddCollaborator(subjectId.DID.String(), rbac.ThisServer, rbacResource); err != nil {
 		return err
 	}
 

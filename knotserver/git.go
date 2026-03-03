@@ -12,12 +12,34 @@ import (
 	"tangled.org/core/knotserver/git/service"
 )
 
-func (h *Knot) InfoRefs(w http.ResponseWriter, r *http.Request) {
+func (h *Knot) resolveRepoPath(r *http.Request) (string, string, error) {
+	did := chi.URLParam(r, "did")
 	name := chi.URLParam(r, "name")
-	repoPath, ok := repoPathFromcontext(r.Context())
-	if !ok {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Failed to find repository path"))
+
+	if name == "" && strings.HasPrefix(did, "did:") {
+		repoPath, _, repoName, err := h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, did)
+		if err != nil {
+			return "", "", fmt.Errorf("unknown repo DID: %w", err)
+		}
+		return repoPath, repoName, nil
+	}
+
+	repoDid, err := h.db.GetRepoDid(did, name)
+	if err != nil {
+		return "", "", fmt.Errorf("repo not found: %w", err)
+	}
+	repoPath, _, _, err := h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
+	if err != nil {
+		return "", "", fmt.Errorf("repo not found: %w", err)
+	}
+	return repoPath, name, nil
+}
+
+func (h *Knot) InfoRefs(w http.ResponseWriter, r *http.Request) {
+	repoPath, name, err := h.resolveRepoPath(r)
+	if err != nil {
+		gitError(w, "repository not found", http.StatusNotFound)
+		h.l.Error("git: failed to resolve repo path", "handler", "InfoRefs", "error", err)
 		return
 	}
 
@@ -48,10 +70,10 @@ func (h *Knot) InfoRefs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Knot) UploadArchive(w http.ResponseWriter, r *http.Request) {
-	repo, ok := repoPathFromcontext(r.Context())
-	if !ok {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Failed to find repository path"))
+	repo, _, err := h.resolveRepoPath(r)
+	if err != nil {
+		gitError(w, "repository not found", http.StatusNotFound)
+		h.l.Error("git: failed to resolve repo path", "handler", "UploadArchive", "error", err)
 		return
 	}
 
@@ -93,10 +115,10 @@ func (h *Knot) UploadArchive(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Knot) UploadPack(w http.ResponseWriter, r *http.Request) {
-	repo, ok := repoPathFromcontext(r.Context())
-	if !ok {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Failed to find repository path"))
+	repo, _, err := h.resolveRepoPath(r)
+	if err != nil {
+		gitError(w, "repository not found", http.StatusNotFound)
+		h.l.Error("git: failed to resolve repo path", "handler", "UploadPack", "error", err)
 		return
 	}
 
@@ -140,7 +162,13 @@ func (h *Knot) UploadPack(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Knot) ReceivePack(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
+	_, name, err := h.resolveRepoPath(r)
+	if err != nil {
+		gitError(w, "repository not found", http.StatusNotFound)
+		h.l.Error("git: failed to resolve repo path", "handler", "ReceivePack", "error", err)
+		return
+	}
+
 	h.RejectPush(w, r, name)
 }
 

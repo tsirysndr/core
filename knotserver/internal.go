@@ -3,14 +3,12 @@ package knotserver
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"path/filepath"
 	"strings"
 
-	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -72,7 +70,7 @@ func (h *InternalHandle) InternalKeys(w http.ResponseWriter, r *http.Request) {
 // the body will be qualified repository path on success/push-denied
 // or an error message when process failed
 func (h *InternalHandle) Guard(w http.ResponseWriter, r *http.Request) {
-	l := h.l.With("handler", "PostReceiveHook")
+	l := h.l.With("handler", "Guard")
 
 	var (
 		incomingUser = r.URL.Query().Get("user")
@@ -87,36 +85,77 @@ func (h *InternalHandle) Guard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// did:foo/repo-name or
-	// handle/repo-name or
-	// any of the above with a leading slash (/)
 	components := strings.Split(strings.TrimPrefix(strings.Trim(repo, "'"), "/"), "/")
 	l.Info("command components", "components", components)
 
-	if len(components) != 2 {
+	var rbacResource string
+	var diskRelative string
+
+	switch {
+	case len(components) == 1 && strings.HasPrefix(components[0], "did:"):
+		repoDid := components[0]
+		repoPath, _, _, lookupErr := h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
+		if lookupErr != nil {
+			w.WriteHeader(http.StatusNotFound)
+			l.Error("repo DID not found", "repoDid", repoDid, "err", lookupErr)
+			fmt.Fprintln(w, "repo not found")
+			return
+		}
+		rbacResource = repoDid
+		rel, relErr := filepath.Rel(h.c.Repo.ScanPath, repoPath)
+		if relErr != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			l.Error("failed to compute relative path", "repoPath", repoPath, "err", relErr)
+			fmt.Fprintln(w, "internal error")
+			return
+		}
+		diskRelative = rel
+
+	case len(components) == 2:
+		repoOwner := components[0]
+		resolver := idresolver.DefaultResolver(h.c.Server.PlcUrl)
+		repoOwnerIdent, resolveErr := resolver.ResolveIdent(r.Context(), repoOwner)
+		if resolveErr != nil || repoOwnerIdent.Handle.IsInvalidHandle() {
+			l.Error("Error resolving handle", "handle", repoOwner, "err", resolveErr)
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "error resolving handle: invalid handle\n")
+			return
+		}
+		ownerDid := repoOwnerIdent.DID.String()
+		repoName := components[1]
+		repoDid, didErr := h.db.GetRepoDid(ownerDid, repoName)
+		if didErr != nil {
+			w.WriteHeader(http.StatusNotFound)
+			l.Error("repo DID not found", "owner", ownerDid, "name", repoName, "err", didErr)
+			fmt.Fprintln(w, "repo not found")
+			return
+		}
+		repoPath, _, _, lookupErr := h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
+		if lookupErr != nil {
+			w.WriteHeader(http.StatusNotFound)
+			l.Error("repo not found on disk", "repoDid", repoDid, "err", lookupErr)
+			fmt.Fprintln(w, "repo not found")
+			return
+		}
+		rbacResource = repoDid
+		rel, relErr := filepath.Rel(h.c.Repo.ScanPath, repoPath)
+		if relErr != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			l.Error("failed to compute relative path", "repoPath", repoPath, "err", relErr)
+			fmt.Fprintln(w, "internal error")
+			return
+		}
+		diskRelative = rel
+
+	default:
 		w.WriteHeader(http.StatusBadRequest)
 		l.Error("invalid repo format", "components", components)
-		fmt.Fprintln(w, "invalid repo format, needs <user>/<repo> or /<user>/<repo>")
+		fmt.Fprintln(w, "invalid repo format, needs <user>/<repo>, /<user>/<repo>, or <repo-did>")
 		return
 	}
-	repoOwner := components[0]
-	repoName := components[1]
-
-	resolver := idresolver.DefaultResolver(h.c.Server.PlcUrl)
-
-	repoOwnerIdent, err := resolver.ResolveIdent(r.Context(), repoOwner)
-	if err != nil || repoOwnerIdent.Handle.IsInvalidHandle() {
-		l.Error("Error resolving handle", "handle", repoOwner, "err", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "error resolving handle: invalid handle\n")
-		return
-	}
-	repoOwnerDid := repoOwnerIdent.DID.String()
-
-	qualifiedRepo, _ := securejoin.SecureJoin(repoOwnerDid, repoName)
 
 	if gitCommand == "git-receive-pack" {
-		ok, err := h.e.IsPushAllowed(incomingUser, rbac.ThisServer, qualifiedRepo)
+		ok, err := h.e.IsPushAllowed(incomingUser, rbac.ThisServer, rbacResource)
 		if err != nil || !ok {
 			w.WriteHeader(http.StatusForbidden)
 			fmt.Fprint(w, repo)
@@ -125,7 +164,7 @@ func (h *InternalHandle) Guard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, qualifiedRepo)
+	fmt.Fprint(w, diskRelative)
 }
 
 type PushOptions struct {
@@ -140,16 +179,23 @@ func (h *InternalHandle) PostReceiveHook(w http.ResponseWriter, r *http.Request)
 	gitRelativeDir, err := filepath.Rel(h.c.Repo.ScanPath, gitAbsoluteDir)
 	if err != nil {
 		l.Error("failed to calculate relative git dir", "scanPath", h.c.Repo.ScanPath, "gitAbsoluteDir", gitAbsoluteDir)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	parts := strings.SplitN(gitRelativeDir, "/", 2)
-	if len(parts) != 2 {
-		l.Error("invalid git dir", "gitRelativeDir", gitRelativeDir)
+	repoDid := gitRelativeDir
+	if !strings.HasPrefix(repoDid, "did:") {
+		l.Error("invalid git dir, expected repo DID", "gitRelativeDir", gitRelativeDir)
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	repoDid := parts[0]
-	repoName := parts[1]
+
+	ownerDid, repoName, err := h.db.GetRepoKeyOwner(repoDid)
+	if err != nil {
+		l.Error("failed to resolve repo DID from git dir", "repoDid", repoDid, "err", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 
 	gitUserDid := r.Header.Get("X-Git-User-Did")
 
@@ -176,37 +222,29 @@ func (h *InternalHandle) PostReceiveHook(w http.ResponseWriter, r *http.Request)
 	}
 
 	for _, line := range lines {
-		err := h.insertRefUpdate(line, gitUserDid, repoDid, repoName)
+		err := h.insertRefUpdate(line, gitUserDid, ownerDid, repoName, repoDid)
 		if err != nil {
 			l.Error("failed to insert op", "err", err, "line", line, "did", gitUserDid, "repo", gitRelativeDir)
-			// non-fatal
 		}
 
-		err = h.emitCompareLink(&resp.Messages, line, repoDid, repoName)
+		err = h.emitCompareLink(&resp.Messages, line, ownerDid, repoName, repoDid)
 		if err != nil {
 			l.Error("failed to reply with compare link", "err", err, "line", line, "did", gitUserDid, "repo", gitRelativeDir)
-			// non-fatal
 		}
 
-		err = h.triggerPipeline(&resp.Messages, line, gitUserDid, repoDid, repoName, pushOptions)
+		err = h.triggerPipeline(&resp.Messages, line, gitUserDid, ownerDid, repoName, repoDid, pushOptions)
 		if err != nil {
 			l.Error("failed to trigger pipeline", "err", err, "line", line, "did", gitUserDid, "repo", gitRelativeDir)
-			// non-fatal
 		}
 	}
 
 	writeJSON(w, resp)
 }
 
-func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, repoDid, repoName string) error {
-	didSlashRepo, err := securejoin.SecureJoin(repoDid, repoName)
-	if err != nil {
-		return err
-	}
-
-	repoPath, err := securejoin.SecureJoin(h.c.Repo.ScanPath, didSlashRepo)
-	if err != nil {
-		return err
+func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, ownerDid, repoName, repoDid string) error {
+	repoPath, _, _, resolveErr := h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
+	if resolveErr != nil {
+		return fmt.Errorf("failed to resolve repo on disk: %w", resolveErr)
 	}
 
 	gr, err := git.Open(repoPath, line.Ref)
@@ -214,9 +252,10 @@ func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, r
 		return fmt.Errorf("failed to open git repo at ref %s: %w", line.Ref, err)
 	}
 
-	var errs error
 	meta, err := gr.RefUpdateMeta(line)
-	errors.Join(errs, err)
+	if err != nil {
+		return fmt.Errorf("failed to get ref update metadata: %w", err)
+	}
 
 	metaRecord := meta.AsRecord()
 
@@ -225,10 +264,12 @@ func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, r
 		NewSha:       line.NewSha.String(),
 		Ref:          line.Ref,
 		CommitterDid: gitUserDid,
-		RepoDid:      repoDid,
+		OwnerDid:     &ownerDid,
 		RepoName:     repoName,
+		RepoDid:      &repoDid,
 		Meta:         &metaRecord,
 	}
+
 	eventJson, err := json.Marshal(refUpdate)
 	if err != nil {
 		return err
@@ -240,29 +281,25 @@ func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, r
 		EventJson: string(eventJson),
 	}
 
-	return errors.Join(errs, h.db.InsertEvent(event, h.n))
+	return h.db.InsertEvent(event, h.n)
 }
 
 func (h *InternalHandle) triggerPipeline(
 	clientMsgs *[]string,
 	line git.PostReceiveLine,
 	gitUserDid string,
-	repoDid string,
+	ownerDid string,
 	repoName string,
+	repoDid string,
 	pushOptions PushOptions,
 ) error {
 	if pushOptions.skipCi {
 		return nil
 	}
 
-	didSlashRepo, err := securejoin.SecureJoin(repoDid, repoName)
-	if err != nil {
-		return err
-	}
-
-	repoPath, err := securejoin.SecureJoin(h.c.Repo.ScanPath, didSlashRepo)
-	if err != nil {
-		return err
+	repoPath, _, _, resolveErr := h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
+	if resolveErr != nil {
+		return fmt.Errorf("failed to resolve repo on disk: %w", resolveErr)
 	}
 
 	gr, err := git.Open(repoPath, line.Ref)
@@ -299,15 +336,18 @@ func (h *InternalHandle) triggerPipeline(
 		NewSha: line.NewSha.String(),
 	}
 
+	triggerRepo := &tangled.Pipeline_TriggerRepo{
+		Did:     ownerDid,
+		Knot:    h.c.Server.Hostname,
+		Repo:    &repoName,
+		RepoDid: &repoDid,
+	}
+
 	compiler := workflow.Compiler{
 		Trigger: tangled.Pipeline_TriggerMetadata{
 			Kind: string(workflow.TriggerKindPush),
 			Push: &trigger,
-			Repo: &tangled.Pipeline_TriggerRepo{
-				Did:  repoDid,
-				Knot: h.c.Server.Hostname,
-				Repo: repoName,
-			},
+			Repo: triggerRepo,
 		},
 	}
 
@@ -348,8 +388,9 @@ func (h *InternalHandle) triggerPipeline(
 func (h *InternalHandle) emitCompareLink(
 	clientMsgs *[]string,
 	line git.PostReceiveLine,
-	repoDid string,
+	ownerDid string,
 	repoName string,
+	repoDid string,
 ) error {
 	// this is a second push to a branch, don't reply with the link again
 	if !line.OldSha.IsZero() {
@@ -365,20 +406,15 @@ func (h *InternalHandle) emitCompareLink(
 
 	pushedRef := plumbing.ReferenceName(line.Ref)
 
-	userIdent, err := h.res.ResolveIdent(context.Background(), repoDid)
-	user := repoDid
+	userIdent, err := h.res.ResolveIdent(context.Background(), ownerDid)
+	user := ownerDid
 	if err == nil {
 		user = userIdent.Handle.String()
 	}
 
-	didSlashRepo, err := securejoin.SecureJoin(repoDid, repoName)
-	if err != nil {
-		return err
-	}
-
-	repoPath, err := securejoin.SecureJoin(h.c.Repo.ScanPath, didSlashRepo)
-	if err != nil {
-		return err
+	repoPath, _, _, resolveErr := h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
+	if resolveErr != nil {
+		return fmt.Errorf("failed to resolve repo on disk: %w", resolveErr)
 	}
 
 	gr, err := git.PlainOpen(repoPath)
