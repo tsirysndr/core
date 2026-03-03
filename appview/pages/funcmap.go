@@ -84,13 +84,13 @@ func (p *Pages) funcMap() template.FuncMap {
 		"ownerSlashRepo": func(repo *models.Repo) string {
 			ownerId, err := p.resolver.ResolveIdent(context.Background(), repo.Did)
 			if err != nil {
-				return repo.DidSlashRepo()
+				return repo.RepoIdentifier()
 			}
 			handle := ownerId.Handle
 			if handle != "" && !handle.IsInvalidHandle() {
 				return string(handle) + "/" + repo.Name
 			}
-			return repo.DidSlashRepo()
+			return repo.RepoIdentifier()
 		},
 		"truncateAt30": func(s string) string {
 			if len(s) <= 30 {

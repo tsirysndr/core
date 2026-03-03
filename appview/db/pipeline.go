@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"slices"
 	"strings"
@@ -27,7 +28,7 @@ func GetPipelines(e Execer, filters ...orm.Filter) ([]models.Pipeline, error) {
 		whereClause = " where " + strings.Join(conditions, " and ")
 	}
 
-	query := fmt.Sprintf(`select id, rkey, knot, repo_owner, repo_name, sha, created from pipelines %s`, whereClause)
+	query := fmt.Sprintf(`select id, rkey, knot, repo_owner, repo_name, sha, created, repo_did from pipelines %s`, whereClause)
 
 	rows, err := e.Query(query, args...)
 
@@ -39,6 +40,7 @@ func GetPipelines(e Execer, filters ...orm.Filter) ([]models.Pipeline, error) {
 	for rows.Next() {
 		var pipeline models.Pipeline
 		var createdAt string
+		var repoDid sql.NullString
 		err = rows.Scan(
 			&pipeline.Id,
 			&pipeline.Rkey,
@@ -47,6 +49,7 @@ func GetPipelines(e Execer, filters ...orm.Filter) ([]models.Pipeline, error) {
 			&pipeline.RepoName,
 			&pipeline.Sha,
 			&createdAt,
+			&repoDid,
 		)
 		if err != nil {
 			return nil, err
@@ -54,6 +57,9 @@ func GetPipelines(e Execer, filters ...orm.Filter) ([]models.Pipeline, error) {
 
 		if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
 			pipeline.Created = t
+		}
+		if repoDid.Valid {
+			pipeline.RepoDid = repoDid.String
 		}
 
 		pipelines = append(pipelines, pipeline)
@@ -67,6 +73,11 @@ func GetPipelines(e Execer, filters ...orm.Filter) ([]models.Pipeline, error) {
 }
 
 func AddPipeline(e Execer, pipeline models.Pipeline) error {
+	var repoDid *string
+	if pipeline.RepoDid != "" {
+		repoDid = &pipeline.RepoDid
+	}
+
 	args := []any{
 		pipeline.Rkey,
 		pipeline.Knot,
@@ -74,6 +85,7 @@ func AddPipeline(e Execer, pipeline models.Pipeline) error {
 		pipeline.RepoName,
 		pipeline.TriggerId,
 		pipeline.Sha,
+		repoDid,
 	}
 
 	placeholders := make([]string, len(args))
@@ -88,7 +100,8 @@ func AddPipeline(e Execer, pipeline models.Pipeline) error {
 		repo_owner,
 		repo_name,
 		trigger_id,
-		sha
+		sha,
+		repo_did
 	) values (%s)
 	`, strings.Join(placeholders, ","))
 
@@ -196,6 +209,7 @@ func GetPipelineStatuses(e Execer, limit int, filters ...orm.Filter) ([]models.P
 			p.repo_name,
 			p.sha,
 			p.created,
+			p.repo_did,
 			t.id,
 			t.kind,
 			t.push_ref,
@@ -225,6 +239,7 @@ func GetPipelineStatuses(e Execer, limit int, filters ...orm.Filter) ([]models.P
 		var p models.Pipeline
 		var t models.Trigger
 		var created string
+		var repoDid sql.NullString
 
 		err := rows.Scan(
 			&p.Id,
@@ -234,6 +249,7 @@ func GetPipelineStatuses(e Execer, limit int, filters ...orm.Filter) ([]models.P
 			&p.RepoName,
 			&p.Sha,
 			&created,
+			&repoDid,
 			&p.TriggerId,
 			&t.Kind,
 			&t.PushRef,
@@ -251,6 +267,9 @@ func GetPipelineStatuses(e Execer, limit int, filters ...orm.Filter) ([]models.P
 		p.Created, err = time.Parse(time.RFC3339, created)
 		if err != nil {
 			return nil, fmt.Errorf("invalid pipeline created timestamp %q: %w", created, err)
+		}
+		if repoDid.Valid {
+			p.RepoDid = repoDid.String
 		}
 
 		t.Id = p.TriggerId

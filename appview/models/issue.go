@@ -44,8 +44,9 @@ func (i *Issue) AsRecord() tangled.RepoIssue {
 	for i, uri := range i.References {
 		references[i] = string(uri)
 	}
+	repoAtStr := i.RepoAt.String()
 	return tangled.RepoIssue{
-		Repo:       i.RepoAt.String(),
+		Repo:       &repoAtStr,
 		Title:      i.Title,
 		Body:       &i.Body,
 		Mentions:   mentions,
@@ -161,8 +162,13 @@ func IssueFromRecord(did, rkey string, record tangled.RepoIssue) Issue {
 		body = *record.Body
 	}
 
+	var repoAt syntax.ATURI
+	if record.Repo != nil {
+		repoAt = syntax.ATURI(*record.Repo)
+	}
+
 	return Issue{
-		RepoAt:  syntax.ATURI(record.Repo),
+		RepoAt:  repoAt,
 		Did:     did,
 		Rkey:    rkey,
 		Created: created,

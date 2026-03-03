@@ -1295,6 +1295,45 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "add-repo-did-column", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			alter table repos add column repo_did text;
+			create unique index if not exists idx_repos_repo_did on repos(repo_did);
+		`)
+		return err
+	})
+
+	orm.RunMigration(conn, logger, "add-pds-rewrite-status", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			create table if not exists pds_rewrite_status (
+				id          integer primary key autoincrement,
+				user_did    text not null,
+				repo_did    text not null,
+				record_nsid text not null,
+				record_rkey text not null,
+				old_repo_at text not null,
+				status      text not null default 'pending',
+				updated_at  text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				unique(user_did, record_nsid, record_rkey)
+			);
+			create index if not exists idx_pds_rewrite_user on pds_rewrite_status(user_did, status);
+		`)
+		return err
+	})
+
+	orm.RunMigration(conn, logger, "add-pipelines-repo-did", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			alter table pipelines add column repo_did text;
+			create index if not exists idx_pipelines_repo_did on pipelines(repo_did);
+		`)
+		return err
+	})
+
+	orm.RunMigration(conn, logger, "migrate-knots-to-repo-dids", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`update registrations set needs_upgrade = 1`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,

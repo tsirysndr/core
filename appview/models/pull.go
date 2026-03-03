@@ -104,6 +104,7 @@ func (p Pull) AsRecord() tangled.RepoPull {
 		references[i] = string(uri)
 	}
 
+	targetRepoStr := p.RepoAt.String()
 	record := tangled.RepoPull{
 		Title:      p.Title,
 		Body:       &p.Body,
@@ -111,7 +112,7 @@ func (p Pull) AsRecord() tangled.RepoPull {
 		References: references,
 		CreatedAt:  p.Created.Format(time.RFC3339),
 		Target: &tangled.RepoPull_Target{
-			Repo:   p.RepoAt.String(),
+			Repo:   &targetRepoStr,
 			Branch: p.TargetBranch,
 		},
 		Source: source,

@@ -19,6 +19,7 @@ type Pipeline struct {
 	Knot      string
 	RepoOwner syntax.DID
 	RepoName  string
+	RepoDid   string
 	TriggerId int
 	Sha       string
 	Created   time.Time

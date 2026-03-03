@@ -614,7 +614,7 @@ func NewPullComment(tx *sql.Tx, comment *models.PullComment) (int64, error) {
 
 func SetPullState(e Execer, repoAt syntax.ATURI, pullId int, pullState models.PullState) error {
 	_, err := e.Exec(
-		`update pulls set state = ? where repo_at = ? and pull_id = ? and (state <> ? or state <> ?)`,
+		`update pulls set state = ? where repo_at = ? and pull_id = ? and (state <> ? and state <> ?)`,
 		pullState,
 		repoAt,
 		pullId,

@@ -22,6 +22,7 @@ type Repo struct {
 	Topics      []string
 	Spindle     string
 	Labels      []string
+	RepoDid     string
 
 	// optionally, populate this when querying for reverse mappings
 	RepoStats *RepoStats
@@ -49,6 +50,11 @@ func (r *Repo) AsRecord() tangled.Repo {
 		website = &r.Website
 	}
 
+	var repoDid *string
+	if r.RepoDid != "" {
+		repoDid = &r.RepoDid
+	}
+
 	return tangled.Repo{
 		Knot:        r.Knot,
 		Name:        r.Name,
@@ -59,6 +65,7 @@ func (r *Repo) AsRecord() tangled.Repo {
 		Source:      source,
 		Spindle:     spindle,
 		Labels:      r.Labels,
+		RepoDid:     repoDid,
 	}
 }
 
@@ -66,7 +73,10 @@ func (r Repo) RepoAt() syntax.ATURI {
 	return syntax.ATURI(fmt.Sprintf("at://%s/%s/%s", r.Did, tangled.RepoNSID, r.Rkey))
 }
 
-func (r Repo) DidSlashRepo() string {
+func (r Repo) RepoIdentifier() string {
+	if r.RepoDid != "" {
+		return r.RepoDid
+	}
 	p, _ := securejoin.SecureJoin(r.Did, r.Name)
 	return p
 }
