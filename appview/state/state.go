@@ -42,7 +42,7 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 	"github.com/bluesky-social/indigo/xrpc"
-	securejoin "github.com/cyphar/filepath-securejoin"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/posthog/posthog-go"
 )
@@ -457,8 +457,46 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// create atproto record for this repo
 		rkey := tid.TID()
+
+		client, err := s.oauth.ServiceClient(
+			r,
+			oauth.WithService(domain),
+			oauth.WithLxm(tangled.RepoCreateNSID),
+			oauth.WithDev(s.config.Core.Dev),
+		)
+		if err != nil {
+			l.Error("service auth failed", "err", err)
+			s.pages.Notice(w, "repo", "Failed to reach knot server.")
+			return
+		}
+
+		input := &tangled.RepoCreate_Input{
+			Rkey:          rkey,
+			Name:          repoName,
+			DefaultBranch: &defaultBranch,
+		}
+		createResp, xe := tangled.RepoCreate(
+			r.Context(),
+			client,
+			input,
+		)
+		if err := xrpcclient.HandleXrpcErr(xe); err != nil {
+			l.Error("xrpc error", "xe", xe)
+			s.pages.Notice(w, "repo", err.Error())
+			return
+		}
+
+		var repoDid string
+		if createResp != nil && createResp.RepoDid != nil {
+			repoDid = *createResp.RepoDid
+		}
+		if repoDid == "" {
+			l.Error("knot returned empty repo DID")
+			s.pages.Notice(w, "repo", "Knot failed to mint a repo DID. The knot may need to be upgraded.")
+			return
+		}
+
 		repo := &models.Repo{
 			Did:         user.Active.Did,
 			Name:        repoName,
@@ -467,12 +505,48 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 			Description: description,
 			Created:     time.Now(),
 			Labels:      s.config.Label.DefaultLabelDefs,
+			RepoDid:     repoDid,
 		}
 		record := repo.AsRecord()
+
+		cleanupKnot := func() {
+			go func() {
+				delays := []time.Duration{0, 2 * time.Second, 5 * time.Second}
+				for attempt, delay := range delays {
+					time.Sleep(delay)
+					deleteClient, dErr := s.oauth.ServiceClient(
+						r,
+						oauth.WithService(domain),
+						oauth.WithLxm(tangled.RepoDeleteNSID),
+						oauth.WithDev(s.config.Core.Dev),
+					)
+					if dErr != nil {
+						l.Error("failed to create delete client for knot cleanup", "attempt", attempt+1, "err", dErr)
+						continue
+					}
+					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+					if dErr := tangled.RepoDelete(ctx, deleteClient, &tangled.RepoDelete_Input{
+						Did:  user.Active.Did,
+						Name: repoName,
+						Rkey: rkey,
+					}); dErr != nil {
+						cancel()
+						l.Error("failed to clean up repo on knot after rollback", "attempt", attempt+1, "err", dErr)
+						continue
+					}
+					cancel()
+					l.Info("successfully cleaned up repo on knot after rollback", "attempt", attempt+1)
+					return
+				}
+				l.Error("exhausted retries for knot cleanup, repo may be orphaned",
+					"did", user.Active.Did, "repo", repoName, "knot", domain)
+			}()
+		}
 
 		atpClient, err := s.oauth.AuthorizedClient(r)
 		if err != nil {
 			l.Info("PDS write failed", "err", err)
+			cleanupKnot()
 			s.pages.Notice(w, "repo", "Failed to write record to PDS.")
 			return
 		}
@@ -487,6 +561,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 		})
 		if err != nil {
 			l.Info("PDS write failed", "err", err)
+			cleanupKnot()
 			s.pages.Notice(w, "repo", "Failed to announce repository creation.")
 			return
 		}
@@ -502,51 +577,24 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// The rollback function reverts a few things on failure:
-		// - the pending txn
-		// - the ACLs
-		// - the atproto record created
 		rollback := func() {
 			err1 := tx.Rollback()
 			err2 := s.enforcer.E.LoadPolicy()
 			err3 := rollbackRecord(context.Background(), aturi, atpClient)
 
-			// ignore txn complete errors, this is okay
 			if errors.Is(err1, sql.ErrTxDone) {
 				err1 = nil
 			}
 
 			if errs := errors.Join(err1, err2, err3); errs != nil {
 				l.Error("failed to rollback changes", "errs", errs)
-				return
+			}
+
+			if aturi != "" {
+				cleanupKnot()
 			}
 		}
 		defer rollback()
-
-		client, err := s.oauth.ServiceClient(
-			r,
-			oauth.WithService(domain),
-			oauth.WithLxm(tangled.RepoCreateNSID),
-			oauth.WithDev(s.config.Core.Dev),
-		)
-		if err != nil {
-			l.Error("service auth failed", "err", err)
-			s.pages.Notice(w, "repo", "Failed to reach PDS.")
-			return
-		}
-
-		xe := tangled.RepoCreate(
-			r.Context(),
-			client,
-			&tangled.RepoCreate_Input{
-				Rkey: rkey,
-			},
-		)
-		if err := xrpcclient.HandleXrpcErr(xe); err != nil {
-			l.Error("xrpc error", "xe", xe)
-			s.pages.Notice(w, "repo", err.Error())
-			return
-		}
 
 		err = db.AddRepo(tx, repo)
 		if err != nil {
@@ -555,9 +603,8 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// acls
-		p, _ := securejoin.SecureJoin(user.Active.Did, repoName)
-		err = s.enforcer.AddRepo(user.Active.Did, domain, p)
+		rbacPath := repo.RepoIdentifier()
+		err = s.enforcer.AddRepo(user.Active.Did, domain, rbacPath)
 		if err != nil {
 			l.Error("acl setup failed", "err", err)
 			s.pages.Notice(w, "repo", "Failed to set up repository permissions.")
@@ -578,11 +625,14 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// reset the ATURI because the transaction completed successfully
 		aturi = ""
 
 		s.notifier.NewRepo(r.Context(), repo)
-		s.pages.HxLocation(w, fmt.Sprintf("/%s/%s", user.Active.Did, repoName))
+		if repoDid != "" {
+			s.pages.HxLocation(w, fmt.Sprintf("/%s", repoDid))
+		} else {
+			s.pages.HxLocation(w, fmt.Sprintf("/%s/%s", user.Active.Did, repoName))
+		}
 	}
 }
 

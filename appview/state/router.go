@@ -1,10 +1,13 @@
 package state
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/issues"
 	"tangled.org/core/appview/knots"
 	"tangled.org/core/appview/labels"
@@ -46,8 +49,29 @@ func (s *State) Router() http.Handler {
 		if len(pathParts) > 0 {
 			firstPart := pathParts[0]
 
-			// if using a DID or handle, just continue as per usual
-			if userutil.IsDid(firstPart) || userutil.IsHandle(firstPart) {
+			if userutil.IsDid(firstPart) {
+				repo, err := db.GetRepoByDid(s.db, firstPart)
+				switch {
+				case err == nil:
+					remaining := ""
+					if len(pathParts) > 1 {
+						remaining = "/" + pathParts[1]
+					}
+					rewritten := "/" + repo.Did + "/" + repo.Name + remaining
+					r2 := r.Clone(r.Context())
+					r2.URL.Path = rewritten
+					r2.URL.RawPath = rewritten
+					userRouter.ServeHTTP(w, r2)
+				case errors.Is(err, sql.ErrNoRows):
+					userRouter.ServeHTTP(w, r)
+				default:
+					s.logger.Error("db error looking up repo DID", "repoDid", firstPart, "err", err)
+					http.Error(w, "internal server error", http.StatusInternalServerError)
+				}
+				return
+			}
+
+			if userutil.IsHandle(firstPart) {
 				userRouter.ServeHTTP(w, r)
 				return
 			}

@@ -293,7 +293,7 @@ func (rp *Repo) SaveRepoSiteConfig(w http.ResponseWriter, r *http.Request) {
 	// Skip entirely if there is no active domain claim — the site cannot be served anyway.
 	ownerClaim, _ := db.GetActiveDomainClaimForDid(rp.db, f.Did)
 	if ownerClaim == nil {
-		rp.logger.Info("skipping deploy: no active domain claim", "repo", f.DidSlashRepo())
+		rp.logger.Info("skipping deploy: no active domain claim", "repo", f.RepoIdentifier())
 	} else if rp.cfClient.Enabled() {
 		scheme := "http"
 		if !rp.config.Core.Dev {
@@ -313,7 +313,7 @@ func (rp *Repo) SaveRepoSiteConfig(w http.ResponseWriter, r *http.Request) {
 
 			deployErr := sites.Deploy(ctx, rp.cfClient, knotHost, f.Did, f.Name, branch, dir)
 			if deployErr != nil {
-				l.Error("sites: initial R2 sync failed", "repo", f.DidSlashRepo(), "err", deployErr)
+				l.Error("sites: initial R2 sync failed", "repo", f.RepoIdentifier(), "err", deployErr)
 				deploy.Status = models.SiteDeployStatusFailure
 				deploy.Error = deployErr.Error()
 			} else {
@@ -321,18 +321,18 @@ func (rp *Repo) SaveRepoSiteConfig(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if err := db.AddSiteDeploy(rp.db, deploy); err != nil {
-				l.Error("sites: failed to record deploy", "repo", f.DidSlashRepo(), "err", err)
+				l.Error("sites: failed to record deploy", "repo", f.RepoIdentifier(), "err", err)
 			}
 
 			if deployErr == nil {
 				if err := sites.PutDomainMapping(ctx, rp.cfClient, ownerClaim.Domain, f.Did, f.Name, isIndex); err != nil {
 					l.Error("sites: KV write failed", "domain", ownerClaim.Domain, "err", err)
 				}
-				rp.logger.Info("site deployed to r2", "repo", f.DidSlashRepo(), "is_index", isIndex)
+				rp.logger.Info("site deployed to r2", "repo", f.RepoIdentifier(), "is_index", isIndex)
 			}
 		}()
 	} else {
-		rp.logger.Warn("cloudflare integration is disabled; site won't be deployed", "repo", f.DidSlashRepo())
+		rp.logger.Warn("cloudflare integration is disabled; site won't be deployed", "repo", f.RepoIdentifier())
 	}
 
 	rp.pages.HxRefresh(w)
@@ -367,7 +367,7 @@ func (rp *Repo) DeleteRepoSiteConfig(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			ctx := context.Background()
 			if err := sites.Delete(ctx, rp.cfClient, f.Did, f.Name); err != nil {
-				l.Error("sites: R2 delete failed", "repo", f.DidSlashRepo(), "err", err)
+				l.Error("sites: R2 delete failed", "repo", f.RepoIdentifier(), "err", err)
 			}
 			if ownerClaim != nil {
 				if err := sites.DeleteDomainMapping(ctx, rp.cfClient, ownerClaim.Domain, f.Name); err != nil {
@@ -459,7 +459,7 @@ func (rp *Repo) accessSettings(w http.ResponseWriter, r *http.Request) {
 	user := rp.oauth.GetMultiAccountUser(r)
 
 	collaborators, err := func(repo *models.Repo) ([]pages.Collaborator, error) {
-		repoCollaborators, err := rp.enforcer.E.GetImplicitUsersForResourceByDomain(repo.DidSlashRepo(), repo.Knot)
+		repoCollaborators, err := rp.enforcer.E.GetImplicitUsersForResourceByDomain(repo.RepoIdentifier(), repo.Knot)
 		if err != nil {
 			return nil, err
 		}

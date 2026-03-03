@@ -12,6 +12,7 @@ import (
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pages"
+	"tangled.org/core/orm"
 	"tangled.org/core/tid"
 )
 
@@ -40,15 +41,22 @@ func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		createdAt := time.Now().Format(time.RFC3339)
 		rkey := tid.TID()
+
+		subjectStr := subjectUri.String()
+		starRecord := &tangled.FeedStar{
+			CreatedAt: createdAt,
+			Subject:   &subjectStr,
+		}
+		repo, err := db.GetRepo(s.db, orm.FilterEq("at_uri", subjectUri.String()))
+		if err == nil && repo.RepoDid != "" {
+			starRecord.SubjectDid = &repo.RepoDid
+		}
+
 		resp, err := comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 			Collection: tangled.FeedStarNSID,
 			Repo:       currentUser.Active.Did,
 			Rkey:       rkey,
-			Record: &lexutil.LexiconTypeDecoder{
-				Val: &tangled.FeedStar{
-					Subject:   subjectUri.String(),
-					CreatedAt: createdAt,
-				}},
+			Record:     &lexutil.LexiconTypeDecoder{Val: starRecord},
 		})
 		if err != nil {
 			log.Println("failed to create atproto record", err)

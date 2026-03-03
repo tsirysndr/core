@@ -45,7 +45,7 @@ func (i *Issue) AsRecord() tangled.RepoIssue {
 		references[i] = string(uri)
 	}
 	repoAtStr := i.RepoAt.String()
-	return tangled.RepoIssue{
+	rec := tangled.RepoIssue{
 		Repo:       &repoAtStr,
 		Title:      i.Title,
 		Body:       &i.Body,
@@ -53,6 +53,10 @@ func (i *Issue) AsRecord() tangled.RepoIssue {
 		References: references,
 		CreatedAt:  i.Created.Format(time.RFC3339),
 	}
+	if i.Repo != nil && i.Repo.RepoDid != "" {
+		rec.RepoDid = &i.Repo.RepoDid
+	}
+	return rec
 }
 
 func (i *Issue) State() string {

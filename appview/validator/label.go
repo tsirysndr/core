@@ -109,7 +109,7 @@ func (v *Validator) ValidateLabelOp(labelDef *models.LabelDefinition, repo *mode
 	// validate permissions: only collaborators can apply labels currently
 	//
 	// TODO: introduce a repo:triage permission
-	ok, err := v.enforcer.IsPushAllowed(labelOp.Did, repo.Knot, repo.DidSlashRepo())
+	ok, err := v.enforcer.IsPushAllowed(labelOp.Did, repo.Knot, repo.RepoIdentifier())
 	if err != nil {
 		return fmt.Errorf("failed to enforce permissions: %w", err)
 	}

@@ -164,8 +164,7 @@ func (rp *Repo) Commit(w http.ResponseWriter, r *http.Request) {
 		Host: host,
 	}
 
-	repo := fmt.Sprintf("%s/%s", f.Did, f.Name)
-	xrpcBytes, err := tangled.RepoDiff(r.Context(), xrpcc, ref, repo)
+	xrpcBytes, err := tangled.RepoDiff(r.Context(), xrpcc, ref, f.RepoIdentifier())
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		l.Error("failed to call XRPC repo.diff", "err", xrpcerr)
 		rp.pages.Error503(w)

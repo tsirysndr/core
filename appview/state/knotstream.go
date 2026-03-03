@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -66,6 +67,20 @@ func Knotstream(ctx context.Context, c *config.Config, d *db.DB, enforcer *rbac.
 	return ec.NewConsumer(cfg), nil
 }
 
+func resolveRepo(d *db.DB, repoDid *string, ownerDid, repoName string) (*models.Repo, error) {
+	if repoDid != nil && *repoDid != "" {
+		return db.GetRepoByDid(d, *repoDid)
+	}
+	repos, err := db.GetRepos(d, orm.FilterEq("did", ownerDid), orm.FilterEq("name", repoName))
+	if err != nil {
+		return nil, err
+	}
+	if len(repos) == 0 {
+		return nil, sql.ErrNoRows
+	}
+	return &repos[0], nil
+}
+
 func knotIngester(d *db.DB, enforcer *rbac.Enforcer, posthog posthog.Client, notifier notify.Notifier, dev bool, c *config.Config, cfClient *cloudflare.Client) ec.ProcessFunc {
 	return func(ctx context.Context, source ec.Source, msg ec.Message) error {
 		switch msg.Nsid {
@@ -96,19 +111,18 @@ func ingestRefUpdate(ctx context.Context, d *db.DB, enforcer *rbac.Enforcer, pc 
 		return fmt.Errorf("%s does not belong to %s, something is fishy", record.CommitterDid, source.Key())
 	}
 
-	repo, err := db.GetRepo(
-		d,
-		orm.FilterEq("did", record.RepoDid),
-		orm.FilterEq("name", record.RepoName),
-		orm.FilterEq("knot", source.Key()),
-	)
-	if err != nil {
-		return fmt.Errorf("repo %s/%s on knot %s not found", record.RepoDid, record.RepoName, source.Key())
+	ownerDid := ""
+	if record.OwnerDid != nil {
+		ownerDid = *record.OwnerDid
+	}
+
+	repo, lookupErr := resolveRepo(d, record.RepoDid, ownerDid, record.RepoName)
+	if lookupErr != nil {
+		return fmt.Errorf("failed to look up repo: %w", lookupErr)
 	}
 
 	logger.Info("processing gitRefUpdate event",
-		"repo_did", record.RepoDid,
-		"repo_name", record.RepoName,
+		"repo", repo.RepoIdentifier(),
 		"ref", record.Ref,
 		"old_sha", record.OldSha,
 		"new_sha", record.NewSha)
@@ -145,15 +159,15 @@ func triggerSitesDeployIfNeeded(ctx context.Context, d *db.DB, cfClient *cloudfl
 	}
 	pushedBranch := ref.Short()
 
-	repos, err := db.GetRepos(
-		d,
-		orm.FilterEq("did", record.RepoDid),
-		orm.FilterEq("name", record.RepoName),
-	)
-	if err != nil || len(repos) != 1 {
+	ownerDid := ""
+	if record.OwnerDid != nil {
+		ownerDid = *record.OwnerDid
+	}
+
+	repo, err := resolveRepo(d, record.RepoDid, ownerDid, record.RepoName)
+	if err != nil {
 		return
 	}
-	repo := repos[0]
 
 	siteConfig, err := db.GetRepoSiteConfig(d, repo.RepoAt().String())
 	if err != nil || siteConfig == nil {
@@ -177,9 +191,9 @@ func triggerSitesDeployIfNeeded(ctx context.Context, d *db.DB, cfClient *cloudfl
 		Trigger:   models.SiteDeployTriggerPush,
 	}
 
-	deployErr := sites.Deploy(ctx, cfClient, knotHost, record.RepoDid, record.RepoName, siteConfig.Branch, siteConfig.Dir)
+	deployErr := sites.Deploy(ctx, cfClient, knotHost, repo.RepoIdentifier(), record.RepoName, siteConfig.Branch, siteConfig.Dir)
 	if deployErr != nil {
-		logger.Error("sites: R2 sync failed on push", "repo", record.RepoDid+"/"+record.RepoName, "err", deployErr)
+		logger.Error("sites: R2 sync failed on push", "repo", repo.RepoIdentifier(), "err", deployErr)
 		deploy.Status = models.SiteDeployStatusFailure
 		deploy.Error = deployErr.Error()
 	} else {
@@ -187,11 +201,11 @@ func triggerSitesDeployIfNeeded(ctx context.Context, d *db.DB, cfClient *cloudfl
 	}
 
 	if err := db.AddSiteDeploy(d, deploy); err != nil {
-		logger.Error("sites: failed to record deploy", "repo", record.RepoDid+"/"+record.RepoName, "err", err)
+		logger.Error("sites: failed to record deploy", "repo", repo.RepoIdentifier(), "err", err)
 	}
 
 	if deployErr == nil {
-		logger.Info("site deployed to r2", "repo", record.RepoDid+"/"+record.RepoName)
+		logger.Info("site deployed to r2", "repo", repo.RepoIdentifier())
 	}
 }
 
@@ -233,21 +247,19 @@ func populatePunchcard(d *db.DB, record tangled.GitRefUpdate) error {
 
 func updateRepoLanguages(d *db.DB, record tangled.GitRefUpdate) error {
 	if record.Meta == nil || record.Meta.LangBreakdown == nil || record.Meta.LangBreakdown.Inputs == nil {
-		return fmt.Errorf("empty language data for repo: %s/%s", record.RepoDid, record.RepoName)
+		return fmt.Errorf("empty language data for repo: %v/%s", record.OwnerDid, record.RepoName)
 	}
 
-	repos, err := db.GetRepos(
-		d,
-		orm.FilterEq("did", record.RepoDid),
-		orm.FilterEq("name", record.RepoName),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to look for repo in DB (%s/%s): %w", record.RepoDid, record.RepoName, err)
+	ownerDid := ""
+	if record.OwnerDid != nil {
+		ownerDid = *record.OwnerDid
 	}
-	if len(repos) != 1 {
-		return fmt.Errorf("incorrect number of repos returned: %d (expected 1)", len(repos))
+
+	r, lookupErr := resolveRepo(d, record.RepoDid, ownerDid, record.RepoName)
+	if lookupErr != nil {
+		return fmt.Errorf("failed to look up repo: %w", lookupErr)
 	}
-	repo := repos[0]
+	repo := *r
 
 	ref := plumbing.ReferenceName(record.Ref)
 	if !ref.IsBranch() {
@@ -300,25 +312,15 @@ func ingestPipeline(d *db.DB, source ec.Source, msg ec.Message) error {
 		return fmt.Errorf("empty repo: nsid %s, rkey %s", msg.Nsid, msg.Rkey)
 	}
 
-	repo, err := db.GetRepo(
-		d,
-		orm.FilterEq("did", record.TriggerMetadata.Repo.Did),
-		orm.FilterEq("name", record.TriggerMetadata.Repo.Repo),
-		orm.FilterEq("knot", source.Key()),
-	)
-	if err != nil {
-		return fmt.Errorf(
-			"failed to look for repo in DB: nsid %s, rkey %s, %s/%s, knot %s, %w",
-			msg.Nsid,
-			msg.Rkey,
-			record.TriggerMetadata.Repo.Did,
-			record.TriggerMetadata.Repo.Did,
-			source.Key(),
-			err,
-		)
+	repoName := ""
+	if record.TriggerMetadata.Repo.Repo != nil {
+		repoName = *record.TriggerMetadata.Repo.Repo
 	}
 
-	// does this repo have a spindle configured?
+	repo, lookupErr := resolveRepo(d, record.TriggerMetadata.Repo.RepoDid, record.TriggerMetadata.Repo.Did, repoName)
+	if lookupErr != nil {
+		return fmt.Errorf("failed to look up repo: %w", lookupErr)
+	}
 	if repo.Spindle == "" {
 		return fmt.Errorf("repo does not have a spindle configured yet: nsid %s, rkey %s", msg.Nsid, msg.Rkey)
 	}
@@ -355,7 +357,8 @@ func ingestPipeline(d *db.DB, source ec.Source, msg ec.Message) error {
 		Rkey:      msg.Rkey,
 		Knot:      source.Key(),
 		RepoOwner: syntax.DID(record.TriggerMetadata.Repo.Did),
-		RepoName:  record.TriggerMetadata.Repo.Repo,
+		RepoName:  repoName,
+		RepoDid:   repo.RepoDid,
 		TriggerId: int(triggerId),
 		Sha:       sha,
 	}

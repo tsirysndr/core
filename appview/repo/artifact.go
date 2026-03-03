@@ -80,13 +80,7 @@ func (rp *Repo) AttachArtifact(w http.ResponseWriter, r *http.Request) {
 		Repo:       user.Active.Did,
 		Rkey:       rkey,
 		Record: &lexutil.LexiconTypeDecoder{
-			Val: &tangled.RepoArtifact{
-				Artifact:  uploadBlobResp.Blob,
-				CreatedAt: createdAt.Format(time.RFC3339),
-				Name:      header.Filename,
-				Repo:      f.RepoAt().String(),
-				Tag:       tag.Tag.Hash[:],
-			},
+			Val: repoArtifactRecord(f, uploadBlobResp.Blob, createdAt, header.Filename, tag.Tag.Hash[:]),
 		},
 	})
 	if err != nil {
@@ -349,4 +343,19 @@ func (rp *Repo) resolveTag(ctx context.Context, f *models.Repo, tagParam string)
 	}
 
 	return tag, nil
+}
+
+func repoArtifactRecord(f *models.Repo, blob *lexutil.LexBlob, createdAt time.Time, name string, tag []byte) *tangled.RepoArtifact {
+	rec := &tangled.RepoArtifact{
+		Artifact:  blob,
+		CreatedAt: createdAt.Format(time.RFC3339),
+		Name:      name,
+		Tag:       tag,
+	}
+	s := f.RepoAt().String()
+	rec.Repo = &s
+	if f.RepoDid != "" {
+		rec.RepoDid = &f.RepoDid
+	}
+	return rec
 }

@@ -58,8 +58,7 @@ func (rp *Repo) Blob(w http.ResponseWriter, r *http.Request) {
 	xrpcc := &indigoxrpc.Client{
 		Host: host,
 	}
-	repo := fmt.Sprintf("%s/%s", f.Did, f.Name)
-	resp, err := tangled.RepoBlob(r.Context(), xrpcc, filePath, false, ref, repo)
+	resp, err := tangled.RepoBlob(r.Context(), xrpcc, filePath, false, ref, f.RepoIdentifier())
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		l.Error("failed to call XRPC repo.blob", "err", xrpcerr)
 		rp.pages.Error503(w)
@@ -139,7 +138,7 @@ func (rp *Repo) RepoBlobRaw(w http.ResponseWriter, r *http.Request) {
 	if !rp.config.Core.Dev {
 		scheme = "https"
 	}
-	repo := f.DidSlashRepo()
+	repo := f.RepoIdentifier()
 	baseURL := &url.URL{
 		Scheme: scheme,
 		Host:   f.Knot,
@@ -290,7 +289,7 @@ func generateBlobURL(config *config.Config, repo *models.Repo, ref, filePath str
 		scheme = "https"
 	}
 
-	repoName := fmt.Sprintf("%s/%s", repo.Did, repo.Name)
+	repoName := repo.RepoIdentifier()
 	baseURL := &url.URL{
 		Scheme: scheme,
 		Host:   repo.Knot,

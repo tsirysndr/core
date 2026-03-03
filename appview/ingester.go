@@ -2,7 +2,9 @@ package appview
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -116,16 +118,36 @@ func (i *Ingester) ingestStar(e *jmodels.Event) error {
 			return err
 		}
 
-		subjectUri, err = syntax.ParseATURI(record.Subject)
-		if err != nil {
-			l.Error("invalid record", "err", err)
-			return err
+		star := &models.Star{
+			Did:  did,
+			Rkey: e.Commit.RKey,
 		}
-		err = db.AddStar(i.Db, &models.Star{
-			Did:    did,
-			RepoAt: subjectUri,
-			Rkey:   e.Commit.RKey,
-		})
+
+		switch {
+		case record.SubjectDid != nil:
+			repo, repoErr := db.GetRepo(i.Db, orm.FilterEq("repo_did", *record.SubjectDid))
+			if repoErr == nil {
+				subjectUri = repo.RepoAt()
+				star.RepoAt = subjectUri
+			}
+		case record.Subject != nil:
+			subjectUri, err = syntax.ParseATURI(*record.Subject)
+			if err != nil {
+				l.Error("invalid record", "err", err)
+				return err
+			}
+			star.RepoAt = subjectUri
+			repo, repoErr := db.GetRepoByAtUri(i.Db, subjectUri.String())
+			if repoErr == nil && repo.RepoDid != "" {
+				if enqErr := db.EnqueuePdsRewrite(i.Db, did, repo.RepoDid, tangled.FeedStarNSID, e.Commit.RKey, *record.Subject); enqErr != nil {
+					l.Warn("failed to enqueue PDS rewrite for star", "err", enqErr, "did", did, "repoDid", repo.RepoDid)
+				}
+			}
+		default:
+			l.Error("star record has neither subject nor subjectDid")
+			return fmt.Errorf("star record has neither subject nor subjectDid")
+		}
+		err = db.AddStar(i.Db, star)
 	case jmodels.CommitOperationDelete:
 		err = db.DeleteStarByRkey(i.Db, did, e.Commit.RKey)
 	}
@@ -220,19 +242,40 @@ func (i *Ingester) ingestArtifact(e *jmodels.Event) error {
 			return err
 		}
 
-		repoAt, err := syntax.ParseATURI(record.Repo)
-		if err != nil {
-			return err
+		var repo *models.Repo
+		if record.RepoDid != nil && *record.RepoDid != "" {
+			repo, err = db.GetRepoByDid(i.Db, *record.RepoDid)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("failed to look up repo by DID %s: %w", *record.RepoDid, err)
+			}
+		}
+		if repo == nil && record.Repo != nil {
+			repoAt, parseErr := syntax.ParseATURI(*record.Repo)
+			if parseErr != nil {
+				return parseErr
+			}
+			repo, err = db.GetRepoByAtUri(i.Db, repoAt.String())
+			if err != nil {
+				return err
+			}
+		}
+		if repo == nil {
+			return fmt.Errorf("artifact record has neither valid repoDid nor repo field")
 		}
 
-		repo, err := db.GetRepoByAtUri(i.Db, repoAt.String())
-		if err != nil {
-			return err
-		}
-
-		ok, err := i.Enforcer.E.Enforce(did, repo.Knot, repo.DidSlashRepo(), "repo:push")
+		ok, err := i.Enforcer.E.Enforce(did, repo.Knot, repo.RepoIdentifier(), "repo:push")
 		if err != nil || !ok {
 			return err
+		}
+
+		repoDid := repo.RepoDid
+		if repoDid == "" && record.RepoDid != nil {
+			repoDid = *record.RepoDid
+		}
+		if repoDid != "" && (record.RepoDid == nil || *record.RepoDid == "") && record.Repo != nil {
+			if enqErr := db.EnqueuePdsRewrite(i.Db, did, repoDid, tangled.RepoArtifactNSID, e.Commit.RKey, *record.Repo); enqErr != nil {
+				l.Warn("failed to enqueue PDS rewrite for artifact", "err", enqErr, "did", did, "repoDid", repoDid)
+			}
 		}
 
 		createdAt, err := time.Parse(time.RFC3339, record.CreatedAt)
@@ -243,7 +286,7 @@ func (i *Ingester) ingestArtifact(e *jmodels.Event) error {
 		artifact := models.Artifact{
 			Did:       did,
 			Rkey:      e.Commit.RKey,
-			RepoAt:    repoAt,
+			RepoAt:    repo.RepoAt(),
 			Tag:       plumbing.Hash(record.Tag),
 			CreatedAt: createdAt,
 			BlobCid:   cid.Cid(record.Artifact.Ref),
@@ -834,8 +877,21 @@ func (i *Ingester) ingestIssue(ctx context.Context, e *jmodels.Event) error {
 
 		issue := models.IssueFromRecord(did, rkey, record)
 
+		if issue.RepoAt == "" {
+			return fmt.Errorf("issue record has no repo field")
+		}
+
 		if err := i.Validator.ValidateIssue(&issue); err != nil {
 			return fmt.Errorf("failed to validate issue: %w", err)
+		}
+
+		if record.Repo != nil {
+			repo, repoErr := db.GetRepoByAtUri(i.Db, *record.Repo)
+			if repoErr == nil && repo.RepoDid != "" {
+				if enqErr := db.EnqueuePdsRewrite(i.Db, did, repo.RepoDid, tangled.RepoIssueNSID, rkey, *record.Repo); enqErr != nil {
+					l.Warn("failed to enqueue PDS rewrite for issue", "err", enqErr, "did", did, "repoDid", repo.RepoDid)
+				}
+			}
 		}
 
 		tx, err := ddb.BeginTx(ctx, nil)

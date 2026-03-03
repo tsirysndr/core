@@ -18,6 +18,7 @@ import (
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/pagination"
 	"tangled.org/core/appview/reporesolver"
+	"tangled.org/core/appview/state/userutil"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/orm"
 	"tangled.org/core/rbac"
@@ -162,9 +163,9 @@ func (mw Middleware) RepoPermissionMiddleware(requiredPerm string) middlewareFun
 				return
 			}
 
-			ok, err := mw.enforcer.E.Enforce(actor.Active.Did, f.Knot, f.DidSlashRepo(), requiredPerm)
+			ok, err := mw.enforcer.E.Enforce(actor.Active.Did, f.Knot, f.RepoIdentifier(), requiredPerm)
 			if err != nil || !ok {
-				log.Printf("%s does not have perms of a %s in repo %s", actor.Active.Did, requiredPerm, f.DidSlashRepo())
+				log.Printf("%s does not have perms of a %s in repo %s", actor.Active.Did, requiredPerm, f.RepoIdentifier())
 				http.Error(w, "Forbiden", http.StatusUnauthorized)
 				return
 			}
@@ -195,7 +196,6 @@ func (mw Middleware) ResolveIdent() middlewareFunc {
 					}
 				}
 			}
-			// invalid did or handle
 			if err != nil {
 				log.Printf("failed to resolve did/handle '%s': %s\n", didOrHandle, err)
 				mw.pages.Error404(w)
@@ -342,11 +342,15 @@ func (mw Middleware) GoImport() middlewareFunc {
 
 			if r.Header.Get("User-Agent") == "Go-http-client/1.1" {
 				if r.URL.Query().Get("go-get") == "1" {
+					modulePath := userutil.FlattenDid(fullName)
+					if strings.Contains(modulePath, ":") {
+						modulePath = userutil.FlattenDid(f.Did) + "/" + f.Name
+					}
 					html := fmt.Sprintf(
 						`<meta name="go-import" content="tangled.sh/%s git https://tangled.sh/%s"/>
 <meta name="go-import" content="tangled.org/%s git https://tangled.org/%s"/>`,
-						fullName, fullName,
-						fullName, fullName,
+						modulePath, fullName,
+						modulePath, fullName,
 					)
 					w.Header().Set("Content-Type", "text/html")
 					w.Write([]byte(html))

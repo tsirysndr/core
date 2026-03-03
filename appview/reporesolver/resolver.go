@@ -36,12 +36,15 @@ func New(config *config.Config, enforcer *rbac.Enforcer, execer db.Execer) *Repo
 
 // NOTE: this... should not even be here. the entire package will be removed in future refactor
 func GetBaseRepoPath(r *http.Request, repo *models.Repo) string {
+	if repo.RepoDid != "" {
+		return repo.RepoDid
+	}
 	var (
 		user = chi.URLParam(r, "user")
 		name = chi.URLParam(r, "repo")
 	)
 	if user == "" || name == "" {
-		return repo.DidSlashRepo()
+		return repo.RepoIdentifier()
 	}
 	return path.Join(user, name)
 }
@@ -77,13 +80,13 @@ func (rr *RepoResolver) GetRepoInfo(r *http.Request, user *oauth.MultiAccountUse
 	roles := repoinfo.RolesInRepo{}
 	if user != nil && user.Active != nil {
 		isStarred = db.GetStarStatus(rr.execer, user.Active.Did, repoAt)
-		roles.Roles = rr.enforcer.GetPermissionsInRepo(user.Active.Did, repo.Knot, repo.DidSlashRepo())
+		roles.Roles = rr.enforcer.GetPermissionsInRepo(user.Active.Did, repo.Knot, repo.RepoIdentifier())
 	}
 
 	stats := repo.RepoStats
 	if stats == nil {
-		starCount, err := db.GetStarCount(rr.execer, repoAt)
-		if err != nil {
+		starCount, starErr := db.GetStarCount(rr.execer, repoAt)
+		if starErr != nil {
 			log.Println("failed to get star count for ", repoAt)
 		}
 		issueCount, err := db.GetIssueCount(rr.execer, repoAt)
@@ -104,9 +107,13 @@ func (rr *RepoResolver) GetRepoInfo(r *http.Request, user *oauth.MultiAccountUse
 	var sourceRepo *models.Repo
 	var err error
 	if repo.Source != "" {
-		sourceRepo, err = db.GetRepoByAtUri(rr.execer, repo.Source)
+		if strings.HasPrefix(repo.Source, "did:") {
+			sourceRepo, err = db.GetRepoByDid(rr.execer, repo.Source)
+		} else {
+			sourceRepo, err = db.GetRepoByAtUri(rr.execer, repo.Source)
+		}
 		if err != nil {
-			log.Println("failed to get repo by at uri", err)
+			log.Println("failed to get source repo", err)
 		}
 	}
 

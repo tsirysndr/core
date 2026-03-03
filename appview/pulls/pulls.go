@@ -408,7 +408,7 @@ func (s *Pulls) branchDeleteStatus(r *http.Request, repo *models.Repo, pull *mod
 	}
 
 	// user can only delete branch if they are a collaborator in the repo that the branch belongs to
-	perms := s.enforcer.GetPermissionsInRepo(user.Active.Did, repo.Knot, repo.DidSlashRepo())
+	perms := s.enforcer.GetPermissionsInRepo(user.Active.Did, repo.Knot, repo.RepoIdentifier())
 	if !slices.Contains(perms, "repo:push") {
 		return nil
 	}
@@ -432,10 +432,8 @@ func (s *Pulls) resubmitCheck(r *http.Request, repo *models.Repo, pull *models.P
 
 	var sourceRepo syntax.ATURI
 	if pull.PullSource.RepoAt != nil {
-		// fork-based pulls
 		sourceRepo = *pull.PullSource.RepoAt
 	} else {
-		// pulls within the same repo
 		sourceRepo = repo.RepoAt()
 	}
 
@@ -929,7 +927,7 @@ func (s *Pulls) NewPull(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Determine PR type based on input parameters
-		roles := repoinfo.RolesInRepo{Roles: s.enforcer.GetPermissionsInRepo(user.Active.Did, f.Knot, f.DidSlashRepo())}
+		roles := repoinfo.RolesInRepo{Roles: s.enforcer.GetPermissionsInRepo(user.Active.Did, f.Knot, f.RepoIdentifier())}
 		isPushAllowed := roles.IsPushAllowed()
 		isBranchBased := isPushAllowed && sourceBranch != "" && fromFork == ""
 		isForkBased := fromFork != "" && sourceBranch != ""
@@ -1045,8 +1043,7 @@ func (s *Pulls) handleBranchBasedPull(
 		Host: host,
 	}
 
-	didSlashRepo := fmt.Sprintf("%s/%s", repo.Did, repo.Name)
-	xrpcBytes, err := tangled.RepoCompare(r.Context(), xrpcc, didSlashRepo, targetBranch, sourceBranch)
+	xrpcBytes, err := tangled.RepoCompare(r.Context(), xrpcc, repo.RepoIdentifier(), targetBranch, sourceBranch)
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 			s.logger.Error("failed to call XRPC repo.compare", "err", xrpcerr)
@@ -1155,8 +1152,7 @@ func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo
 		Host: forkHost,
 	}
 
-	forkRepoId := fmt.Sprintf("%s/%s", fork.Did, fork.Name)
-	forkXrpcBytes, err := tangled.RepoCompare(r.Context(), forkXrpcc, forkRepoId, hiddenRef, sourceBranch)
+	forkXrpcBytes, err := tangled.RepoCompare(r.Context(), forkXrpcc, fork.RepoIdentifier(), hiddenRef, sourceBranch)
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 			s.logger.Error("failed to call XRPC repo.compare for fork", "err", xrpcerr)
@@ -1196,6 +1192,9 @@ func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo
 		Branch: sourceBranch,
 		Repo:   &forkAtUriStr,
 		Sha:    sourceRev,
+	}
+	if fork.RepoDid != "" {
+		recordPullSource.RepoDid = &fork.RepoDid
 	}
 
 	s.createPullRequest(w, r, repo, user, title, body, targetBranch, patch, combined, sourceRev, pullSource, recordPullSource, isStacked)
@@ -1313,11 +1312,8 @@ func (s *Pulls) createPullRequest(
 		Rkey:       rkey,
 		Record: &lexutil.LexiconTypeDecoder{
 			Val: &tangled.RepoPull{
-				Title: title,
-				Target: &tangled.RepoPull_Target{
-					Repo:   string(repo.RepoAt()),
-					Branch: targetBranch,
-				},
+				Title:     title,
+				Target:    repoPullTarget(repo, targetBranch),
 				PatchBlob: blob.Blob,
 				Source:    recordPullSource,
 				CreatedAt: time.Now().Format(time.RFC3339),
@@ -1707,7 +1703,7 @@ func (s *Pulls) resubmitBranch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles := repoinfo.RolesInRepo{Roles: s.enforcer.GetPermissionsInRepo(user.Active.Did, f.Knot, f.DidSlashRepo())}
+	roles := repoinfo.RolesInRepo{Roles: s.enforcer.GetPermissionsInRepo(user.Active.Did, f.Knot, f.RepoIdentifier())}
 	if !roles.IsPushAllowed() {
 		s.logger.Warn("unauthorized user")
 		w.WriteHeader(http.StatusUnauthorized)
@@ -1723,8 +1719,7 @@ func (s *Pulls) resubmitBranch(w http.ResponseWriter, r *http.Request) {
 		Host: host,
 	}
 
-	repo := fmt.Sprintf("%s/%s", f.Did, f.Name)
-	xrpcBytes, err := tangled.RepoCompare(r.Context(), xrpcc, repo, pull.TargetBranch, pull.PullSource.Branch)
+	xrpcBytes, err := tangled.RepoCompare(r.Context(), xrpcc, f.RepoIdentifier(), pull.TargetBranch, pull.PullSource.Branch)
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 			s.logger.Error("failed to call XRPC repo.compare", "err", xrpcerr)
@@ -1817,8 +1812,7 @@ func (s *Pulls) resubmitFork(w http.ResponseWriter, r *http.Request) {
 		forkScheme = "https"
 	}
 	forkHost := fmt.Sprintf("%s://%s", forkScheme, forkRepo.Knot)
-	forkRepoId := fmt.Sprintf("%s/%s", forkRepo.Did, forkRepo.Name)
-	forkXrpcBytes, err := tangled.RepoCompare(r.Context(), &indigoxrpc.Client{Host: forkHost}, forkRepoId, hiddenRef, pull.PullSource.Branch)
+	forkXrpcBytes, err := tangled.RepoCompare(r.Context(), &indigoxrpc.Client{Host: forkHost}, forkRepo.RepoIdentifier(), hiddenRef, pull.PullSource.Branch)
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 			s.logger.Error("failed to call XRPC repo.compare for fork", "err", xrpcerr)
@@ -2296,7 +2290,7 @@ func (s *Pulls) ClosePull(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// auth filter: only owner or collaborators can close
-	roles := repoinfo.RolesInRepo{Roles: s.enforcer.GetPermissionsInRepo(user.Active.Did, f.Knot, f.DidSlashRepo())}
+	roles := repoinfo.RolesInRepo{Roles: s.enforcer.GetPermissionsInRepo(user.Active.Did, f.Knot, f.RepoIdentifier())}
 	isOwner := roles.IsOwner()
 	isCollaborator := roles.IsCollaborator()
 	isPullAuthor := user.Active.Did == pull.OwnerDid
@@ -2370,7 +2364,7 @@ func (s *Pulls) ReopenPull(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// auth filter: only owner or collaborators can close
-	roles := repoinfo.RolesInRepo{Roles: s.enforcer.GetPermissionsInRepo(user.Active.Did, f.Knot, f.DidSlashRepo())}
+	roles := repoinfo.RolesInRepo{Roles: s.enforcer.GetPermissionsInRepo(user.Active.Did, f.Knot, f.RepoIdentifier())}
 	isOwner := roles.IsOwner()
 	isCollaborator := roles.IsCollaborator()
 	isPullAuthor := user.Active.Did == pull.OwnerDid
@@ -2495,3 +2489,15 @@ func gz(s string) io.Reader {
 }
 
 func ptrPullState(s models.PullState) *models.PullState { return &s }
+
+func repoPullTarget(repo *models.Repo, branch string) *tangled.RepoPull_Target {
+	s := string(repo.RepoAt())
+	t := &tangled.RepoPull_Target{
+		Branch: branch,
+		Repo:   &s,
+	}
+	if repo.RepoDid != "" {
+		t.RepoDid = &repo.RepoDid
+	}
+	return t
+}

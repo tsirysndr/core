@@ -309,7 +309,7 @@ func (rp *Issues) CloseIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles := repoinfo.RolesInRepo{Roles: rp.enforcer.GetPermissionsInRepo(user.Active.Did, f.Knot, f.DidSlashRepo())}
+	roles := repoinfo.RolesInRepo{Roles: rp.enforcer.GetPermissionsInRepo(user.Active.Did, f.Knot, f.RepoIdentifier())}
 	isRepoOwner := roles.IsOwner()
 	isCollaborator := roles.IsCollaborator()
 	isIssueOwner := user.Active.Did == issue.Did
@@ -357,7 +357,7 @@ func (rp *Issues) ReopenIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles := repoinfo.RolesInRepo{Roles: rp.enforcer.GetPermissionsInRepo(user.Active.Did, f.Knot, f.DidSlashRepo())}
+	roles := repoinfo.RolesInRepo{Roles: rp.enforcer.GetPermissionsInRepo(user.Active.Did, f.Knot, f.RepoIdentifier())}
 	isRepoOwner := roles.IsOwner()
 	isCollaborator := roles.IsCollaborator()
 	isIssueOwner := user.Active.Did == issue.Did

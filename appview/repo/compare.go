@@ -141,9 +141,9 @@ func (rp *Repo) Compare(w http.ResponseWriter, r *http.Request) {
 		Host: host,
 	}
 
-	repo := fmt.Sprintf("%s/%s", f.Did, f.Name)
+	repoId := f.RepoIdentifier()
 
-	branchBytes, err := tangled.RepoBranches(r.Context(), xrpcc, "", 0, repo)
+	branchBytes, err := tangled.RepoBranches(r.Context(), xrpcc, "", 0, repoId)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		l.Error("failed to call XRPC repo.branches", "err", xrpcerr)
 		rp.pages.Error503(w)
@@ -157,7 +157,7 @@ func (rp *Repo) Compare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tagBytes, err := tangled.RepoTags(r.Context(), xrpcc, "", 0, repo)
+	tagBytes, err := tangled.RepoTags(r.Context(), xrpcc, "", 0, repoId)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		l.Error("failed to call XRPC repo.tags", "err", xrpcerr)
 		rp.pages.Error503(w)
@@ -171,7 +171,7 @@ func (rp *Repo) Compare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	compareBytes, err := tangled.RepoCompare(r.Context(), xrpcc, repo, base, head)
+	compareBytes, err := tangled.RepoCompare(r.Context(), xrpcc, repoId, base, head)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		l.Error("failed to call XRPC repo.compare", "err", xrpcerr)
 		rp.pages.Error503(w)

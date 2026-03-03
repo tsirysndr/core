@@ -239,7 +239,6 @@ func (rp *Repo) getLanguageInfo(
 func (rp *Repo) buildIndexResponse(ctx context.Context, repo *models.Repo, ref string) (*types.RepoIndexResponse, error) {
 	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
 
-	// first get branches to determine the ref if not specified
 	branchesBytes, err := tangled.GitTempListBranches(ctx, xrpcc, "", 0, repo.RepoAt().String())
 	if err != nil {
 		return nil, fmt.Errorf("calling knotmirror git.listBranches: %w", err)
