@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
+	"github.com/go-chi/chi/v5"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/jetstream"
@@ -16,8 +19,6 @@ import (
 	"tangled.org/core/rbac"
 	xrpcerr "tangled.org/core/xrpc/errors"
 	"tangled.org/core/xrpc/serviceauth"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type Xrpc struct {
@@ -78,39 +79,40 @@ func (x *Xrpc) Router() http.Handler {
 	return r
 }
 
-// parseRepoParam parses a repo parameter in 'did/repoName' format and returns
-// the full repository path on disk
 func (x *Xrpc) parseRepoParam(repo string) (string, error) {
-	if repo == "" {
+	if repo == "" || !strings.HasPrefix(repo, "did:") {
 		return "", xrpcerr.NewXrpcError(
 			xrpcerr.WithTag("InvalidRequest"),
-			xrpcerr.WithMessage("missing repo parameter"),
+			xrpcerr.WithMessage("missing or invalid repo parameter, expected a repo DID"),
 		)
 	}
 
-	// Parse repo string (did/repoName format)
+	if !strings.Contains(repo, "/") {
+		repoPath, _, _, err := x.Db.ResolveRepoDIDOnDisk(x.Config.Repo.ScanPath, repo)
+		if err != nil {
+			return "", xrpcerr.RepoNotFoundError
+		}
+		return repoPath, nil
+	}
+
 	parts := strings.SplitN(repo, "/", 2)
-	if len(parts) != 2 {
-		return "", xrpcerr.NewXrpcError(
-			xrpcerr.WithTag("InvalidRequest"),
-			xrpcerr.WithMessage("invalid repo format, expected 'did/repoName'"),
-		)
+	ownerDid, repoName := parts[0], parts[1]
+
+	repoDid, err := x.Db.GetRepoDid(ownerDid, repoName)
+	if err == nil {
+		repoPath, _, _, resolveErr := x.Db.ResolveRepoDIDOnDisk(x.Config.Repo.ScanPath, repoDid)
+		if resolveErr == nil {
+			return repoPath, nil
+		}
 	}
 
-	did := parts[0]
-	repoName := parts[1]
-
-	// Construct repository path using the same logic as didPath
-	didRepoPath, err := securejoin.SecureJoin(did, repoName)
-	if err != nil {
+	repoPath, joinErr := securejoin.SecureJoin(x.Config.Repo.ScanPath, filepath.Join(ownerDid, repoName))
+	if joinErr != nil {
 		return "", xrpcerr.RepoNotFoundError
 	}
-
-	repoPath, err := securejoin.SecureJoin(x.Config.Repo.ScanPath, didRepoPath)
-	if err != nil {
+	if _, statErr := os.Stat(repoPath); statErr != nil {
 		return "", xrpcerr.RepoNotFoundError
 	}
-
 	return repoPath, nil
 }
 

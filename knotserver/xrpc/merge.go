@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	securejoin "github.com/cyphar/filepath-securejoin"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/knotserver/git"
 	"tangled.org/core/patchutil"
@@ -43,21 +42,20 @@ func (x *Xrpc) Merge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	relativeRepoPath, err := securejoin.SecureJoin(did, name)
+	repoDid, err := x.Db.GetRepoDid(did, name)
 	if err != nil {
-		fail(xrpcerr.GenericError(err))
+		fail(xrpcerr.RepoNotFoundError)
+		return
+	}
+	repoPath, _, _, err := x.Db.ResolveRepoDIDOnDisk(x.Config.Repo.ScanPath, repoDid)
+	if err != nil {
+		fail(xrpcerr.RepoNotFoundError)
 		return
 	}
 
-	if ok, err := x.Enforcer.IsPushAllowed(actorDid.String(), rbac.ThisServer, relativeRepoPath); !ok || err != nil {
-		l.Error("insufficient permissions", "did", actorDid.String(), "repo", relativeRepoPath)
+	if ok, err := x.Enforcer.IsPushAllowed(actorDid.String(), rbac.ThisServer, repoDid); !ok || err != nil {
+		l.Error("insufficient permissions", "did", actorDid.String(), "repo", repoDid)
 		writeError(w, xrpcerr.AccessControlError(actorDid.String()), http.StatusUnauthorized)
-		return
-	}
-
-	repoPath, err := securejoin.SecureJoin(x.Config.Repo.ScanPath, relativeRepoPath)
-	if err != nil {
-		fail(xrpcerr.GenericError(err))
 		return
 	}
 

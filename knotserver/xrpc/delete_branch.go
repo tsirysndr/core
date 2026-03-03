@@ -8,7 +8,6 @@ import (
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/bluesky-social/indigo/xrpc"
-	securejoin "github.com/cyphar/filepath-securejoin"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/knotserver/git"
 	"tangled.org/core/rbac"
@@ -57,20 +56,24 @@ func (x *Xrpc) DeleteBranch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	repo := resp.Value.Val.(*tangled.Repo)
-	didPath, err := securejoin.SecureJoin(ident.DID.String(), repo.Name)
+	repoDid, err := x.Db.GetRepoDid(ident.DID.String(), repo.Name)
 	if err != nil {
-		fail(xrpcerr.GenericError(err))
+		fail(xrpcerr.RepoNotFoundError)
+		return
+	}
+	repoPath, _, _, err := x.Db.ResolveRepoDIDOnDisk(x.Config.Repo.ScanPath, repoDid)
+	if err != nil {
+		fail(xrpcerr.RepoNotFoundError)
 		return
 	}
 
-	if ok, err := x.Enforcer.IsPushAllowed(actorDid.String(), rbac.ThisServer, didPath); !ok || err != nil {
-		l.Error("insufficent permissions", "did", actorDid.String(), "repo", didPath)
+	if ok, err := x.Enforcer.IsPushAllowed(actorDid.String(), rbac.ThisServer, repoDid); !ok || err != nil {
+		l.Error("insufficent permissions", "did", actorDid.String(), "repo", repoDid)
 		writeError(w, xrpcerr.AccessControlError(actorDid.String()), http.StatusUnauthorized)
 		return
 	}
 
-	path, _ := securejoin.SecureJoin(x.Config.Repo.ScanPath, didPath)
-	gr, err := git.PlainOpen(path)
+	gr, err := git.PlainOpen(repoPath)
 	if err != nil {
 		fail(xrpcerr.GenericError(err))
 		return

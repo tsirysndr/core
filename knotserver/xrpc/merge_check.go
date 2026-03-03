@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 
-	securejoin "github.com/cyphar/filepath-securejoin"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/knotserver/git"
 	"tangled.org/core/patchutil"
@@ -34,15 +33,14 @@ func (x *Xrpc) MergeCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	relativeRepoPath, err := securejoin.SecureJoin(did, name)
+	repoDid, err := x.Db.GetRepoDid(did, name)
 	if err != nil {
-		fail(xrpcerr.GenericError(err))
+		fail(xrpcerr.RepoNotFoundError)
 		return
 	}
-
-	repoPath, err := securejoin.SecureJoin(x.Config.Repo.ScanPath, relativeRepoPath)
+	repoPath, _, _, err := x.Db.ResolveRepoDIDOnDisk(x.Config.Repo.ScanPath, repoDid)
 	if err != nil {
-		fail(xrpcerr.GenericError(err))
+		fail(xrpcerr.RepoNotFoundError)
 		return
 	}
 

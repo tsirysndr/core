@@ -5,12 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/bluesky-social/indigo/xrpc"
-	securejoin "github.com/cyphar/filepath-securejoin"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/rbac"
 	xrpcerr "tangled.org/core/xrpc/errors"
@@ -61,20 +59,24 @@ func (x *Xrpc) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	relativeRepoPath := filepath.Join(did, name)
-	isDeleteAllowed, err := x.Enforcer.IsRepoDeleteAllowed(actorDid.String(), rbac.ThisServer, relativeRepoPath)
+	repoDid, err := x.Db.GetRepoDid(did, name)
+	if err != nil {
+		fail(xrpcerr.RepoNotFoundError)
+		return
+	}
+	repoPath, _, _, err := x.Db.ResolveRepoDIDOnDisk(x.Config.Repo.ScanPath, repoDid)
+	if err != nil {
+		fail(xrpcerr.RepoNotFoundError)
+		return
+	}
+
+	isDeleteAllowed, err := x.Enforcer.IsRepoDeleteAllowed(actorDid.String(), rbac.ThisServer, repoDid)
 	if err != nil {
 		fail(xrpcerr.GenericError(err))
 		return
 	}
 	if !isDeleteAllowed {
 		fail(xrpcerr.AccessControlError(actorDid.String()))
-		return
-	}
-
-	repoPath, err := securejoin.SecureJoin(x.Config.Repo.ScanPath, relativeRepoPath)
-	if err != nil {
-		fail(xrpcerr.GenericError(err))
 		return
 	}
 
@@ -85,11 +87,15 @@ func (x *Xrpc) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = x.Enforcer.RemoveRepo(did, rbac.ThisServer, relativeRepoPath)
+	err = x.Enforcer.RemoveRepo(did, rbac.ThisServer, repoDid)
 	if err != nil {
 		l.Error("failed to delete repo from enforcer", "error", err.Error())
 		writeError(w, xrpcerr.GenericError(err), http.StatusInternalServerError)
 		return
+	}
+
+	if err := x.Db.DeleteRepoKey(repoDid); err != nil {
+		l.Error("failed to delete repo key", "error", err.Error())
 	}
 
 	w.WriteHeader(http.StatusOK)
