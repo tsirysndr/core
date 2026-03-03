@@ -10,13 +10,16 @@
       "record": {
         "type": "object",
         "required": [
-          "subject",
           "createdAt"
         ],
         "properties": {
           "subject": {
             "type": "string",
             "format": "at-uri"
+          },
+          "subjectDid": {
+            "type": "string",
+            "format": "did"
           },
           "createdAt": {
             "type": "string",

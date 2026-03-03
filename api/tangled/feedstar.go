@@ -17,7 +17,8 @@ func init() {
 } //
 // RECORDTYPE: FeedStar
 type FeedStar struct {
-	LexiconTypeID string `json:"$type,const=sh.tangled.feed.star" cborgen:"$type,const=sh.tangled.feed.star"`
-	CreatedAt     string `json:"createdAt" cborgen:"createdAt"`
-	Subject       string `json:"subject" cborgen:"subject"`
+	LexiconTypeID string  `json:"$type,const=sh.tangled.feed.star" cborgen:"$type,const=sh.tangled.feed.star"`
+	CreatedAt     string  `json:"createdAt" cborgen:"createdAt"`
+	Subject       *string `json:"subject,omitempty" cborgen:"subject,omitempty"`
+	SubjectDid    *string `json:"subjectDid,omitempty" cborgen:"subjectDid,omitempty"`
 }

@@ -8,6 +8,8 @@ import (
 	"tangled.org/core/workflow"
 )
 
+func sp(s string) *string { return &s }
+
 func TestBuildCloneStep_PushTrigger(t *testing.T) {
 	twf := tangled.Pipeline_Workflow{
 		Clone: &tangled.Pipeline_CloneOpts{
@@ -26,7 +28,7 @@ func TestBuildCloneStep_PushTrigger(t *testing.T) {
 		Repo: &tangled.Pipeline_TriggerRepo{
 			Knot: "example.com",
 			Did:  "did:plc:user123",
-			Repo: "my-repo",
+			Repo: sp("my-repo"),
 		},
 	}
 
@@ -85,7 +87,7 @@ func TestBuildCloneStep_PullRequestTrigger(t *testing.T) {
 		Repo: &tangled.Pipeline_TriggerRepo{
 			Knot: "example.com",
 			Did:  "did:plc:user123",
-			Repo: "my-repo",
+			Repo: sp("my-repo"),
 		},
 	}
 
@@ -112,7 +114,7 @@ func TestBuildCloneStep_ManualTrigger(t *testing.T) {
 		Repo: &tangled.Pipeline_TriggerRepo{
 			Knot: "example.com",
 			Did:  "did:plc:user123",
-			Repo: "my-repo",
+			Repo: sp("my-repo"),
 		},
 	}
 
@@ -143,7 +145,7 @@ func TestBuildCloneStep_SkipFlag(t *testing.T) {
 		Repo: &tangled.Pipeline_TriggerRepo{
 			Knot: "example.com",
 			Did:  "did:plc:user123",
-			Repo: "my-repo",
+			Repo: sp("my-repo"),
 		},
 	}
 
@@ -173,7 +175,7 @@ func TestBuildCloneStep_DevMode(t *testing.T) {
 		Repo: &tangled.Pipeline_TriggerRepo{
 			Knot: "localhost:3000",
 			Did:  "did:plc:user123",
-			Repo: "my-repo",
+			Repo: sp("my-repo"),
 		},
 	}
 
@@ -203,7 +205,7 @@ func TestBuildCloneStep_DepthAndSubmodules(t *testing.T) {
 		Repo: &tangled.Pipeline_TriggerRepo{
 			Knot: "example.com",
 			Did:  "did:plc:user123",
-			Repo: "my-repo",
+			Repo: sp("my-repo"),
 		},
 	}
 
@@ -234,7 +236,7 @@ func TestBuildCloneStep_DefaultDepth(t *testing.T) {
 		Repo: &tangled.Pipeline_TriggerRepo{
 			Knot: "example.com",
 			Did:  "did:plc:user123",
-			Repo: "my-repo",
+			Repo: sp("my-repo"),
 		},
 	}
 
@@ -259,7 +261,7 @@ func TestBuildCloneStep_NilPushData(t *testing.T) {
 		Repo: &tangled.Pipeline_TriggerRepo{
 			Knot: "example.com",
 			Did:  "did:plc:user123",
-			Repo: "my-repo",
+			Repo: sp("my-repo"),
 		},
 	}
 
@@ -292,7 +294,7 @@ func TestBuildCloneStep_NilPRData(t *testing.T) {
 		Repo: &tangled.Pipeline_TriggerRepo{
 			Knot: "example.com",
 			Did:  "did:plc:user123",
-			Repo: "my-repo",
+			Repo: sp("my-repo"),
 		},
 	}
 
@@ -321,7 +323,7 @@ func TestBuildCloneStep_UnknownTriggerKind(t *testing.T) {
 		Repo: &tangled.Pipeline_TriggerRepo{
 			Knot: "example.com",
 			Did:  "did:plc:user123",
-			Repo: "my-repo",
+			Repo: sp("my-repo"),
 		},
 	}
 
@@ -350,7 +352,7 @@ func TestBuildCloneStep_NilCloneOpts(t *testing.T) {
 		Repo: &tangled.Pipeline_TriggerRepo{
 			Knot: "example.com",
 			Did:  "did:plc:user123",
-			Repo: "my-repo",
+			Repo: sp("my-repo"),
 		},
 	}
 

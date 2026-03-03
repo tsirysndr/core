@@ -66,10 +66,12 @@ type Pipeline_TriggerMetadata struct {
 
 // Pipeline_TriggerRepo is a "triggerRepo" in the sh.tangled.pipeline schema.
 type Pipeline_TriggerRepo struct {
-	DefaultBranch string `json:"defaultBranch" cborgen:"defaultBranch"`
-	Did           string `json:"did" cborgen:"did"`
-	Knot          string `json:"knot" cborgen:"knot"`
-	Repo          string `json:"repo" cborgen:"repo"`
+	DefaultBranch string  `json:"defaultBranch" cborgen:"defaultBranch"`
+	Did           string  `json:"did" cborgen:"did"`
+	Knot          string  `json:"knot" cborgen:"knot"`
+	Repo          *string `json:"repo,omitempty" cborgen:"repo,omitempty"`
+	// repoDid: DID of the repo itself
+	RepoDid *string `json:"repoDid,omitempty" cborgen:"repoDid,omitempty"`
 }
 
 // Pipeline_Workflow is a "workflow" in the sh.tangled.pipeline schema.

@@ -66,7 +66,6 @@
       "required": [
         "knot",
         "did",
-        "repo",
         "defaultBranch"
       ],
       "properties": {
@@ -75,6 +74,11 @@
         },
         "did": {
           "type": "string",
+          "format": "did"
+        },
+        "repoDid": {
+          "type": "string",
+          "description": "DID of the repo itself",
           "format": "did"
         },
         "repo": {

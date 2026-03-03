@@ -65,13 +65,16 @@
     "target": {
       "type": "object",
       "required": [
-        "repo",
         "branch"
       ],
       "properties": {
         "repo": {
           "type": "string",
           "format": "at-uri"
+        },
+        "repoDid": {
+          "type": "string",
+          "format": "did"
         },
         "branch": {
           "type": "string"
@@ -96,6 +99,10 @@
         "repo": {
           "type": "string",
           "format": "at-uri"
+        },
+        "repoDid": {
+          "type": "string",
+          "format": "did"
         }
       }
     }

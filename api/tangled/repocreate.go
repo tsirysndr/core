@@ -18,17 +18,27 @@ const (
 type RepoCreate_Input struct {
 	// defaultBranch: Default branch to push to
 	DefaultBranch *string `json:"defaultBranch,omitempty" cborgen:"defaultBranch,omitempty"`
+	// name: Name of the repository
+	Name string `json:"name" cborgen:"name"`
+	// repoDid: Optional user-provided did:web to use as the repo identity instead of minting a did:plc.
+	RepoDid *string `json:"repoDid,omitempty" cborgen:"repoDid,omitempty"`
 	// rkey: Rkey of the repository record
 	Rkey string `json:"rkey" cborgen:"rkey"`
 	// source: A source URL to clone from, populate this when forking or importing a repository.
 	Source *string `json:"source,omitempty" cborgen:"source,omitempty"`
 }
 
+// RepoCreate_Output is the output of a sh.tangled.repo.create call.
+type RepoCreate_Output struct {
+	RepoDid *string `json:"repoDid,omitempty" cborgen:"repoDid,omitempty"`
+}
+
 // RepoCreate calls the XRPC method "sh.tangled.repo.create".
-func RepoCreate(ctx context.Context, c util.LexClient, input *RepoCreate_Input) error {
-	if err := c.LexDo(ctx, util.Procedure, "application/json", "sh.tangled.repo.create", nil, input, nil); err != nil {
-		return err
+func RepoCreate(ctx context.Context, c util.LexClient, input *RepoCreate_Input) (*RepoCreate_Output, error) {
+	var out RepoCreate_Output
+	if err := c.LexDo(ctx, util.Procedure, "application/json", "sh.tangled.repo.create", nil, input, &out); err != nil {
+		return nil, err
 	}
 
-	return nil
+	return &out, nil
 }

@@ -25,10 +25,12 @@ type GitRefUpdate struct {
 	NewSha string `json:"newSha" cborgen:"newSha"`
 	// oldSha: old SHA of this ref
 	OldSha string `json:"oldSha" cborgen:"oldSha"`
+	// ownerDid: did of the owner of the repo
+	OwnerDid *string `json:"ownerDid,omitempty" cborgen:"ownerDid,omitempty"`
 	// ref: Ref being updated
 	Ref string `json:"ref" cborgen:"ref"`
-	// repoDid: did of the owner of the repo
-	RepoDid string `json:"repoDid" cborgen:"repoDid"`
+	// repoDid: DID of the repo itself
+	RepoDid *string `json:"repoDid,omitempty" cborgen:"repoDid,omitempty"`
 	// repoName: name of the repo
 	RepoName string `json:"repoName" cborgen:"repoName"`
 }

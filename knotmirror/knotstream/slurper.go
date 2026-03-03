@@ -274,9 +274,13 @@ func (s *KnotSlurper) ProcessLegacyGitRefUpdate(ctx context.Context, source stri
 
 	l := s.logger.With("src", source)
 
-	curr, err := db.GetRepoByName(ctx, s.db, syntax.DID(evt.Event.RepoDid), evt.Event.RepoName)
+	repoDid := ""
+	if evt.Event.RepoDid != nil {
+		repoDid = *evt.Event.RepoDid
+	}
+	curr, err := db.GetRepoByName(ctx, s.db, syntax.DID(repoDid), evt.Event.RepoName)
 	if err != nil {
-		return fmt.Errorf("failed to get repo '%s': %w", evt.Event.RepoDid+"/"+evt.Event.RepoName, err)
+		return fmt.Errorf("failed to get repo '%s': %w", repoDid+"/"+evt.Event.RepoName, err)
 	}
 	if curr == nil {
 		// if repo doesn't exist in DB, just ignore the event. That repo is unknown.
@@ -286,7 +290,7 @@ func (s *KnotSlurper) ProcessLegacyGitRefUpdate(ctx context.Context, source stri
 		// But we want to store that in did/rkey in knot-mirror.
 		// Therefore, we should ignore when the repository is unknown.
 		// Hopefully crawler will sync it later.
-		l.Warn("skipping event from unknown repo", "did/name", evt.Event.RepoDid+"/"+evt.Event.RepoName)
+		l.Warn("skipping event from unknown repo", "did/name", repoDid+"/"+evt.Event.RepoName)
 		knotstreamEventsSkipped.Inc()
 		return nil
 	}

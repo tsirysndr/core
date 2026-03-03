@@ -22,6 +22,7 @@ type RepoIssue struct {
 	CreatedAt     string   `json:"createdAt" cborgen:"createdAt"`
 	Mentions      []string `json:"mentions,omitempty" cborgen:"mentions,omitempty"`
 	References    []string `json:"references,omitempty" cborgen:"references,omitempty"`
-	Repo          string   `json:"repo" cborgen:"repo"`
+	Repo          *string  `json:"repo,omitempty" cborgen:"repo,omitempty"`
+	RepoDid       *string  `json:"repoDid,omitempty" cborgen:"repoDid,omitempty"`
 	Title         string   `json:"title" cborgen:"title"`
 }

@@ -25,7 +25,8 @@ type RepoArtifact struct {
 	// name: name of the artifact
 	Name string `json:"name" cborgen:"name"`
 	// repo: repo that this artifact is being uploaded to
-	Repo string `json:"repo" cborgen:"repo"`
+	Repo    *string `json:"repo,omitempty" cborgen:"repo,omitempty"`
+	RepoDid *string `json:"repoDid,omitempty" cborgen:"repoDid,omitempty"`
 	// tag: hash of the tag object that this artifact is attached to (only annotated tags are supported)
 	Tag util.LexBytes `json:"tag,omitempty" cborgen:"tag,omitempty"`
 }

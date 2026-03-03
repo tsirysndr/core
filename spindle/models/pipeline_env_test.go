@@ -18,7 +18,7 @@ func TestPipelineEnvVars_PushBranch(t *testing.T) {
 		Repo: &tangled.Pipeline_TriggerRepo{
 			Knot:          "example.com",
 			Did:           "did:plc:user123",
-			Repo:          "my-repo",
+			Repo:          sp("my-repo"),
 			DefaultBranch: "main",
 		},
 	}
@@ -81,7 +81,7 @@ func TestPipelineEnvVars_PushTag(t *testing.T) {
 		Repo: &tangled.Pipeline_TriggerRepo{
 			Knot: "example.com",
 			Did:  "did:plc:user123",
-			Repo: "my-repo",
+			Repo: sp("my-repo"),
 		},
 	}
 	id := PipelineId{
@@ -113,7 +113,7 @@ func TestPipelineEnvVars_PullRequest(t *testing.T) {
 		Repo: &tangled.Pipeline_TriggerRepo{
 			Knot: "example.com",
 			Did:  "did:plc:user123",
-			Repo: "my-repo",
+			Repo: sp("my-repo"),
 		},
 	}
 	id := PipelineId{
@@ -168,7 +168,7 @@ func TestPipelineEnvVars_ManualWithInputs(t *testing.T) {
 		Repo: &tangled.Pipeline_TriggerRepo{
 			Knot: "example.com",
 			Did:  "did:plc:user123",
-			Repo: "my-repo",
+			Repo: sp("my-repo"),
 		},
 	}
 	id := PipelineId{
@@ -204,7 +204,7 @@ func TestPipelineEnvVars_DevMode(t *testing.T) {
 		Repo: &tangled.Pipeline_TriggerRepo{
 			Knot: "localhost:3000",
 			Did:  "did:plc:user123",
-			Repo: "my-repo",
+			Repo: sp("my-repo"),
 		},
 	}
 	id := PipelineId{
@@ -239,7 +239,7 @@ func TestPipelineEnvVars_NilPushData(t *testing.T) {
 		Repo: &tangled.Pipeline_TriggerRepo{
 			Knot: "example.com",
 			Did:  "did:plc:user123",
-			Repo: "my-repo",
+			Repo: sp("my-repo"),
 		},
 	}
 	id := PipelineId{

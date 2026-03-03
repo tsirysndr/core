@@ -26,6 +26,8 @@ type Repo struct {
 	Labels []string `json:"labels,omitempty" cborgen:"labels,omitempty"`
 	// name: name of the repo
 	Name string `json:"name" cborgen:"name"`
+	// repoDid: DID of the repo itself, if assigned
+	RepoDid *string `json:"repoDid,omitempty" cborgen:"repoDid,omitempty"`
 	// source: source of the repo
 	Source *string `json:"source,omitempty" cborgen:"source,omitempty"`
 	// spindle: CI runner to send jobs to and receive results from
