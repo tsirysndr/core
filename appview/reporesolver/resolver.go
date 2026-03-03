@@ -18,6 +18,12 @@ import (
 	"tangled.org/core/rbac"
 )
 
+var (
+	blobPattern     = regexp.MustCompile(`blob/[^/]+/(.*)$`)
+	treePattern     = regexp.MustCompile(`tree/[^/]+/(.*)$`)
+	pathAfterRefRE  = regexp.MustCompile(`(?:blob|tree|raw)/[^/]+/(.*)$`)
+)
+
 type RepoResolver struct {
 	config   *config.Config
 	enforcer *rbac.Enforcer
@@ -140,12 +146,10 @@ func (rr *RepoResolver) GetRepoInfo(r *http.Request, user *oauth.MultiAccountUse
 func extractCurrentDir(fullPath string) string {
 	fullPath = strings.TrimPrefix(fullPath, "/")
 
-	blobPattern := regexp.MustCompile(`blob/[^/]+/(.*)$`)
 	if matches := blobPattern.FindStringSubmatch(fullPath); len(matches) > 1 {
 		return path.Dir(matches[1])
 	}
 
-	treePattern := regexp.MustCompile(`tree/[^/]+/(.*)$`)
 	if matches := treePattern.FindStringSubmatch(fullPath); len(matches) > 1 {
 		dir := strings.TrimSuffix(matches[1], "/")
 		if dir == "" {
@@ -164,13 +168,9 @@ func extractCurrentDir(fullPath string) string {
 func extractPathAfterRef(fullPath string) string {
 	fullPath = strings.TrimPrefix(fullPath, "/")
 
-	// match blob/, tree/, or raw/ followed by any ref and then a slash
-	//
-	// captures everything after the final slash
-	pattern := `(?:blob|tree|raw)/[^/]+/(.*)$`
-
-	re := regexp.MustCompile(pattern)
-	matches := re.FindStringSubmatch(fullPath)
+	// pathAfterRefRE matches blob/, tree/, or raw/ followed by any ref and then a slash;
+	// it captures everything after the final slash.
+	matches := pathAfterRefRE.FindStringSubmatch(fullPath)
 
 	if len(matches) > 1 {
 		return matches[1]
