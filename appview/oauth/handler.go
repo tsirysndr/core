@@ -130,7 +130,7 @@ func (o *OAuth) addToDefaultSpindle(did string) {
 	}
 
 	l.Debug("adding to default spindle")
-	session, err := CreateAppPasswordSession(o.IdResolver, o.Config.Core.AppPassword, consts.TangledDid)
+	session, err := CreateAppPasswordSession(o.IdResolver, o.Config.Core.AppPassword, consts.TangledDid, o.Config.Core.RateLimitBypass)
 	if err != nil {
 		l.Error("failed to create session", "err", err)
 		return
@@ -169,7 +169,7 @@ func (o *OAuth) addToDefaultKnot(did string) {
 	}
 
 	l.Debug("adding to default knot")
-	session, err := CreateAppPasswordSession(o.IdResolver, o.Config.Core.AppPassword, consts.TangledDid)
+	session, err := CreateAppPasswordSession(o.IdResolver, o.Config.Core.AppPassword, consts.TangledDid, o.Config.Core.RateLimitBypass)
 	if err != nil {
 		l.Error("failed to create session", "err", err)
 		return
@@ -244,12 +244,13 @@ func (o *OAuth) ensureTangledProfile(sessData *oauth.ClientSessionData) {
 
 // create a AppPasswordSession using apppasswords
 type AppPasswordSession struct {
-	AccessJwt   string `json:"accessJwt"`
-	PdsEndpoint string
-	Did         string
+	AccessJwt       string `json:"accessJwt"`
+	PdsEndpoint     string
+	Did             string
+	RateLimitBypass string
 }
 
-func CreateAppPasswordSession(res *idresolver.Resolver, appPassword, did string) (*AppPasswordSession, error) {
+func CreateAppPasswordSession(res *idresolver.Resolver, appPassword, did, rateLimitBypass string) (*AppPasswordSession, error) {
 	if appPassword == "" {
 		return nil, fmt.Errorf("no app password configured")
 	}
@@ -279,6 +280,9 @@ func CreateAppPasswordSession(res *idresolver.Resolver, appPassword, did string)
 		return nil, fmt.Errorf("failed to create session request: %v", err)
 	}
 	sessionReq.Header.Set("Content-Type", "application/json")
+	if rateLimitBypass != "" {
+		sessionReq.Header.Set("x-ratelimit-bypass", rateLimitBypass)
+	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	sessionResp, err := client.Do(sessionReq)
@@ -298,6 +302,7 @@ func CreateAppPasswordSession(res *idresolver.Resolver, appPassword, did string)
 
 	session.PdsEndpoint = pdsEndpoint
 	session.Did = did
+	session.RateLimitBypass = rateLimitBypass
 
 	return &session, nil
 }
@@ -328,6 +333,9 @@ func (s *AppPasswordSession) putRecord(record any, collection string) error {
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+s.AccessJwt)
+	if s.RateLimitBypass != "" {
+		req.Header.Set("x-ratelimit-bypass", s.RateLimitBypass)
+	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
