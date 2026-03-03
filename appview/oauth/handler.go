@@ -137,7 +137,7 @@ func (o *OAuth) addToDefaultSpindle(did string) {
 	}
 
 	record := tangled.SpindleMember{
-		LexiconTypeID: "sh.tangled.spindle.member",
+		LexiconTypeID: tangled.SpindleMemberNSID,
 		Subject:       did,
 		Instance:      consts.DefaultSpindle,
 		CreatedAt:     time.Now().Format(time.RFC3339),
@@ -169,14 +169,14 @@ func (o *OAuth) addToDefaultKnot(did string) {
 	}
 
 	l.Debug("adding to default knot")
-	session, err := CreateAppPasswordSession(o.IdResolver, o.Config.Core.TmpAltAppPassword, consts.IcyDid)
+	session, err := CreateAppPasswordSession(o.IdResolver, o.Config.Core.AppPassword, consts.TangledDid)
 	if err != nil {
 		l.Error("failed to create session", "err", err)
 		return
 	}
 
 	record := tangled.KnotMember{
-		LexiconTypeID: "sh.tangled.knot.member",
+		LexiconTypeID: tangled.KnotMemberNSID,
 		Subject:       did,
 		Domain:        consts.DefaultKnot,
 		CreatedAt:     time.Now().Format(time.RFC3339),

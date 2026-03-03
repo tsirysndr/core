@@ -116,6 +116,7 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 			tangled.PublicKeyNSID,
 			tangled.RepoArtifactNSID,
 			tangled.ActorProfileNSID,
+			tangled.KnotMemberNSID,
 			tangled.SpindleMemberNSID,
 			tangled.SpindleNSID,
 			tangled.StringNSID,

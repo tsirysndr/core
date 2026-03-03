@@ -401,7 +401,7 @@ func (i *Ingester) ingestSpindleMember(ctx context.Context, e *jmodels.Event) er
 
 		ddb, ok := i.Db.Execer.(*db.DB)
 		if !ok {
-			return fmt.Errorf("failed to index profile record, invalid db cast")
+			return fmt.Errorf("invalid db cast")
 		}
 
 		err = db.AddSpindleMember(ddb, models.SpindleMember{
