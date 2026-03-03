@@ -235,6 +235,9 @@ schema = 3
   [mod."github.com/dgryski/go-rendezvous"]
     version = "v0.0.0-20200823014737-9f7001d12a5f"
     hash = "sha256-n/7xo5CQqo4yLaWMSzSN1Muk/oqK6O5dgDOFWapeDUI="
+  [mod."github.com/did-method-plc/go-didplc"]
+    version = "v0.0.0-20250716171643-635da8b4e038"
+    hash = "sha256-o0uB/5tryjdB44ssALFr49PtfY3nRJnEENmE187md1w="
   [mod."github.com/distribution/reference"]
     version = "v0.6.0"
     hash = "sha256-gr4tL+qz4jKyAtl8LINcxMSanztdt+pybj1T+2ulQv4="
