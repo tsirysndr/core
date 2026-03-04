@@ -1,0 +1,24 @@
+{{ define "title" }}stars · {{ .RepoInfo.FullName }}{{ end }}
+  {{ define "repoContent" }}
+  <div class="flex flex-col gap-4">
+    <h2 class="text-sm uppercase font-bold">Starred by</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {{ range .Starrers }}
+        {{ $handle := resolve .Did }}
+        <div class="border border-gray-200 dark:border-gray-700 rounded p-4">
+          <div class="flex items-center gap-3">
+            {{ template "user/fragments/picLink" (list .Did "size-10") }}
+            <div class="flex-1 min-w-0">
+              <a href="/{{ $handle }}" class="block truncate">{{ $handle }}</a>
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                starred {{ .Created | relTimeFmt }}
+              </p>
+            </div>
+          </div>
+        </div>
+      {{ else }}
+        <p class="text-gray-500 dark:text-gray-400 col-span-3">No stars yet.</p>
+      {{ end }}
+    </div>
+  </div>
+{{ end }}

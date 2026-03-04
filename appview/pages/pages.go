@@ -757,6 +757,7 @@ type StarBtnFragmentParams struct {
 	IsStarred bool
 	SubjectAt syntax.ATURI
 	StarCount int
+	RepoName  string
 	HxSwapOob bool
 }
 
@@ -1481,6 +1482,18 @@ type EditLabelPanelParams struct {
 
 func (p *Pages) EditLabelPanel(w io.Writer, params EditLabelPanelParams) error {
 	return p.executePlain("repo/fragments/editLabelPanel", w, params)
+}
+
+type RepoStarsParams struct {
+	LoggedInUser *oauth.MultiAccountUser
+	RepoInfo     repoinfo.RepoInfo
+	Active       string
+	Starrers     []models.Star
+}
+
+func (p *Pages) RepoStars(w io.Writer, params RepoStarsParams) error {
+	params.Active = "overview"
+	return p.executeRepo("repo/stars", w, params)
 }
 
 type PipelinesParams struct {

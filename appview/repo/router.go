@@ -47,6 +47,8 @@ func (rp *Repo) Router(mw *middleware.Middleware) http.Handler {
 	// a file path
 	r.Get("/archive/{ref}", rp.DownloadArchive)
 
+	r.Get("/stars", rp.Stars)
+
 	r.Route("/fork", func(r chi.Router) {
 		r.Use(middleware.AuthMiddleware(rp.oauth))
 		r.Get("/", rp.ForkRepo)

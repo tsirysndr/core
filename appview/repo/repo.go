@@ -1257,6 +1257,29 @@ func (rp *Repo) ForkRepo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (rp *Repo) Stars(w http.ResponseWriter, r *http.Request) {
+	l := rp.logger.With("handler", "Stars")
+
+	user := rp.oauth.GetMultiAccountUser(r)
+	f, err := rp.repoResolver.Resolve(r)
+	if err != nil {
+		l.Error("failed to resolve source repo", "err", err)
+		return
+	}
+
+	starrers, err := db.GetStars(rp.db, f.RepoAt())
+	if err != nil {
+		l.Error("failed to fetch starrers", "err", err, "repoAt", f.RepoAt())
+		return
+	}
+
+	rp.pages.RepoStars(w, pages.RepoStarsParams{
+		LoggedInUser: user,
+		RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
+		Starrers:     starrers,
+	})
+}
+
 // this is used to rollback changes made to the PDS
 //
 // it is a no-op if the provided ATURI is empty

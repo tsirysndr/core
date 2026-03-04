@@ -37,6 +37,8 @@ func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	repoName := r.URL.Query().Get("repoName")
+
 	switch r.Method {
 	case http.MethodPost:
 		createdAt := time.Now().Format(time.RFC3339)
@@ -87,6 +89,7 @@ func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 			IsStarred: true,
 			SubjectAt: subjectUri,
 			StarCount: starCount,
+			RepoName:  repoName,
 		})
 
 		return
@@ -127,9 +130,11 @@ func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 			IsStarred: false,
 			SubjectAt: subjectUri,
 			StarCount: starCount,
+			RepoName:  repoName,
 		})
 
 		return
 	}
 
 }
+
