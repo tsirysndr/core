@@ -115,7 +115,8 @@
     {{ template "fragments/starBtn"
       (dict "SubjectAt" .RepoInfo.RepoAt
             "IsStarred" .RepoInfo.IsStarred
-            "StarCount" .RepoInfo.Stats.StarCount) }}
+            "StarCount" .RepoInfo.Stats.StarCount
+            "RepoName" .RepoInfo.Name) }}
     <a
       class="btn text-sm no-underline hover:no-underline flex items-center gap-2 group"
       hx-boost="true"

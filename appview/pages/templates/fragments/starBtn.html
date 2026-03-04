@@ -1,27 +1,42 @@
 {{ define "fragments/starBtn" }}
     {{/* NOTE: this fragment is always replaced with hx-swap-oob */}}
-    <button
+    <div
         id="starBtn"
-        class="btn disabled:opacity-50 disabled:cursor-not-allowed flex gap-2 items-center group"
+        class="flex w-full min-h-[30px] items-stretch overflow-hidden rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm"
         data-star-subject-at="{{ .SubjectAt }}"
-        {{ if .IsStarred }}
-            hx-delete="/star?subject={{ .SubjectAt }}&countHint={{ .StarCount }}"
-        {{ else }}
-            hx-post="/star?subject={{ .SubjectAt }}&countHint={{ .StarCount }}"
-        {{ end }}
         {{ if .HxSwapOob }}hx-swap-oob='outerHTML:#starBtn[data-star-subject-at="{{ .SubjectAt }}"]'{{ end }}
-
-        hx-trigger="click"
-        hx-disabled-elt="#starBtn"
     >
-        {{ if .IsStarred }}
-            {{ i "star" "w-4 h-4 fill-current inline group-[.htmx-request]:hidden" }}
+        <button
+            class="flex flex-1 justify-center gap-2 items-center px-2 group disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700"
+            {{ if .IsStarred }}
+                hx-delete="/star?subject={{ .SubjectAt }}&countHint={{ .StarCount }}&repoName={{ .RepoName }}"
+            {{ else }}
+                hx-post="/star?subject={{ .SubjectAt }}&countHint={{ .StarCount }}&repoName={{ .RepoName }}"
+            {{ end }}
+            hx-trigger="click"
+            hx-disabled-elt="this"
+        >
+            {{ if .IsStarred }}
+                {{ i "star" "w-4 h-4 fill-current inline group-[.htmx-request]:hidden" }}
+            {{ else }}
+                {{ i "star" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
+            {{ end }}
+            {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+            <span class="text-sm md:hidden group-[.htmx-request]:hidden">{{ if .IsStarred }}unstar{{ else }}star{{ end }}</span>
+        </button>
+        {{ if .RepoName }}
+            {{ $did := .SubjectAt.Authority | string }}
+            <a
+                href="/{{ resolve $did }}/{{ .RepoName }}/stars"
+                class="flex items-center px-2 text-sm no-underline hover:no-underline border-l border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
+                title="Starred by"
+            >
+                {{ .StarCount }}
+            </a>
         {{ else }}
-            {{ i "star" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
+            <span class="flex items-center px-2 text-sm border-l border-gray-200 dark:border-gray-700">
+                {{ .StarCount }}
+            </span>
         {{ end }}
-        {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-        <span class="text-sm">
-            {{ .StarCount }}
-        </span>
-    </button>
+    </div>
 {{ end }}
