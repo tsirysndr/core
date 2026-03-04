@@ -51,6 +51,37 @@ func GetStar(e Execer, did string, subjectAt syntax.ATURI) (*models.Star, error)
 	return &star, nil
 }
 
+func GetStars(e Execer, subjectAt syntax.ATURI) ([]models.Star, error) {
+	query := `
+	select did, subject_at, created, rkey
+	from stars
+	where subject_at = ?
+	order by created desc
+    `
+	rows, err := e.Query(query, subjectAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stars []models.Star
+	for rows.Next() {
+		var star models.Star
+		var created string
+		if err := rows.Scan(&star.Did, &star.RepoAt, &created, &star.Rkey); err != nil {
+			return nil, err
+		}
+
+		star.Created = time.Now()
+		if t, err := time.Parse(time.RFC3339, created); err == nil {
+			star.Created = t
+		}
+		stars = append(stars, star)
+	}
+
+	return stars, rows.Err()
+}
+
 // Remove a star
 func DeleteStar(e Execer, did string, subjectAt syntax.ATURI) error {
 	_, err := e.Exec(`delete from stars where did = ? and subject_at = ?`, did, subjectAt)
