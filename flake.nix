@@ -218,6 +218,7 @@
         type = "app";
         program = toString (pkgs.writeShellScript "watch-appview" ''
           echo "copying static files to appview/pages/static..."
+          mkdir -p appview/pages/static
           ${pkgs.coreutils}/bin/cp -fr --no-preserve=ownership ${packages'.appview-static-files}/* appview/pages/static
           ${air-watcher "appview" ""}/bin/run
         '');
