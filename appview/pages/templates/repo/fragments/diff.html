@@ -11,6 +11,7 @@
   {{ template "diffTopbar" . }}
   {{ block "diffLayout" . }} {{ end }}
   {{ template "fragments/resizable" }}
+  {{ template "activeFileHighlight" }}
 {{ end }}
 
 {{ define "diffTopbar" }}
@@ -226,6 +227,51 @@
           }
         });
       });
+    });
+  </script>
+{{ end }}
+
+{{ define "activeFileHighlight" }}
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const diffFiles = document.querySelectorAll('details[id^="file-"]');
+      const filetreeLinks = document.querySelectorAll('.filetree-link');
+      if (diffFiles.length === 0 || filetreeLinks.length === 0) return;
+
+      const linkMap = new Map();
+      filetreeLinks.forEach(link => {
+        const path = link.getAttribute('data-path');
+        if (path) linkMap.set('file-' + path, link);
+      });
+
+      let currentActive = null;
+      function setActive(link) {
+        if (link && link !== currentActive) {
+          if (currentActive) currentActive.classList.remove('font-bold');
+          link.classList.add('font-bold');
+          currentActive = link;
+        }
+      }
+
+      filetreeLinks.forEach(link => {
+        link.addEventListener('click', () => setActive(link));
+      });
+
+      const topbar = document.querySelector('.sticky.top-0.z-30');
+      const headerHeight = topbar ? topbar.offsetHeight : 0;
+
+      function updateActiveFile() {
+        for (const file of diffFiles) {
+          const rect = file.getBoundingClientRect();
+          if (rect.top <= headerHeight && rect.bottom > headerHeight) {
+            setActive(linkMap.get(file.id));
+            return;
+          }
+        }
+      }
+
+      document.addEventListener('scroll', updateActiveFile);
+      updateActiveFile();
     });
   </script>
 {{ end }}
