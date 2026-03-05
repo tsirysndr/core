@@ -59,7 +59,7 @@
 {{ block "mainLayout" . }}
   <div class="flex-grow relative">
     <div
-      class="absolute opacity-50 dark:opacity-5 inset-x-0 top-0 bottom-[-50px] md:bottom-[-150px] pointer-events-none bg-[url('https://assets.tangled.network/yarn_ball.svg')] bg-no-repeat bg-right-bottom bg-[length:500px] md:bg-[length:1000px] w-full">
+      class="absolute opacity-50 dark:opacity-5 inset-x-0 top-0 bottom-[-50px] md:bottom-[-150px] pointer-events-none bg-[url('https://assets.tangled.network/yarn_ball.svg')] bg-no-repeat bg-right-bottom w-full">
     </div>
     <div class="max-w-screen-xl mx-auto flex flex-col gap-4 relative z-10">
       {{ block "contentLayout" . }}
@@ -143,7 +143,7 @@
     {{ $imgContentStyle := "w-full overflow-hidden place-content-center bg-gradient-to-b from-slate-50 to-slate-100 dark:from-gray-800 dark:to-gray-900 border-t border-gray-200 dark:border-gray-700" }}
     {{ $linkDesktopStyle := "hover:no-underline items-center gap-2 p-3 text-base btn" }}
 
-    <div class="col-span-3 {{ $contentStyle }} peer-checked/prs:grid relative">
+    <div class="col-span-3 {{ $contentStyle }} peer-checked/prs:grid">
       <div class="{{ $textContentStyle }} flex gap-4 md:gap-8">
         <section class="space-y-4">
           <h1 class="{{ $titleStyle }}">Pull requests, reimagined</h1>
@@ -152,7 +152,7 @@
           requests on top of each other and ship faster with round-based code
           reviews. Tangled natively supports stacking using Jujutsu.
           </p>
-          <a href="https://blog.tangled.org/stacking" class="hover:no-underline inline-flex md:hidden items-center gap-2 text-sm text-black dark:text-white font-medium">
+          <a href="https://blog.tangled.org/stacking" class="hover:no-underline inline-flex items-center gap-2 text-sm md:text-base text-black dark:text-white font-medium">
             Learn more
             {{ i "arrow-right" "size-4" }}
           </a>
@@ -174,13 +174,9 @@
           </picture>
         </div>
       </div>
-      <a href="https://blog.tangled.org/stacking" class="hover:no-underline hidden md:inline-flex absolute -bottom-6 -right-12 items-center gap-2 p-3 text-base btn">
-        Learn more
-        {{ i "arrow-right" "size-4" }}
-      </a>
     </div>
 
-    <div class="col-span-3 {{ $contentStyle }} peer-checked/knots:grid relative">
+    <div class="col-span-3 {{ $contentStyle }} peer-checked/knots:grid">
       <div class="{{ $textContentStyle }} flex place-content-between gap-4 md:gap-8">
         <section class="space-y-4">
           <h1 class="{{ $titleStyle }}">Run it at home</h1>
@@ -190,7 +186,7 @@
             <br>
             Don't want to self-host? All are welcome on our hosted instances.
           </p>
-          <a href="https://docs.tangled.org/knot-self-hosting-guide.html#knot-self-hosting-guide" class="hover:no-underline inline-flex md:hidden items-center gap-2 text-sm text-black dark:text-white font-medium">
+          <a href="https://docs.tangled.org/knot-self-hosting-guide.html#knot-self-hosting-guide" class="hover:no-underline inline-flex items-center gap-2 text-sm md:text-base text-black dark:text-white font-medium">
             Learn more
             {{ i "arrow-right" "size-4" }}
           </a>
@@ -212,13 +208,9 @@
           </picture>
         </div>
       </div>
-      <a href="https://docs.tangled.org/knot-self-hosting-guide.html#knot-self-hosting-guide" class="hover:no-underline hidden md:inline-flex absolute -bottom-6 -right-12 items-center gap-2 p-3 text-base btn">
-        Learn more
-        {{ i "arrow-right" "size-4" }}
-      </a>
     </div>
 
-    <div class="col-span-3 {{ $contentStyle }} peer-checked/spindles:grid relative">
+    <div class="col-span-3 {{ $contentStyle }} peer-checked/spindles:grid">
       <div class="{{ $textContentStyle }} flex place-content-between gap-4 md:gap-8">
         <section class="space-y-4">
           <h1 class="{{ $titleStyle }}">Nix-powered CI</h1>
@@ -230,7 +222,7 @@
             <br>
             Support for Docker and MicroVM based runners coming soon!
           </p>
-          <a href="https://docs.tangled.org/spindles.html#pipelines" class="hover:no-underline inline-flex md:hidden items-center gap-2 text-sm text-black dark:text-white font-medium">
+          <a href="https://docs.tangled.org/spindles.html#pipelines" class="hover:no-underline inline-flex items-center gap-2 text-sm md:text-base text-black dark:text-white font-medium">
             Learn more
             {{ i "arrow-right" "size-4" }}
           </a>
@@ -252,10 +244,6 @@
           </picture>
         </div>
       </div>
-      <a href="https://docs.tangled.org/spindles.html#pipelines" class="hover:no-underline hidden md:inline-flex absolute -bottom-6 -right-12 items-center gap-2 p-3 text-base btn">
-        Learn more
-        {{ i "arrow-right" "size-4" }}
-      </a>
     </div>
   </div>
 
