@@ -104,7 +104,7 @@ func New(config *config.Config, ph posthog.Client, db *db.DB, enforcer *rbac.Enf
 func (o *OAuth) SaveSession(w http.ResponseWriter, r *http.Request, sessData *oauth.ClientSessionData) error {
 	userSession, err := o.SessStore.Get(r, SessionName)
 	if err != nil {
-		return err
+		o.Logger.Warn("failed to decode existing session cookie, will create new", "err", err)
 	}
 
 	userSession.Values[SessionDid] = sessData.AccountDID.String()

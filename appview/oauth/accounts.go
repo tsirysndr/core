@@ -63,7 +63,7 @@ func (o *OAuth) GetAccounts(r *http.Request) *AccountRegistry {
 func (o *OAuth) SaveAccounts(w http.ResponseWriter, r *http.Request, registry *AccountRegistry) error {
 	session, err := o.SessStore.Get(r, AccountsName)
 	if err != nil {
-		return err
+		o.Logger.Warn("failed to decode existing accounts cookie, will create new", "err", err)
 	}
 
 	data, err := json.Marshal(registry)
