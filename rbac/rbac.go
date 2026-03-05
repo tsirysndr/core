@@ -34,7 +34,7 @@ m = r.act == p.act && r.dom == p.dom && r.obj == p.obj && g(r.sub, p.sub, r.dom)
 )
 
 type Enforcer struct {
-	E *casbin.Enforcer
+	E *casbin.SyncedEnforcer
 }
 
 func NewEnforcer(path string) (*Enforcer, error) {
@@ -53,7 +53,7 @@ func NewEnforcer(path string) (*Enforcer, error) {
 		return nil, err
 	}
 
-	e, err := casbin.NewEnforcer(m, a)
+	e, err := casbin.NewSyncedEnforcer(m, a)
 	if err != nil {
 		return nil, err
 	}

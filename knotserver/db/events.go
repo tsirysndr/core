@@ -1,10 +1,12 @@
 package db
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"tangled.org/core/notifier"
+	"tangled.org/core/tid"
 )
 
 type Event struct {
@@ -27,6 +29,26 @@ func (d *DB) InsertEvent(event Event, notifier *notifier.Notifier) error {
 	notifier.NotifyAll()
 
 	return err
+}
+
+func (d *DB) EmitDIDAssign(n *notifier.Notifier, ownerDid, repoName, repoDid, oldRepoAt string) error {
+	payload := RepoDIDAssign{
+		OwnerDid:  ownerDid,
+		RepoName:  repoName,
+		RepoDid:   repoDid,
+		OldRepoAt: oldRepoAt,
+	}
+
+	eventJson, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal didAssign event: %w", err)
+	}
+
+	return d.InsertEvent(Event{
+		Rkey:      tid.TID(),
+		Nsid:      RepoDIDAssignNSID,
+		EventJson: string(eventJson),
+	}, n)
 }
 
 func (d *DB) GetEvents(cursor int64) ([]Event, error) {

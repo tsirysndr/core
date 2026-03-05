@@ -23,7 +23,7 @@ func setup(t *testing.T) *rbac.Enforcer {
 	m, err := model.NewModelFromString(rbac.Model)
 	assert.NoError(t, err)
 
-	e, err := casbin.NewEnforcer(m, a)
+	e, err := casbin.NewSyncedEnforcer(m, a)
 	assert.NoError(t, err)
 
 	e.EnableAutoSave(false)

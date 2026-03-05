@@ -20,6 +20,7 @@ import (
 	"tangled.org/core/appview/sites"
 	ec "tangled.org/core/eventconsumer"
 	"tangled.org/core/eventconsumer/cursor"
+	knotdb "tangled.org/core/knotserver/db"
 	"tangled.org/core/log"
 	"tangled.org/core/orm"
 	"tangled.org/core/rbac"
@@ -88,6 +89,8 @@ func knotIngester(d *db.DB, enforcer *rbac.Enforcer, posthog posthog.Client, not
 			return ingestRefUpdate(ctx, d, enforcer, posthog, notifier, dev, c, cfClient, source, msg)
 		case tangled.PipelineNSID:
 			return ingestPipeline(d, source, msg)
+		case knotdb.RepoDIDAssignNSID:
+			return ingestDIDAssign(d, enforcer, source, msg, ctx)
 		}
 
 		return nil
@@ -372,6 +375,93 @@ func ingestPipeline(d *db.DB, source ec.Source, msg ec.Message) error {
 	if err != nil {
 		return fmt.Errorf("failed to commit txn: %w", err)
 	}
+
+	return nil
+}
+
+func ingestDIDAssign(d *db.DB, enforcer *rbac.Enforcer, source ec.Source, msg ec.Message, ctx context.Context) error {
+	logger := log.FromContext(ctx)
+
+	var record knotdb.RepoDIDAssign
+	if err := json.Unmarshal(msg.EventJson, &record); err != nil {
+		return fmt.Errorf("unmarshal didAssign: %w", err)
+	}
+
+	if record.RepoDid == "" || record.OwnerDid == "" || record.RepoName == "" {
+		return fmt.Errorf("didAssign missing required fields: repoDid=%q ownerDid=%q repoName=%q",
+			record.RepoDid, record.OwnerDid, record.RepoName)
+	}
+
+	logger.Info("processing didAssign event",
+		"repo_did", record.RepoDid,
+		"owner_did", record.OwnerDid,
+		"repo_name", record.RepoName)
+
+	repos, err := db.GetRepos(d,
+		orm.FilterEq("did", record.OwnerDid),
+		orm.FilterEq("name", record.RepoName),
+	)
+	if err != nil || len(repos) == 0 {
+		logger.Warn("didAssign for unknown repo, skipping",
+			"owner_did", record.OwnerDid,
+			"repo_name", record.RepoName)
+		return nil
+	}
+	repo := repos[0]
+	knot := source.Key()
+
+	if repo.Knot != knot {
+		return fmt.Errorf("didAssign from %s for repo hosted on %s, rejecting", knot, repo.Knot)
+	}
+
+	repoAtUri := repo.RepoAt().String()
+	legacyResource := record.OwnerDid + "/" + record.RepoName
+
+	if repo.RepoDid != record.RepoDid {
+		tx, err := d.Begin()
+		if err != nil {
+			return fmt.Errorf("begin didAssign txn: %w", err)
+		}
+		defer tx.Rollback()
+
+		if err := db.CascadeRepoDid(tx, repoAtUri, record.RepoDid); err != nil {
+			return fmt.Errorf("cascade repo_did: %w", err)
+		}
+
+		if err := db.EnqueuePdsRewritesForRepo(tx, record.RepoDid, repoAtUri); err != nil {
+			return fmt.Errorf("enqueue pds rewrites: %w", err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit didAssign txn: %w", err)
+		}
+	}
+
+	if err := enforcer.RemoveRepo(record.OwnerDid, knot, legacyResource); err != nil {
+		return fmt.Errorf("remove legacy RBAC policies for %s: %w", legacyResource, err)
+	}
+	if err := enforcer.AddRepo(record.OwnerDid, knot, record.RepoDid); err != nil {
+		return fmt.Errorf("add RBAC policies for %s: %w", record.RepoDid, err)
+	}
+
+	collabs, collabErr := db.GetCollaborators(d, orm.FilterEq("repo_at", repoAtUri))
+	if collabErr != nil {
+		return fmt.Errorf("get collaborators for RBAC update: %w", collabErr)
+	}
+	for _, c := range collabs {
+		collabDid := c.SubjectDid.String()
+		if err := enforcer.RemoveCollaborator(collabDid, knot, legacyResource); err != nil {
+			return fmt.Errorf("remove collaborator RBAC for %s: %w", collabDid, err)
+		}
+		if err := enforcer.AddCollaborator(collabDid, knot, record.RepoDid); err != nil {
+			return fmt.Errorf("add collaborator RBAC for %s: %w", collabDid, err)
+		}
+	}
+
+	logger.Info("didAssign processed successfully",
+		"repo_did", record.RepoDid,
+		"owner_did", record.OwnerDid,
+		"repo_name", record.RepoName)
 
 	return nil
 }

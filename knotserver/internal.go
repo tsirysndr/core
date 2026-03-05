@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
+	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -124,20 +126,33 @@ func (h *InternalHandle) Guard(w http.ResponseWriter, r *http.Request) {
 		ownerDid := repoOwnerIdent.DID.String()
 		repoName := components[1]
 		repoDid, didErr := h.db.GetRepoDid(ownerDid, repoName)
-		if didErr != nil {
-			w.WriteHeader(http.StatusNotFound)
-			l.Error("repo DID not found", "owner", ownerDid, "name", repoName, "err", didErr)
-			fmt.Fprintln(w, "repo not found")
-			return
+		var repoPath string
+		if didErr == nil {
+			var lookupErr error
+			repoPath, _, _, lookupErr = h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
+			if lookupErr != nil {
+				w.WriteHeader(http.StatusNotFound)
+				l.Error("repo not found on disk", "repoDid", repoDid, "err", lookupErr)
+				fmt.Fprintln(w, "repo not found")
+				return
+			}
+			rbacResource = repoDid
+		} else {
+			legacyPath, joinErr := securejoin.SecureJoin(h.c.Repo.ScanPath, filepath.Join(ownerDid, repoName))
+			if joinErr != nil {
+				w.WriteHeader(http.StatusNotFound)
+				fmt.Fprintln(w, "repo not found")
+				return
+			}
+			if _, statErr := os.Stat(legacyPath); statErr != nil {
+				w.WriteHeader(http.StatusNotFound)
+				l.Error("repo not found on disk (legacy)", "owner", ownerDid, "name", repoName)
+				fmt.Fprintln(w, "repo not found")
+				return
+			}
+			repoPath = legacyPath
+			rbacResource = ownerDid + "/" + repoName
 		}
-		repoPath, _, _, lookupErr := h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
-		if lookupErr != nil {
-			w.WriteHeader(http.StatusNotFound)
-			l.Error("repo not found on disk", "repoDid", repoDid, "err", lookupErr)
-			fmt.Fprintln(w, "repo not found")
-			return
-		}
-		rbacResource = repoDid
 		rel, relErr := filepath.Rel(h.c.Repo.ScanPath, repoPath)
 		if relErr != nil {
 			w.WriteHeader(http.StatusInternalServerError)

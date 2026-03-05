@@ -56,9 +56,8 @@ func (h *Knot) Events(w http.ResponseWriter, r *http.Request) {
 		cursor = defaultCursor
 	}
 
-	// complete backfill first before going to live data
 	l.Debug("going through backfill", "cursor", cursor)
-	if err := h.streamOps(conn, &cursor); err != nil {
+	if err := h.drainBackfill(conn, &cursor, 10_000); err != nil {
 		l.Error("failed to backfill", "err", err)
 		return
 	}
@@ -81,9 +80,8 @@ func (h *Knot) Events(w http.ResponseWriter, r *http.Request) {
 			l.Debug("stopping stream: client closed connection")
 			return
 		case <-ch:
-			// we have been notified of new data
 			l.Debug("going through live data", "cursor", cursor)
-			if err := h.streamOps(conn, &cursor); err != nil {
+			if _, err := h.streamOps(conn, &cursor); err != nil {
 				l.Error("failed to stream", "err", err)
 				return
 			}
@@ -96,40 +94,54 @@ func (h *Knot) Events(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Knot) streamOps(conn *websocket.Conn, cursor *int64) error {
+func (h *Knot) drainBackfill(conn *websocket.Conn, cursor *int64, maxBatches int) error {
+	for range maxBatches {
+		n, err := h.streamOps(conn, cursor)
+		if err != nil {
+			return err
+		}
+		if n < 100 {
+			return nil
+		}
+	}
+	h.l.Warn("backfill hit batch limit", "maxBatches", maxBatches, "cursor", *cursor)
+	return nil
+}
+
+func (h *Knot) streamOps(conn *websocket.Conn, cursor *int64) (int, error) {
 	events, err := h.db.GetEvents(*cursor)
 	if err != nil {
 		h.l.Error("failed to fetch events from db", "err", err, "cursor", cursor)
-		return err
+		return 0, err
 	}
 
 	for _, event := range events {
-		// first extract the inner json into a map
 		var eventJson map[string]any
 		err := json.Unmarshal([]byte(event.EventJson), &eventJson)
 		if err != nil {
 			h.l.Error("failed to unmarshal event", "err", err)
-			return err
+			return 0, err
 		}
 
 		jsonMsg, err := json.Marshal(map[string]any{
-			"rkey":  event.Rkey,
-			"nsid":  event.Nsid,
-			"event": eventJson,
+			"rkey":    event.Rkey,
+			"nsid":    event.Nsid,
+			"event":   eventJson,
+			"created": event.Created,
 		})
 		if err != nil {
 			h.l.Error("failed to marshal record", "err", err)
-			return err
+			return 0, err
 		}
 
 		if err := conn.WriteMessage(websocket.TextMessage, jsonMsg); err != nil {
 			h.l.Debug("err", "err", err)
-			return err
+			return 0, err
 		}
 		*cursor = event.Created
 	}
 
-	return nil
+	return len(events), nil
 }
 
 func (h *Knot) requestCrawl(ctx context.Context) error {

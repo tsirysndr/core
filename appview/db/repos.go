@@ -583,14 +583,154 @@ func GetRepoByDid(e Execer, repoDid string) (*models.Repo, error) {
 	return GetRepo(e, orm.FilterEq("repo_did", repoDid))
 }
 
+func EnqueuePdsRewritesForRepo(tx *sql.Tx, repoDid, repoAtUri string) error {
+	type record struct {
+		userDidCol string
+		table      string
+		nsid       string
+		fkCol      string
+	}
+	sources := []record{
+		{"did", "repos", "sh.tangled.repo", "at_uri"},
+		{"did", "issues", "sh.tangled.repo.issue", "repo_at"},
+		{"owner_did", "pulls", "sh.tangled.repo.pull", "repo_at"},
+		{"did", "collaborators", "sh.tangled.repo.collaborator", "repo_at"},
+		{"did", "artifacts", "sh.tangled.repo.artifact", "repo_at"},
+		{"did", "stars", "sh.tangled.feed.star", "subject_at"},
+	}
+
+	for _, src := range sources {
+		rows, err := tx.Query(
+			fmt.Sprintf(`SELECT %s, rkey FROM %s WHERE %s = ?`, src.userDidCol, src.table, src.fkCol),
+			repoAtUri,
+		)
+		if err != nil {
+			return fmt.Errorf("query %s for pds rewrites: %w", src.table, err)
+		}
+
+		var pairs []struct{ did, rkey string }
+		for rows.Next() {
+			var d, r string
+			if scanErr := rows.Scan(&d, &r); scanErr != nil {
+				rows.Close()
+				return fmt.Errorf("scan %s for pds rewrites: %w", src.table, scanErr)
+			}
+			pairs = append(pairs, struct{ did, rkey string }{d, r})
+		}
+		rows.Close()
+		if rowsErr := rows.Err(); rowsErr != nil {
+			return fmt.Errorf("iterate %s for pds rewrites: %w", src.table, rowsErr)
+		}
+
+		for _, p := range pairs {
+			if err := EnqueuePdsRewrite(tx, p.did, repoDid, src.nsid, p.rkey, repoAtUri); err != nil {
+				return fmt.Errorf("enqueue pds rewrite for %s/%s: %w", src.table, p.rkey, err)
+			}
+		}
+	}
+
+	profileRows, err := tx.Query(
+		`SELECT DISTINCT did FROM profile_pinned_repositories WHERE at_uri = ?`,
+		repoAtUri,
+	)
+	if err != nil {
+		return fmt.Errorf("query profile_pinned_repositories for pds rewrites: %w", err)
+	}
+	var profileDids []string
+	for profileRows.Next() {
+		var d string
+		if scanErr := profileRows.Scan(&d); scanErr != nil {
+			profileRows.Close()
+			return fmt.Errorf("scan profile_pinned_repositories for pds rewrites: %w", scanErr)
+		}
+		profileDids = append(profileDids, d)
+	}
+	profileRows.Close()
+	if profileRowsErr := profileRows.Err(); profileRowsErr != nil {
+		return fmt.Errorf("iterate profile_pinned_repositories for pds rewrites: %w", profileRowsErr)
+	}
+
+	for _, d := range profileDids {
+		if err := EnqueuePdsRewrite(tx, d, repoDid, "sh.tangled.actor.profile", "self", repoAtUri); err != nil {
+			return fmt.Errorf("enqueue pds rewrite for profile/%s: %w", d, err)
+		}
+	}
+
+	return nil
+}
+
+type PdsRewrite struct {
+	Id         int
+	RepoDid    string
+	RecordNsid string
+	RecordRkey string
+	OldRepoAt  string
+}
+
+func GetPendingPdsRewrites(e Execer, userDid string) ([]PdsRewrite, error) {
+	rows, err := e.Query(
+		`SELECT id, repo_did, record_nsid, record_rkey, old_repo_at
+		FROM pds_rewrite_status
+		WHERE user_did = ? AND status = 'pending'`,
+		userDid,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var rewrites []PdsRewrite
+	for rows.Next() {
+		var r PdsRewrite
+		if err := rows.Scan(&r.Id, &r.RepoDid, &r.RecordNsid, &r.RecordRkey, &r.OldRepoAt); err != nil {
+			return nil, err
+		}
+		rewrites = append(rewrites, r)
+	}
+	return rewrites, rows.Err()
+}
+
+func CompletePdsRewrite(e Execer, id int) error {
+	_, err := e.Exec(
+		`UPDATE pds_rewrite_status SET status = 'done', updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?`,
+		id,
+	)
+	return err
+}
+
 func EnqueuePdsRewrite(e Execer, userDid, repoDid, recordNsid, recordRkey, oldRepoAt string) error {
 	_, err := e.Exec(
-		`INSERT OR IGNORE INTO pds_rewrite_status
+		`INSERT INTO pds_rewrite_status
 			(user_did, repo_did, record_nsid, record_rkey, old_repo_at, status)
-		VALUES (?, ?, ?, ?, ?, 'pending')`,
+		VALUES (?, ?, ?, ?, ?, 'pending')
+		ON CONFLICT(user_did, record_nsid, record_rkey) DO UPDATE SET
+			status = 'pending',
+			repo_did = excluded.repo_did,
+			old_repo_at = excluded.old_repo_at,
+			updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')`,
 		userDid, repoDid, recordNsid, recordRkey, oldRepoAt,
 	)
 	return err
+}
+
+func CascadeRepoDid(tx *sql.Tx, repoAtUri, repoDid string) error {
+	_, err := tx.Exec(
+		`UPDATE repos SET repo_did = ? WHERE at_uri = ?`,
+		repoDid, repoAtUri,
+	)
+	if err != nil {
+		return fmt.Errorf("cascade repo_did to repos: %w", err)
+	}
+
+	_, err = tx.Exec(
+		`UPDATE repos SET source = ? WHERE source = ?`,
+		repoDid, repoAtUri,
+	)
+	if err != nil {
+		return fmt.Errorf("cascade repo_did to repos.source: %w", err)
+	}
+
+	return nil
 }
 
 func UpdateDescription(e Execer, repoAt, newDescription string) error {

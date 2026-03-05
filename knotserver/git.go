@@ -6,8 +6,10 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
+	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/knotserver/git/service"
 )
@@ -25,12 +27,19 @@ func (h *Knot) resolveRepoPath(r *http.Request) (string, string, error) {
 	}
 
 	repoDid, err := h.db.GetRepoDid(did, name)
-	if err != nil {
-		return "", "", fmt.Errorf("repo not found: %w", err)
+	if err == nil {
+		repoPath, _, _, resolveErr := h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
+		if resolveErr == nil {
+			return repoPath, name, nil
+		}
 	}
-	repoPath, _, _, err := h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
-	if err != nil {
-		return "", "", fmt.Errorf("repo not found: %w", err)
+
+	repoPath, joinErr := securejoin.SecureJoin(h.c.Repo.ScanPath, filepath.Join(did, name))
+	if joinErr != nil {
+		return "", "", fmt.Errorf("repo not found: %w", joinErr)
+	}
+	if _, statErr := os.Stat(repoPath); statErr != nil {
+		return "", "", fmt.Errorf("repo not found: %w", statErr)
 	}
 	return repoPath, name, nil
 }

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
+	atpclient "github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/auth/oauth"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 	xrpc "github.com/bluesky-social/indigo/xrpc"
@@ -95,6 +96,7 @@ func (o *OAuth) callback(w http.ResponseWriter, r *http.Request) {
 	go o.addToDefaultSpindle(sessData.AccountDID.String())
 	go o.ensureTangledProfile(sessData)
 	go o.autoClaimTnglShDomain(sessData.AccountDID.String())
+	go o.drainPdsRewrites(sessData)
 
 	if !o.Config.Core.Dev {
 		err = o.Posthog.Enqueue(posthog.Capture{
@@ -271,6 +273,138 @@ func (o *OAuth) ensureTangledProfile(sessData *oauth.ClientSessionData) {
 	}
 
 	l.Debug("successfully created empty Tangled profile on PDS and DB")
+}
+
+func (o *OAuth) drainPdsRewrites(sessData *oauth.ClientSessionData) {
+	ctx := context.Background()
+	did := sessData.AccountDID.String()
+	l := o.Logger.With("did", did, "handler", "drainPdsRewrites")
+
+	rewrites, err := db.GetPendingPdsRewrites(o.Db, did)
+	if err != nil {
+		l.Error("failed to get pending rewrites", "err", err)
+		return
+	}
+	if len(rewrites) == 0 {
+		return
+	}
+
+	l.Info("draining pending PDS rewrites", "count", len(rewrites))
+
+	sess, err := o.ClientApp.ResumeSession(ctx, sessData.AccountDID, sessData.SessionID)
+	if err != nil {
+		l.Error("failed to resume session for PDS rewrites", "err", err)
+		return
+	}
+	client := sess.APIClient()
+
+	for _, rw := range rewrites {
+		if err := o.rewritePdsRecord(ctx, client, did, rw); err != nil {
+			l.Error("failed to rewrite PDS record",
+				"nsid", rw.RecordNsid,
+				"rkey", rw.RecordRkey,
+				"repo_did", rw.RepoDid,
+				"err", err)
+			continue
+		}
+
+		if err := db.CompletePdsRewrite(o.Db, rw.Id); err != nil {
+			l.Error("failed to mark rewrite complete", "id", rw.Id, "err", err)
+		}
+	}
+}
+
+func (o *OAuth) rewritePdsRecord(ctx context.Context, client *atpclient.APIClient, userDid string, rw db.PdsRewrite) error {
+	ex, err := comatproto.RepoGetRecord(ctx, client, "", rw.RecordNsid, userDid, rw.RecordRkey)
+	if err != nil {
+		return fmt.Errorf("get record: %w", err)
+	}
+
+	val := ex.Value.Val
+	repoDid := rw.RepoDid
+
+	switch rw.RecordNsid {
+	case tangled.RepoNSID:
+		rec, ok := val.(*tangled.Repo)
+		if !ok {
+			return fmt.Errorf("unexpected type for repo record")
+		}
+		rec.RepoDid = &repoDid
+
+	case tangled.RepoIssueNSID:
+		rec, ok := val.(*tangled.RepoIssue)
+		if !ok {
+			return fmt.Errorf("unexpected type for issue record")
+		}
+		rec.RepoDid = &repoDid
+
+	case tangled.RepoPullNSID:
+		rec, ok := val.(*tangled.RepoPull)
+		if !ok {
+			return fmt.Errorf("unexpected type for pull record")
+		}
+		if rec.Target != nil {
+			rec.Target.RepoDid = &repoDid
+		}
+		if rec.Source != nil && rec.Source.Repo != nil && *rec.Source.Repo == rw.OldRepoAt {
+			rec.Source.RepoDid = &repoDid
+		}
+
+	case tangled.RepoCollaboratorNSID:
+		rec, ok := val.(*tangled.RepoCollaborator)
+		if !ok {
+			return fmt.Errorf("unexpected type for collaborator record")
+		}
+		rec.RepoDid = &repoDid
+
+	case tangled.RepoArtifactNSID:
+		rec, ok := val.(*tangled.RepoArtifact)
+		if !ok {
+			return fmt.Errorf("unexpected type for artifact record")
+		}
+		rec.RepoDid = &repoDid
+
+	case tangled.FeedStarNSID:
+		rec, ok := val.(*tangled.FeedStar)
+		if !ok {
+			return fmt.Errorf("unexpected type for star record")
+		}
+		rec.SubjectDid = &repoDid
+
+	case tangled.ActorProfileNSID:
+		rec, ok := val.(*tangled.ActorProfile)
+		if !ok {
+			return fmt.Errorf("unexpected type for profile record")
+		}
+		var dids []string
+		var remaining []string
+		for _, pinUri := range rec.PinnedRepositories {
+			repo, repoErr := db.GetRepoByAtUri(o.Db, pinUri)
+			if repoErr != nil || repo.RepoDid == "" {
+				remaining = append(remaining, pinUri)
+				continue
+			}
+			dids = append(dids, repo.RepoDid)
+		}
+		rec.PinnedRepositoryDids = append(rec.PinnedRepositoryDids, dids...)
+		rec.PinnedRepositories = remaining
+
+	default:
+		return fmt.Errorf("unsupported NSID for PDS rewrite: %s", rw.RecordNsid)
+	}
+
+	_, err = comatproto.RepoPutRecord(ctx, client, &comatproto.RepoPutRecord_Input{
+		Collection: rw.RecordNsid,
+		Repo:       userDid,
+		Rkey:       rw.RecordRkey,
+		SwapRecord: ex.Cid,
+		Record:     &lexutil.LexiconTypeDecoder{Val: val},
+	})
+	if err != nil {
+		return fmt.Errorf("put record: %w", err)
+	}
+
+	return nil
 }
 
 // create a AppPasswordSession using apppasswords
