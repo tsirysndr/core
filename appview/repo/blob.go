@@ -236,7 +236,7 @@ func NewBlobView(resp *tangled.RepoBlob_Output, config *config.Config, repo *mod
 		ext := strings.ToLower(filepath.Ext(resp.Path))
 
 		switch ext {
-		case ".jpg", ".jpeg", ".png", ".gif", ".webp":
+		case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".jxl", ".heic", ".heif":
 			view.ContentType = models.BlobContentTypeImage
 			view.HasRawView = true
 			view.HasRenderedView = true

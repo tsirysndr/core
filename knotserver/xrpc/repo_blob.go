@@ -74,8 +74,16 @@ func (x *Xrpc) RepoBlob(w http.ResponseWriter, r *http.Request) {
 
 	mimeType := http.DetectContentType(contents)
 
-	if filepath.Ext(treePath) == ".svg" {
+	// override MIME types for formats that http.DetectContentType does not recognize
+	switch filepath.Ext(treePath) {
+	case ".svg":
 		mimeType = "image/svg+xml"
+	case ".avif":
+		mimeType = "image/avif"
+	case ".jxl":
+		mimeType = "image/jxl"
+	case ".heic", ".heif":
+		mimeType = "image/heif"
 	}
 
 	if raw {

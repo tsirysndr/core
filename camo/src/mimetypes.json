@@ -1,10 +1,13 @@
 [
+  "image/avif",
   "image/bmp",
   "image/cgm",
   "image/g3fax",
   "image/gif",
+  "image/heif",
   "image/ief",
   "image/jp2",
+  "image/jxl",
   "image/jpeg",
   "image/jpg",
   "image/pict",
