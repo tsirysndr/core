@@ -46,14 +46,14 @@ func (h *Knot) Events(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	defaultCursor := time.Now().UnixNano()
+	var cursor int64
 	cursorStr := r.URL.Query().Get("cursor")
-	cursor, err := strconv.ParseInt(cursorStr, 10, 64)
-	if err != nil {
-		l.Error("empty or invalid cursor", "invalidCursor", cursorStr, "default", defaultCursor)
-	}
-	if cursor == 0 {
-		cursor = defaultCursor
+	if cursorStr != "" {
+		cursor, err = strconv.ParseInt(cursorStr, 10, 64)
+		if err != nil {
+			l.Error("invalid cursor, starting from beginning", "invalidCursor", cursorStr)
+			cursor = 0
+		}
 	}
 
 	l.Debug("going through backfill", "cursor", cursor)

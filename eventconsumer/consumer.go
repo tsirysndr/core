@@ -19,9 +19,9 @@ import (
 type ProcessFunc func(ctx context.Context, source Source, message Message) error
 
 type Message struct {
-	Rkey string
-	Nsid string
-	// do not full deserialize this portion of the message, processFunc can do that
+	Rkey      string
+	Nsid      string
+	Created   int64           `json:"created"`
 	EventJson json.RawMessage `json:"event"`
 }
 
@@ -159,8 +159,11 @@ func (c *Consumer) worker(ctx context.Context) {
 				return
 			}
 
-			// update cursor
-			c.cfg.CursorStore.Set(j.source.Key(), time.Now().UnixNano())
+			cursorVal := msg.Created
+			if cursorVal == 0 {
+				cursorVal = time.Now().UnixNano()
+			}
+			c.cfg.CursorStore.Set(j.source.Key(), cursorVal)
 
 			if err := c.cfg.ProcessFunc(ctx, j.source, msg); err != nil {
 				c.logger.Error("error processing message", "source", j.source, "err", err)

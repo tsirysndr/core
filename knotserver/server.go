@@ -89,6 +89,8 @@ func Run(ctx context.Context, cmd *cli.Command) error {
 
 	notifier := notifier.New()
 
+	go migrateReposOnStartup(ctx, c, db, e, &notifier, log.SubLogger(logger, "migrate"))
+
 	mux, err := Setup(ctx, c, db, e, jc, &notifier)
 	if err != nil {
 		return fmt.Errorf("failed to setup server: %w", err)

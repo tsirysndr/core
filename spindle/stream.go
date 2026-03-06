@@ -52,14 +52,14 @@ func (s *Spindle) Events(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	defaultCursor := time.Now().UnixNano()
+	var cursor int64
 	cursorStr := r.URL.Query().Get("cursor")
-	cursor, err := strconv.ParseInt(cursorStr, 10, 64)
-	if err != nil {
-		l.Error("empty or invalid cursor", "invalidCursor", cursorStr, "default", defaultCursor)
-	}
-	if cursor == 0 {
-		cursor = defaultCursor
+	if cursorStr != "" {
+		cursor, err = strconv.ParseInt(cursorStr, 10, 64)
+		if err != nil {
+			l.Error("invalid cursor, starting from beginning", "invalidCursor", cursorStr)
+			cursor = 0
+		}
 	}
 
 	// complete backfill first before going to live data
@@ -239,9 +239,10 @@ func (s *Spindle) streamPipelines(conn *websocket.Conn, cursor *int64) error {
 		}
 
 		jsonMsg, err := json.Marshal(map[string]any{
-			"rkey":  event.Rkey,
-			"nsid":  event.Nsid,
-			"event": eventJson,
+			"rkey":    event.Rkey,
+			"nsid":    event.Nsid,
+			"event":   eventJson,
+			"created": event.Created,
 		})
 		if err != nil {
 			s.l.Error("failed to marshal record", "err", err)
