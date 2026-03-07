@@ -1470,25 +1470,10 @@ Non-Nix users can look at the `devShell` attribute in the
 
 ## Running the appview
 
-The Nix flake also exposes a few `app` attributes (run `nix
-flake show` to see a full list of what the flake provides),
-one of the apps runs the appview with the `air`
-live-reloader:
+The appview requires Redis and OAuth JWKs. Start these
+first, before launching the appview itself.
 
 ```bash
-TANGLED_DEV=true nix run .#watch-appview
-
-# TANGLED_DB_PATH might be of interest to point to
-# different sqlite DBs
-
-# in a separate shell, you can live-reload tailwind
-nix run .#watch-tailwind
-```
-
-To authenticate with the appview, you will need Redis and
-OAuth JWKs to be set up:
-
-```
 # OAuth JWKs should already be set up by the Nix devshell:
 echo $TANGLED_OAUTH_CLIENT_SECRET
 z42ty4RT1ovnTopY8B8ekz9NuziF2CuMkZ7rbRFpAR9jBqMc
@@ -1509,6 +1494,21 @@ export TANGLED_OAUTH_CLIENT_SECRET="z42tuP..."
 
 # Run Redis in a new shell to store OAuth sessions
 redis-server
+```
+
+The Nix flake exposes a few `app` attributes (run `nix
+flake show` to see a full list of what the flake provides),
+one of the apps runs the appview with the `air`
+live-reloader:
+
+```bash
+TANGLED_DEV=true nix run .#watch-appview
+
+# TANGLED_DB_PATH might be of interest to point to
+# different sqlite DBs
+
+# in a separate shell, you can live-reload tailwind
+nix run .#watch-tailwind
 ```
 
 ## Running knots and spindles
