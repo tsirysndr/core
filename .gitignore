@@ -16,6 +16,8 @@ patches
 *.rdb
 .envrc
 **/*.bleve
+sites/target/
+sites/.wrangler/
 # Created if following hacking.md
 genjwks.out
 /nix/vm-data
