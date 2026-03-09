@@ -1,0 +1,20 @@
+{{ define "repo/fragments/permalinkShortcut" }}
+  <script>
+    (() => {
+      {{ if .LastCommitInfo }}
+      const abortController = new AbortController();
+      document.addEventListener('keydown', (e) => {
+        if(e.key === 'y' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+          const permalinkUrl = '/{{ .RepoInfo.FullName }}/tree/{{ .LastCommitInfo.Hash }}/{{ .Path }}';
+          window.location.href = permalinkUrl;
+        }
+      }, {signal: abortController.signal});
+
+      document.body.addEventListener('htmx:beforeCleanupElement', (e) => {
+        abortController.abort();
+      }, {signal: abortController.signal});
+      {{ end }}
+    })();
+  </script>
+{{ end }}
