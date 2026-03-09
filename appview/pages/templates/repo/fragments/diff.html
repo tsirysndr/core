@@ -138,8 +138,15 @@
   {{ $idx := index . 0 }}
   {{ $file := index . 1 }}
   {{ $isSplit := index . 2 }}
+  {{ $isGenerated := false }}
   {{ with $file }}
-    <details open id="file-{{ .Id }}" class="group border border-gray-200 dark:border-gray-700 w-full mx-auto rounded bg-white dark:bg-gray-800 drop-shadow-sm" tabindex="{{ add $idx 1 }}">
+    {{ $n := .Names }}
+    {{ if $n.New }}
+      {{ $isGenerated = isGenerated $n.New }}
+    {{ else if $n.Old }}
+      {{ $isGenerated = isGenerated $n.Old }}
+    {{ end }}
+    <details {{ if not $isGenerated }}open{{ end }} id="file-{{ .Id }}" class="group border border-gray-200 dark:border-gray-700 w-full mx-auto rounded bg-white dark:bg-gray-800 drop-shadow-sm" tabindex="{{ add $idx 1 }}">
       <summary class="list-none cursor-pointer sticky top-12 group-open:border-b border-gray-200 dark:border-gray-700">
         <div id="diff-file-header" class="rounded cursor-pointer bg-white dark:bg-gray-800 flex justify-between">
           <div id="left-side-items" class="p-2 flex gap-2 items-center overflow-x-auto">
@@ -148,13 +155,17 @@
             {{ template "repo/fragments/diffStatPill" .Stats }}
 
             <div class="flex gap-2 items-center overflow-x-auto">
-              {{ $n := .Names }}
               {{ if and $n.New $n.Old (ne $n.New $n.Old)}}
                 {{ $n.Old }} {{ i "arrow-right" "w-4 h-4" }} {{ $n.New }}
               {{ else if $n.New }}
                 {{ $n.New }}
               {{ else }}
                 {{ $n.Old }}
+              {{ end }}
+              {{ if $isGenerated }}
+                <span class="text-gray-400 dark:text-gray-500" title="Generated files are collapsed by default">
+                  {{ i "circle-question-mark" "size-4" }}
+                </span>
               {{ end }}
             </div>
           </div>

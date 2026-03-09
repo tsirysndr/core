@@ -453,6 +453,9 @@ func (p *Pages) funcMap() template.FuncMap {
 			}
 			return result
 		},
+		"isGenerated": func(path string) bool {
+			return enry.IsGenerated(path, nil)
+		},
 		// constant values used to define a template
 		"const": func() map[string]any {
 			return map[string]any{
