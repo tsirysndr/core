@@ -346,7 +346,11 @@ func (s *AppPasswordSession) putRecord(record any, collection string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to add user to default service: HTTP %d", resp.StatusCode)
+		var errorResponse map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&errorResponse); err != nil {
+			return fmt.Errorf("failed to add user to default service: HTTP %d (failed to decode error response: %w)", resp.StatusCode, err)
+		}
+		return fmt.Errorf("failed to add user to default service: HTTP %d, response: %v", resp.StatusCode, errorResponse)
 	}
 
 	return nil
