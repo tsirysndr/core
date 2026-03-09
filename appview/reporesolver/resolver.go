@@ -19,9 +19,9 @@ import (
 )
 
 var (
-	blobPattern     = regexp.MustCompile(`blob/[^/]+/(.*)$`)
-	treePattern     = regexp.MustCompile(`tree/[^/]+/(.*)$`)
-	pathAfterRefRE  = regexp.MustCompile(`(?:blob|tree|raw)/[^/]+/(.*)$`)
+	blobPattern    = regexp.MustCompile(`blob/[^/]+/(.*)$`)
+	treePattern    = regexp.MustCompile(`tree/[^/]+/(.*)$`)
+	pathAfterRefRE = regexp.MustCompile(`(?:blob|tree|raw)/[^/]+/(.*)$`)
 )
 
 type RepoResolver struct {
