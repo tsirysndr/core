@@ -247,14 +247,13 @@ func (o *OAuth) ensureTangledProfile(sessData *oauth.ClientSessionData) {
 
 // create a AppPasswordSession using apppasswords
 type AppPasswordSession struct {
-	AccessJwt       string `json:"accessJwt"`
-	PdsEndpoint     string
-	Did             string
-	RateLimitBypass string
-	Logger          *slog.Logger
+	AccessJwt   string `json:"accessJwt"`
+	PdsEndpoint string
+	Did         string
+	Logger      *slog.Logger
 }
 
-func CreateAppPasswordSession(res *idresolver.Resolver, appPassword, did, rateLimitBypass string, logger *slog.Logger) (*AppPasswordSession, error) {
+func CreateAppPasswordSession(res *idresolver.Resolver, appPassword, did string, logger *slog.Logger) (*AppPasswordSession, error) {
 	if appPassword == "" {
 		return nil, fmt.Errorf("no app password configured")
 	}
@@ -284,9 +283,6 @@ func CreateAppPasswordSession(res *idresolver.Resolver, appPassword, did, rateLi
 		return nil, fmt.Errorf("failed to create session request: %v", err)
 	}
 	sessionReq.Header.Set("Content-Type", "application/json")
-	if rateLimitBypass != "" {
-		sessionReq.Header.Set("x-ratelimit-bypass", rateLimitBypass)
-	}
 
 	logger.Debug("creating app password session", "url", sessionURL, "headers", sessionReq.Header)
 
@@ -308,7 +304,6 @@ func CreateAppPasswordSession(res *idresolver.Resolver, appPassword, did, rateLi
 
 	session.PdsEndpoint = pdsEndpoint
 	session.Did = did
-	session.RateLimitBypass = rateLimitBypass
 	session.Logger = logger
 
 	return &session, nil
@@ -340,9 +335,6 @@ func (s *AppPasswordSession) putRecord(record any, collection string) error {
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+s.AccessJwt)
-	if s.RateLimitBypass != "" {
-		req.Header.Set("x-ratelimit-bypass", s.RateLimitBypass)
-	}
 
 	s.Logger.Debug("putting record", "url", url, "collection", collection, "headers", req.Header)
 
@@ -369,7 +361,7 @@ func (o *OAuth) getAppPasswordSession() (*AppPasswordSession, error) {
 		return o.appPasswordSession, nil
 	}
 
-	session, err := CreateAppPasswordSession(o.IdResolver, o.Config.Core.AppPassword, consts.TangledDid, o.Config.Core.RateLimitBypass, o.Logger)
+	session, err := CreateAppPasswordSession(o.IdResolver, o.Config.Core.AppPassword, consts.TangledDid, o.Logger)
 	if err != nil {
 		return nil, err
 	}

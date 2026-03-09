@@ -17,7 +17,6 @@ type CoreConfig struct {
 	AppviewName             string `env:"APPVIEW_Name, default=Tangled"`
 	Dev                     bool   `env:"DEV, default=false"`
 	DisallowedNicknamesFile string `env:"DISALLOWED_NICKNAMES_FILE"`
-	RateLimitBypass         string `env:"PDS_RATE_LIMIT_BYPASS"`
 
 	// temporarily, to add users to default knot and spindle
 	AppPassword string `env:"APP_PASSWORD"`
