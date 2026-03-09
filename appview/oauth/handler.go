@@ -145,7 +145,6 @@ func (o *OAuth) addToDefaultSpindle(did string) {
 	}
 
 	if err := session.putRecord(record, tangled.SpindleMemberNSID); err != nil {
-		o.invalidateAppPasswordSession()
 		l.Error("failed to add to default spindle", "err", err)
 		return
 	}
@@ -185,7 +184,6 @@ func (o *OAuth) addToDefaultKnot(did string) {
 	}
 
 	if err := session.putRecord(record, tangled.KnotMemberNSID); err != nil {
-		o.invalidateAppPasswordSession()
 		l.Error("failed to add to default knot", "err", err)
 		return
 	}
@@ -195,7 +193,7 @@ func (o *OAuth) addToDefaultKnot(did string) {
 		return
 	}
 
-	l.Debug("successfully addeds to default Knot")
+	l.Debug("successfully added to default knot")
 }
 
 func (o *OAuth) ensureTangledProfile(sessData *oauth.ClientSessionData) {
@@ -248,9 +246,11 @@ func (o *OAuth) ensureTangledProfile(sessData *oauth.ClientSessionData) {
 // create a AppPasswordSession using apppasswords
 type AppPasswordSession struct {
 	AccessJwt   string `json:"accessJwt"`
+	RefreshJwt  string `json:"refreshJwt"`
 	PdsEndpoint string
 	Did         string
 	Logger      *slog.Logger
+	ExpiresAt   time.Time
 }
 
 func CreateAppPasswordSession(res *idresolver.Resolver, appPassword, did string, logger *slog.Logger) (*AppPasswordSession, error) {
@@ -305,11 +305,68 @@ func CreateAppPasswordSession(res *idresolver.Resolver, appPassword, did string,
 	session.PdsEndpoint = pdsEndpoint
 	session.Did = did
 	session.Logger = logger
+	session.ExpiresAt = time.Now().Add(115 * time.Minute)
 
 	return &session, nil
 }
 
+func (s *AppPasswordSession) refreshSession() error {
+	refreshURL := s.PdsEndpoint + "/xrpc/com.atproto.server.refreshSession"
+	req, err := http.NewRequestWithContext(context.Background(), "POST", refreshURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create refresh request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+s.RefreshJwt)
+
+	s.Logger.Debug("refreshing app password session", "url", refreshURL)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to refresh session: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errorResponse map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&errorResponse); err != nil {
+			return fmt.Errorf("failed to refresh session: HTTP %d (failed to decode error response: %w)", resp.StatusCode, err)
+		}
+		errorBytes, _ := json.Marshal(errorResponse)
+		return fmt.Errorf("failed to refresh session: HTTP %d, response: %s", resp.StatusCode, string(errorBytes))
+	}
+
+	var refreshResponse struct {
+		AccessJwt  string `json:"accessJwt"`
+		RefreshJwt string `json:"refreshJwt"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&refreshResponse); err != nil {
+		return fmt.Errorf("failed to decode refresh response: %w", err)
+	}
+
+	s.AccessJwt = refreshResponse.AccessJwt
+	s.RefreshJwt = refreshResponse.RefreshJwt
+	// Set new expiry time with 5 minute buffer
+	s.ExpiresAt = time.Now().Add(115 * time.Minute)
+
+	s.Logger.Debug("successfully refreshed app password session")
+	return nil
+}
+
+func (s *AppPasswordSession) isValid() bool {
+	return time.Now().Before(s.ExpiresAt)
+}
+
 func (s *AppPasswordSession) putRecord(record any, collection string) error {
+	if !s.isValid() {
+		s.Logger.Debug("access token expired, refreshing session")
+		if err := s.refreshSession(); err != nil {
+			return fmt.Errorf("failed to refresh session: %w", err)
+		}
+		s.Logger.Debug("session refreshed")
+	}
+
 	recordBytes, err := json.Marshal(record)
 	if err != nil {
 		return fmt.Errorf("failed to marshal knot member record: %w", err)
@@ -336,7 +393,7 @@ func (s *AppPasswordSession) putRecord(record any, collection string) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+s.AccessJwt)
 
-	s.Logger.Debug("putting record", "url", url, "collection", collection, "headers", req.Header)
+	s.Logger.Debug("putting record", "url", url, "collection", collection)
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -372,12 +429,4 @@ func (o *OAuth) getAppPasswordSession() (*AppPasswordSession, error) {
 
 	o.appPasswordSession = session
 	return session, nil
-}
-
-// invalidateAppPasswordSession clears the cached session so the next call to
-// getAppPasswordSession will create a fresh one.
-func (o *OAuth) invalidateAppPasswordSession() {
-	o.appPasswordSessionMu.Lock()
-	defer o.appPasswordSessionMu.Unlock()
-	o.appPasswordSession = nil
 }
