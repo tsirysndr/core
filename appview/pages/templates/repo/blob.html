@@ -31,7 +31,7 @@
                 {{ end }}
             </div>
             <div id="file-info" class="text-gray-500 dark:text-gray-400 text-xs md:text-sm flex flex-wrap items-center gap-1 md:gap-0">
-                <span>at <a href="/{{ .RepoInfo.FullName }}/tree/{{ .Ref }}">{{ .Ref }}</a></span>
+                <span>at <a href="/{{ .RepoInfo.FullName }}/tree/{{ pathEscape .Ref }}">{{ .Ref }}</a></span>
 
                 {{ if .BlobView.ShowingText }}
                   <span class="select-none px-1 md:px-2 [&:before]:content-['·']"></span>
@@ -45,12 +45,12 @@
 
                 {{ if .BlobView.HasRawView }}
                   <span class="select-none px-1 md:px-2 [&:before]:content-['·']"></span>
-                  <a href="/{{ .RepoInfo.FullName }}/raw/{{ .Ref }}/{{ .Path }}">view raw</a>
+                  <a href="/{{ .RepoInfo.FullName }}/raw/{{ pathEscape .Ref }}/{{ .Path }}">view raw</a>
                 {{ end }}
 
                 {{ if .BlobView.ShowToggle }}
                   <span class="select-none px-1 md:px-2 [&:before]:content-['·']"></span>
-                  <a href="/{{ .RepoInfo.FullName }}/blob/{{ .Ref }}/{{ .Path }}?code={{ .BlobView.ShowingRendered }}" hx-boost="true">
+                  <a href="/{{ .RepoInfo.FullName }}/blob/{{ pathEscape .Ref }}/{{ .Path }}?code={{ .BlobView.ShowingRendered }}" hx-boost="true">
                     view {{ if .BlobView.ShowingRendered }}code{{ else }}rendered{{ end }}
                   </a>
                 {{ end }}
