@@ -407,6 +407,22 @@ func (s *Strings) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	client, err := s.OAuth.AuthorizedClient(r)
+	if err != nil {
+		fail("Failed to authorize client.", err)
+		return
+	}
+
+	_, err = comatproto.RepoDeleteRecord(r.Context(), client, &comatproto.RepoDeleteRecord_Input{
+		Collection: tangled.StringNSID,
+		Repo:       user.Active.Did,
+		Rkey:       rkey,
+	})
+	if err != nil {
+		fail("Failed to delete string record from PDS.", err)
+		return
+	}
+
 	if err := db.DeleteString(
 		s.Db,
 		orm.FilterEq("did", user.Active.Did),
