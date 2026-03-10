@@ -278,6 +278,108 @@ git push github main
 git push tangled main
 ```
 
+# Hosting websites on Tangled
+
+You can serve static websites directly from your git repositories on
+Tangled. If you've used GitHub Pages or Codeberg Pages, this should feel
+familiar.
+
+## Overview
+
+Every user gets a sites domain. If you signed up through Tangled's own
+PDS (`tngl.sh`), your sites domain is automatically
+`<your-handle>.tngl.sh` no setup needed. Otherwise, you can claim a
+`<subdomain>.tngl.io` domain from your settings.
+
+You can serve multiple sites per domain:
+
+- One **index site** served at the root of your domain (e.g.
+  `alice.tngl.sh`)
+- Any number of **sub-path sites** served under the repository name
+  (e.g. `alice.tngl.sh/my-project`)
+
+## Claiming a domain
+
+If you don't have a `tngl.sh` handle, you need to claim a domain before
+publishing sites:
+
+1. Go to **Settings → Sites**
+2. Enter a subdomain (e.g. `alice` to claim `alice.tngl.io`)
+3. Click **claim**
+
+You can only hold one domain at a time. Releasing a domain puts it in a
+30-day cooldown before anyone else can claim it.
+
+## Configuring a site for a repository
+
+1. Navigate to your repository
+2. Go to **Settings → Sites** 
+3. Choose a **branch** to deploy from
+4. Set the **deploy directory** — the path within the repository
+   containing your `index.html`. Use `/` for the root, or a subdirectory
+   like `/docs` or `/public`
+5. Choose the **site type**:
+   - **Index site** — served at the root of your domain (e.g.
+     `alice.tngl.sh`)
+   - **Sub-path site** — served under the repository name (e.g.
+     `alice.tngl.sh/my-project`)
+6. Click **save**
+
+The site will be deployed automatically. You can see the status of your
+previous deploys in the **Recent Deploys** section at the bottom of the
+page.
+
+Sites are redeployed automatically on every push to the configured
+branch.
+
+## Custom domains
+
+Tangled currently doesn't support custom domains for sites. This will be
+added in a future update.
+
+## Deploy directory
+
+The deploy directory is the path within your repository that Tangled
+serves as the site root. It must contain an `index.html`.
+
+| Deploy directory | Result |
+|---|---|
+| `/` | Serves the repository root |
+| `/docs` | Serves the `docs/` subdirectory |
+| `/public` | Serves the `public/` subdirectory |
+
+Directories are served with automatic `index.html` resolution -- a
+request to `/about` will serve `/about/index.html` if it exists.
+
+## Site types
+
+| Type | URL |
+|---|---|
+| Index site | `alice.tngl.sh` |
+| Sub-path site | `alice.tngl.sh/my-project` |
+
+Only one repository can be the index site for a given domain at a time.
+If another repository already holds the index site, you will see a
+notice in the settings and only the sub-path option will be available.
+
+## Deploy triggers
+
+A deployment is triggered automatically when:
+
+- You push to the configured branch
+- You change the site configuration (branch, deploy directory, or site
+  type)
+
+## Disabling a site
+
+To stop serving a site, go to **Settings → Sites** in your repository
+and click **Disable**. This removes the site configuration and stops
+serving the site. The deployed files are also deleted from storage.
+
+Releasing your domain from **Settings → Sites** at the account level
+will disable all sites associated with it and delete their files.
+
+
 # Knot self-hosting guide
 
 So you want to run your own knot server? Great! Here are a few prerequisites:
@@ -1236,12 +1338,12 @@ Webhooks send HTTP POST requests to URLs you configure whenever specific events 
 
 To set up a webhook for your repository:
 
-1. Navigate to your repository settings
-2. Click the "hooks" tab
-3. Click "add webhook"
+1. Navigate to your repository
+2. Go to **Settings → Hooks**
+3. Click **new webhook**
 4. Configure your webhook:
    - **Payload URL**: The endpoint that will receive the webhook POST requests
-   - **Secret**: An optional secret key for verifying webhook authenticity (auto-generated if left blank)
+   - **Secret**: An optional secret key for verifying webhook authenticity (leave blank to send unsigned webhooks)
    - **Events**: Select which events trigger the webhook (currently only push events)
    - **Active**: Toggle whether the webhook is enabled
 
