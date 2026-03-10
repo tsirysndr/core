@@ -100,6 +100,7 @@
         appview = self.callPackage ./nix/pkgs/appview.nix {};
         docs = self.callPackage ./nix/pkgs/docs.nix {
           inherit inter-fonts-src ibm-plex-mono-src lucide-src;
+          inherit (pkgs) pagefind;
         };
         spindle = self.callPackage ./nix/pkgs/spindle.nix {};
         knot-unwrapped = self.callPackage ./nix/pkgs/knot-unwrapped.nix {};
@@ -256,6 +257,16 @@
       watch-tailwind = {
         type = "app";
         program = ''${tailwind-watcher}/bin/run'';
+      };
+      serve-docs = {
+        type = "app";
+        program = toString (pkgs.writeShellScript "serve-docs" ''
+          echo "building docs..."
+          docsOut=$(nix build --no-link --print-out-paths .#docs)
+          echo "serving docs at http://localhost:1414"
+          cd "$docsOut"
+          exec ${pkgs.python3}/bin/python3 -m http.server 1414
+        '');
       };
       vm = let
         guestSystem =

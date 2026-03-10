@@ -34,20 +34,33 @@
       $header-includes$
     $endfor$
 
-    <link rel="preload" href="/static/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="icon" href="/static/logos/dolly.ico" sizes="48x48"/>
-    <link rel="icon" href="/static/logos/dolly.svg" sizes="any" type="image/svg+xml"/>
-    <link rel="apple-touch-icon" href="/static/logos/dolly.png"/>
+    <link href="$root$pagefind/pagefind-ui.css" rel="stylesheet">
+    <script src="$root$pagefind/pagefind-ui.js"></script>
+    <script>
+      window.addEventListener("DOMContentLoaded", () => {
+        document.querySelectorAll(".pagefind-search").forEach((el) => {
+          new PagefindUI({
+            element: el,
+            showSubResults: true,
+            resetStyles: false,
+          });
+        });
+      });
+    </script>
+    <link rel="preload" href="$root$static/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="icon" href="$root$static/logos/dolly.ico" sizes="48x48"/>
+    <link rel="icon" href="$root$static/logos/dolly.svg" sizes="any" type="image/svg+xml"/>
+    <link rel="apple-touch-icon" href="$root$static/logos/dolly.png"/>
 
   </head>
-  <body class="bg-white dark:bg-gray-900 flex flex-col min-h-svh">
+  <body class="bg-white dark:bg-gray-900 flex flex-col min-h-svh"$if(single-page)$ data-pagefind-ignore$endif$>
     $for(include-before)$
       $include-before$
     $endfor$
 
     $if(toc)$
       <!-- mobile TOC trigger -->
-      <div class="md:hidden px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+      <div data-pagefind-ignore class="md:hidden px-6 py-4 border-b border-gray-200 dark:border-gray-700">
         <button
           type="button"
           popovertarget="mobile-toc-popover"
@@ -62,9 +75,10 @@
       <div
         id="mobile-toc-popover"
         popover
+        data-pagefind-ignore
         class="mobile-toc-popover
                bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700
-               h-full overflow-y-auto shadow-sm
+               h-full overflow-x-hidden overflow-y-auto shadow-sm
                px-6 py-4 fixed inset-x-0 top-0 w-fit max-w-4/5 m-0"
       >
         <div class="flex flex-col min-h-full">
@@ -89,6 +103,7 @@
       <nav
         id="$idprefix$TOC"
         role="doc-toc"
+        data-pagefind-ignore
         class="hidden md:flex md:flex-col gap-4 fixed left-0 top-0 w-80 h-screen
                bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700
                p-4 z-50 overflow-y-auto">

@@ -1,5 +1,6 @@
 {
   pandoc,
+  pagefind,
   tailwindcss,
   runCommandLocal,
   inter-fonts-src,
@@ -59,4 +60,7 @@ runCommandLocal "docs" {} ''
 
   # styles
   cd ${src} && ${tailwindcss}/bin/tailwindcss -i input.css -o $out/stylesheet.css
+
+  # search index
+  ${pagefind}/bin/pagefind --site $out --output-path $out/pagefind
 ''
