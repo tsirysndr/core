@@ -10,6 +10,17 @@ import (
 	"github.com/microcosm-cc/bluemonday"
 )
 
+// shared policies built once at init; safe for concurrent use per bluemonday docs
+var (
+	sharedDefaultPolicy     *bluemonday.Policy
+	sharedDescriptionPolicy *bluemonday.Policy
+)
+
+func init() {
+	sharedDefaultPolicy = buildDefaultPolicy()
+	sharedDescriptionPolicy = buildDescriptionPolicy()
+}
+
 type Sanitizer struct {
 	defaultPolicy     *bluemonday.Policy
 	descriptionPolicy *bluemonday.Policy
@@ -17,8 +28,8 @@ type Sanitizer struct {
 
 func NewSanitizer() Sanitizer {
 	return Sanitizer{
-		defaultPolicy:     defaultPolicy(),
-		descriptionPolicy: descriptionPolicy(),
+		defaultPolicy:     sharedDefaultPolicy,
+		descriptionPolicy: sharedDescriptionPolicy,
 	}
 }
 
@@ -29,7 +40,7 @@ func (s *Sanitizer) SanitizeDescription(html string) string {
 	return s.descriptionPolicy.Sanitize(html)
 }
 
-func defaultPolicy() *bluemonday.Policy {
+func buildDefaultPolicy() *bluemonday.Policy {
 	policy := bluemonday.UGCPolicy()
 
 	// Allow generally safe attributes
@@ -123,7 +134,7 @@ func defaultPolicy() *bluemonday.Policy {
 	return policy
 }
 
-func descriptionPolicy() *bluemonday.Policy {
+func buildDescriptionPolicy() *bluemonday.Policy {
 	policy := bluemonday.NewPolicy()
 	policy.AllowStandardURLs()
 
