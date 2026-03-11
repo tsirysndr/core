@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"html"
 	"log"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -26,6 +28,7 @@ import (
 	"tangled.org/core/tid"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
+	atpclient "github.com/bluesky-social/indigo/atproto/client"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 	"github.com/gliderlabs/ssh"
@@ -75,6 +78,16 @@ func (s *Settings) Router() http.Handler {
 		r.Put("/", s.claimSitesDomain)
 		r.Delete("/", s.releaseSitesDomain)
 	})
+
+	r.Post("/password/request", s.requestPasswordReset)
+	r.Post("/password/reset", s.resetPassword)
+	r.Post("/deactivate", s.deactivateAccount)
+	r.Post("/reactivate", s.reactivateAccount)
+	r.Post("/delete/request", s.requestAccountDelete)
+	r.Post("/delete/confirm", s.deleteAccount)
+
+	r.Get("/handle", s.elevateForHandle)
+	r.Post("/handle", s.updateHandle)
 
 	return r
 }
@@ -243,9 +256,15 @@ func (s *Settings) profileSettings(w http.ResponseWriter, r *http.Request) {
 		log.Printf("failed to get users punchcard preferences: %s", err)
 	}
 
+	isDeactivated := s.Config.Pds.IsTnglShUser(user.Pds()) && s.isAccountDeactivated(r.Context(), user.Did(), user.Pds())
+
 	s.Pages.UserProfileSettings(w, pages.UserProfileSettingsParams{
 		LoggedInUser:        user,
 		PunchcardPreference: punchcardPreferences,
+		IsTnglSh:            s.Config.Pds.IsTnglShUser(user.Pds()),
+		IsDeactivated:       isDeactivated,
+		PdsDomain:           s.pdsDomain(),
+		HandleOpen:          r.URL.Query().Get("handle") == "1",
 	})
 }
 
@@ -605,7 +624,7 @@ func (s *Settings) keys(w http.ResponseWriter, r *http.Request) {
 		_, _, _, _, err = ssh.ParseAuthorizedKey([]byte(key))
 		if err != nil {
 			s.Logger.Error("parsing public key", "err", err)
-			s.Pages.Notice(w, "settings-keys", "That doesn't look like a valid public key. Make sure it's a <strong>public</strong> key.")
+			s.Pages.NoticeHTML(w, "settings-keys", "That doesn't look like a valid public key. Make sure it's a <strong>public</strong> key.")
 			return
 		}
 
@@ -689,8 +708,8 @@ func (s *Settings) keys(w http.ResponseWriter, r *http.Request) {
 
 			// invalid record
 			if err != nil {
-				s.Logger.Error("failed to delete record from PDS", "err", err)
-				s.Pages.Notice(w, "settings-keys", "Failed to remove key from PDS.")
+				s.Logger.Error("failed to delete record", "err", err)
+				s.Pages.Notice(w, "settings-keys", "Failed to remove key.")
 				return
 			}
 		}
@@ -699,4 +718,111 @@ func (s *Settings) keys(w http.ResponseWriter, r *http.Request) {
 		s.Pages.HxLocation(w, "/settings/keys")
 		return
 	}
+}
+
+func (s *Settings) pdsDomain() string {
+	parsed, err := url.Parse(s.Config.Pds.Host)
+	if err != nil {
+		return s.Config.Pds.Host
+	}
+	return parsed.Hostname()
+}
+
+func (s *Settings) elevateForHandle(w http.ResponseWriter, r *http.Request) {
+	user := s.OAuth.GetMultiAccountUser(r)
+	if !s.Config.Pds.IsTnglShUser(user.Pds()) {
+		http.Redirect(w, r, "/settings/profile", http.StatusSeeOther)
+		return
+	}
+
+	sess, err := s.OAuth.ResumeSession(r)
+	if err == nil && slices.Contains(sess.Data.Scopes, "identity:handle") {
+		http.Redirect(w, r, "/settings/profile?handle=1", http.StatusSeeOther)
+		return
+	}
+
+	redirectURL, err := s.OAuth.StartElevatedAuthFlow(
+		r.Context(), w, r,
+		user.Did(),
+		[]string{"identity:handle"},
+		"/settings/profile?handle=1",
+	)
+	if err != nil {
+		log.Printf("failed to start elevated auth flow: %s", err)
+		http.Redirect(w, r, "/settings/profile", http.StatusSeeOther)
+		return
+	}
+
+	http.Redirect(w, r, redirectURL, http.StatusFound)
+}
+
+func (s *Settings) updateHandle(w http.ResponseWriter, r *http.Request) {
+	user := s.OAuth.GetMultiAccountUser(r)
+	if !s.Config.Pds.IsTnglShUser(user.Pds()) {
+		s.Pages.Notice(w, "handle-error", "Handle changes are only available for tngl.sh accounts.")
+		return
+	}
+
+	handleType := r.FormValue("type")
+	handleInput := strings.TrimSpace(r.FormValue("handle"))
+
+	if handleInput == "" {
+		s.Pages.Notice(w, "handle-error", "Handle cannot be empty.")
+		return
+	}
+
+	var newHandle string
+	switch handleType {
+	case "subdomain":
+		if !isValidSubdomain(handleInput) {
+			s.Pages.Notice(w, "handle-error", "Invalid handle. Use only lowercase letters, digits, and hyphens.")
+			return
+		}
+		newHandle = handleInput + "." + s.pdsDomain()
+	case "custom":
+		newHandle = handleInput
+	default:
+		s.Pages.Notice(w, "handle-error", "Invalid handle type.")
+		return
+	}
+
+	client, err := s.OAuth.AuthorizedClient(r)
+	if err != nil {
+		log.Printf("failed to get authorized client: %s", err)
+		s.Pages.Notice(w, "handle-error", "Failed to authorize. Try logging in again.")
+		return
+	}
+
+	err = comatproto.IdentityUpdateHandle(r.Context(), client, &comatproto.IdentityUpdateHandle_Input{
+		Handle: newHandle,
+	})
+	if err != nil {
+		if strings.Contains(err.Error(), "ScopeMissing") || strings.Contains(err.Error(), "insufficient_scope") {
+			redirectURL, elevErr := s.OAuth.StartElevatedAuthFlow(
+				r.Context(), w, r,
+				user.Did(),
+				[]string{"identity:handle"},
+				"/settings/profile?handle=1",
+			)
+			if elevErr != nil {
+				log.Printf("failed to start elevated auth flow: %s", elevErr)
+				s.Pages.Notice(w, "handle-error", "Failed to start re-authorization. Try again later.")
+				return
+			}
+
+			s.Pages.HxRedirect(w, redirectURL)
+			return
+		}
+
+		log.Printf("failed to update handle: %s", err)
+		msg := err.Error()
+		var apiErr *atpclient.APIError
+		if errors.As(err, &apiErr) && apiErr.Message != "" {
+			msg = apiErr.Message
+		}
+		s.Pages.Notice(w, "handle-error", fmt.Sprintf("Failed to update handle: %s", msg))
+		return
+	}
+
+	s.Pages.NoticeHTML(w, "handle-success", fmt.Sprintf("Handle updated to <strong>%s</strong>.", html.EscapeString(newHandle)))
 }

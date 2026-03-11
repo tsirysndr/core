@@ -15,6 +15,7 @@ import (
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/auth/oauth"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
+	xrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-chi/chi/v5"
 	"github.com/posthog/posthog-go"
 	"tangled.org/core/api/tangled"
@@ -40,6 +41,7 @@ func (o *OAuth) clientMetadata(w http.ResponseWriter, r *http.Request) {
 	doc.JWKSURI = &o.JwksUri
 	doc.ClientName = &o.ClientName
 	doc.ClientURI = &o.ClientUri
+	doc.Scope = doc.Scope + " identity:handle"
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(doc); err != nil {
@@ -109,7 +111,33 @@ func (o *OAuth) callback(w http.ResponseWriter, r *http.Request) {
 		redirectURL = authReturn.ReturnURL
 	}
 
+	if o.isAccountDeactivated(sessData) {
+		redirectURL = "/settings/profile"
+	}
+
 	http.Redirect(w, r, redirectURL, http.StatusFound)
+}
+
+func (o *OAuth) isAccountDeactivated(sessData *oauth.ClientSessionData) bool {
+	pdsClient := &xrpc.Client{
+		Host:   sessData.HostURL,
+		Client: &http.Client{Timeout: 5 * time.Second},
+	}
+
+	_, err := comatproto.RepoDescribeRepo(
+		context.Background(),
+		pdsClient,
+		sessData.AccountDID.String(),
+	)
+	if err == nil {
+		return false
+	}
+
+	var xrpcErr *xrpc.Error
+	var xrpcBody *xrpc.XRPCError
+	return errors.As(err, &xrpcErr) &&
+		errors.As(xrpcErr.Wrapped, &xrpcBody) &&
+		xrpcBody.ErrStr == "RepoDeactivated"
 }
 
 func (o *OAuth) addToDefaultSpindle(did string) {

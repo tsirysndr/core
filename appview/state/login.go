@@ -1,10 +1,14 @@
 package state
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
+	comatproto "github.com/bluesky-social/indigo/api/atproto"
+	"github.com/bluesky-social/indigo/xrpc"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 )
@@ -62,6 +66,35 @@ func (s *State) Login(w http.ResponseWriter, r *http.Request) {
 				fmt.Sprintf("\"%s\" is an invalid handle. Did you mean %s.bsky.social or %s.tngl.sh?", handle, handle, handle),
 			)
 			return
+		}
+
+		ident, err := s.idResolver.ResolveIdent(r.Context(), handle)
+		if err != nil {
+			l.Warn("handle resolution failed", "handle", handle, "err", err)
+			s.pages.Notice(w, "login-msg", fmt.Sprintf("Could not resolve handle \"%s\". The account may not exist.", handle))
+			return
+		}
+
+		pdsEndpoint := ident.PDSEndpoint()
+		if pdsEndpoint == "" {
+			s.pages.Notice(w, "login-msg", fmt.Sprintf("No PDS found for \"%s\".", handle))
+			return
+		}
+
+		pdsClient := &xrpc.Client{Host: pdsEndpoint, Client: &http.Client{Timeout: 5 * time.Second}}
+		_, err = comatproto.RepoDescribeRepo(r.Context(), pdsClient, ident.DID.String())
+		if err != nil {
+			var xrpcErr *xrpc.Error
+			var xrpcBody *xrpc.XRPCError
+			isDeactivated := errors.As(err, &xrpcErr) &&
+				errors.As(xrpcErr.Wrapped, &xrpcBody) &&
+				xrpcBody.ErrStr == "RepoDeactivated"
+
+			if !isDeactivated {
+				l.Warn("describeRepo failed", "handle", handle, "did", ident.DID, "pds", pdsEndpoint, "err", err)
+				s.pages.Notice(w, "login-msg", fmt.Sprintf("Account \"%s\" is no longer available.", handle))
+				return
+			}
 		}
 
 		if err := s.oauth.SetAuthReturn(w, r, returnURL, addAccount); err != nil {

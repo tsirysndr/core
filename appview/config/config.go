@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/sethvargo/go-envconfig"
@@ -86,6 +87,10 @@ type RedisConfig struct {
 type PdsConfig struct {
 	Host        string `env:"HOST, default=https://tngl.sh"`
 	AdminSecret string `env:"ADMIN_SECRET"`
+}
+
+func (p *PdsConfig) IsTnglShUser(pdsHost string) bool {
+	return strings.TrimRight(pdsHost, "/") == strings.TrimRight(p.Host, "/")
 }
 
 type R2Config struct {

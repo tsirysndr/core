@@ -1,10 +1,12 @@
 package oauth
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -362,4 +364,60 @@ func (o *OAuth) ServiceClient(r *http.Request, os ...ServiceClientOpt) (*xrpc.Cl
 			Timeout: opts.timeout,
 		},
 	}, nil
+}
+
+func (o *OAuth) StartElevatedAuthFlow(ctx context.Context, w http.ResponseWriter, r *http.Request, did string, extraScopes []string, returnURL string) (string, error) {
+	parsedDid, err := syntax.ParseDID(did)
+	if err != nil {
+		return "", fmt.Errorf("invalid DID: %w", err)
+	}
+
+	ident, err := o.ClientApp.Dir.Lookup(ctx, parsedDid.AtIdentifier())
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve DID (%s): %w", did, err)
+	}
+
+	host := ident.PDSEndpoint()
+	if host == "" {
+		return "", fmt.Errorf("identity does not link to an atproto host (PDS)")
+	}
+
+	authserverURL, err := o.ClientApp.Resolver.ResolveAuthServerURL(ctx, host)
+	if err != nil {
+		return "", fmt.Errorf("resolving auth server: %w", err)
+	}
+
+	authserverMeta, err := o.ClientApp.Resolver.ResolveAuthServerMetadata(ctx, authserverURL)
+	if err != nil {
+		return "", fmt.Errorf("fetching auth server metadata: %w", err)
+	}
+
+	scopes := make([]string, 0, len(TangledScopes)+len(extraScopes))
+	scopes = append(scopes, TangledScopes...)
+	scopes = append(scopes, extraScopes...)
+
+	loginHint := did
+	if ident.Handle != "" && !ident.Handle.IsInvalidHandle() {
+		loginHint = ident.Handle.String()
+	}
+
+	info, err := o.ClientApp.SendAuthRequest(ctx, authserverMeta, scopes, loginHint)
+	if err != nil {
+		return "", fmt.Errorf("auth request failed: %w", err)
+	}
+
+	info.AccountDID = &parsedDid
+	o.ClientApp.Store.SaveAuthRequestInfo(ctx, *info)
+
+	if err := o.SetAuthReturn(w, r, returnURL, false); err != nil {
+		return "", fmt.Errorf("failed to set auth return: %w", err)
+	}
+
+	redirectURL := fmt.Sprintf("%s?client_id=%s&request_uri=%s",
+		authserverMeta.AuthorizationEndpoint,
+		url.QueryEscape(o.ClientApp.Config.ClientID),
+		url.QueryEscape(info.RequestURI),
+	)
+
+	return redirectURL, nil
 }

@@ -2,17 +2,27 @@ package pages
 
 import (
 	"fmt"
+	"html"
 	"net/http"
 )
 
 // Notice performs a hx-oob-swap to replace the content of an element with a message.
 // Pass the id of the element and the message to display.
 func (s *Pages) Notice(w http.ResponseWriter, id, msg string) {
-	html := fmt.Sprintf(`<span id="%s" hx-swap-oob="innerHTML">%s</span>`, id, msg)
+	escaped := html.EscapeString(msg)
+	markup := fmt.Sprintf(`<span id="%s" hx-swap-oob="innerHTML">%s</span>`, id, escaped)
 
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(html))
+	w.Write([]byte(markup))
+}
+
+func (s *Pages) NoticeHTML(w http.ResponseWriter, id string, trustedHTML string) {
+	markup := fmt.Sprintf(`<span id="%s" hx-swap-oob="innerHTML">%s</span>`, id, trustedHTML)
+
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(markup))
 }
 
 // HxRefresh is a client-side full refresh of the page.

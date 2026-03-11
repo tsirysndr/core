@@ -364,6 +364,10 @@ type UserProfileSettingsParams struct {
 	LoggedInUser        *oauth.MultiAccountUser
 	Tab                 string
 	PunchcardPreference models.PunchcardPreference
+	IsTnglSh            bool
+	IsDeactivated       bool
+	PdsDomain           string
+	HandleOpen          bool
 }
 
 func (p *Pages) UserProfileSettings(w io.Writer, params UserProfileSettingsParams) error {
@@ -1571,6 +1575,18 @@ func (p *Pages) CssContentHash() string {
 	}
 
 	return hex.EncodeToString(hasher.Sum(nil))[:8] // Use first 8 chars of hash
+}
+
+func (p *Pages) DangerPasswordTokenStep(w io.Writer) error {
+	return p.executePlain("user/settings/fragments/dangerPasswordToken", w, nil)
+}
+
+func (p *Pages) DangerPasswordSuccess(w io.Writer) error {
+	return p.executePlain("user/settings/fragments/dangerPasswordSuccess", w, nil)
+}
+
+func (p *Pages) DangerDeleteTokenStep(w io.Writer) error {
+	return p.executePlain("user/settings/fragments/dangerDeleteToken", w, nil)
 }
 
 func (p *Pages) Error500(w io.Writer) error {

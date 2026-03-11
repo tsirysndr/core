@@ -11,6 +11,9 @@
       </div>
       <div class="col-span-1 md:col-span-3 flex flex-col gap-6">
         {{ template "profile" . }}
+        {{ if .IsTnglSh }}
+          {{ template "accountActions" . }}
+        {{ end }}
         {{ template "punchcard" . }}
       </div>
     </section>
@@ -26,7 +29,19 @@
     <div class="flex flex-col rounded border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700">
       <div class="flex flex-col gap-1 p-4">
         <span class="text-sm text-gray-500 dark:text-gray-400">Handle</span>
-        <span class="font-bold">{{ resolve .LoggedInUser.Did }}</span>
+        <div class="flex items-center gap-2">
+          <span class="font-bold">{{ resolve .LoggedInUser.Did }}</span>
+          {{ if .IsTnglSh }}
+            {{ if .HandleOpen }}
+              <button
+                popovertarget="change-handle-modal"
+                popovertargetaction="toggle"
+                class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer">change</button>
+            {{ else }}
+              <a href="/settings/handle" class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">change</a>
+            {{ end }}
+          {{ end }}
+        </div>
       </div>
       <div class="flex flex-col gap-1 p-4">
         <span class="text-sm text-gray-500 dark:text-gray-400">Decentralized Identifier (DID)</span>
@@ -37,6 +52,231 @@
         <span class="font-bold">{{ .LoggedInUser.Pds }}</span>
       </div>
     </div>
+    {{ if and .IsTnglSh .HandleOpen }}
+      <div
+        id="change-handle-modal"
+        popover
+        class="bg-white w-full md:w-96 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 drop-shadow dark:text-white backdrop:bg-gray-400/50 dark:backdrop:bg-gray-800/50">
+        <div id="handle-subdomain" class="flex flex-col gap-3">
+          <label class="uppercase text-sm font-bold p-0">Change handle</label>
+          <form hx-post="/settings/handle" hx-swap="none" class="flex flex-col gap-3">
+            <input type="hidden" name="type" value="subdomain">
+            <div class="flex items-stretch rounded border border-gray-200 dark:border-gray-600 overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 dark:bg-gray-700">
+              <input type="text" name="handle" placeholder="username" class="flex-1 px-2 py-1.5 bg-transparent dark:text-white border-0 focus:outline-none focus:ring-0 min-w-0" required>
+              <span class="px-2 py-1.5 bg-gray-100 dark:bg-gray-600 text-gray-500 dark:text-gray-300 select-none whitespace-nowrap border-l border-gray-200 dark:border-gray-600 content-center">.{{ .PdsDomain }}</span>
+            </div>
+            <div class="flex gap-2 pt-2">
+              <button type="button" popovertarget="change-handle-modal" popovertargetaction="hide" class="btn w-1/2 flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+                {{ i "x" "size-4" }} cancel
+              </button>
+              <button type="submit" class="btn w-1/2 flex items-center justify-center gap-2">
+                {{ i "check" "size-4" }} save
+              </button>
+            </div>
+          </form>
+          <a href="#" id="switch-to-custom" class="text-sm text-gray-400 underline hover:text-gray-600 dark:hover:text-gray-300">I have my own domain</a>
+        </div>
+        <div id="handle-custom" style="display: none;" class="flex flex-col gap-3">
+          <label class="uppercase text-sm font-bold p-0">Change handle</label>
+          <form hx-post="/settings/handle" hx-swap="none" class="flex flex-col gap-3">
+            <input type="hidden" name="type" value="custom">
+            <input id="custom-domain-input" type="text" name="handle" placeholder="mycoolhandle.com" class="w-full dark:bg-gray-700 dark:text-white dark:border-gray-600 dark:placeholder-gray-400 px-2 py-1.5 border border-gray-200 dark:border-gray-600 rounded outline-none focus:ring-1 focus:ring-blue-500" required>
+            <div class="bg-gray-50 dark:bg-gray-900 rounded p-3 text-gray-500 dark:text-gray-400 flex flex-col gap-2 text-xs">
+              <p>Set up one of the following on your domain:</p>
+              <div>
+                <p class="font-medium text-gray-700 dark:text-gray-300">DNS TXT record</p>
+                <p>Add a TXT record for <code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">_atproto.<span id="dns-domain">mycoolhandle.com</span></code></p>
+                <code class="inline-block bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded mt-1.5 break-all">did={{ .LoggedInUser.Did }}</code>
+              </div>
+              <div>
+                <p class="font-medium text-gray-700 dark:text-gray-300">HTTP well-known</p>
+                <p>Serve your DID at:</p>
+                <code class="inline-block bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded mt-1 break-all">https://<span id="wk-domain">mycoolhandle.com</span>/.well-known/atproto-did</code>
+                <code class="inline-block bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded mt-1.5 break-all">{{ .LoggedInUser.Did }}</code>
+              </div>
+            </div>
+            <div class="flex gap-2 pt-2">
+              <button type="button" popovertarget="change-handle-modal" popovertargetaction="hide" class="btn w-1/2 flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+                {{ i "x" "size-4" }} cancel
+              </button>
+              <button type="submit" class="btn w-1/2 flex items-center justify-center gap-2">
+                {{ i "check" "size-4" }} verify & save
+              </button>
+            </div>
+          </form>
+          <a href="#" id="switch-to-subdomain" class="text-sm text-gray-400 underline hover:text-gray-600 dark:hover:text-gray-300">use a {{ .PdsDomain }} subdomain instead</a>
+        </div>
+        <div id="handle-error" class="text-red-500 dark:text-red-400 text-sm empty:hidden"></div>
+        <div id="handle-success" class="text-green-500 dark:text-green-400 text-sm empty:hidden"></div>
+      </div>
+      <script>
+        document.getElementById('switch-to-custom').addEventListener('click', function(e) {
+          e.preventDefault();
+          document.getElementById('handle-subdomain').style.display = 'none';
+          document.getElementById('handle-custom').style.display = '';
+        });
+        document.getElementById('switch-to-subdomain').addEventListener('click', function(e) {
+          e.preventDefault();
+          document.getElementById('handle-custom').style.display = 'none';
+          document.getElementById('handle-subdomain').style.display = '';
+        });
+        document.getElementById('custom-domain-input').addEventListener('input', function(e) {
+          var d = e.target.value.trim() || 'mycoolhandle.com';
+          document.getElementById('dns-domain').textContent = d;
+          document.getElementById('wk-domain').textContent = d;
+        });
+        document.getElementById('change-handle-modal').showPopover();
+      </script>
+    {{ end }}
+  </div>
+{{ end }}
+
+{{ define "accountActions" }}
+  <div>
+    <h2 class="text-sm uppercase font-bold">Account</h2>
+    {{ if .IsDeactivated }}
+      <div class="mt-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded text-sm text-amber-700 dark:text-amber-300">
+        Your account is deactivated. Your profile and repositories are currently inaccessible. Reactivate to restore access.
+      </div>
+    {{ end }}
+    <div class="flex flex-wrap gap-2 pt-2">
+      <button
+        popovertarget="change-password-modal"
+        popovertargetaction="toggle"
+        class="btn flex items-center gap-2 text-sm cursor-pointer">
+        {{ i "key" "size-4" }}
+        change password
+      </button>
+      {{ if .IsDeactivated }}
+        <button
+          popovertarget="reactivate-modal"
+          popovertargetaction="toggle"
+          class="btn flex items-center gap-2 text-sm text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 border-green-300 dark:border-green-600 cursor-pointer">
+          {{ i "play" "size-4" }}
+          reactivate account
+        </button>
+      {{ else }}
+        <button
+          popovertarget="deactivate-modal"
+          popovertargetaction="toggle"
+          class="btn flex items-center gap-2 text-sm text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 border-amber-300 dark:border-amber-600 cursor-pointer">
+          {{ i "pause" "size-4" }}
+          deactivate account
+        </button>
+      {{ end }}
+      <button
+        popovertarget="delete-modal"
+        popovertargetaction="toggle"
+        class="btn flex items-center gap-2 text-sm text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border-red-300 dark:border-red-600 cursor-pointer">
+        {{ i "trash-2" "size-4" }}
+        delete account
+      </button>
+    </div>
+  </div>
+
+  <div
+    id="change-password-modal"
+    popover
+    class="bg-white w-full md:w-96 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 drop-shadow dark:text-white backdrop:bg-gray-400/50 dark:backdrop:bg-gray-800/50">
+    <div id="password-form-container" class="flex flex-col gap-3">
+      <label class="uppercase text-sm font-bold p-0">Change password</label>
+      <form hx-post="/settings/password/request" hx-swap="none" hx-disabled-elt="find button[type='submit']" class="flex flex-col gap-3">
+        <div class="flex flex-col">
+          <label for="current-password">current password</label>
+          <input type="password" id="current-password" name="current_password" required autocomplete="current-password" />
+          <span class="text-sm text-gray-500 mt-1">Confirm your identity to proceed.</span>
+        </div>
+        <div class="flex gap-2 pt-2">
+          <button type="button" popovertarget="change-password-modal" popovertargetaction="hide" class="btn w-1/2 flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+            {{ i "x" "size-4" }} cancel
+          </button>
+          <button type="submit" class="btn w-1/2 flex items-center justify-center gap-2">
+            {{ i "key" "size-4" }} send reset code
+          </button>
+        </div>
+      </form>
+      <div id="password-error" class="text-red-500 dark:text-red-400 text-sm empty:hidden"></div>
+    </div>
+  </div>
+
+  {{ if .IsDeactivated }}
+    <div
+      id="reactivate-modal"
+      popover
+      class="bg-white w-full md:w-96 dark:bg-gray-800 p-4 rounded border border-green-300 dark:border-green-600 drop-shadow dark:text-white backdrop:bg-gray-400/50 dark:backdrop:bg-gray-800/50">
+      <div class="flex flex-col gap-3">
+        <label class="uppercase text-sm font-bold p-0 text-green-600 dark:text-green-400">Reactivate account</label>
+        <p class="text-sm text-gray-500 dark:text-gray-400">This will restore your profile and repositories, making them accessible again.</p>
+        <form hx-post="/settings/reactivate" hx-swap="none" hx-disabled-elt="find button[type='submit']" class="flex flex-col gap-3">
+          <div class="flex flex-col">
+            <label for="reactivate-password">password</label>
+            <input type="password" id="reactivate-password" name="password" required autocomplete="current-password" />
+            <span class="text-sm text-gray-500 mt-1">Confirm your identity to proceed.</span>
+          </div>
+          <div class="flex gap-2 pt-2">
+            <button type="button" popovertarget="reactivate-modal" popovertargetaction="hide" class="btn w-1/2 flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+              {{ i "x" "size-4" }} cancel
+            </button>
+            <button type="submit" class="btn w-1/2 flex items-center justify-center gap-2 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300">
+              {{ i "play" "size-4" }} reactivate
+            </button>
+          </div>
+        </form>
+        <div id="reactivate-error" class="text-red-500 dark:text-red-400 text-sm empty:hidden"></div>
+      </div>
+    </div>
+  {{ else }}
+    <div
+      id="deactivate-modal"
+      popover
+      class="bg-white w-full md:w-96 dark:bg-gray-800 p-4 rounded border border-amber-300 dark:border-amber-600 drop-shadow dark:text-white backdrop:bg-gray-400/50 dark:backdrop:bg-gray-800/50">
+      <div class="flex flex-col gap-3">
+        <label class="uppercase text-sm font-bold p-0 text-amber-600 dark:text-amber-400">Deactivate account</label>
+        <p class="text-sm text-gray-500 dark:text-gray-400">Your profile and repositories will become inaccessible. You can reactivate by logging in again.</p>
+        <form hx-post="/settings/deactivate" hx-swap="none" hx-confirm="Are you sure you want to deactivate your account?" hx-disabled-elt="find button[type='submit']" class="flex flex-col gap-3">
+          <div class="flex flex-col">
+            <label for="deactivate-password">password</label>
+            <input type="password" id="deactivate-password" name="password" required autocomplete="current-password" />
+            <span class="text-sm text-gray-500 mt-1">Confirm your identity to proceed.</span>
+          </div>
+          <div class="flex gap-2 pt-2">
+            <button type="button" popovertarget="deactivate-modal" popovertargetaction="hide" class="btn w-1/2 flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+              {{ i "x" "size-4" }} cancel
+            </button>
+            <button type="submit" class="btn w-1/2 flex items-center justify-center gap-2 text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300">
+              {{ i "pause" "size-4" }} deactivate
+            </button>
+          </div>
+        </form>
+        <div id="deactivate-error" class="text-red-500 dark:text-red-400 text-sm empty:hidden"></div>
+      </div>
+    </div>
+  {{ end }}
+
+  <div
+    id="delete-modal"
+    popover
+    class="bg-white w-full md:w-96 dark:bg-gray-800 p-4 rounded border border-red-300 dark:border-red-600 drop-shadow dark:text-white backdrop:bg-gray-400/50 dark:backdrop:bg-gray-800/50">
+    <div id="delete-form-container" class="flex flex-col gap-3">
+      <label class="uppercase text-sm font-bold p-0 text-red-600 dark:text-red-400">Delete account</label>
+      <p class="text-sm text-gray-500 dark:text-gray-400">This permanently deletes your account and all associated data. This cannot be undone.</p>
+      <form hx-post="/settings/delete/request" hx-swap="none" hx-disabled-elt="find button[type='submit']" class="flex flex-col gap-3">
+        <div class="flex flex-col">
+          <label for="delete-password">password</label>
+          <input type="password" id="delete-password" name="password" required autocomplete="current-password" />
+          <span class="text-sm text-gray-500 mt-1">Confirm your identity to proceed.</span>
+        </div>
+        <div class="flex gap-2 pt-2">
+          <button type="button" popovertarget="delete-modal" popovertargetaction="hide" class="btn w-1/2 flex items-center gap-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
+            {{ i "x" "size-4" }} cancel
+          </button>
+          <button type="submit" class="btn w-1/2 flex items-center justify-center gap-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+            {{ i "trash-2" "size-4" }} send deletion code
+          </button>
+        </div>
+      </form>
+      <div id="delete-error" class="text-red-500 dark:text-red-400 text-sm empty:hidden"></div>
+    </div>
   </div>
 {{ end }}
 
@@ -46,7 +286,7 @@
     <p class="text-gray-500 dark:text-gray-400 pb-2 ">
       Configure punchcard visibility and preferences.
     </p>
-    <form hx-post="/profile/punchcard" hx-trigger="change" hx-swap="none" class="flex flex-col gap-2">
+    <form hx-post="/profile/punchcard" hx-trigger="change" hx-swap="none" class="flex flex-col gap-3">
       <div class="flex items-center gap-2">
         <input type="checkbox" id="hideMine" name="hideMine" value="on" {{ if eq true $.PunchcardPreference.HideMine }}checked{{ end }}>
         <label for="hideMine" class="my-0 py-0 normal-case font-normal">Hide mine</label>

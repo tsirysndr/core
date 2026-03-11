@@ -1,0 +1,26 @@
+{{ define "user/settings/fragments/dangerDeleteToken" }}
+<div id="delete-form-container" hx-swap-oob="innerHTML">
+  <label class="uppercase text-sm font-bold p-0 text-red-600 dark:text-red-400">Delete account</label>
+  <p class="text-sm text-gray-500 dark:text-gray-400 pt-1">Check your email for an account deletion code.</p>
+  <form hx-post="/settings/delete/confirm" hx-swap="none" hx-confirm="This will permanently delete your account. This cannot be undone. Continue?" hx-disabled-elt="find button[type='submit']" class="flex flex-col gap-3 pt-2">
+    <div class="flex flex-col">
+      <label for="delete-token">deletion code</label>
+      <input type="text" id="delete-token" name="token" required autocomplete="off" placeholder="xxxx-xxxx" />
+    </div>
+    <div class="flex flex-col">
+      <label for="delete-password-confirm">password</label>
+      <input type="password" id="delete-password-confirm" name="password" required autocomplete="current-password" />
+    </div>
+    <div class="flex flex-col">
+      <label for="delete-confirmation">confirmation</label>
+      <input type="text" id="delete-confirmation" name="confirmation" required autocomplete="off" placeholder="delete my account" />
+      <span class="text-sm text-gray-500 mt-1">Type <strong>delete my account</strong> to confirm.</span>
+    </div>
+    <div class="flex gap-2 pt-2">
+      <button type="button" popovertarget="delete-modal" popovertargetaction="hide" class="btn w-1/2 flex items-center gap-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">cancel</button>
+      <button type="submit" class="btn w-1/2 flex items-center justify-center gap-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">delete account</button>
+    </div>
+    <div id="delete-error" class="text-red-500 dark:text-red-400 text-sm empty:hidden"></div>
+  </form>
+</div>
+{{ end }}
