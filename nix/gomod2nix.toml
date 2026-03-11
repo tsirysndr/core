@@ -32,6 +32,42 @@ schema = 3
   [mod."github.com/avast/retry-go/v4"]
     version = "v4.6.1"
     hash = "sha256-PeZc8k4rDV64+k8nZt/oy1YNVbLevltXP3ZD1jf6Z6k="
+  [mod."github.com/aws/aws-sdk-go-v2"]
+    version = "v1.41.1"
+    hash = "sha256-umafTZB+cuy8+Kzpl2WrlygJO3tR3D2WkTC0eTY5G/g="
+  [mod."github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream"]
+    version = "v1.7.4"
+    hash = "sha256-ZY/Jn1p0IgDe8MONhp0RFHZmRgTBZZ5ddqXlNWEo7Ys="
+  [mod."github.com/aws/aws-sdk-go-v2/credentials"]
+    version = "v1.19.9"
+    hash = "sha256-eqM5BmetQ/MrxTwoUCqRpkm5frFAspuq+QWod+5wzrU="
+  [mod."github.com/aws/aws-sdk-go-v2/internal/configsources"]
+    version = "v1.4.17"
+    hash = "sha256-W+d0WDYBrVJxdfRSvoe3cvZYgIgUSVyXsVdQlMcIZvc="
+  [mod."github.com/aws/aws-sdk-go-v2/internal/endpoints/v2"]
+    version = "v2.7.17"
+    hash = "sha256-dKJx0+K1DKi2LJKQNwnTofZH4GWLDgY6/ZI2XR2oCGI="
+  [mod."github.com/aws/aws-sdk-go-v2/internal/v4a"]
+    version = "v1.4.17"
+    hash = "sha256-PKwNn9nFf+7TqocgQprxP9r1Fs4IxwGLGd05MrsxmLg="
+  [mod."github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding"]
+    version = "v1.13.4"
+    hash = "sha256-Rm6czqOnOULP080D97WQQSqkBhmN6ei1qZaTa51SRj8="
+  [mod."github.com/aws/aws-sdk-go-v2/service/internal/checksum"]
+    version = "v1.9.8"
+    hash = "sha256-DZhR0aqHrgAFBGSlnsSQ6XeAJ/q504RG/LBWhtQqRVg="
+  [mod."github.com/aws/aws-sdk-go-v2/service/internal/presigned-url"]
+    version = "v1.13.17"
+    hash = "sha256-qS7Db9S/KQ24kvJdL8qH4gnoN116J1ezwOnbovCiFEI="
+  [mod."github.com/aws/aws-sdk-go-v2/service/internal/s3shared"]
+    version = "v1.19.17"
+    hash = "sha256-x/Cb4j3HFlg1+U21YCAIhBnfpf1yehJU2Ss/PxamEMI="
+  [mod."github.com/aws/aws-sdk-go-v2/service/s3"]
+    version = "v1.96.0"
+    hash = "sha256-lzAn2KHIkd742mDwEZqGEaIXlEfvltL6HdP+sEQ/8YA="
+  [mod."github.com/aws/smithy-go"]
+    version = "v1.24.0"
+    hash = "sha256-ZPFhf2Yv3BQpUn3cN4wSnoO7uBki8oCisZxL6F09nnE="
   [mod."github.com/aymanbagabas/go-osc52/v2"]
     version = "v2.0.1"
     hash = "sha256-6Bp0jBZ6npvsYcKZGHHIUSVSTAMEyieweAX2YAKDjjg="
@@ -147,9 +183,9 @@ schema = 3
   [mod."github.com/cloudflare/circl"]
     version = "v1.6.2-0.20250618153321-aa837fd1539d"
     hash = "sha256-0s/i/XmMcuvPQ+qK9OIU5KxwYZyLVXRtdlYvIXRJT3Y="
-  [mod."github.com/cloudflare/cloudflare-go"]
-    version = "v0.115.0"
-    hash = "sha256-jezmDs6IsHA4rag7DzcHDfDgde0vU4iKgCN9+0XDViw="
+  [mod."github.com/cloudflare/cloudflare-go/v6"]
+    version = "v6.7.0"
+    hash = "sha256-ycQpx1II/JgBgrCRwY5qiVKStGv5wuCANy1091sJ5Zw="
   [mod."github.com/containerd/errdefs"]
     version = "v1.0.0"
     hash = "sha256-wMZGoeqvRhuovYCJx0Js4P3qFCNTZ/6Atea/kNYoPMI="
@@ -509,6 +545,18 @@ schema = 3
   [mod."github.com/stretchr/testify"]
     version = "v1.10.0"
     hash = "sha256-fJ4gnPr0vnrOhjQYQwJ3ARDKPsOtA7d4olQmQWR+wpI="
+  [mod."github.com/tidwall/gjson"]
+    version = "v1.18.0"
+    hash = "sha256-CO6hqDu8Y58Po6A01e5iTpwiUBQ5khUZsw7czaJHw0I="
+  [mod."github.com/tidwall/match"]
+    version = "v1.2.0"
+    hash = "sha256-O2wTU0SmNIEEOxfncl2BW2czgWeIW5vqR6+A7dtNtXI="
+  [mod."github.com/tidwall/pretty"]
+    version = "v1.2.1"
+    hash = "sha256-S0uTDDGD8qr415Ut7QinyXljCp0TkL4zOIrlJ+9OMl8="
+  [mod."github.com/tidwall/sjson"]
+    version = "v1.2.5"
+    hash = "sha256-OYGNolkmL7E1Qs2qrQ3IVpQp5gkcHNU/AB/z2O+Myps="
   [mod."github.com/urfave/cli/v3"]
     version = "v3.3.3"
     hash = "sha256-FdPiu7koY1qBinkfca4A05zCrX+Vu4eRz8wlRDZJyGg="
