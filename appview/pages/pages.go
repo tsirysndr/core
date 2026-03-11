@@ -42,6 +42,7 @@ type Pages struct {
 	cache *TmplCache[string, *template.Template]
 
 	avatar      config.AvatarConfig
+	pdsCfg      config.PdsConfig
 	resolver    *idresolver.Resolver
 	db          *db.DB
 	dev         bool
@@ -67,6 +68,7 @@ func NewPages(config *config.Config, res *idresolver.Resolver, database *db.DB, 
 		cache:       NewTmplCache[string, *template.Template](),
 		dev:         config.Core.Dev,
 		avatar:      config.Avatar,
+		pdsCfg:      config.Pds,
 		rctx:        rctx,
 		resolver:    res,
 		db:          database,
@@ -427,7 +429,6 @@ type UserProfileSettingsParams struct {
 	PunchcardPreference models.PunchcardPreference
 	IsTnglSh            bool
 	IsDeactivated       bool
-	PdsDomain           string
 	HandleOpen          bool
 }
 

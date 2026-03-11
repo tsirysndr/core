@@ -501,6 +501,7 @@ func (p *Pages) funcMap() template.FuncMap {
 					{"Name": "hooks", "Icon": "webhook"},
 					{"Name": "sites", "Icon": "globe"},
 				},
+				"PdsUserDomain": p.pdsCfg.UserDomain,
 			}
 		},
 	}

@@ -90,6 +90,7 @@ type RedisConfig struct {
 
 type PdsConfig struct {
 	Host        string `env:"HOST, default=https://tngl.sh"`
+	UserDomain  string `env:"USER_DOMAIN, default=.tngl.sh"`
 	AdminSecret string `env:"ADMIN_SECRET"`
 }
 

@@ -94,9 +94,8 @@ func (s *Settings) Router() http.Handler {
 
 func (s *Settings) sitesSettings(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
-	did := s.OAuth.GetDid(r)
 
-	claim, err := db.GetActiveDomainClaimForDid(s.Db, did)
+	claim, err := db.GetActiveDomainClaimForDid(s.Db, user.Active.Did)
 	if err != nil {
 		s.Logger.Error("failed to get domain claim", "err", err)
 		claim = nil
@@ -104,12 +103,10 @@ func (s *Settings) sitesSettings(w http.ResponseWriter, r *http.Request) {
 
 	// determine whether the active account has a tngl.sh handle, in which
 	// case their sites domain is automatically their handle domain.
-	pdsDomain := strings.TrimPrefix(s.Config.Pds.Host, "https://")
-	pdsDomain = strings.TrimPrefix(pdsDomain, "http://")
 	isTnglHandle := false
 	for _, acc := range user.Accounts {
-		if acc.Did == did && strings.HasSuffix(acc.Handle, "."+pdsDomain) {
-			isTnglHandle = true
+		if acc.Did == user.Active.Did {
+			isTnglHandle = strings.HasSuffix(acc.Handle, s.Config.Pds.UserDomain)
 			break
 		}
 	}
@@ -174,7 +171,7 @@ func (s *Settings) claimSitesDomain(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Settings) releaseSitesDomain(w http.ResponseWriter, r *http.Request) {
-	did := s.OAuth.GetDid(r)
+	user := s.OAuth.GetMultiAccountUser(r)
 	domain := strings.TrimSpace(r.FormValue("domain"))
 
 	if domain == "" {
@@ -182,19 +179,17 @@ func (s *Settings) releaseSitesDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pdsDomain := strings.TrimPrefix(s.Config.Pds.Host, "https://")
-	pdsDomain = strings.TrimPrefix(pdsDomain, "http://")
-	user := s.OAuth.GetMultiAccountUser(r)
 	for _, acc := range user.Accounts {
-		if acc.Did == did && strings.HasSuffix(acc.Handle, "."+pdsDomain) {
-			if strings.HasSuffix(domain, "."+pdsDomain) {
+		if acc.Did == user.Active.Did {
+			if strings.HasSuffix(acc.Handle, s.Config.Pds.UserDomain) {
 				s.Pages.Notice(w, "settings-sites-error", "Your tngl.sh domain is tied to your handle and cannot be released here.")
 				return
 			}
+			break
 		}
 	}
 
-	if err := db.ReleaseDomain(s.Db, did, domain); err != nil {
+	if err := db.ReleaseDomain(s.Db, user.Active.Did, domain); err != nil {
 		s.Logger.Error("releasing domain", "err", err)
 		s.Pages.Notice(w, "settings-sites-error", "Unable to release domain. Make sure it belongs to your account.")
 		return
@@ -202,12 +197,12 @@ func (s *Settings) releaseSitesDomain(w http.ResponseWriter, r *http.Request) {
 
 	// Clean up all site data for this DID asynchronously.
 	if s.CfClient.Enabled() {
-		siteConfigs, err := db.GetRepoSiteConfigsForDid(s.Db, did)
+		siteConfigs, err := db.GetRepoSiteConfigsForDid(s.Db, user.Active.Did)
 		if err != nil {
 			s.Logger.Error("releaseSitesDomain: fetching site configs for cleanup", "err", err)
 		}
 
-		if err := db.DeleteRepoSiteConfigsForDid(s.Db, did); err != nil {
+		if err := db.DeleteRepoSiteConfigsForDid(s.Db, user.Active.Did); err != nil {
 			s.Logger.Error("releaseSitesDomain: deleting site configs from db", "err", err)
 		}
 
@@ -216,8 +211,8 @@ func (s *Settings) releaseSitesDomain(w http.ResponseWriter, r *http.Request) {
 
 			// Delete each repo's R2 objects.
 			for _, sc := range siteConfigs {
-				if err := sites.Delete(ctx, s.CfClient, did, sc.RepoName); err != nil {
-					s.Logger.Error("releaseSitesDomain: R2 delete failed", "did", did, "repo", sc.RepoName, "err", err)
+				if err := sites.Delete(ctx, s.CfClient, user.Active.Did, sc.RepoName); err != nil {
+					s.Logger.Error("releaseSitesDomain: R2 delete failed", "did", user.Active.Did, "repo", sc.RepoName, "err", err)
 				}
 			}
 
@@ -263,7 +258,6 @@ func (s *Settings) profileSettings(w http.ResponseWriter, r *http.Request) {
 		PunchcardPreference: punchcardPreferences,
 		IsTnglSh:            s.Config.Pds.IsTnglShUser(user.Pds()),
 		IsDeactivated:       isDeactivated,
-		PdsDomain:           s.pdsDomain(),
 		HandleOpen:          r.URL.Query().Get("handle") == "1",
 	})
 }
@@ -720,14 +714,6 @@ func (s *Settings) keys(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Settings) pdsDomain() string {
-	parsed, err := url.Parse(s.Config.Pds.Host)
-	if err != nil {
-		return s.Config.Pds.Host
-	}
-	return parsed.Hostname()
-}
-
 func (s *Settings) elevateForHandle(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
 	if !s.Config.Pds.IsTnglShUser(user.Pds()) {
@@ -778,7 +764,7 @@ func (s *Settings) updateHandle(w http.ResponseWriter, r *http.Request) {
 			s.Pages.Notice(w, "handle-error", "Invalid handle. Use only lowercase letters, digits, and hyphens.")
 			return
 		}
-		newHandle = handleInput + "." + s.pdsDomain()
+		newHandle = handleInput + s.Config.Pds.UserDomain
 	case "custom":
 		newHandle = handleInput
 	default:
