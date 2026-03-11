@@ -154,6 +154,16 @@
 {{ define "subsPanel" }}
   {{ $root := index . 2 }}
   {{ $pull := $root.Pull }}
+  {{ $bgColor := "bg-gray-600 dark:bg-gray-700" }}
+
+  {{ if $pull.State.IsOpen }}
+    {{ $bgColor = "bg-green-600 dark:bg-green-700" }}
+  {{ else if $pull.State.IsMerged }}
+    {{ $bgColor = "bg-purple-600 dark:bg-purple-700" }}
+  {{ else if $pull.State.IsDeleted }}
+    {{ $bgColor = "bg-red-600 dark:bg-red-700" }}
+  {{ end }}
+
   <!-- backdrop overlay - only visible on mobile when open -->
   <div id="bottomSheetBackdrop" class="fixed inset-0 bg-black/50 md:hidden opacity-0 pointer-events-none transition-opacity duration-300 z-40"></div>
   <!-- right panel - bottom sheet on mobile, side panel on desktop -->
@@ -163,7 +173,7 @@
         flex gap-4 items-center justify-between
         rounded-t-2xl md:rounded-t cursor-pointer list-none p-4 md:h-12
         text-white md:text-black md:dark:text-white
-        bg-green-600 dark:bg-green-700
+        {{ $bgColor }}
         md:bg-white md:dark:bg-gray-800
         drop-shadow-sm border-t md:border-x border-gray-200 dark:border-gray-700">
         <h2 class="">History</h2>
