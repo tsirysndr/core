@@ -118,6 +118,11 @@ func (s *Settings) claimSitesDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(subdomain) < 4 {
+		s.Pages.Notice(w, "settings-sites-error", "Subdomain must be at least 4 characters long.")
+		return
+	}
+
 	if !isValidSubdomain(subdomain) {
 		s.Pages.Notice(w, "settings-sites-error", "Invalid subdomain. Use only lowercase letters, digits, and hyphens. Cannot start or end with a hyphen.")
 		return
