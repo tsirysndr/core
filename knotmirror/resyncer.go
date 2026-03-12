@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
+	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +33,9 @@ type Resyncer struct {
 	repoFetchTimeout    time.Duration
 	manualResyncTimeout time.Duration
 	parallelism         int
+
+	knotBackoff   map[string]time.Time
+	knotBackoffMu sync.RWMutex
 }
 
 func NewResyncer(l *slog.Logger, db *sql.DB, gitm GitMirrorManager, cfg *config.Config) *Resyncer {
@@ -44,6 +49,8 @@ func NewResyncer(l *slog.Logger, db *sql.DB, gitm GitMirrorManager, cfg *config.
 		repoFetchTimeout:    cfg.GitRepoFetchTimeout,
 		manualResyncTimeout: 30 * time.Minute,
 		parallelism:         cfg.ResyncParallelism,
+
+		knotBackoff: make(map[string]time.Time),
 	}
 }
 
@@ -203,8 +210,26 @@ func (r *Resyncer) doResync(ctx context.Context, repoAt syntax.ATURI) (bool, err
 		return false, nil
 	}
 
-	// TODO: check if Knot is on backoff list. If so, return (false, nil)
-	// TODO: detect rate limit error (http.StatusTooManyRequests) to put Knot in backoff list
+	r.knotBackoffMu.RLock()
+	backoffUntil, inBackoff := r.knotBackoff[repo.KnotDomain]
+	r.knotBackoffMu.RUnlock()
+	if inBackoff && time.Now().Before(backoffUntil) {
+		return false, nil
+	}
+
+	// HACK: check knot reachability with short timeout before running actual fetch.
+	// This is crucial as git-cli doesn't support http connection timeout.
+	// `http.lowSpeedTime` is only applied _after_ the connection.
+	if err := r.checkKnotReachability(ctx, repo); err != nil {
+		if isRateLimitError(err) {
+			r.knotBackoffMu.Lock()
+			r.knotBackoff[repo.KnotDomain] = time.Now().Add(10 * time.Second)
+			r.knotBackoffMu.Unlock()
+			return false, nil
+		}
+		// TODO: suspend repo on 404. KnotStream updates will change the repo state back online
+		return false, fmt.Errorf("knot unreachable: %w", err)
+	}
 
 	timeout := r.repoFetchTimeout
 	if repo.RetryAfter == -1 {
@@ -227,6 +252,64 @@ func (r *Resyncer) doResync(ctx context.Context, repoAt syntax.ATURI) (bool, err
 		return false, fmt.Errorf("updating repo state to active %w", err)
 	}
 	return true, nil
+}
+
+type knotStatusError struct {
+	StatusCode int
+}
+
+func (ke *knotStatusError) Error() string {
+	return fmt.Sprintf("request failed with status code (HTTP %d)", ke.StatusCode)
+}
+
+func isRateLimitError(err error) bool {
+	var knotErr *knotStatusError
+	if errors.As(err, &knotErr) {
+		return knotErr.StatusCode == http.StatusTooManyRequests
+	}
+	return false
+}
+
+// checkKnotReachability checks if Knot is reachable and is valid git remote server
+func (r *Resyncer) checkKnotReachability(ctx context.Context, repo *models.Repo) error {
+	repoUrl, err := makeRepoRemoteUrl(repo.KnotDomain, repo.DidSlashRepo(), true)
+	if err != nil {
+		return err
+	}
+
+	repoUrl += "/info/refs?service=git-upload-pack"
+
+	client := http.Client{
+		Timeout: 30 * time.Second,
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", repoUrl, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", "git/2.x")
+	req.Header.Set("Accept", "*/*")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		var uerr *url.Error
+		if errors.As(err, &uerr) {
+			return fmt.Errorf("request failed: %w", uerr.Unwrap())
+		}
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return &knotStatusError{resp.StatusCode}
+	}
+
+	// check if target is git server
+	ct := resp.Header.Get("Content-Type")
+	if !strings.Contains(ct, "application/x-git-upload-pack-advertisement") {
+		return fmt.Errorf("unexpected content-type: %s", ct)
+	}
+
+	return nil
 }
 
 func (r *Resyncer) handleResyncFailure(ctx context.Context, repoAt syntax.ATURI, err error) error {
