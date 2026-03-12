@@ -123,6 +123,11 @@ func (s *Settings) claimSitesDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if subdomainHasSlur(subdomain) {
+		s.Pages.Notice(w, "settings-sites-error", "That subdomain is not allowed.")
+		return
+	}
+
 	if !isValidSubdomain(subdomain) {
 		s.Pages.Notice(w, "settings-sites-error", "Invalid subdomain. Use only lowercase letters, digits, and hyphens. Cannot start or end with a hyphen.")
 		return
