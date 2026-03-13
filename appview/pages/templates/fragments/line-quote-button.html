@@ -1,0 +1,132 @@
+{{ define "fragments/line-quote-button" }}
+<button
+  id="line-quote-btn"
+  type="button"
+  aria-label="Quote line in comment"
+  class="hidden fixed z-50 p-0.5 rounded bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-600 cursor-pointer shadow-sm transition-opacity opacity-0"
+  style="pointer-events: none;"
+>
+  {{ i "message-square-quote" "w-3.5 h-3.5" }}
+</button>
+<script>
+  (() => {
+    const btn = document.getElementById('line-quote-btn');
+    if (!btn) return;
+
+    let currentAnchor = null;
+    let currentFileName = null;
+
+    const findTextarea = () =>
+      document.getElementById('pull-comment-textarea')
+      || document.getElementById('comment-textarea');
+
+    const findLineEl = (el) =>
+      el?.closest?.('.line')
+      || el?.closest?.('span[id*="-O"]')
+      || el?.closest?.('span[id*="-N"]');
+
+    const getAnchor = (lineEl) => {
+      const link = lineEl.querySelector('a[href^="#"]');
+      return link ? link.getAttribute('href').slice(1) : lineEl.id || null;
+    };
+
+    const getFileName = (lineEl) => {
+      const details = lineEl.closest('details[id^="file-"]');
+      if (details) return details.id.replace(/^file-/, '');
+      const bc = document.getElementById('breadcrumbs');
+      if (!bc) return null;
+      const els = bc.querySelectorAll('.text-bold');
+      return els.length > 0 ? els[els.length - 1].textContent.trim() : null;
+    };
+
+    const show = (lineEl) => {
+      if (!findTextarea()) return;
+      const anchor = getAnchor(lineEl);
+      if (!anchor) return;
+
+      currentAnchor = anchor;
+      currentFileName = getFileName(lineEl);
+
+      const rect = lineEl.getBoundingClientRect();
+      Object.assign(btn.style, {
+        top: `${rect.top + rect.height / 2 - btn.offsetHeight / 2}px`,
+        left: `${rect.left + 4}px`,
+        opacity: '1',
+        pointerEvents: 'auto',
+      });
+      btn.classList.remove('hidden');
+    };
+
+    const hide = () => {
+      Object.assign(btn.style, { opacity: '0', pointerEvents: 'none' });
+      setTimeout(() => { if (btn.style.opacity === '0') btn.classList.add('hidden'); }, 150);
+    };
+
+    let hoverTarget = null;
+
+    document.addEventListener('mouseover', (e) => {
+      const lineEl = findLineEl(e.target);
+      if (lineEl && lineEl !== hoverTarget) {
+        hoverTarget = lineEl;
+        show(lineEl);
+      }
+    });
+
+    document.addEventListener('mouseout', (e) => {
+      const lineEl = findLineEl(e.target);
+      if (!lineEl) return;
+      if (findLineEl(e.relatedTarget) === lineEl) return;
+      if (e.relatedTarget === btn || btn.contains(e.relatedTarget)) return;
+      hoverTarget = null;
+      hide();
+    });
+
+    btn.addEventListener('mouseleave', (e) => {
+      if (!findLineEl(e.relatedTarget)) {
+        hoverTarget = null;
+        hide();
+      }
+    });
+
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const textarea = findTextarea();
+      if (!textarea || !currentAnchor) return;
+
+      const lineNum = currentAnchor.match(/[ON]?(\d+)(?:-[ON]?\d+)?$/)?.[1];
+      if (!lineNum) return;
+
+      const label = currentFileName ? `${currentFileName}:${lineNum}` : `L${lineNum}`;
+      const md = `[\`${label}\`](${window.location.pathname}#${currentAnchor})`;
+
+      const { selectionStart: start, selectionEnd: end, value } = textarea;
+      const before = value.slice(0, start);
+      const after = value.slice(end);
+
+      let prefix = '';
+      let suffix = '';
+      if (start === end && before.length > 0) {
+        const currentLine = before.slice(before.lastIndexOf('\n') + 1);
+        if (currentLine.length > 0) {
+          const nextNl = after.indexOf('\n');
+          const restOfLine = nextNl === -1 ? after : after.slice(0, nextNl);
+          if (restOfLine.trim().length === 0) {
+            prefix = '\n';
+          } else {
+            prefix = before.endsWith(' ') ? '' : ' ';
+            suffix = after.startsWith(' ') ? '' : ' ';
+          }
+        }
+      }
+
+      textarea.value = before + prefix + md + suffix + after;
+      const pos = start + prefix.length + md.length + suffix.length;
+      textarea.selectionStart = textarea.selectionEnd = pos;
+      textarea.focus();
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      textarea.dispatchEvent(new Event('keyup', { bubbles: true }));
+    });
+  })();
+</script>
+{{ end }}
