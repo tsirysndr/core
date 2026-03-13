@@ -52,6 +52,7 @@ func (rp *Repo) DownloadArchive(w http.ResponseWriter, r *http.Request) {
 		rp.pages.Error503(w)
 		return
 	}
+	defer resp.Body.Close()
 
 	// pass through headers from upstream response
 	if contentDisposition := resp.Header.Get("Content-Disposition"); contentDisposition != "" {
