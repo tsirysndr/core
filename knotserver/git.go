@@ -5,28 +5,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path/filepath"
+	"os"
 	"strings"
 
-	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/knotserver/git/service"
 )
 
 func (h *Knot) InfoRefs(w http.ResponseWriter, r *http.Request) {
-	did := chi.URLParam(r, "did")
 	name := chi.URLParam(r, "name")
-	repoName, err := securejoin.SecureJoin(did, name)
-	if err != nil {
-		gitError(w, "repository not found", http.StatusNotFound)
-		h.l.Error("git: failed to secure join repo path", "handler", "InfoRefs", "error", err)
-		return
-	}
-
-	repoPath, err := securejoin.SecureJoin(h.c.Repo.ScanPath, repoName)
-	if err != nil {
-		gitError(w, "repository not found", http.StatusNotFound)
-		h.l.Error("git: failed to secure join repo path", "handler", "InfoRefs", "error", err)
+	repoPath, ok := repoPathFromcontext(r.Context())
+	if !ok {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to find repository path"))
 		return
 	}
 
@@ -57,12 +48,10 @@ func (h *Knot) InfoRefs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Knot) UploadArchive(w http.ResponseWriter, r *http.Request) {
-	did := chi.URLParam(r, "did")
-	name := chi.URLParam(r, "name")
-	repo, err := securejoin.SecureJoin(h.c.Repo.ScanPath, filepath.Join(did, name))
-	if err != nil {
-		gitError(w, err.Error(), http.StatusInternalServerError)
-		h.l.Error("git: failed to secure join repo path", "handler", "UploadPack", "error", err)
+	repo, ok := repoPathFromcontext(r.Context())
+	if !ok {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to find repository path"))
 		return
 	}
 
@@ -104,12 +93,10 @@ func (h *Knot) UploadArchive(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Knot) UploadPack(w http.ResponseWriter, r *http.Request) {
-	did := chi.URLParam(r, "did")
-	name := chi.URLParam(r, "name")
-	repo, err := securejoin.SecureJoin(h.c.Repo.ScanPath, filepath.Join(did, name))
-	if err != nil {
-		gitError(w, err.Error(), http.StatusInternalServerError)
-		h.l.Error("git: failed to secure join repo path", "handler", "UploadPack", "error", err)
+	repo, ok := repoPathFromcontext(r.Context())
+	if !ok {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Failed to find repository path"))
 		return
 	}
 
@@ -153,15 +140,7 @@ func (h *Knot) UploadPack(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Knot) ReceivePack(w http.ResponseWriter, r *http.Request) {
-	did := chi.URLParam(r, "did")
 	name := chi.URLParam(r, "name")
-	_, err := securejoin.SecureJoin(h.c.Repo.ScanPath, filepath.Join(did, name))
-	if err != nil {
-		gitError(w, err.Error(), http.StatusForbidden)
-		h.l.Error("git: failed to secure join repo path", "handler", "ReceivePack", "error", err)
-		return
-	}
-
 	h.RejectPush(w, r, name)
 }
 
@@ -190,6 +169,17 @@ func (h *Knot) RejectPush(w http.ResponseWriter, r *http.Request, unqualifiedRep
 		fmt.Fprintf(w, " Try:\ngit remote set-url --push origin git@%s:%s/%s\n\n... and push again.", hostname, ownerHandle, unqualifiedRepoName)
 	}
 	fmt.Fprintf(w, "\n\n")
+}
+
+func isDir(path string) (bool, error) {
+	info, err := os.Stat(path)
+	if err == nil && info.IsDir() {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
 }
 
 func gitError(w http.ResponseWriter, msg string, status int) {
