@@ -28,7 +28,7 @@ func (s *State) SwitchAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	l.Info("switched account", "did", did)
-	s.pages.HxRedirect(w, "/")
+	s.pages.HxRefresh(w)
 }
 
 func (s *State) RemoveAccount(w http.ResponseWriter, r *http.Request) {
