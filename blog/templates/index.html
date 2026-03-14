@@ -1,0 +1,76 @@
+{{ define "title" }}the tangled blog{{ end }}
+
+{{ define "extrameta" }}
+<meta name="description" content="The Tangled blog." />
+<link rel="alternate" type="application/atom+xml" title="Atom" href="/feed.xml" />
+{{ end }}
+
+<!-- overrides the default slate bg -->
+{{ define "bodyClasses" }}!bg-white dark:!bg-gray-900{{ end }}
+
+{{ define "topbarLayout" }}
+<header class="max-w-screen-xl mx-auto w-full" style="z-index: 20;">
+  {{ template "layouts/fragments/topbar" . }}
+</header>
+{{ end }}
+
+{{ define "content" }}
+<div class="max-w-screen-lg mx-auto w-full px-4 py-10">
+
+  <header class="mb-10 text-center">
+    <h1 class="text-3xl font-bold dark:text-white mb-2">the tangled blog</h1>
+    <p class="text-gray-500 dark:text-gray-400">all the ropes and scaffolding</p>
+  </header>
+
+  {{ if .Featured }}
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-14">
+    {{ range .Featured }}
+    <a href="/{{ .Meta.Slug }}" class="no-underline hover:no-underline group flex flex-col bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 overflow-hidden hover:bg-gray-100/25 hover:dark:bg-gray-700/25 transition-colors">
+      <div class="aspect-[16/9] overflow-hidden bg-gray-100 dark:bg-gray-700">
+        <img src="{{ .Meta.Image }}" alt="{{ .Meta.Title }}" class="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
+      </div>
+      <div class="flex flex-col flex-1 px-5 py-4">
+        <div class="text-xs text-gray-400 dark:text-gray-500 mb-2">
+          {{ $date := .ParsedDate }}{{ $date.Format "Jan 2, 2006" }}
+          {{ if .Meta.Draft }}<span class="text-red-500">[draft]</span>{{ end }}
+        </div>
+        <h2 class="font-bold text-gray-900 dark:text-white text-base leading-snug mb-1 group-hover:underline">{{ .Meta.Title }}</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 flex-1">{{ .Meta.Subtitle }}</p>
+        <div class="flex items-center mt-4">
+          <div class="inline-flex items-center -space-x-2">
+            {{ range .Meta.Authors }}
+            <img src="{{ tinyAvatar .Handle }}" class="size-6 rounded-full border border-gray-300 dark:border-gray-700" alt="{{ .Name }}" title="{{ .Name }}" />
+            {{ end }}
+          </div>
+        </div>
+      </div>
+    </a>
+    {{ end }}
+  </div>
+  {{ end }}
+
+  <div class="grid grid-cols-1 rounded border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700">
+    {{ range .Posts }}
+    <a href="/{{ .Meta.Slug }}" class="no-underline hover:no-underline group flex items-center justify-between gap-4 px-6 py-3 hover:bg-gray-100/25 hover:dark:bg-gray-700/25 transition-colors">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="inline-flex items-center -space-x-2 shrink-0">
+          {{ range .Meta.Authors }}
+          <img src="{{ tinyAvatar .Handle }}" class="size-5 rounded-full border border-gray-300 dark:border-gray-700" alt="{{ .Name }}" title="{{ .Name }}" />
+          {{ end }}
+        </div>
+        <span class="font-medium text-gray-900 dark:text-white group-hover:underline truncate">
+          {{ .Meta.Title }}
+          {{ if .Meta.Draft }}<span class="text-red-500 text-xs font-normal ml-1">[draft]</span>{{ end }}
+        </span>
+      </div>
+      <div class="text-sm text-gray-400 dark:text-gray-500 shrink-0">
+        {{ $date := .ParsedDate }}{{ $date.Format "Jan 02, 2006" }}
+      </div>
+    </a>
+    {{ end }}
+  </div>
+
+</div>
+{{ end }}
+
+{{ define "footerLayout" }}{{ template "blog/fragments/footer" . }}{{ end }}

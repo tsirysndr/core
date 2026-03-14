@@ -1,0 +1,68 @@
+{{ define "title" }}{{ .Post.Meta.Title }} — tangled blog{{ end }}
+
+{{ define "extrameta" }}
+<meta name="description" content="{{ .Post.Meta.Subtitle }}"/>
+<meta property="og:title" content="{{ .Post.Meta.Title }}" />
+<meta property="og:description" content="{{ .Post.Meta.Subtitle }}" />
+<meta property="og:url" content="https://blog.tangled.org/{{ .Post.Meta.Slug }}" />
+{{ if .Post.Meta.Image }}
+<meta property="og:image" content="https://blog.tangled.org{{ .Post.Meta.Image }}" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:image" content="https://blog.tangled.org{{ .Post.Meta.Image }}" />
+{{ end }}
+<meta name="twitter:title" content="{{ .Post.Meta.Title }}" />
+<meta name="twitter:description" content="{{ .Post.Meta.Subtitle }}" />
+<link rel="alternate" type="application/atom+xml" title="Atom" href="/feed.xml" />
+{{ end }}
+
+{{ define "bodyClasses" }}!bg-white dark:!bg-gray-900{{ end }}
+
+{{ define "topbarLayout" }}
+<header class="max-w-screen-xl mx-auto w-full" style="z-index: 20;">
+  {{ template "layouts/fragments/topbar" . }}
+</header>
+{{ end }}
+
+{{ define "footerLayout" }}{{ template "blog/fragments/footer" . }}{{ end }}
+
+{{ define "content" }}
+<div class="max-w-[90ch] mx-auto w-full px-4 py-8">
+  <div class="prose dark:prose-invert w-full max-w-none">
+
+    <header class="not-prose mb-4">
+      {{ $authors := .Post.Meta.Authors }}
+      <p class="mb-1 text-sm text-gray-600 dark:text-gray-400">
+        {{ $date := .Post.ParsedDate }}
+        {{ $date.Format "02 Jan, 2006" }}
+      </p>
+
+      <h1 class="mb-0 text-2xl font-bold dark:text-white">
+        {{ .Post.Meta.Title }}
+        {{ if .Post.Meta.Draft }}<span class="text-red-500 text-base font-normal">[draft]</span>{{ end }}
+      </h1>
+      <p class="italic mt-1 mb-3 text-lg text-gray-600 dark:text-gray-400">{{ .Post.Meta.Subtitle }}</p>
+
+      <div class="flex items-center gap-3 not-prose">
+        <div class="inline-flex items-center -space-x-2">
+          {{ range $authors }}
+          <img src="{{ tinyAvatar .Handle }}" class="size-7 rounded-full border border-gray-300 dark:border-gray-700" alt="{{ .Handle }}" title="{{ .Handle }}" />
+          {{ end }}
+        </div>
+        <div class="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300">
+          {{ range $i, $a := $authors }}
+          {{ if gt $i 0 }}<span class="text-gray-400">&amp;</span>{{ end }}
+          <a href="https://tangled.org/@{{ $a.Handle }}" class="hover:underline">{{ $a.Handle }}</a>
+          {{ end }}
+        </div>
+      </div>
+    </header>
+
+    <article>
+      {{ .Post.Body }}
+    </article>
+
+  </div>
+</div>
+{{ end }}

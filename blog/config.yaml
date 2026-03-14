@@ -1,0 +1,12 @@
+preBuild:
+  - tailwindcss -i ../input.css -o static/tw.css
+title: the tangled blog
+# note the trailing slash!
+url: "https://blog.tangled.org/"
+description: ""
+author:
+  name: "Anirudh Oppiliappan"
+  email: "anirudh@tangled.sh"
+defaultTemplate: text.html
+extraTemplateDirs:
+  - ../appview/pages/templates

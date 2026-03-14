@@ -1,0 +1,195 @@
+---
+atroot: true
+template:
+slug: pulls
+title: the lifecycle of a pull request
+subtitle: we shipped a bunch of PR features recently; here's how we built it
+date: 2025-04-16
+image: https://assets.tangled.network/blog/hidden-ref.png
+authors:
+  - name: Anirudh
+    email: anirudh@tangled.sh
+    handle: anirudh.fi
+  - name: Akshay
+    email: akshay@tangled.sh
+    handle: oppi.li
+draft: false
+---
+
+We've spent the last couple of weeks building out a pull
+request system for Tangled, and today we want to lift the
+hood and show you how it works.
+
+If you're new to Tangled, [read our intro](/intro) for the
+full story!
+
+You have three options to contribute to a repository:
+
+- Paste a patch on the web UI
+- Compare two local branches (you'll see this only if you're a
+collaborator on the repo)
+- Compare across forks
+
+Whatever you choose, at the core of every PR is the patch.
+First, you write some code. Then, you run `git diff` to
+produce a patch and make everyone's lives easier, or push to
+a branch, and we generate it ourselves by comparing against
+the target.
+
+## patch generation
+
+When you create a PR from a branch, we create a "patch" by
+calculating the difference between your branch and the
+target branch. Consider this scenario:
+
+<figure class="max-w-[550px] m-auto flex flex-col items-center justify-center">
+  <img class="h-auto max-w-full" src="https://assets.tangled.network/blog/merge-base.png">
+  <figcaption class="text-center"><code>A</code> is the merge-base for
+<code>feature</code> and <code>main</code>.</figcaption>
+</figure>
+
+Your `feature` branch has advanced 2 commits since you first
+branched out, but in the meanwhile, `main` has also advanced
+2 commits. Doing a trivial `git diff feature main` will
+produce a confusing patch:
+
+- the patch will apply the changes from `X` and `Y`
+- the patch will **revert** the changes from `B` and `C`
+
+We obviously do not want the second part! To only show the
+changes added by `feature`, we have to identify the
+"merge-base": the nearest common ancestor of `feature` and
+`main`.
+
+
+In this case, `A` is the nearest common ancestor, and
+subsequently, the patch calculated will contain just `X` and
+`Y`.
+
+### ref comparisons across forks
+
+The plumbing described above is easy to do across two
+branches, but what about forks? And what if they live on
+different servers altogether (as they can in Tangled!)?
+
+Here's the concept: since we already have all the necessary
+components to compare two local refs, why not simply
+"localize" the remote ref?
+
+In simpler terms, we instruct Git to fetch the target branch
+from the original repository and store it in your fork under
+a special name. This approach allows us to compare your
+changes against the most current version of the branch
+you're trying to contribute to, all while remaining within
+your fork.
+
+<figure class="max-w-[550px] m-auto flex flex-col items-center justify-center">
+    <img class="h-auto max-w-full" src="https://assets.tangled.network/blog/hidden-ref.png">
+    <figcaption class="text-center">Hidden tracking ref.</figcaption>
+</figure>
+
+We call this a "hidden tracking ref." When you create a pull
+request from a fork, we establish a refspec that tracks the
+remote branch, which we then use to generate a diff. A
+refspec is essentially a rule that tells Git how to map
+references between a remote and your local repository during
+fetch or push operations.
+
+For example, if your fork has a feature branch called
+`feature-1`, and you want to make a pull request to the
+`main` branch of the original repository, we fetch the
+remote `main` into a local hidden ref using a refspec like
+this:
+
+```
++refs/heads/main:refs/hidden/feature-1/main
+```
+
+Since we already have a remote (`origin`, by default) to the
+original repository (remember, we cloned it earlier), we can
+use `fetch` with this refspec to bring the remote `main`
+branch into our local hidden ref. Each pull request gets its
+own hidden ref, hence the `refs/hidden/:localRef/:remoteRef`
+format. We keep this ref updated whenever you push new
+commits to your feature branch, ensuring that comparisons --
+and any potential merge conflicts -- are always based on the
+latest state of the target branch.
+
+And just like earlier, we produce the patch by diffing your
+feature branch with the hidden tracking ref. Also, the entire pull
+request is stored as [an atproto record][atproto-record] and updated
+each time the patch changes.
+
+[atproto-record]: https://pdsls.dev/at://did:plc:qfpnj4og54vl56wngdriaxug/sh.tangled.repo.pull/3lmwniim2i722
+
+Neat, now that we have a patch; we can move on the hard
+part: code review.
+
+
+## your patch does the rounds
+
+Tangled uses a "round-based" review format. Your initial
+submission starts "round 0". Once your submission receives
+scrutiny, you can address reviews and resubmit your patch.
+This resubmission starts "round 1". You keep whittling on
+your patch till it is good enough, and eventually merged (or
+closed if you are unlucky).
+
+<figure class="max-w-[700px] m-auto flex flex-col items-center justify-center">
+    <img class="h-auto max-w-full" src="https://assets.tangled.network/blog/patch-pr-main.png">
+    <figcaption class="text-center">A new pull request with a couple
+rounds of reviews.</figcaption>
+</figure>
+
+Rounds are a far superior to standard branch-based
+approaches:
+
+- Submissions are immutable: how many times have your
+  reviews gone out-of-date because the author pushed commits
+  _during_ your review?
+- Reviews are attached to submissions: at a glance, it is
+  easy to tell which comment applies to which "version" of
+  the pull-request
+- The author can choose when to resubmit! They can commit as
+  much as they want to their branch, but a new round begins
+  when they choose to hit "resubmit"
+- It is possible to "interdiff" and observe changes made
+  across submissions (this is coming very soon to Tangled!)
+
+This [post by Mitchell
+Hashimoto](https://mitchellh.com/writing/github-changesets)
+goes into further detail on what can be achieved with
+round-based reviews.
+
+## future plans
+
+To close off this post, we wanted to share some of our
+future plans for pull requests:
+
+* `format-patch` support: both for pasting in the UI and
+  internally. This allows us to show commits in the PR page,
+  and offer different merge strategies to choose from
+  (squash, rebase, ...).
+  **Update 2025-08-12**: We have format-patch support!
+
+* Gerrit-style `refs/for/main`: we're still hashing out the
+  details but being able to push commits to a ref to
+  "auto-create" a PR would be super handy!
+
+* Change ID support: This will allow us to group changes
+  together and track them across multiple commits, and to
+  provide "history" for each change. This works great with [Jujutsu][jj].
+  **Update 2025-08-12**: This has now landed: https://blog.tangled.org/stacking
+
+Join us on [Discord](https://chat.tangled.sh) or
+`#tangled` on libera.chat (the two are bridged, so we will
+never miss a message!). We are always available to help
+setup knots, listen to feedback on features, or even
+shepherd contributions!
+
+**Update 2025-08-12**: We move fast, and we now have jujutsu support, and an
+early in-house CI: https://blog.tangled.org/ci. You no longer need a Bluesky
+account to sign-up; head to https://tangled.sh/signup and sign up with your
+email!
+
+[jj]: https://jj-vcs.github.io/jj/latest/

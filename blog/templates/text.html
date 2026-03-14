@@ -1,0 +1,91 @@
+{{ define "fragments/logotypeSmall" }}
+  <span class="flex items-center gap-2">
+    {{ template "fragments/dolly/logo" "size-8 text-black dark:text-white" }}
+    <span class="font-bold text-xl not-italic">tangled</span>
+    <span class="font-normal not-italic text-xs rounded bg-gray-100 dark:bg-gray-700 px-1">alpha</span>
+  </span>
+{{ end }}
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="description" content="{{ index .Meta "subtitle" }}"/>
+    <meta property="og:site_name" content="Tangled" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="{{ index .Meta "title" }}" />
+    <meta property="og:description" content="{{ index .Meta "subtitle" }}" />
+    <meta property="og:url" content="https://blog.tangled.org/{{ index .Meta "slug" }}" />
+    <meta property="og:image" content="https://blog.tangled.org{{ index .Meta "image" }}" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="{{ index .Meta "title" }}" />
+    <meta name="twitter:description" content="{{ index .Meta "subtitle" }}" />
+    <meta name="twitter:image" content="https://blog.tangled.org{{ index .Meta "image" }}" />
+    <link rel="alternate" type="application/atom+xml" title="Atom" href="/feed.xml" />
+    <link rel="icon" href="/static/logos/dolly.ico" sizes="48x48"/>
+    <link rel="icon" href="/static/logos/dolly.svg" sizes="any" type="image/svg+xml"/>
+    <link rel="apple-touch-icon" href="/static/logos/dolly.png"/>
+    <link rel="preload" href="/static/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="/static/tw.css" type="text/css" />
+    <title>{{ index .Meta "title" }}</title>
+  </head>
+  <body class="bg-slate-100 dark:bg-gray-900 dark:text-white min-h-screen flex flex-col gap-4">
+
+    <header class="w-full drop-shadow-sm bg-white dark:bg-gray-800">
+      <nav class="mx-auto px-6 py-2">
+        <div class="flex justify-between items-center">
+          <a href="/" class="text-2xl no-underline hover:no-underline flex items-center gap-2">
+            {{ template "fragments/logotypeSmall" }}
+          </a>
+        </div>
+      </nav>
+    </header>
+
+    <div class="flex-grow flex flex-col max-w-[75ch] mx-auto w-full px-1">
+      <main class="prose dark:prose-invert w-full max-w-none">
+
+        <header class="not-prose">
+          <p class="px-6 mb-0 text-sm text-gray-600 dark:text-gray-400">
+            {{ $dateStr := index .Meta "date" }}
+            {{ $date := parsedate $dateStr }}
+            {{ $date.Format "02 Jan, 2006" }}
+
+            <span class="mx-2 select-none">&middot;</span>
+
+            by
+            {{ $authors := index .Meta "authors" }}
+            {{ if eq (len $authors) 2 }}
+              <a href="https://bsky.app/profile/{{ (index $authors 0).handle }}" class="no-underline">{{ (index $authors 0).name }}</a>
+              &amp;
+              <a href="https://bsky.app/profile/{{ (index $authors 1).handle }}" class="no-underline">{{ (index $authors 1).name }}</a>
+            {{ else }}
+              {{ range $authors }}
+              <a href="https://bsky.app/profile/{{ .handle }}" class="no-underline">{{ .name }}</a>
+              {{ end }}
+            {{ end }}
+          </p>
+
+          {{ if index .Meta "draft" }}
+            <h1 class="px-6 mb-0 text-2xl font-bold">{{ index .Meta "title" }} <span class="text-red-500">[draft]</span></h1>
+          {{ else }}
+            <h1 class="px-6 mb-0 text-2xl font-bold">{{ index .Meta "title" }}</h1>
+          {{ end }}
+          <p class="italic px-6 mt-1 mb-4 text-lg text-gray-600 dark:text-gray-400">{{ index .Meta "subtitle" }}</p>
+        </header>
+
+        <article class="bg-white dark:bg-gray-800 px-6 py-4 rounded drop-shadow-sm">
+          {{ .Body }}
+        </article>
+
+      </main>
+    </div>
+
+    <footer class="mt-12">
+      {{ template "layouts/fragments/footer" . }}
+    </footer>
+
+  </body>
+</html>
