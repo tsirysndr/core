@@ -13,7 +13,7 @@ import (
 	chromahtml "github.com/alecthomas/chroma/v2/formatters/html"
 	"github.com/alecthomas/chroma/v2/styles"
 	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark-emoji"
+	emoji "github.com/yuin/goldmark-emoji"
 	highlighting "github.com/yuin/goldmark-highlighting/v2"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
@@ -53,35 +53,42 @@ type RenderContext struct {
 	Files        fs.FS
 }
 
-func NewMarkdown(hostname string) goldmark.Markdown {
-	md := goldmark.New(
-		goldmark.WithExtensions(
-			extension.GFM,
-			&mermaid.Extender{
-				RenderMode: mermaid.RenderModeClient,
-				NoScript:   true,
-			},
-			highlighting.NewHighlighting(
-				highlighting.WithFormatOptions(
-					chromahtml.Standalone(false),
-					chromahtml.WithClasses(true),
-				),
-				highlighting.WithCustomStyle(styles.Get("catppuccin-latte")),
+func NewMarkdown(hostname string, extra ...goldmark.Extender) goldmark.Markdown {
+	exts := []goldmark.Extender{
+		extension.GFM,
+		&mermaid.Extender{
+			RenderMode: mermaid.RenderModeClient,
+			NoScript:   true,
+		},
+		highlighting.NewHighlighting(
+			highlighting.WithFormatOptions(
+				chromahtml.Standalone(false),
+				chromahtml.WithClasses(true),
 			),
-			extension.NewFootnote(
-				extension.WithFootnoteIDPrefix([]byte("footnote")),
-			),
-			callout.CalloutExtention,
-			textension.AtExt,
-			textension.NewTangledLinkExt(hostname),
-			emoji.Emoji,
+			highlighting.WithCustomStyle(styles.Get("catppuccin-latte")),
 		),
+		extension.NewFootnote(
+			extension.WithFootnoteIDPrefix([]byte("footnote")),
+		),
+		callout.CalloutExtention,
+		textension.AtExt,
+		textension.NewTangledLinkExt(hostname),
+		emoji.Emoji,
+	}
+	exts = append(exts, extra...)
+	md := goldmark.New(
+		goldmark.WithExtensions(exts...),
 		goldmark.WithParserOptions(
 			parser.WithAutoHeadingID(),
 		),
 		goldmark.WithRendererOptions(html.WithUnsafe()),
 	)
 	return md
+}
+
+// NewMarkdownWith is an alias for NewMarkdown with extra extensions.
+func NewMarkdownWith(hostname string, extra ...goldmark.Extender) goldmark.Markdown {
+	return NewMarkdown(hostname, extra...)
 }
 
 func (rctx *RenderContext) RenderMarkdown(source string) string {
