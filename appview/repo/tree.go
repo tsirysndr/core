@@ -128,7 +128,7 @@ func (rp *Repo) Tree(w http.ResponseWriter, r *http.Request) {
 	rp.pages.RepoTree(w, pages.RepoTreeParams{
 		LoggedInUser:     user,
 		BreadCrumbs:      breadcrumbs,
-		TreePath:         treePath,
+		Path:             treePath,
 		RepoInfo:         rp.repoResolver.GetRepoInfo(r, user),
 		EmailToDid:       emailToDidMap,
 		LastCommitInfo:   lastCommitInfo,

@@ -59,18 +59,18 @@
     {{ range .Files }}
       <div class="grid grid-cols-12 gap-4 items-center py-1">
         <div class="col-span-8 md:col-span-4">
-          {{ $link := printf "/%s/%s/%s/%s/%s" $.RepoInfo.FullName "tree" (pathEscape $.Ref) $.TreePath .Name }}
+          {{ $link := printf "/%s/%s/%s/%s/%s" $.RepoInfo.FullName "tree" (pathEscape $.Ref) $.Path .Name }}
           {{ $icon := "folder" }}
           {{ $iconStyle := "size-4 fill-current" }}
 
           {{ if .IsSubmodule }}
-            {{ $link = printf "/%s/%s/%s/%s/%s" $.RepoInfo.FullName "blob" (urlquery $.Ref) $.TreePath .Name }}
+            {{ $link = printf "/%s/%s/%s/%s/%s" $.RepoInfo.FullName "blob" (urlquery $.Ref) $.Path .Name }}
             {{ $icon = "folder-input" }}
             {{ $iconStyle = "size-4" }}
           {{ end }}
 
           {{ if .IsFile }}
-            {{ $link = printf "/%s/%s/%s/%s/%s" $.RepoInfo.FullName "blob" (urlquery $.Ref) $.TreePath .Name }}
+            {{ $link = printf "/%s/%s/%s/%s/%s" $.RepoInfo.FullName "blob" (urlquery $.Ref) $.Path .Name }}
             {{ $icon = "file" }}
             {{ $iconStyle = "size-4" }}
           {{ end }}

@@ -795,7 +795,7 @@ type RepoTreeParams struct {
 	RepoInfo       repoinfo.RepoInfo
 	Active         string
 	BreadCrumbs    [][]string
-	TreePath       string
+	Path           string
 	Raw            bool
 	HTMLReadme     template.HTML
 	EmailToDid     map[string]string
