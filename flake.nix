@@ -254,6 +254,15 @@
         type = "app";
         program = ''${air-watcher "spindle" ""}/bin/run'';
       };
+      watch-blog = {
+        type = "app";
+        program = toString (pkgs.writeShellScript "watch-blog" ''
+          echo "copying static files to appview/pages/static..."
+          mkdir -p appview/pages/static
+          ${pkgs.coreutils}/bin/cp -fr --no-preserve=ownership,mode ${packages'.appview-static-files}/* appview/pages/static
+          ${air-watcher "blog" "serve"}/bin/run
+        '');
+      };
       watch-tailwind = {
         type = "app";
         program = ''${tailwind-watcher}/bin/run'';

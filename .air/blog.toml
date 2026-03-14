@@ -1,0 +1,12 @@
+root = "."
+tmp_dir = "out"
+
+[build]
+cmd = "go build -o out/blog.out cmd/blog/main.go"
+bin = "out/blog.out"
+args_bin = ["serve"]
+
+include_ext = ["go", "html", "md"]
+include_dir = ["cmd/blog", "blog"]
+exclude_dir = ["nix", "tmp", "out"]
+stop_on_error = true
