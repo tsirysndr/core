@@ -1,0 +1,33 @@
+engine: nixery
+when:
+  - event: push
+    branch: master
+
+dependencies:
+  nixpkgs:
+    - go
+    - gcc
+    - nodejs
+    - tailwindcss
+
+steps:
+  - name: patch static dir
+    command: |
+      mkdir -p appview/pages/static
+      touch appview/pages/static/x
+
+  - name: build blog
+    command: |
+      go build -o blog.out ./cmd/blog
+
+  - name: generate css
+    command: |
+      tailwindcss -i input.css -o appview/pages/static/tw.css
+
+  - name: build static site
+    command: |
+      ./blog.out build
+
+  - name: deploy
+    command: |
+      npx --yes wrangler pages deploy --branch master --project-name tangled-blog ./build
