@@ -526,14 +526,16 @@ func (p *Pages) AvatarUrl(actor, size string) string {
 	signature := hex.EncodeToString(h.Sum(nil))
 
 	// Get avatar CID for cache busting
-	profile, err := db.GetProfile(p.db, did)
 	version := ""
-	if err == nil && profile != nil && profile.Avatar != "" {
-		// Use first 8 chars of avatar CID as version
-		if len(profile.Avatar) > 8 {
-			version = profile.Avatar[:8]
-		} else {
-			version = profile.Avatar
+	if p.db != nil {
+		profile, err := db.GetProfile(p.db, did)
+		if err == nil && profile != nil && profile.Avatar != "" {
+			// Use first 8 chars of avatar CID as version
+			if len(profile.Avatar) > 8 {
+				version = profile.Avatar[:8]
+			} else {
+				version = profile.Avatar
+			}
 		}
 	}
 
