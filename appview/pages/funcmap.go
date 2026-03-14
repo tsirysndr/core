@@ -295,6 +295,19 @@ func (p *Pages) funcMap() template.FuncMap {
 
 			lexer := lexers.Get(filepath.Base(path))
 			if lexer == nil {
+				if firstLine, _, ok := strings.Cut(content, "\n"); ok && strings.HasPrefix(firstLine, "#!") {
+					// extract interpreter from shebang (handles "#!/usr/bin/env nu", "#!/usr/bin/nu", etc.)
+					fields := strings.Fields(firstLine[2:])
+					if len(fields) > 0 {
+						interp := filepath.Base(fields[len(fields)-1])
+						lexer = lexers.Get(interp)
+					}
+				}
+			}
+			if lexer == nil {
+				lexer = lexers.Analyse(content)
+			}
+			if lexer == nil {
 				lexer = lexers.Fallback
 			}
 
