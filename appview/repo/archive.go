@@ -54,16 +54,19 @@ func (rp *Repo) DownloadArchive(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	// pass through headers from upstream response
-	if contentDisposition := resp.Header.Get("Content-Disposition"); contentDisposition != "" {
-		w.Header().Set("Content-Disposition", contentDisposition)
+	// force application/gzip here
+	w.Header().Set("Content-Type", "application/gzip")
+
+	filename := ""
+	if cd := resp.Header.Get("Content-Disposition"); strings.HasPrefix(cd, "attachment;") {
+		filename = cd // knot has already set the attachment CD
 	}
-	if contentType := resp.Header.Get("Content-Type"); contentType != "" {
-		w.Header().Set("Content-Type", contentType)
+	if filename == "" {
+		filename = fmt.Sprintf("attachment; filename=\"%s-%s.tar.gz\"", f.Name, ref)
 	}
-	if contentLength := resp.Header.Get("Content-Length"); contentLength != "" {
-		w.Header().Set("Content-Length", contentLength)
-	}
+	w.Header().Set("Content-Disposition", filename)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+
 	if link := resp.Header.Get("Link"); link != "" {
 		if resolvedRef, err := extractImmutableLink(link); err == nil {
 			newLink := fmt.Sprintf("<%s/%s/archive/%s.tar.gz>; rel=\"immutable\"",
