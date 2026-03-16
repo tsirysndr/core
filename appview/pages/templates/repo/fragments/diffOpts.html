@@ -4,24 +4,32 @@
     {{ $active = "split" }}
   {{ end }}
 
-  {{ $unified := 
-     (dict
-       "Key" "unified"
-       "Value" "unified"
-       "Icon" "square-split-vertical"
-       "Meta" "") }}
-  {{ $split := 
-     (dict
-       "Key" "split"
-       "Value" "split"
-       "Icon" "square-split-horizontal"
-       "Meta" "") }}
-  {{ $values := list $unified $split }}
+  {{ $activeTab := "bg-white dark:bg-gray-700 shadow-sm" }}
+  {{ $inactiveTab := "bg-gray-100 dark:bg-gray-800 shadow-inner" }}
 
-  {{ template "fragments/tabSelector" 
-     (dict
-       "Name" "diff"
-       "Values" $values
-       "Active" $active) }}
+  <div class="flex justify-between divide-x divide-gray-200 dark:divide-gray-700 rounded border border-gray-200 dark:border-gray-700 overflow-hidden"
+       hx-on::before-request="const t=event.target.closest('button'); if(!t||t.classList.contains('shadow-sm'))return event.preventDefault(); this.querySelectorAll('button').forEach(b => { const active=b===t; b.classList.toggle('bg-white',active); b.classList.toggle('dark:bg-gray-700',active); b.classList.toggle('shadow-sm',active); b.classList.toggle('bg-gray-100',!active); b.classList.toggle('dark:bg-gray-800',!active); b.classList.toggle('shadow-inner',!active); })">
+    <button
+       hx-get="?diff=unified"
+       hx-target="#diff-files"
+       hx-select="#diff-files"
+       hx-swap="outerHTML"
+       hx-push-url="true"
+       class="group p-2 whitespace-nowrap flex justify-center items-center gap-2 text-sm w-full hover:no-underline text-center {{ if eq $active "unified" }} {{ $activeTab }} {{ else }} {{ $inactiveTab }} {{ end }}">
+      {{ i "square-split-vertical" "size-4 inline group-[.htmx-request]:hidden" }}
+      {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
+      unified
+    </button>
+    <button
+       hx-get="?diff=split"
+       hx-target="#diff-files"
+       hx-select="#diff-files"
+       hx-swap="outerHTML"
+       hx-push-url="true"
+       class="group p-2 whitespace-nowrap flex justify-center items-center gap-2 text-sm w-full hover:no-underline text-center {{ if eq $active "split" }} {{ $activeTab }} {{ else }} {{ $inactiveTab }} {{ end }}">
+      {{ i "square-split-horizontal" "size-4 inline group-[.htmx-request]:hidden" }}
+      {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
+      split
+    </button>
+  </div>
 {{ end }}
-

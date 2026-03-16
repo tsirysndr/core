@@ -8,11 +8,13 @@
     #filesToggle:not(:checked) ~ div div#resize-files { display: none; }
   </style>
 
-  {{ template "diffTopbar" . }}
-  {{ block "diffLayout" . }} {{ end }}
-  {{ template "fragments/resizable" }}
-  {{ template "activeFileHighlight" }}
-  {{ template "fragments/line-quote-button" }}
+  <div id="diff-area">
+    {{ template "diffTopbar" . }}
+    {{ block "diffLayout" . }} {{ end }}
+    {{ template "fragments/resizable" }}
+    {{ template "activeFileHighlight" }}
+    {{ template "fragments/line-quote-button" }}
+  </div>
 {{ end }}
 
 {{ define "diffTopbar" }}
@@ -86,7 +88,7 @@
   {{ $id := index . 0 }}
   {{ $target := index . 1 }}
   {{ $direction := index . 2 }}
-  <div id="{{ $id }}" 
+  <div id="{{ $id }}"
     data-resizer="vertical"
     data-target="{{ $target }}"
     data-direction="{{ $direction }}"
@@ -217,38 +219,45 @@
     </span>
   </label>
   <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    (() => {
       const checkbox = document.getElementById('collapseToggle');
-      const details = document.querySelectorAll('details[id^="file-"]');
+      const diffArea = document.getElementById('diff-area');
 
-      checkbox.addEventListener('change', function() {
-        details.forEach(detail => {
+      checkbox.addEventListener('change', () => {
+        document.querySelectorAll('details[id^="file-"]').forEach(detail => {
           detail.open = checkbox.checked;
         });
       });
 
-      details.forEach(detail => {
-        detail.addEventListener('toggle', function() {
-          const allOpen = Array.from(details).every(d => d.open);
-          const allClosed = Array.from(details).every(d => !d.open);
+      if (window.__collapseToggleHandler) {
+        diffArea.removeEventListener('toggle', window.__collapseToggleHandler, true);
+      }
 
-          if (allOpen) {
-            checkbox.checked = true;
-          } else if (allClosed) {
-            checkbox.checked = false;
-          }
-        });
-      });
-    });
+      const handler = (e) => {
+        if (!e.target.matches('details[id^="file-"]')) return;
+        const details = document.querySelectorAll('details[id^="file-"]');
+        const allOpen = Array.from(details).every(d => d.open);
+        const allClosed = Array.from(details).every(d => !d.open);
+
+        if (allOpen) checkbox.checked = true;
+        else if (allClosed) checkbox.checked = false;
+      };
+
+      window.__collapseToggleHandler = handler;
+      diffArea.addEventListener('toggle', handler, true);
+    })();
   </script>
 {{ end }}
 
 {{ define "activeFileHighlight" }}
   <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      const diffFiles = document.querySelectorAll('details[id^="file-"]');
+    (() => {
+      if (window.__activeFileScrollHandler) {
+        document.removeEventListener('scroll', window.__activeFileScrollHandler);
+      }
+
       const filetreeLinks = document.querySelectorAll('.filetree-link');
-      if (diffFiles.length === 0 || filetreeLinks.length === 0) return;
+      if (filetreeLinks.length === 0) return;
 
       const linkMap = new Map();
       filetreeLinks.forEach(link => {
@@ -257,13 +266,13 @@
       });
 
       let currentActive = null;
-      function setActive(link) {
+      const setActive = (link) => {
         if (link && link !== currentActive) {
           if (currentActive) currentActive.classList.remove('font-bold');
           link.classList.add('font-bold');
           currentActive = link;
         }
-      }
+      };
 
       filetreeLinks.forEach(link => {
         link.addEventListener('click', () => setActive(link));
@@ -272,18 +281,21 @@
       const topbar = document.querySelector('.sticky.top-0.z-30');
       const headerHeight = topbar ? topbar.offsetHeight : 0;
 
-      function updateActiveFile() {
-        for (const file of diffFiles) {
+      const updateActiveFile = () => {
+        const diffFiles = document.querySelectorAll('details[id^="file-"]');
+        Array.from(diffFiles).some(file => {
           const rect = file.getBoundingClientRect();
           if (rect.top <= headerHeight && rect.bottom > headerHeight) {
             setActive(linkMap.get(file.id));
-            return;
+            return true;
           }
-        }
-      }
+          return false;
+        });
+      };
 
+      window.__activeFileScrollHandler = updateActiveFile;
       document.addEventListener('scroll', updateActiveFile);
       updateActiveFile();
-    });
+    })();
   </script>
 {{ end }}
