@@ -3,130 +3,251 @@
   id="line-quote-btn"
   type="button"
   aria-label="Quote line in comment"
-  class="hidden fixed z-50 p-0.5 rounded bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-600 cursor-pointer shadow-sm transition-opacity opacity-0"
+  class="hidden fixed z-50 p-0.5 rounded bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-600 cursor-pointer shadow-sm transition-opacity opacity-0 flex flex-col items-start"
   style="pointer-events: none;"
 >
   {{ i "message-square-quote" "w-3.5 h-3.5" }}
+  <span id="line-quote-btn-end" class="hidden mt-auto rotate-180 opacity-50">
+    {{ i "message-square-quote" "w-3.5 h-3.5" }}
+  </span>
 </button>
 <script>
   (() => {
     const btn = document.getElementById('line-quote-btn');
     if (!btn) return;
+    const btnEnd = document.getElementById('line-quote-btn-end');
 
-    let currentAnchor = null;
-    let currentFileName = null;
-
-    const findTextarea = () =>
+    const textarea = () =>
       document.getElementById('pull-comment-textarea')
       || document.getElementById('comment-textarea');
 
-    const findLineEl = (el) =>
-      el?.closest?.('.line')
-      || el?.closest?.('span[id*="-O"]')
+    const lineOf = (el) =>
+      el?.closest?.('span[id*="-O"]')
       || el?.closest?.('span[id*="-N"]');
 
-    const getAnchor = (lineEl) => {
-      const link = lineEl.querySelector('a[href^="#"]');
-      return link ? link.getAttribute('href').slice(1) : lineEl.id || null;
+    const anchorOf = (el) => {
+      const link = el.querySelector('a[href^="#"]');
+      return link ? link.getAttribute('href').slice(1) : el.id || null;
     };
 
-    const getFileName = (lineEl) => {
-      const details = lineEl.closest('details[id^="file-"]');
-      if (details) return details.id.replace(/^file-/, '');
-      const bc = document.getElementById('breadcrumbs');
-      if (!bc) return null;
-      const els = bc.querySelectorAll('.text-bold');
-      return els.length > 0 ? els[els.length - 1].textContent.trim() : null;
+    const fileOf = (el) => {
+      const d = el.closest('details[id^="file-"]');
+      return d ? d.id.replace(/^file-/, '') : null;
     };
 
-    const show = (lineEl) => {
-      if (!findTextarea()) return;
-      const anchor = getAnchor(lineEl);
-      if (!anchor) return;
+    const lineNumOf = (el) => anchorOf(el)?.match(/(\d+)(?:-[ON]?\d+)?$/)?.[1];
 
-      currentAnchor = anchor;
-      currentFileName = getFileName(lineEl);
+    const columnOf = (el) => el.closest('.flex-col');
 
+    const linesInColumn = (col) =>
+      Array.from(col.querySelectorAll('span[id*="-O"], span[id*="-N"]'))
+        .filter(s => s.querySelector('a[href^="#"]'));
+
+    let dragLines = null;
+
+    const rangeBetween = (a, b) => {
+      const col = columnOf(a);
+      if (!col || col !== columnOf(b)) return [];
+      const all = dragLines || linesInColumn(col);
+      const ai = all.indexOf(a);
+      const bi = all.indexOf(b);
+      if (ai === -1 || bi === -1) return [];
+      return all.slice(Math.min(ai, bi), Math.max(ai, bi) + 1);
+    };
+
+    const clearHl = (cls) =>
+      document.querySelectorAll(`.${cls}`).forEach(el => el.classList.remove(cls));
+
+    const applyHl = (a, b, cls) => {
+      clearHl(cls);
+      const sel = rangeBetween(a, b);
+      sel.forEach(el => el.classList.add(cls));
+      return sel;
+    };
+
+    const highlightFromHash = () => {
+      clearHl('line-range-hl');
+      const hash = decodeURIComponent(window.location.hash.slice(1));
+      if (!hash) return;
+      const parts = hash.split('~');
+      const startEl = document.getElementById(parts[0]);
+
+      if (!startEl) {
+        const params = new URLSearchParams(window.location.search);
+        const hasCombined = parts.some(p => /-O\d+-N\d+$/.test(p));
+        if (hasCombined && params.get('diff') !== 'unified') {
+          params.set('diff', 'unified');
+          window.location.replace(
+            `${window.location.pathname}?${params}${window.location.hash}`
+          );
+        }
+        return;
+      }
+
+      const endEl = parts.length === 2 ? document.getElementById(parts[1]) : startEl;
+      if (!endEl) return;
+
+      const details = startEl.closest('details');
+      if (details) details.open = true;
+
+      applyHl(startEl, endEl, 'line-range-hl');
+      requestAnimationFrame(() =>
+        startEl.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+    };
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', highlightFromHash);
+    } else {
+      highlightFromHash();
+    }
+    window.addEventListener('hashchange', highlightFromHash);
+
+    let dragging = false;
+    let dragAnchor = null;
+    let dragCurrent = null;
+    let hoverTarget = null;
+
+    const showBtn = (lineEl) => {
+      if (!textarea() || !anchorOf(lineEl)) return;
       const rect = lineEl.getBoundingClientRect();
       Object.assign(btn.style, {
         top: `${rect.top + rect.height / 2 - btn.offsetHeight / 2}px`,
         left: `${rect.left + 4}px`,
+        height: '',
         opacity: '1',
         pointerEvents: 'auto',
       });
       btn.classList.remove('hidden');
     };
 
-    const hide = () => {
-      Object.assign(btn.style, { opacity: '0', pointerEvents: 'none' });
+    const hideBtn = () => {
+      if (dragging) return;
+      Object.assign(btn.style, { opacity: '0', pointerEvents: 'none', height: '' });
+      btnEnd.classList.add('hidden');
       setTimeout(() => { if (btn.style.opacity === '0') btn.classList.add('hidden'); }, 150);
     };
 
-    let hoverTarget = null;
+    const stretchBtn = (a, b) => {
+      const aRect = a.getBoundingClientRect();
+      const bRect = b.getBoundingClientRect();
+      const top = Math.min(aRect.top, bRect.top);
+      const bottom = Math.max(aRect.bottom, bRect.bottom);
+      const multiLine = a !== b;
+      Object.assign(btn.style, {
+        top: `${top}px`,
+        left: `${aRect.left + 4}px`,
+        height: `${bottom - top}px`,
+      });
+      if (multiLine) { btnEnd.classList.remove('hidden'); }
+      else { btnEnd.classList.add('hidden'); }
+    };
 
     document.addEventListener('mouseover', (e) => {
-      const lineEl = findLineEl(e.target);
-      if (lineEl && lineEl !== hoverTarget) {
-        hoverTarget = lineEl;
-        show(lineEl);
-      }
+      if (dragging || e.target === btn || btn.contains(e.target)) return;
+      const el = lineOf(e.target);
+      if (el && el !== hoverTarget) { hoverTarget = el; showBtn(el); }
     });
 
     document.addEventListener('mouseout', (e) => {
-      const lineEl = findLineEl(e.target);
-      if (!lineEl) return;
-      if (findLineEl(e.relatedTarget) === lineEl) return;
-      if (e.relatedTarget === btn || btn.contains(e.relatedTarget)) return;
+      if (dragging) return;
+      const el = lineOf(e.target);
+      if (!el || lineOf(e.relatedTarget) === el || e.relatedTarget === btn || btn.contains(e.relatedTarget)) return;
       hoverTarget = null;
-      hide();
+      hideBtn();
     });
 
     btn.addEventListener('mouseleave', (e) => {
-      if (!findLineEl(e.relatedTarget)) {
-        hoverTarget = null;
-        hide();
-      }
+      if (!dragging && !lineOf(e.relatedTarget)) { hoverTarget = null; hideBtn(); }
     });
 
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener('mousedown', (e) => {
+      if (e.button !== 0 || !hoverTarget) return;
       e.preventDefault();
-      e.stopPropagation();
-      const textarea = findTextarea();
-      if (!textarea || !currentAnchor) return;
+      dragging = true;
+      dragAnchor = dragCurrent = hoverTarget;
+      const col = columnOf(hoverTarget);
+      dragLines = col ? linesInColumn(col) : null;
+      applyHl(dragAnchor, dragCurrent, 'line-quote-hl');
+      btn.style.pointerEvents = 'none';
+      document.body.style.userSelect = 'none';
+    });
 
-      const lineNum = currentAnchor.match(/[ON]?(\d+)(?:-[ON]?\d+)?$/)?.[1];
-      if (!lineNum) return;
+    document.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      const el = lineOf(document.elementFromPoint(e.clientX, e.clientY));
+      if (!el || el === dragCurrent) return;
+      if (columnOf(el) !== columnOf(dragAnchor)) return;
+      dragCurrent = el;
+      applyHl(dragAnchor, dragCurrent, 'line-quote-hl');
+      stretchBtn(dragAnchor, dragCurrent);
+    });
 
-      const label = currentFileName ? `${currentFileName}:${lineNum}` : `L${lineNum}`;
-      const md = `[\`${label}\`](${window.location.pathname}#${currentAnchor})`;
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      document.body.style.userSelect = '';
 
-      const { selectionStart: start, selectionEnd: end, value } = textarea;
-      const before = value.slice(0, start);
-      const after = value.slice(end);
+      const selected = rangeBetween(dragAnchor, dragCurrent);
+      const ta = textarea();
+      if (ta && selected.length > 0) {
+        const first = selected[0];
+        const last = selected[selected.length - 1];
+        const fNum = lineNumOf(first);
+        const firstAnchor = anchorOf(first);
 
-      let prefix = '';
-      let suffix = '';
-      if (start === end && before.length > 0) {
-        const currentLine = before.slice(before.lastIndexOf('\n') + 1);
-        if (currentLine.length > 0) {
-          const nextNl = after.indexOf('\n');
-          const restOfLine = nextNl === -1 ? after : after.slice(0, nextNl);
-          if (restOfLine.trim().length === 0) {
-            prefix = '\n';
-          } else {
-            prefix = before.endsWith(' ') ? '' : ' ';
-            suffix = after.startsWith(' ') ? '' : ' ';
+        if (fNum && firstAnchor) {
+          const file = fileOf(first);
+          const lNum = lineNumOf(last);
+          const lastAnchor = anchorOf(last);
+
+          const label = selected.length === 1
+            ? (file ? `${file}:${fNum}` : `L${fNum}`)
+            : (file ? `${file}:${fNum}-${lNum}` : `L${fNum}-${lNum}`);
+
+          const fragment = selected.length === 1
+            ? firstAnchor
+            : `${firstAnchor}~${lastAnchor}`;
+
+          const md = `[\`${label}\`](${window.location.pathname}${window.location.search}#${fragment})`;
+
+          const { selectionStart: s, selectionEnd: end, value } = ta;
+          const before = value.slice(0, s);
+          const after = value.slice(end);
+          let pre = '', suf = '';
+          if (s === end && before.length > 0) {
+            const cur = before.slice(before.lastIndexOf('\n') + 1);
+            if (cur.length > 0) {
+              const nextNl = after.indexOf('\n');
+              const rest = nextNl === -1 ? after : after.slice(0, nextNl);
+              if (rest.trim().length === 0) { pre = '\n'; }
+              else { pre = before.endsWith(' ') ? '' : ' '; suf = after.startsWith(' ') ? '' : ' '; }
+            }
           }
+          ta.value = before + pre + md + suf + after;
+          ta.selectionStart = ta.selectionEnd = s + pre.length + md.length + suf.length;
+          ta.focus();
+          ta.dispatchEvent(new Event('input', { bubbles: true }));
         }
       }
 
-      textarea.value = before + prefix + md + suffix + after;
-      const pos = start + prefix.length + md.length + suffix.length;
-      textarea.selectionStart = textarea.selectionEnd = pos;
-      textarea.focus();
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
-      textarea.dispatchEvent(new Event('keyup', { bubbles: true }));
+      clearHl('line-quote-hl');
+      dragLines = null;
+      dragAnchor = dragCurrent = hoverTarget = null;
+      hideBtn();
     });
+
+    btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); });
+
+    const cancelDrag = () => {
+      if (!dragging) return;
+      dragging = false;
+      document.body.style.userSelect = '';
+      clearHl('line-quote-hl');
+      dragLines = null;
+      dragAnchor = dragCurrent = hoverTarget = null;
+      hideBtn();
+    };
+    window.addEventListener('blur', cancelDrag);
   })();
 </script>
 {{ end }}

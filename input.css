@@ -373,6 +373,18 @@
     @apply bg-amber-400/30 dark:bg-amber-500/20;
 }
 
+.line-quote-hl, .line-range-hl {
+    @apply !bg-yellow-200/30 dark:!bg-yellow-700/30;
+}
+
+:is(.line-quote-hl, .line-range-hl) > .min-w-\[3\.5rem\] {
+    @apply !bg-yellow-200/30 dark:!bg-yellow-700/30;
+}
+
+:is(.line-quote-hl, .line-range-hl) > .min-w-\[3\.5rem\] a {
+    @apply !text-black dark:!text-white;
+}
+
 /* LineNumbersTable */
 .chroma .lnt {
     white-space: pre;
