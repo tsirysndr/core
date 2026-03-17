@@ -26,11 +26,7 @@
   </div>
 {{ end }}
 
-{{ define "footerLayout" }}
-  <footer class="px-1 col-span-full mt-12">
-    {{ template "layouts/fragments/footer" . }}
-  </footer>
-{{ end }}
+
 
 {{ define "contentAfter" }}
   {{ template "repo/fragments/diff" (list .Diff .DiffOpts) }}

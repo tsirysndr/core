@@ -1,0 +1,19 @@
+{{ define "layouts/fragments/footer" }}
+<footer class="w-full px-6 py-4 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700">
+  <div class="max-w-screen-lg mx-auto flex flex-wrap justify-center items-center gap-x-4 gap-y-2 text-sm text-gray-500 dark:text-gray-400">
+    <div class="flex items-center justify-center gap-x-2 order-last sm:order-first w-full sm:w-auto">
+      <a href="/" hx-boost="true" class="no-underline hover:no-underline flex items-center">
+        {{ template "fragments/dolly/logo" (dict "Classes" "size-5 text-gray-500 dark:text-gray-400") }}
+      </a>
+      <span>&copy; 2026 Tangled Labs Oy.</span>
+    </div>
+    <a href="https://blog.tangled.org" class="hover:text-gray-900 dark:hover:text-gray-200 hover:underline">blog</a>
+    <a href="https://docs.tangled.org" class="hover:text-gray-900 dark:hover:text-gray-200 hover:underline">docs</a>
+    <a href="https://tangled.org/tangled.org/core" hx-boost="true" class="hover:text-gray-900 dark:hover:text-gray-200 hover:underline">source</a>
+    <a href="https://chat.tangled.org" class="hover:text-gray-900 dark:hover:text-gray-200 hover:underline" target="_blank" rel="noopener noreferrer">discord</a>
+    <a href="https://bsky.app/profile/tangled.org" class="hover:text-gray-900 dark:hover:text-gray-200 hover:underline" target="_blank" rel="noopener noreferrer">bluesky</a>
+    <a href="/terms" hx-boost="true" class="hover:text-gray-900 dark:hover:text-gray-200 hover:underline">terms</a>
+    <a href="/privacy" hx-boost="true" class="hover:text-gray-900 dark:hover:text-gray-200 hover:underline">privacy</a>
+  </div>
+</footer>
+{{ end }}
