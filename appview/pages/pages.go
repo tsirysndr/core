@@ -350,9 +350,10 @@ func (p *Pages) TermsOfService(w io.Writer, params TermsOfServiceParams) error {
 		return fmt.Errorf("failed to read %s: %w", filename, err)
 	}
 
-	p.rctx.RendererType = markup.RendererTypeDefault
-	htmlString := p.rctx.RenderMarkdown(string(markdownBytes))
-	sanitized := p.rctx.SanitizeDefault(htmlString)
+	rctx := p.rctx.Clone()
+	rctx.RendererType = markup.RendererTypeDefault
+	htmlString := rctx.RenderMarkdown(string(markdownBytes))
+	sanitized := rctx.SanitizeDefault(htmlString)
 	params.Content = template.HTML(sanitized)
 
 	return p.execute("legal/terms", w, params)
@@ -378,9 +379,10 @@ func (p *Pages) PrivacyPolicy(w io.Writer, params PrivacyPolicyParams) error {
 		return fmt.Errorf("failed to read %s: %w", filename, err)
 	}
 
-	p.rctx.RendererType = markup.RendererTypeDefault
-	htmlString := p.rctx.RenderMarkdown(string(markdownBytes))
-	sanitized := p.rctx.SanitizeDefault(htmlString)
+	rctx := p.rctx.Clone()
+	rctx.RendererType = markup.RendererTypeDefault
+	htmlString := rctx.RenderMarkdown(string(markdownBytes))
+	sanitized := rctx.SanitizeDefault(htmlString)
 	params.Content = template.HTML(sanitized)
 
 	return p.execute("legal/privacy", w, params)
@@ -796,17 +798,18 @@ func (p *Pages) RepoIndexPage(w io.Writer, params RepoIndexParams) error {
 		return p.executeRepo("repo/knotUnreachable", w, params)
 	}
 
-	p.rctx.RepoInfo = params.RepoInfo
-	p.rctx.RepoInfo.Ref = params.Ref
-	p.rctx.RendererType = markup.RendererTypeRepoMarkdown
+	rctx := p.rctx.Clone()
+	rctx.RepoInfo = params.RepoInfo
+	rctx.RepoInfo.Ref = params.Ref
+	rctx.RendererType = markup.RendererTypeRepoMarkdown
 
 	if params.ReadmeFileName != "" {
 		ext := filepath.Ext(params.ReadmeFileName)
 		switch ext {
 		case ".md", ".markdown", ".mdown", ".mkdn", ".mkd":
 			params.Raw = false
-			htmlString := p.rctx.RenderMarkdown(params.Readme)
-			sanitized := p.rctx.SanitizeDefault(htmlString)
+			htmlString := rctx.RenderMarkdown(params.Readme)
+			sanitized := rctx.SanitizeDefault(htmlString)
 			params.HTMLReadme = template.HTML(sanitized)
 		default:
 			params.Raw = true
@@ -889,17 +892,18 @@ func (r RepoTreeParams) TreeStats() RepoTreeStats {
 func (p *Pages) RepoTree(w io.Writer, params RepoTreeParams) error {
 	params.Active = "overview"
 
-	p.rctx.RepoInfo = params.RepoInfo
-	p.rctx.RepoInfo.Ref = params.Ref
-	p.rctx.RendererType = markup.RendererTypeRepoMarkdown
+	rctx := p.rctx.Clone()
+	rctx.RepoInfo = params.RepoInfo
+	rctx.RepoInfo.Ref = params.Ref
+	rctx.RendererType = markup.RendererTypeRepoMarkdown
 
 	if params.ReadmeFileName != "" {
 		ext := filepath.Ext(params.ReadmeFileName)
 		switch ext {
 		case ".md", ".markdown", ".mdown", ".mkdn", ".mkd":
 			params.Raw = false
-			htmlString := p.rctx.RenderMarkdown(params.Readme)
-			sanitized := p.rctx.SanitizeDefault(htmlString)
+			htmlString := rctx.RenderMarkdown(params.Readme)
+			sanitized := rctx.SanitizeDefault(htmlString)
 			params.HTMLReadme = template.HTML(sanitized)
 		default:
 			params.Raw = true
@@ -971,11 +975,6 @@ type RepoBlobParams struct {
 }
 
 func (p *Pages) RepoBlob(w io.Writer, params RepoBlobParams) error {
-	switch params.BlobView.ContentType {
-	case models.BlobContentTypeMarkup:
-		p.rctx.RepoInfo = params.RepoInfo
-	}
-
 	params.Active = "overview"
 	return p.executeRepo("repo/blob", w, params)
 }

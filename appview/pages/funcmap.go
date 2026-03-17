@@ -265,25 +265,28 @@ func (p *Pages) funcMap() template.FuncMap {
 			return v.Slice(0, min(n, v.Len())).Interface()
 		},
 		"markdown": func(text string) template.HTML {
-			p.rctx.RendererType = markup.RendererTypeDefault
-			htmlString := p.rctx.RenderMarkdown(text)
-			sanitized := p.rctx.SanitizeDefault(htmlString)
+			rctx := p.rctx.Clone()
+			rctx.RendererType = markup.RendererTypeDefault
+			htmlString := rctx.RenderMarkdown(text)
+			sanitized := rctx.SanitizeDefault(htmlString)
 			return template.HTML(sanitized)
 		},
 		"description": func(text string) template.HTML {
-			p.rctx.RendererType = markup.RendererTypeDefault
-			htmlString := p.rctx.RenderMarkdownWith(text, goldmark.New(
+			rctx := p.rctx.Clone()
+			rctx.RendererType = markup.RendererTypeDefault
+			htmlString := rctx.RenderMarkdownWith(text, goldmark.New(
 				goldmark.WithExtensions(
 					emoji.Emoji,
 				),
 			))
-			sanitized := p.rctx.SanitizeDescription(htmlString)
+			sanitized := rctx.SanitizeDescription(htmlString)
 			return template.HTML(sanitized)
 		},
 		"readme": func(text string) template.HTML {
-			p.rctx.RendererType = markup.RendererTypeRepoMarkdown
-			htmlString := p.rctx.RenderMarkdown(text)
-			sanitized := p.rctx.SanitizeDefault(htmlString)
+			rctx := p.rctx.Clone()
+			rctx.RendererType = markup.RendererTypeRepoMarkdown
+			htmlString := rctx.RenderMarkdown(text)
+			sanitized := rctx.SanitizeDefault(htmlString)
 			return template.HTML(sanitized)
 		},
 		"code": func(content, path string) string {

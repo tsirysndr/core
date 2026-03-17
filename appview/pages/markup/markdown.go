@@ -86,6 +86,15 @@ func NewMarkdown(hostname string, extra ...goldmark.Extender) goldmark.Markdown 
 	return md
 }
 
+// clone creates a shallow copy of the RenderContext
+func (rctx *RenderContext) Clone() *RenderContext {
+	if rctx == nil {
+		return nil
+	}
+	clone := *rctx
+	return &clone
+}
+
 // NewMarkdownWith is an alias for NewMarkdown with extra extensions.
 func NewMarkdownWith(hostname string, extra ...goldmark.Extender) goldmark.Markdown {
 	return NewMarkdown(hostname, extra...)
