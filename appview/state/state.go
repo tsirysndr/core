@@ -226,6 +226,18 @@ func (s *State) Close() error {
 	return s.db.Close()
 }
 
+func (s *State) SecurityTxt(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Cache-Control", "public, max-age=86400") // one day
+
+	securityTxt := `Contact: mailto:security@tangled.org
+Preferred-Languages: en
+Canonical: https://tangled.org/.well-known/security.txt
+Expires: 2030-01-01T21:59:00.000Z
+`
+	w.Write([]byte(securityTxt))
+}
+
 func (s *State) RobotsTxt(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("Cache-Control", "public, max-age=86400") // one day

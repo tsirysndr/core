@@ -34,6 +34,7 @@ func (s *State) Router() http.Handler {
 
 	router.Get("/pwa-manifest.json", s.WebAppManifest)
 	router.Get("/robots.txt", s.RobotsTxt)
+	router.Get("/.well-known/security.txt", s.SecurityTxt)
 
 	userRouter := s.UserRouter(&middleware)
 	standardRouter := s.StandardRouter(&middleware)
