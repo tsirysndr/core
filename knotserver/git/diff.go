@@ -158,6 +158,54 @@ func (g *GitRepo) formatSinglePatch(commit plumbing.Hash, extraArgs ...string) (
 	return raw, &formatPatch[0], nil
 }
 
+// ChangedFilesBetween returns the list of files changed between oldSha and newSha.
+// If oldSha is the zero hash (initial push), all files in newSha are returned.
+func (g *GitRepo) ChangedFilesBetween(oldSha, newSha string) ([]string, error) {
+	newCommit, err := g.ResolveRevision(newSha)
+	if err != nil {
+		return nil, err
+	}
+
+	if plumbing.NewHash(oldSha) == plumbing.ZeroHash {
+		tree, err := newCommit.Tree()
+		if err != nil {
+			return nil, err
+		}
+		var files []string
+		tree.Files().ForEach(func(f *object.File) error {
+			files = append(files, f.Name)
+			return nil
+		})
+		return files, nil
+	}
+
+	oldCommit, err := g.ResolveRevision(oldSha)
+	if err != nil {
+		return nil, err
+	}
+
+	dt, err := g.DiffTree(oldCommit, newCommit)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]struct{})
+	for _, f := range dt.Diff {
+		if f.OldName != "" {
+			seen[f.OldName] = struct{}{}
+		}
+		if f.NewName != "" {
+			seen[f.NewName] = struct{}{}
+		}
+	}
+
+	files := make([]string, 0, len(seen))
+	for name := range seen {
+		files = append(files, name)
+	}
+	return files, nil
+}
+
 func (g *GitRepo) ResolveRevision(revStr string) (*object.Commit, error) {
 	rev, err := g.r.ResolveRevision(plumbing.Revision(revStr))
 	if err != nil {

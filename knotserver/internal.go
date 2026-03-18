@@ -385,12 +385,18 @@ func (h *InternalHandle) triggerPipeline(
 		DefaultBranch: defaultBranch,
 	}
 
+	changedFiles, err := gr.ChangedFilesBetween(line.OldSha.String(), line.NewSha.String())
+	if err != nil {
+		return fmt.Errorf("getting changed files: %w", err)
+	}
+
 	compiler := workflow.Compiler{
 		Trigger: tangled.Pipeline_TriggerMetadata{
 			Kind: string(workflow.TriggerKindPush),
 			Push: &trigger,
 			Repo: triggerRepo,
 		},
+		ChangedFiles: changedFiles,
 	}
 
 	cp := compiler.Compile(compiler.Parse(pipeline))
