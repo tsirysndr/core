@@ -16,7 +16,7 @@ steps:
       mkdir -p appview/pages/static
       touch appview/pages/static/x
 
-  - name: build blog
+  - name: build blog cmd
     command: |
       go build -o blog.out ./cmd/blog
 
