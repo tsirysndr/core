@@ -33,3 +33,4 @@ id_dsa
 id_ed25519
 *.pem
 *.key
+.claude/

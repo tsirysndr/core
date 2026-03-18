@@ -24,6 +24,7 @@ import (
 	"tangled.org/core/spindle/config"
 	"tangled.org/core/spindle/db"
 	"tangled.org/core/spindle/engine"
+	"tangled.org/core/spindle/engines/dummy"
 	"tangled.org/core/spindle/engines/nixery"
 	"tangled.org/core/spindle/models"
 	"tangled.org/core/spindle/queue"
@@ -334,6 +335,7 @@ func Run(ctx context.Context) error {
 
 	s, err := New(ctx, cfg, map[string]models.Engine{
 		"nixery": nixeryEng,
+		"dummy":  dummy.New(log.FromContext(ctx)),
 	})
 	if err != nil {
 		return err
