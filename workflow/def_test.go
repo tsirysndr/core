@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"tangled.org/core/api/tangled"
 )
 
 func TestUnmarshalWorkflowWithBranch(t *testing.T) {
@@ -273,6 +274,180 @@ func TestConstraintMatchBranch_GlobPatterns(t *testing.T) {
 			assert.Equal(t, tt.expected, result, "MatchBranch should return %v for branch %q", tt.expected, tt.branch)
 		})
 	}
+}
+
+func TestMatchesAnyFile(t *testing.T) {
+	tests := []struct {
+		name     string
+		files    []string
+		patterns []string
+		expected bool
+	}{
+		{
+			name:     "exact file match",
+			files:    []string{"src/main.go"},
+			patterns: []string{"src/main.go"},
+			expected: true,
+		},
+		{
+			name:     "glob match single star",
+			files:    []string{"src/main.go"},
+			patterns: []string{"src/*.go"},
+			expected: true,
+		},
+		{
+			name:     "glob match double star",
+			files:    []string{"src/pkg/util.go"},
+			patterns: []string{"src/**/*.go"},
+			expected: true,
+		},
+		{
+			name:     "any file in list matches",
+			files:    []string{"README.md", "src/main.go", "docs/guide.md"},
+			patterns: []string{"src/**"},
+			expected: true,
+		},
+		{
+			name:     "no file matches",
+			files:    []string{"README.md", "docs/guide.md"},
+			patterns: []string{"src/**"},
+			expected: false,
+		},
+		{
+			name:     "empty files list",
+			files:    []string{},
+			patterns: []string{"src/**"},
+			expected: false,
+		},
+		{
+			name:     "nil files list",
+			files:    nil,
+			patterns: []string{"src/**"},
+			expected: false,
+		},
+		{
+			name:     "multiple patterns, second matches",
+			files:    []string{"docs/guide.md"},
+			patterns: []string{"src/**", "docs/**"},
+			expected: true,
+		},
+		{
+			name:     "single star does not cross directory boundary",
+			files:    []string{"src/pkg/util.go"},
+			patterns: []string{"src/*.go"},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := matchesAnyFile(tt.files, tt.patterns)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestConstraintMatch_PathsFilter(t *testing.T) {
+	pushTrigger := tangled.Pipeline_TriggerMetadata{
+		Kind: string(TriggerKindPush),
+		Push: &tangled.Pipeline_PushTriggerData{
+			Ref: "refs/heads/main",
+		},
+	}
+
+	tests := []struct {
+		name         string
+		constraint   Constraint
+		changedFiles []string
+		expected     bool
+	}{
+		{
+			name: "paths match - workflow runs",
+			constraint: Constraint{
+				Event:  []string{"push"},
+				Branch: []string{"main"},
+				Paths:  []string{"src/**"},
+			},
+			changedFiles: []string{"src/main.go"},
+			expected:     true,
+		},
+		{
+			name: "paths no match - workflow skipped",
+			constraint: Constraint{
+				Event:  []string{"push"},
+				Branch: []string{"main"},
+				Paths:  []string{"src/**"},
+			},
+			changedFiles: []string{"docs/guide.md"},
+			expected:     false,
+		},
+		{
+			name: "no paths filter - all files pass",
+			constraint: Constraint{
+				Event:  []string{"push"},
+				Branch: []string{"main"},
+			},
+			changedFiles: []string{"docs/guide.md"},
+			expected:     true,
+		},
+		{
+			name: "paths filter with empty changed files - skipped",
+			constraint: Constraint{
+				Event:  []string{"push"},
+				Branch: []string{"main"},
+				Paths:  []string{"src/**"},
+			},
+			changedFiles: []string{},
+			expected:     false,
+		},
+		{
+			name: "paths glob matches one of many changed files",
+			constraint: Constraint{
+				Event:  []string{"push"},
+				Branch: []string{"main"},
+				Paths:  []string{"**/*.go"},
+			},
+			changedFiles: []string{"README.md", "go.mod", "src/main.go"},
+			expected:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := tt.constraint.Match(pushTrigger, tt.changedFiles)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestUnmarshalWorkflowWithPaths(t *testing.T) {
+	yamlData := `
+when:
+  - event: push
+    branch: main
+    paths:
+      - "src/**"
+      - "**.go"`
+
+	wf, err := FromFile("test.yml", []byte(yamlData))
+	assert.NoError(t, err)
+	assert.Len(t, wf.When, 1)
+	assert.ElementsMatch(t, []string{"src/**", "**.go"}, wf.When[0].Paths)
+}
+
+func TestUnmarshalWorkflowWithPathsSingleString(t *testing.T) {
+	yamlData := `
+when:
+  - event: push
+    branch: main
+    paths: "src/**"`
+
+	wf, err := FromFile("test.yml", []byte(yamlData))
+	assert.NoError(t, err)
+	assert.Len(t, wf.When, 1)
+	assert.ElementsMatch(t, []string{"src/**"}, wf.When[0].Paths)
 }
 
 func TestConstraintMatchTag_GlobPatterns(t *testing.T) {

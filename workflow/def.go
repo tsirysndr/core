@@ -36,6 +36,7 @@ type (
 		Event  StringList `yaml:"event"`
 		Branch StringList `yaml:"branch"` // required for pull_request; for push, either branch or tag must be specified
 		Tag    StringList `yaml:"tag"`    // optional; only applies to push events
+		Paths  StringList `yaml:"paths"`  // optional; only run if any changed file matches a glob pattern
 	}
 
 	CloneOpts struct {
@@ -93,7 +94,7 @@ func FromFile(name string, contents []byte) (Workflow, error) {
 }
 
 // if any of the constraints on a workflow is true, return true
-func (w *Workflow) Match(trigger tangled.Pipeline_TriggerMetadata) (bool, error) {
+func (w *Workflow) Match(trigger tangled.Pipeline_TriggerMetadata, changedFiles []string) (bool, error) {
 	// manual triggers always run the workflow
 	if trigger.Manual != nil {
 		return true, nil
@@ -101,7 +102,7 @@ func (w *Workflow) Match(trigger tangled.Pipeline_TriggerMetadata) (bool, error)
 
 	// if not manual, run through the constraint list and see if any one matches
 	for _, c := range w.When {
-		matched, err := c.Match(trigger)
+		matched, err := c.Match(trigger, changedFiles)
 		if err != nil {
 			return false, err
 		}
@@ -118,7 +119,7 @@ func (w *Workflow) Match(trigger tangled.Pipeline_TriggerMetadata) (bool, error)
 	return false, nil
 }
 
-func (c *Constraint) Match(trigger tangled.Pipeline_TriggerMetadata) (bool, error) {
+func (c *Constraint) Match(trigger tangled.Pipeline_TriggerMetadata, changedFiles []string) (bool, error) {
 	match := true
 
 	// manual triggers always pass this constraint
@@ -147,7 +148,30 @@ func (c *Constraint) Match(trigger tangled.Pipeline_TriggerMetadata) (bool, erro
 		match = match && matched
 	}
 
+	// apply paths filter: if specified, at least one changed file must match
+	if len(c.Paths) > 0 {
+		matched, err := matchesAnyFile(changedFiles, c.Paths)
+		if err != nil {
+			return false, err
+		}
+		match = match && matched
+	}
+
 	return match, nil
+}
+
+// matchesAnyFile returns true if any file in files matches any of the glob patterns.
+func matchesAnyFile(files []string, patterns []string) (bool, error) {
+	for _, f := range files {
+		matched, err := matchesPattern(f, patterns)
+		if err != nil {
+			return false, err
+		}
+		if matched {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (c *Constraint) MatchRef(ref string) (bool, error) {

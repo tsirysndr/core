@@ -15,8 +15,9 @@ type RawWorkflow struct {
 type RawPipeline = []RawWorkflow
 
 type Compiler struct {
-	Trigger     tangled.Pipeline_TriggerMetadata
-	Diagnostics Diagnostics
+	Trigger      tangled.Pipeline_TriggerMetadata
+	ChangedFiles []string
+	Diagnostics  Diagnostics
 }
 
 type Diagnostics struct {
@@ -113,7 +114,7 @@ func (compiler *Compiler) Compile(p Pipeline) tangled.Pipeline {
 func (compiler *Compiler) compileWorkflow(w Workflow) *tangled.Pipeline_Workflow {
 	cw := &tangled.Pipeline_Workflow{}
 
-	matched, err := w.Match(compiler.Trigger)
+	matched, err := w.Match(compiler.Trigger, compiler.ChangedFiles)
 	if err != nil {
 		compiler.Diagnostics.AddError(
 			w.Name,

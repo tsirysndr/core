@@ -96,6 +96,71 @@ func TestCompileWorkflow_MissingEngine(t *testing.T) {
 	assert.Equal(t, MissingEngine, c.Diagnostics.Errors[0].Error)
 }
 
+func TestCompileWorkflow_ChangedFilesMatchesPaths(t *testing.T) {
+	wf := Workflow{
+		Name:   ".tangled/workflows/test.yml",
+		Engine: "nixery",
+		When: []Constraint{
+			{
+				Event:  []string{"push"},
+				Branch: []string{"main"},
+				Paths:  []string{"src/**"},
+			},
+		},
+	}
+
+	c := Compiler{
+		Trigger:      trigger,
+		ChangedFiles: []string{"src/main.go", "src/util.go"},
+	}
+	cp := c.Compile([]Workflow{wf})
+
+	assert.Len(t, cp.Workflows, 1)
+	assert.Equal(t, wf.Name, cp.Workflows[0].Name)
+	assert.False(t, c.Diagnostics.IsErr())
+}
+
+func TestCompileWorkflow_ChangedFilesNoMatch(t *testing.T) {
+	wf := Workflow{
+		Name:   ".tangled/workflows/test.yml",
+		Engine: "nixery",
+		When: []Constraint{
+			{
+				Event:  []string{"push"},
+				Branch: []string{"main"},
+				Paths:  []string{"src/**"},
+			},
+		},
+	}
+
+	c := Compiler{
+		Trigger:      trigger,
+		ChangedFiles: []string{"docs/guide.md", "README.md"},
+	}
+	cp := c.Compile([]Workflow{wf})
+
+	assert.Len(t, cp.Workflows, 0)
+	assert.Len(t, c.Diagnostics.Warnings, 1)
+	assert.Equal(t, WorkflowSkipped, c.Diagnostics.Warnings[0].Type)
+}
+
+func TestCompileWorkflow_NoPaths_ChangedFilesIgnored(t *testing.T) {
+	wf := Workflow{
+		Name:   ".tangled/workflows/test.yml",
+		Engine: "nixery",
+		When:   when, // no Paths constraint
+	}
+
+	c := Compiler{
+		Trigger:      trigger,
+		ChangedFiles: []string{"docs/guide.md"},
+	}
+	cp := c.Compile([]Workflow{wf})
+
+	assert.Len(t, cp.Workflows, 1)
+	assert.False(t, c.Diagnostics.IsErr())
+}
+
 func TestCompileWorkflow_MultipleBranchAndTag(t *testing.T) {
 	wf := Workflow{
 		Name: ".tangled/workflows/branch_and_tag.yml",
