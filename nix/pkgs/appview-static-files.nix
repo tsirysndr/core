@@ -7,7 +7,6 @@
   ibm-plex-mono-src,
   actor-typeahead-src,
   mermaid-src,
-  sqlite-lib,
   tailwindcss,
   dolly,
   src,
