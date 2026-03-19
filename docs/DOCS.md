@@ -827,7 +827,7 @@ environment:
   MY_ENV_VAR: "MY_ENV_VALUE"
 ```
 
-By default, the following environment variables set:
+By default, the following environment variables are set:
 
 - `CI` - Always set to `true` to indicate a CI environment
 - `TANGLED_PIPELINE_ID` - The AT URI of the current pipeline
