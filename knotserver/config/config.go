@@ -39,10 +39,11 @@ func (s Server) Did() syntax.DID {
 }
 
 type Config struct {
-	Repo            Repo   `env:",prefix=KNOT_REPO_"`
-	Server          Server `env:",prefix=KNOT_SERVER_"`
-	Git             Git    `env:",prefix=KNOT_GIT_"`
-	AppViewEndpoint string `env:"APPVIEW_ENDPOINT, default=https://tangled.org"`
+	Repo            Repo     `env:",prefix=KNOT_REPO_"`
+	Server          Server   `env:",prefix=KNOT_SERVER_"`
+	Git             Git      `env:",prefix=KNOT_GIT_"`
+	AppViewEndpoint string   `env:"APPVIEW_ENDPOINT, default=https://tangled.org"`
+	KnotMirrors     []string `env:"KNOT_MIRRORS, default=https://mirror.tangled.network"`
 }
 
 func Load(ctx context.Context) (*Config, error) {

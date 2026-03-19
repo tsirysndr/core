@@ -110,7 +110,11 @@ in
             plcUrl = plcUrl;
             jetstreamEndpoint = jetstream;
             listenAddr = "0.0.0.0:6444";
+            dev = true;
           };
+          knotmirrors = [
+            "http://localhost:7000"
+          ];
         };
         services.tangled.spindle = {
           enable = true;

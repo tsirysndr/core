@@ -1,12 +1,14 @@
 package xrpc
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
@@ -120,7 +122,35 @@ func (h *Xrpc) CreateRepo(w http.ResponseWriter, r *http.Request) {
 		repoPath,
 	)
 
+	// HACK: request crawl for this repository
+	// Users won't want to sync entire network from their local knotmirror.
+	// Therefore, to bypass the local tap, requestCrawl directly to the knotmirror.
+	go func() {
+		if h.Config.Server.Dev {
+			repoAt := fmt.Sprintf("at://%s/%s/%s", actorDid, tangled.RepoNSID, rkey)
+			rCtx, rCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer rCancel()
+			h.requestCrawl(rCtx, &tangled.SyncRequestCrawl_Input{
+				Hostname:   h.Config.Server.Hostname,
+				EnsureRepo: &repoAt,
+			})
+		}
+	}()
+
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Xrpc) requestCrawl(ctx context.Context, input *tangled.SyncRequestCrawl_Input) error {
+	h.Logger.Info("requesting crawl", "mirrors", h.Config.KnotMirrors)
+	for _, knotmirror := range h.Config.KnotMirrors {
+		xrpcc := xrpc.Client{Host: knotmirror}
+		if err := tangled.SyncRequestCrawl(ctx, &xrpcc, input); err != nil {
+			h.Logger.Error("error requesting crawl", "err", err)
+		} else {
+			h.Logger.Info("crawl requested successfully")
+		}
+	}
+	return nil
 }
 
 func validateRepoName(name string) error {

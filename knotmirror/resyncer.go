@@ -281,6 +281,8 @@ func (r *Resyncer) checkKnotReachability(ctx context.Context, repo *models.Repo)
 
 	repoUrl += "/info/refs?service=git-upload-pack"
 
+	r.logger.Debug("checking knot reachability", "url", repoUrl)
+
 	client := http.Client{
 		Timeout: 30 * time.Second,
 	}

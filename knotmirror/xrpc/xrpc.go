@@ -12,6 +12,7 @@ import (
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/knotmirror/config"
+	"tangled.org/core/knotmirror/knotstream"
 	"tangled.org/core/log"
 )
 
@@ -19,14 +20,16 @@ type Xrpc struct {
 	cfg      *config.Config
 	db       *sql.DB
 	resolver *idresolver.Resolver
+	ks       *knotstream.KnotStream
 	logger   *slog.Logger
 }
 
-func New(logger *slog.Logger, cfg *config.Config, db *sql.DB, resolver *idresolver.Resolver) *Xrpc {
+func New(logger *slog.Logger, cfg *config.Config, db *sql.DB, resolver *idresolver.Resolver, ks *knotstream.KnotStream) *Xrpc {
 	return &Xrpc{
 		cfg,
 		db,
 		resolver,
+		ks,
 		log.SubLogger(logger, "xrpc"),
 	}
 }
@@ -47,6 +50,7 @@ func (x *Xrpc) Router() http.Handler {
 	r.Get("/"+tangled.GitTempListCommitsNSID, x.ListCommits)
 	r.Get("/"+tangled.GitTempListLanguagesNSID, x.ListLanguages)
 	r.Get("/"+tangled.GitTempListTagsNSID, x.ListTags)
+	r.Post("/"+tangled.SyncRequestCrawlNSID, x.RequestCrawl)
 
 	return r
 }

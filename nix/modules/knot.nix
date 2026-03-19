@@ -115,6 +115,14 @@ in
           '';
         };
 
+        knotmirrors = mkOption {
+          type = types.listOf types.str;
+          default = [
+            "https://mirror.tangled.network"
+          ];
+          description = "List of knotmirror hosts to request crawl";
+        };
+
         server = {
           listenAddr = mkOption {
             type = types.str;
@@ -263,6 +271,7 @@ in
             "KNOT_SERVER_PLC_URL=${cfg.server.plcUrl}"
             "KNOT_SERVER_JETSTREAM_ENDPOINT=${cfg.server.jetstreamEndpoint}"
             "KNOT_SERVER_OWNER=${cfg.server.owner}"
+            "KNOT_MIRRORS=${concatStringsSep "," cfg.knotmirrors}"
             "KNOT_SERVER_LOG_DIDS=${
               if cfg.server.logDids
               then "true"

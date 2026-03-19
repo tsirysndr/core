@@ -7,7 +7,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/bluesky-social/indigo/xrpc"
 	"github.com/gorilla/websocket"
+	"tangled.org/core/api/tangled"
 	"tangled.org/core/log"
 )
 
@@ -60,6 +62,17 @@ func (h *Knot) Events(w http.ResponseWriter, r *http.Request) {
 		l.Error("failed to backfill", "err", err)
 		return
 	}
+
+	// try request crawl when connection closed
+	defer func() {
+		go func() {
+			retryCtx, retryCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer retryCancel()
+			if err := h.requestCrawl(retryCtx); err != nil {
+				l.Error("error requesting crawls", "err", err)
+			}
+		}()
+	}()
 
 	for {
 		// wait for new data or timeout
@@ -116,5 +129,21 @@ func (h *Knot) streamOps(conn *websocket.Conn, cursor *int64) error {
 		*cursor = event.Created
 	}
 
+	return nil
+}
+
+func (h *Knot) requestCrawl(ctx context.Context) error {
+	h.l.Info("requesting crawl", "mirrors", h.c.KnotMirrors)
+	input := &tangled.SyncRequestCrawl_Input{
+		Hostname: h.c.Server.Hostname,
+	}
+	for _, knotmirror := range h.c.KnotMirrors {
+		xrpcc := xrpc.Client{Host: knotmirror}
+		if err := tangled.SyncRequestCrawl(ctx, &xrpcc, input); err != nil {
+			h.l.Error("error requesting crawl", "err", err)
+		} else {
+			h.l.Info("crawl requested successfully")
+		}
+	}
 	return nil
 }

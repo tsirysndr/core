@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/bluesky-social/indigo/xrpc"
 	"github.com/urfave/cli/v3"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/hook"
@@ -97,6 +98,21 @@ func Run(ctx context.Context, cmd *cli.Command) error {
 
 	logger.Info("starting internal server", "address", c.Server.InternalListenAddr)
 	go http.ListenAndServe(c.Server.InternalListenAddr, imux)
+
+	// TODO(boltless): too lazy here. should clear this up
+	go func() {
+		input := &tangled.SyncRequestCrawl_Input{
+			Hostname: c.Server.Hostname,
+		}
+		for _, knotmirror := range c.KnotMirrors {
+			xrpcc := xrpc.Client{Host: knotmirror}
+			if err := tangled.SyncRequestCrawl(ctx, &xrpcc, input); err != nil {
+				logger.Error("error requesting crawl", "err", err)
+			} else {
+				logger.Info("crawl requested successfully")
+			}
+		}
+	}()
 
 	logger.Info("starting main server", "address", c.Server.ListenAddr)
 	logger.Error("server error", "error", http.ListenAndServe(c.Server.ListenAddr, mux))
