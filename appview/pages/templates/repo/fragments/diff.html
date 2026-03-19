@@ -142,14 +142,16 @@
   {{ $file := index . 1 }}
   {{ $isSplit := index . 2 }}
   {{ $isGenerated := false }}
+  {{ $isDeleted := false }}
   {{ with $file }}
     {{ $n := .Names }}
+    {{ $isDeleted = and (eq $n.New "") (ne $n.Old "") }}
     {{ if $n.New }}
       {{ $isGenerated = isGenerated $n.New }}
     {{ else if $n.Old }}
       {{ $isGenerated = isGenerated $n.Old }}
     {{ end }}
-    <details {{ if not $isGenerated }}open{{ end }} id="file-{{ .Id }}" class="group border border-gray-200 dark:border-gray-700 w-full mx-auto rounded bg-white dark:bg-gray-800 drop-shadow-sm" tabindex="{{ add $idx 1 }}">
+    <details {{ if and (not $isGenerated) (not $isDeleted) }}open{{ end }} id="file-{{ .Id }}" class="group border border-gray-200 dark:border-gray-700 w-full mx-auto rounded bg-white dark:bg-gray-800 drop-shadow-sm" tabindex="{{ add $idx 1 }}">
       <summary class="list-none cursor-pointer sticky top-12 group-open:border-b border-gray-200 dark:border-gray-700">
         <div id="diff-file-header" class="rounded cursor-pointer bg-white dark:bg-gray-800 flex justify-between">
           <div id="left-side-items" class="p-2 flex gap-2 items-center overflow-x-auto">
@@ -165,7 +167,11 @@
               {{ else }}
                 {{ $n.Old }}
               {{ end }}
-              {{ if $isGenerated }}
+              {{ if $isDeleted }}
+                <span class="text-gray-400 dark:text-gray-500" title="Deleted files are collapsed by default">
+                  {{ i "circle-question-mark" "size-4" }}
+                </span>
+              {{ else if $isGenerated }}
                 <span class="text-gray-400 dark:text-gray-500" title="Generated files are collapsed by default">
                   {{ i "circle-question-mark" "size-4" }}
                 </span>
