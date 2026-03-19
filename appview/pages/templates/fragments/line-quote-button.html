@@ -107,8 +107,33 @@
     let dragCurrent = null;
     let hoverTarget = null;
 
+    const commentBtn = () =>
+      document.querySelector('[hx-get$="/comment"]:not(form *)');
+
+    const openCommentForm = () => {
+      const ta = textarea();
+      if (ta) return Promise.resolve(ta);
+      const trigger = commentBtn();
+      if (!trigger) return Promise.resolve(null);
+      trigger.click();
+      return new Promise(resolve => {
+        const handler = () => {
+          const ta = textarea();
+          if (!ta) return;
+          document.body.removeEventListener('htmx:afterSettle', handler);
+          clearTimeout(timer);
+          resolve(ta);
+        };
+        const timer = setTimeout(() => {
+          document.body.removeEventListener('htmx:afterSettle', handler);
+          resolve(null);
+        }, 5000);
+        document.body.addEventListener('htmx:afterSettle', handler);
+      });
+    };
+
     const showBtn = (lineEl) => {
-      if (!textarea() || !anchorOf(lineEl)) return;
+      if ((!textarea() && !commentBtn()) || !anchorOf(lineEl)) return;
       const rect = lineEl.getBoundingClientRect();
       Object.assign(btn.style, {
         top: `${rect.top + rect.height / 2 - btn.offsetHeight / 2}px`,
@@ -182,52 +207,57 @@
       stretchBtn(dragAnchor, dragCurrent);
     });
 
+    const insertIntoTextarea = (ta, selected) => {
+      const first = selected[0];
+      const last = selected[selected.length - 1];
+      const fNum = lineNumOf(first);
+      const firstAnchor = anchorOf(first);
+
+      if (!fNum || !firstAnchor) return;
+
+      const file = fileOf(first);
+      const lNum = lineNumOf(last);
+      const lastAnchor = anchorOf(last);
+
+      const label = selected.length === 1
+        ? (file ? `${file}:${fNum}` : `L${fNum}`)
+        : (file ? `${file}:${fNum}-${lNum}` : `L${fNum}-${lNum}`);
+
+      const fragment = selected.length === 1
+        ? firstAnchor
+        : `${firstAnchor}~${lastAnchor}`;
+
+      const md = `[\`${label}\`](${window.location.pathname}${window.location.search}#${fragment})`;
+
+      const { selectionStart: s, selectionEnd: end, value } = ta;
+      const before = value.slice(0, s);
+      const after = value.slice(end);
+      let pre = '', suf = '';
+      if (s === end && before.length > 0) {
+        const cur = before.slice(before.lastIndexOf('\n') + 1);
+        if (cur.length > 0) {
+          const nextNl = after.indexOf('\n');
+          const rest = nextNl === -1 ? after : after.slice(0, nextNl);
+          if (rest.trim().length === 0) { pre = '\n'; }
+          else { pre = before.endsWith(' ') ? '' : ' '; suf = after.startsWith(' ') ? '' : ' '; }
+        }
+      }
+      ta.value = before + pre + md + suf + after;
+      ta.selectionStart = ta.selectionEnd = s + pre.length + md.length + suf.length;
+      ta.focus();
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
     document.addEventListener('mouseup', () => {
       if (!dragging) return;
       dragging = false;
       document.body.style.userSelect = '';
 
       const selected = rangeBetween(dragAnchor, dragCurrent);
-      const ta = textarea();
-      if (ta && selected.length > 0) {
-        const first = selected[0];
-        const last = selected[selected.length - 1];
-        const fNum = lineNumOf(first);
-        const firstAnchor = anchorOf(first);
-
-        if (fNum && firstAnchor) {
-          const file = fileOf(first);
-          const lNum = lineNumOf(last);
-          const lastAnchor = anchorOf(last);
-
-          const label = selected.length === 1
-            ? (file ? `${file}:${fNum}` : `L${fNum}`)
-            : (file ? `${file}:${fNum}-${lNum}` : `L${fNum}-${lNum}`);
-
-          const fragment = selected.length === 1
-            ? firstAnchor
-            : `${firstAnchor}~${lastAnchor}`;
-
-          const md = `[\`${label}\`](${window.location.pathname}${window.location.search}#${fragment})`;
-
-          const { selectionStart: s, selectionEnd: end, value } = ta;
-          const before = value.slice(0, s);
-          const after = value.slice(end);
-          let pre = '', suf = '';
-          if (s === end && before.length > 0) {
-            const cur = before.slice(before.lastIndexOf('\n') + 1);
-            if (cur.length > 0) {
-              const nextNl = after.indexOf('\n');
-              const rest = nextNl === -1 ? after : after.slice(0, nextNl);
-              if (rest.trim().length === 0) { pre = '\n'; }
-              else { pre = before.endsWith(' ') ? '' : ' '; suf = after.startsWith(' ') ? '' : ' '; }
-            }
-          }
-          ta.value = before + pre + md + suf + after;
-          ta.selectionStart = ta.selectionEnd = s + pre.length + md.length + suf.length;
-          ta.focus();
-          ta.dispatchEvent(new Event('input', { bubbles: true }));
-        }
+      if (selected.length > 0) {
+        openCommentForm().then(ta => {
+          if (ta) insertIntoTextarea(ta, selected);
+        });
       }
 
       clearHl('line-quote-hl');
