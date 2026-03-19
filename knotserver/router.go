@@ -83,8 +83,9 @@ func (h *Knot) Router() http.Handler {
 
 	r.Route("/{did}", func(r chi.Router) {
 		r.Use(h.resolveDidRedirect)
-		r.Use(h.resolveRepo)
 		r.Route("/{name}", func(r chi.Router) {
+			r.Use(h.resolveRepo)
+
 			// routes for git operations
 			r.Get("/info/refs", h.InfoRefs)
 			r.Post("/git-upload-archive", h.UploadArchive)
@@ -176,7 +177,7 @@ func (h *Knot) resolveRepo(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), "repoPath", repoPath)
+		ctx := context.WithValue(r.Context(), ctxRepoPathKey{}, repoPath)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
