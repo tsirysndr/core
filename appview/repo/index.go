@@ -112,11 +112,14 @@ func (rp *Repo) Index(w http.ResponseWriter, r *http.Request) {
 		l.Error("failed to GetVerifiedObjectCommits", "err", err)
 	}
 
-	// TODO: a bit dirty
-	languageInfo, err := rp.getLanguageInfo(r.Context(), l, f, result.Ref, ref == "")
-	if err != nil {
-		l.Warn("failed to compute language percentages", "err", err)
-		// non-fatal
+	var languageInfo []types.RepoLanguageDetails
+	if !result.IsEmpty {
+		// TODO: a bit dirty
+		languageInfo, err = rp.getLanguageInfo(r.Context(), l, f, result.Ref, ref == "")
+		if err != nil {
+			l.Warn("failed to compute language percentages", "err", err)
+			// non-fatal
+		}
 	}
 
 	var shas []string
