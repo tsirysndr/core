@@ -76,7 +76,6 @@ func parsePosts(postsDir string, includeDrafts bool) ([]Post, error) {
 
 	rctx := &markup.RenderContext{
 		RendererType: markup.RendererTypeDefault,
-		Sanitizer:    markup.NewSanitizer(),
 	}
 	var posts []Post
 	for _, entry := range entries {
@@ -100,11 +99,10 @@ func parsePosts(postsDir string, includeDrafts bool) ([]Post, error) {
 		}
 
 		htmlStr := rctx.RenderMarkdownWith(string(rest), markup.NewMarkdownWith("", textension.Dashes))
-		sanitized := rctx.SanitizeDefault(htmlStr)
 
 		posts = append(posts, Post{
 			Meta: meta,
-			Body: template.HTML(sanitized),
+			Body: template.HTML(htmlStr),
 		})
 	}
 
@@ -126,19 +124,19 @@ func AtomFeed(posts []Post, baseURL string) (string, error) {
 	for _, p := range posts {
 		postURL := strings.TrimRight(baseURL, "/") + "/" + p.Meta.Slug
 
-		var authorName string
+		var authorName strings.Builder
 		for i, a := range p.Meta.Authors {
 			if i > 0 {
-				authorName += " & "
+				authorName.WriteString(" & ")
 			}
-			authorName += a.Name
+			authorName.WriteString(a.Name)
 		}
 
 		feed.Items = append(feed.Items, &feeds.Item{
 			Title:       p.Meta.Title,
 			Link:        &feeds.Link{Href: postURL},
 			Description: p.Meta.Subtitle,
-			Author:      &feeds.Author{Name: authorName},
+			Author:      &feeds.Author{Name: authorName.String()},
 			Created:     p.ParsedDate(),
 		})
 	}
