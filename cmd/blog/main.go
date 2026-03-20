@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -84,9 +85,7 @@ func runBuild(ctx context.Context, logger *slog.Logger) error {
 		return fmt.Errorf("rendering index: %w", err)
 	}
 
-	// posts — each at build/<slug>/index.html directly (no /blog/ prefix)
 	for _, post := range posts {
-		post := post
 		postDir := filepath.Join(outDir, post.Meta.Slug)
 		if err := os.MkdirAll(postDir, 0755); err != nil {
 			return err
@@ -98,7 +97,7 @@ func runBuild(ctx context.Context, logger *slog.Logger) error {
 		}
 	}
 
-	// atom feed — at build/feed.xml
+	// atom feed
 	baseURL := "https://blog.tangled.org"
 	atom, err := blog.AtomFeed(posts, baseURL)
 	if err != nil {
@@ -108,8 +107,36 @@ func runBuild(ctx context.Context, logger *slog.Logger) error {
 		return fmt.Errorf("writing feed: %w", err)
 	}
 
+	// copy embedded static assets into build/static/ so Cloudflare Pages
+	// can serve them from the same origin as the built HTML
+	staticSrc, err := fs.Sub(pages.Files, "static")
+	if err != nil {
+		return fmt.Errorf("accessing embedded static dir: %w", err)
+	}
+	if err := copyFS(staticSrc, filepath.Join(outDir, "static")); err != nil {
+		return fmt.Errorf("copying static assets: %w", err)
+	}
+
 	logger.Info("build complete", "dir", outDir)
 	return nil
+}
+
+// copyFS copies all files from src into destDir, preserving directory structure.
+func copyFS(src fs.FS, destDir string) error {
+	return fs.WalkDir(src, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		dest := filepath.Join(destDir, path)
+		if d.IsDir() {
+			return os.MkdirAll(dest, 0755)
+		}
+		data, err := fs.ReadFile(src, path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(dest, data, 0644)
+	})
 }
 
 func runServe(ctx context.Context, logger *slog.Logger, addr string) error {

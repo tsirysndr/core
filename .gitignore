@@ -22,3 +22,5 @@ sites/.wrangler/
 genjwks.out
 /nix/vm-data
 blog/build/
+build/
+.wrangler/

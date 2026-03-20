@@ -521,6 +521,9 @@ func (p *Pages) AvatarUrl(actor, size string) string {
 	}
 
 	secret := p.avatar.SharedSecret
+	if secret == "" {
+		return ""
+	}
 	h := hmac.New(sha256.New, []byte(secret))
 	h.Write([]byte(did))
 	signature := hex.EncodeToString(h.Sum(nil))

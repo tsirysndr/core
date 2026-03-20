@@ -45,11 +45,14 @@
       <p class="italic mt-1 mb-3 text-lg text-gray-600 dark:text-gray-400">{{ .Post.Meta.Subtitle }}</p>
 
       <div class="flex items-center gap-3 not-prose">
+        {{ $hasAvatar := false }}{{ range $authors }}{{ if tinyAvatar .Handle }}{{ $hasAvatar = true }}{{ end }}{{ end }}
+        {{ if $hasAvatar }}
         <div class="inline-flex items-center -space-x-2">
           {{ range $authors }}
-          <img src="{{ tinyAvatar .Handle }}" class="size-7 rounded-full border border-gray-300 dark:border-gray-700" alt="{{ .Handle }}" title="{{ .Handle }}" />
+          {{ $av := tinyAvatar .Handle }}{{ if $av }}<img src="{{ $av }}" class="size-7 rounded-full border border-gray-300 dark:border-gray-700" alt="{{ .Handle }}" title="{{ .Handle }}" />{{ end }}
           {{ end }}
         </div>
+        {{ end }}
         <div class="flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300">
           {{ range $i, $a := $authors }}
           {{ if gt $i 0 }}<span class="text-gray-400">&amp;</span>{{ end }}

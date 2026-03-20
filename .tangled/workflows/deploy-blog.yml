@@ -16,13 +16,13 @@ steps:
       mkdir -p appview/pages/static
       touch appview/pages/static/x
 
-  - name: build blog cmd
-    command: |
-      go build -o blog.out ./cmd/blog
-
   - name: generate css
     command: |
       tailwindcss -i input.css -o appview/pages/static/tw.css
+
+  - name: build blog cmd
+    command: |
+      go build -o blog.out ./cmd/blog
 
   - name: build static site
     command: |
