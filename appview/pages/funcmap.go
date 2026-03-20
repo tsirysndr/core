@@ -209,7 +209,7 @@ func (p *Pages) funcMap() template.FuncMap {
 			return fmt.Sprintf("P%dD%dH%dM%dS", days, hours, minutes, seconds)
 		},
 		"durationFmt": func(duration time.Duration) string {
-			return durationFmt(duration, [4]string{"d", "hr", "min", "s"})
+			return durationFmt(duration, [4]string{"d", "h", "m", "s"})
 		},
 		"longDurationFmt": func(duration time.Duration) string {
 			return durationFmt(duration, [4]string{"days", "hours", "minutes", "seconds"})

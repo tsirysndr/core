@@ -48,9 +48,13 @@
           {{ $lastStatus := $all.Latest }}
           {{ $kind := $lastStatus.Status.String }}
 
-          <div id="left" class="flex items-center gap-2 flex-shrink-0">
-            {{ template "repo/pipelines/fragments/workflowSymbol" $all }}
-            {{ $name }}
+          <div id="left" class="flex items-center gap-2 flex-1 min-w-0">
+            <div class="flex-shrink-0">
+              {{ template "repo/pipelines/fragments/workflowSymbol" $all }}
+            </div>
+            <span class="truncate" title="{{ $name }}">
+              {{ $name }}
+            </span>
           </div>
           <div id="right" class="flex items-center gap-2 flex-shrink-0">
             <span class="font-bold">{{ $kind }}</span>
