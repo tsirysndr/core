@@ -227,7 +227,9 @@
         ? firstAnchor
         : `${firstAnchor}~${lastAnchor}`;
 
-      const md = `[\`${label}\`](${window.location.pathname}${window.location.search}#${fragment})`;
+      const linkBase = document.getElementById('round-link-base')?.value
+        || (window.location.pathname + window.location.search);
+      const md = `[\`${label}\`](${linkBase}#${fragment})`;
 
       const { selectionStart: s, selectionEnd: end, value } = ta;
       const before = value.slice(0, s);

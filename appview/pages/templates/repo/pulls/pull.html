@@ -99,6 +99,7 @@
 {{ end }}
 
 {{ define "contentAfter" }}
+  <input type="hidden" id="round-link-base" value="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/round/{{ .ActiveRound }}" />
   {{ template "repo/fragments/diff" (list .Diff .DiffOpts $) }}
 {{ end }}
 
