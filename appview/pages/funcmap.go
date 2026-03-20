@@ -195,6 +195,9 @@ func (p *Pages) funcMap() template.FuncMap {
 				{D: math.MaxInt64, Format: "a long while %s", DivBy: 1},
 			})
 		},
+		"shortTimeFmt": func(t time.Time) string {
+			return t.Format("Jan 2, 2006")
+		},
 		"longTimeFmt": func(t time.Time) string {
 			return t.Format("Jan 2, 2006, 3:04 PM MST")
 		},

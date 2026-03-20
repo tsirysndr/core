@@ -51,7 +51,7 @@
           <p class="px-6 mb-0 text-sm text-gray-600 dark:text-gray-400">
             {{ $dateStr := index .Meta "date" }}
             {{ $date := parsedate $dateStr }}
-            {{ $date.Format "02 Jan, 2006" }}
+            {{ $date.Format | shortTimeFmt }}
 
             <span class="mx-2 select-none">&middot;</span>
 

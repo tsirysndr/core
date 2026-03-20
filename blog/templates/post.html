@@ -35,7 +35,7 @@
       {{ $authors := .Post.Meta.Authors }}
       <p class="mb-1 text-sm text-gray-600 dark:text-gray-400">
         {{ $date := .Post.ParsedDate }}
-        {{ $date.Format "02 Jan, 2006" }}
+        {{ $date | shortTimeFmt }}
       </p>
 
       <h1 class="mb-0 text-2xl font-bold dark:text-white">
