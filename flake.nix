@@ -107,7 +107,7 @@
         knot = self.callPackage ./nix/pkgs/knot.nix {};
         dolly = self.callPackage ./nix/pkgs/dolly.nix {};
         tap = self.callPackage ./nix/pkgs/tap.nix {};
-        knotmirror = self.callPackage ./nix/pkgs/knot-mirror.nix {};
+        knotmirror = self.callPackage ./nix/pkgs/knotmirror.nix {};
       });
   in {
     overlays.default = final: prev: {
@@ -133,6 +133,7 @@
         docs
         dolly
         tap
+        knotmirror
         ;
 
       pkgsStatic-appview = staticPackages.appview;

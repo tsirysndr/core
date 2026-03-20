@@ -66,6 +66,18 @@ in
         description = "Whether to automatically mirror from entire network";
       };
 
+      knotUseSSL = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Use SSL for knot connection";
+      };
+
+      knotSSRF = mkOption {
+        type = types.bool;
+        default = true;
+        description = "enable SSRF protection for knots";
+      };
+
       tap = {
         port = mkOption {
           type = types.port;
@@ -128,8 +140,8 @@ in
             "MIRROR_TAP_URL=http://localhost:${toString cfg.tap.port}"
             "MIRROR_DB_URL=${cfg.dbUrl}"
             "MIRROR_GIT_BASEPATH=/var/lib/knotmirror/repos"
-            "MIRROR_KNOT_USE_SSL=true"
-            "MIRROR_KNOT_SSRF=true"
+            "MIRROR_KNOT_USE_SSL=${boolToString cfg.knotUseSSL}"
+            "MIRROR_KNOT_SSRF=${boolToString cfg.knotSSRF}"
             "MIRROR_RESYNC_PARALLELISM=12"
             "MIRROR_METRICS_LISTEN=127.0.0.1:7100"
             "MIRROR_ADMIN_LISTEN=${cfg.adminListenAddr}"

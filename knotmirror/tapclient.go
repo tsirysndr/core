@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/netip"
 	"net/url"
+	"strings"
 	"time"
 
 	"tangled.org/core/api/tangled"
@@ -78,9 +79,23 @@ func (t *Tap) processRepo(ctx context.Context, evt *tapc.RecordEventData) error 
 			return fmt.Errorf("parsing record: %w", err)
 		}
 
+		knotUrl := record.Knot
+		if !strings.Contains(record.Knot, "://") {
+			if host, _ := db.GetHost(ctx, t.db, record.Knot); host != nil {
+				knotUrl = host.URL()
+			} else {
+				t.logger.Warn("repo is from unknown knot")
+				if t.cfg.KnotUseSSL {
+					knotUrl = "https://" + knotUrl
+				} else {
+					knotUrl = "http://" + knotUrl
+				}
+			}
+		}
+
 		status := models.RepoStatePending
 		errMsg := ""
-		u, err := url.Parse("http://" + record.Knot) // parsing with fake scheme
+		u, err := url.Parse(knotUrl)
 		if err != nil {
 			status = models.RepoStateSuspended
 			errMsg = "failed to parse knot url"
@@ -94,7 +109,7 @@ func (t *Tap) processRepo(ctx context.Context, evt *tapc.RecordEventData) error 
 			Rkey:       evt.Rkey,
 			Cid:        evt.CID,
 			Name:       record.Name,
-			KnotDomain: record.Knot,
+			KnotDomain: knotUrl,
 			State:      status,
 			ErrorMsg:   errMsg,
 			RetryAfter: 0, // clear retry info

@@ -24,6 +24,7 @@ type Resyncer struct {
 	logger *slog.Logger
 	db     *sql.DB
 	gitm   GitMirrorManager
+	cfg    *config.Config
 
 	claimJobMu sync.Mutex
 
@@ -43,6 +44,7 @@ func NewResyncer(l *slog.Logger, db *sql.DB, gitm GitMirrorManager, cfg *config.
 		logger: log.SubLogger(l, "resyncer"),
 		db:     db,
 		gitm:   gitm,
+		cfg:    cfg,
 
 		runningJobs: make(map[syntax.ATURI]context.CancelFunc),
 
@@ -272,7 +274,7 @@ func isRateLimitError(err error) bool {
 
 // checkKnotReachability checks if Knot is reachable and is valid git remote server
 func (r *Resyncer) checkKnotReachability(ctx context.Context, repo *models.Repo) error {
-	repoUrl, err := makeRepoRemoteUrl(repo.KnotDomain, repo.DidSlashRepo(), true)
+	repoUrl, err := makeRepoRemoteUrl(repo.KnotDomain, repo.DidSlashRepo(), r.cfg.KnotUseSSL)
 	if err != nil {
 		return err
 	}

@@ -85,6 +85,22 @@ var AllHostStatuses = []HostStatus{
 	HostStatusBanned,
 }
 
+func (h *Host) URL() string {
+	if h.NoSSL {
+		return fmt.Sprintf("http://%s", h.Hostname)
+	} else {
+		return fmt.Sprintf("https://%s", h.Hostname)
+	}
+}
+
+func (h *Host) WsURL() string {
+	if h.NoSSL {
+		return fmt.Sprintf("ws://%s", h.Hostname)
+	} else {
+		return fmt.Sprintf("wss://%s", h.Hostname)
+	}
+}
+
 // func (h *Host) SubscribeGitRefsURL(cursor int64) string {
 // 	scheme := "wss"
 // 	if h.NoSSL {
@@ -98,11 +114,7 @@ var AllHostStatuses = []HostStatus{
 // }
 
 func (h *Host) LegacyEventsURL(cursor int64) string {
-	scheme := "wss"
-	if h.NoSSL {
-		scheme = "ws"
-	}
-	u := fmt.Sprintf("%s://%s/events", scheme, h.Hostname)
+	u := fmt.Sprintf("%s/events", h.WsURL())
 	if cursor > 0 {
 		u = fmt.Sprintf("%s?cursor=%d", u, cursor)
 	}

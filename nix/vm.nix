@@ -25,6 +25,7 @@ in
     modules = [
       self.nixosModules.knot
       self.nixosModules.spindle
+      self.nixosModules.knotmirror
       ({
         lib,
         config,
@@ -57,6 +58,24 @@ in
               host.port = 6555;
               guest.port = 6555;
             }
+            # knotmirror
+            {
+              from = "host";
+              host.port = 7007; # 7000 is deserved in macos for Airplay
+              guest.port = 7000;
+            }
+            # knotmirror-tap
+            {
+              from = "host";
+              host.port = 7480;
+              guest.port = 7480;
+            }
+            # knotmirror-admin
+            {
+              from = "host";
+              host.port = 7200;
+              guest.port = 7200;
+            }
           ];
           sharedDirectories = {
             # We can't use the 9p mounts directly for most of these
@@ -81,7 +100,7 @@ in
         networking.firewall.enable = false;
         time.timeZone = "Europe/London";
         services.getty.autologinUser = "root";
-        environment.systemPackages = with pkgs; [curl vim git sqlite litecli];
+        environment.systemPackages = with pkgs; [curl vim git sqlite litecli postgresql_14];
         services.tangled.knot = {
           enable = true;
           motd = "Welcome to the development knot!\n";
@@ -109,6 +128,27 @@ in
             };
           };
         };
+        services.postgresql = {
+          enable = true;
+          package = pkgs.postgresql_14;
+          ensureDatabases = ["mirror" "tap"];
+          ensureUsers = [
+            {name = "tnglr";}
+          ];
+          authentication = ''
+            local all tnglr              trust
+            host  all tnglr 127.0.0.1/32 trust
+          '';
+        };
+        services.tangled.knotmirror = {
+          enable = true;
+          listenAddr = "0.0.0.0:7000";
+          adminListenAddr = "0.0.0.0:7200";
+          hostname = "localhost:7000";
+          dbUrl = "postgresql://tnglr@127.0.0.1:5432/mirror";
+          fullNetwork = false;
+          tap.dbUrl = "postgresql://tnglr@127.0.0.1:5432/tap";
+        };
         users = {
           # So we don't have to deal with permission clashing between
           # blank disk VMs and existing state
@@ -135,6 +175,8 @@ in
         in {
           knot = mkDataSyncScripts "/mnt/knot-data" config.services.tangled.knot.stateDir;
           spindle = mkDataSyncScripts "/mnt/spindle-data" (builtins.dirOf config.services.tangled.spindle.server.dbPath);
+          knotmirror.after = ["postgresql.target"];
+          tap-knotmirror.after = ["postgresql.target"];
         };
       })
     ];

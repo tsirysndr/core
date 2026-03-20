@@ -263,14 +263,16 @@ func (s *KnotSlurper) ProcessEvent(ctx context.Context, task *Task) error {
 		return fmt.Errorf("unmarshaling message: %w", err)
 	}
 
-	if err := s.ProcessLegacyGitRefUpdate(ctx, &legacyMessage); err != nil {
+	if err := s.ProcessLegacyGitRefUpdate(ctx, task.key, &legacyMessage); err != nil {
 		return fmt.Errorf("processing gitRefUpdate: %w", err)
 	}
 	return nil
 }
 
-func (s *KnotSlurper) ProcessLegacyGitRefUpdate(ctx context.Context, evt *LegacyGitEvent) error {
+func (s *KnotSlurper) ProcessLegacyGitRefUpdate(ctx context.Context, source string, evt *LegacyGitEvent) error {
 	knotstreamEventsReceived.Inc()
+
+	l := s.logger.With("src", source)
 
 	curr, err := db.GetRepoByName(ctx, s.db, syntax.DID(evt.Event.RepoDid), evt.Event.RepoName)
 	if err != nil {
@@ -284,11 +286,11 @@ func (s *KnotSlurper) ProcessLegacyGitRefUpdate(ctx context.Context, evt *Legacy
 		// But we want to store that in did/rkey in knot-mirror.
 		// Therefore, we should ignore when the repository is unknown.
 		// Hopefully crawler will sync it later.
-		s.logger.Warn("skipping event from unknown repo", "did/repo", evt.Event.RepoDid+"/"+evt.Event.RepoName)
+		l.Warn("skipping event from unknown repo", "did/name", evt.Event.RepoDid+"/"+evt.Event.RepoName)
 		knotstreamEventsSkipped.Inc()
 		return nil
 	}
-	l := s.logger.With("repoAt", curr.AtUri())
+	l = l.With("repoAt", curr.AtUri())
 
 	// TODO: should plan resync to resyncBuffer on RepoStateResyncing
 	if curr.State != models.RepoStateActive {
