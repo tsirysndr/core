@@ -47,7 +47,7 @@ type PlcConfig struct {
 }
 
 type KnotMirrorConfig struct {
-	Url string `env:"URL, required"`
+	Url string `env:"URL, default=https://mirror.tangled.network"`
 }
 
 type JetstreamConfig struct {
