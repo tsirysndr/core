@@ -60,7 +60,7 @@ func makePages(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*p
 func runBuild(ctx context.Context, logger *slog.Logger) error {
 	cfg, err := config.LoadConfig(ctx)
 	if err != nil {
-		cfg = &config.Config{}
+		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	p, err := makePages(ctx, cfg, logger)
@@ -142,7 +142,7 @@ func copyFS(src fs.FS, destDir string) error {
 func runServe(ctx context.Context, logger *slog.Logger, addr string) error {
 	cfg, err := config.LoadConfig(ctx)
 	if err != nil {
-		cfg = &config.Config{}
+		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	p, err := makePages(ctx, cfg, logger)

@@ -408,13 +408,14 @@ func (p *Pages) funcMap() template.FuncMap {
 		"placeholderAvatar": func(size string) template.HTML {
 			sizeClass := "size-6"
 			iconSize := "size-4"
-			if size == "tiny" {
+			switch size {
+			case "tiny":
 				sizeClass = "size-6"
 				iconSize = "size-4"
-			} else if size == "small" {
+			case "small":
 				sizeClass = "size-8"
 				iconSize = "size-5"
-			} else {
+			default:
 				sizeClass = "size-12"
 				iconSize = "size-8"
 			}
@@ -498,20 +499,6 @@ func (p *Pages) funcMap() template.FuncMap {
 	}
 }
 
-func (p *Pages) resolveDid(did string) string {
-	identity, err := p.resolver.ResolveIdent(context.Background(), did)
-
-	if err != nil {
-		return did
-	}
-
-	if identity.Handle.IsInvalidHandle() {
-		return "handle.invalid"
-	}
-
-	return identity.Handle.String()
-}
-
 func (p *Pages) AvatarUrl(actor, size string) string {
 	actor = strings.TrimPrefix(actor, "@")
 
@@ -555,6 +542,7 @@ func (p *Pages) AvatarUrl(actor, size string) string {
 	if version != "" {
 		return fmt.Sprintf("%s?v=%s", baseUrl, version)
 	}
+
 	return baseUrl
 }
 
