@@ -139,6 +139,10 @@ type BlueskyConfig struct {
 	UpdateInterval time.Duration `env:"UPDATE_INTERVAL, default=1h"`
 }
 
+type OgcardConfig struct {
+	Host string `env:"HOST, default=https://og.tangled.org"`
+}
+
 func (cfg RedisConfig) ToURL() string {
 	u := &url.URL{
 		Scheme: "redis",
@@ -171,6 +175,7 @@ type Config struct {
 	Bluesky       BlueskyConfig    `env:",prefix=TANGLED_BLUESKY_"`
 	Sites         SitesConfig      `env:",prefix=TANGLED_SITES_"`
 	KnotMirror    KnotMirrorConfig `env:",prefix=TANGLED_KNOTMIRROR_"`
+	Ogcard        OgcardConfig     `env:",prefix=TANGLED_OGCARD_"`
 }
 
 func LoadConfig(ctx context.Context) (*Config, error) {

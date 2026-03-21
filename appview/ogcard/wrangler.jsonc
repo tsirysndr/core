@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tangled-ogcard-worker",
+  "main": "src/index.tsx",
+  "compatibility_date": "2026-03-07",
+  "observability": {
+    "enabled": true,
+  },
+  "routes": [
+    {
+      "pattern": "og.tangled.org/*",
+      "zone_name": "tangled.org",
+    },
+  ],
+  "vars": {
+    "ENVIRONMENT": "production",
+  },
+  "rules": [
+    {
+      "type": "Data",
+      "globs": ["**/*.woff"],
+      "fallthrough": true,
+    },
+  ],
+}

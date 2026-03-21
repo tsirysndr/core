@@ -150,6 +150,15 @@ You can't use this directly unfortunately since all requests are signed and may 
 
     const size = searchParams.get("size");
     const resizeToTiny = size === "tiny";
+    const format = searchParams.get("format") || "webp";
+    const validFormats = ["webp", "jpeg", "png"];
+    const outputFormat = validFormats.includes(format) ? format : "webp";
+    
+    const contentTypes = {
+      webp: "image/webp",
+      jpeg: "image/jpeg",
+      png: "image/png",
+    };
 
     const cache = caches.default;
     let cacheKey = request.url;
@@ -242,20 +251,16 @@ You can't use this directly unfortunately since all requests are signed and may 
 
       // Fetch and optionally resize the avatar
       let avatarResponse;
-      if (resizeToTiny) {
-        avatarResponse = await fetch(avatarUrl, {
-          // cf: {
-          //   image: {
-          //     width: 32,
-          //     height: 32,
-          //     fit: "cover",
-          //     format: "webp",
-          //   },
-          // },
-        });
-      } else {
-        avatarResponse = await fetch(avatarUrl);
-      }
+      const cfOptions = outputFormat !== "webp" || resizeToTiny ? {
+        cf: {
+          image: {
+            format: outputFormat,
+            ...(resizeToTiny ? { width: 32, height: 32, fit: "cover" } : {}),
+          },
+        },
+      }: {};
+
+      avatarResponse = await fetch(avatarUrl, cfOptions);
 
       if (!avatarResponse.ok) {
         return new Response(`failed to fetch avatar for ${actor}.`, {
@@ -264,12 +269,10 @@ You can't use this directly unfortunately since all requests are signed and may 
       }
 
       const avatarData = await avatarResponse.arrayBuffer();
-      const contentType =
-        avatarResponse.headers.get("content-type") || "image/jpeg";
 
       response = new Response(avatarData, {
         headers: {
-          "Content-Type": contentType,
+          "Content-Type": contentTypes[outputFormat],
           "Cache-Control": "public, max-age=43200",
         },
       });
