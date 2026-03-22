@@ -5,6 +5,7 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/appview/models"
+	"tangled.org/core/appview/pagination"
 	"tangled.org/core/orm"
 )
 
@@ -90,7 +91,7 @@ func getTimelineRepos(e Execer, limit int, loggedInUserDid string, userIsFollowi
 		filters = append(filters, orm.FilterIn("did", userIsFollowing))
 	}
 
-	repos, err := GetRepos(e, limit, filters...)
+	repos, err := GetReposPaginated(e, pagination.Page{Limit: limit}, filters...)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +106,7 @@ func getTimelineRepos(e Execer, limit int, loggedInUserDid string, userIsFollowi
 
 	var origRepos []models.Repo
 	if args != nil {
-		origRepos, err = GetRepos(e, 0, orm.FilterIn("at_uri", args))
+		origRepos, err = GetRepos(e, orm.FilterIn("at_uri", args))
 	}
 	if err != nil {
 		return nil, err

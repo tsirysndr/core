@@ -109,7 +109,6 @@ func (s *Spindles) dashboard(w http.ResponseWriter, r *http.Request) {
 
 	repos, err := db.GetRepos(
 		s.Db,
-		0,
 		orm.FilterEq("spindle", instance),
 	)
 	if err != nil {

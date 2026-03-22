@@ -11,12 +11,15 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/appview/models"
+	"tangled.org/core/appview/pagination"
 	"tangled.org/core/orm"
 )
 
-func GetRepos(e Execer, limit int, filters ...orm.Filter) ([]models.Repo, error) {
-	repoMap := make(map[syntax.ATURI]*models.Repo)
+func GetRepos(e Execer, filters ...orm.Filter) ([]models.Repo, error) {
+	return GetReposPaginated(e, pagination.Page{}, filters...)
+}
 
+func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([]models.Repo, error) {
 	var conditions []string
 	var args []any
 	for _, filter := range filters {
@@ -29,13 +32,14 @@ func GetRepos(e Execer, limit int, filters ...orm.Filter) ([]models.Repo, error)
 		whereClause = " where " + strings.Join(conditions, " and ")
 	}
 
-	limitClause := ""
-	if limit != 0 {
-		limitClause = fmt.Sprintf(" limit %d", limit)
+	pageClause := ""
+	if page.Limit != 0 {
+		pageClause = fmt.Sprintf(" limit %d offset %d", page.Limit, page.Offset)
 	}
 
-	repoQuery := fmt.Sprintf(
-		`select
+	// main query to get repos with pagination
+	query := fmt.Sprintf(`
+		select
 			id,
 			did,
 			name,
@@ -47,20 +51,19 @@ func GetRepos(e Execer, limit int, filters ...orm.Filter) ([]models.Repo, error)
 			topics,
 			source,
 			spindle
-		from
-			repos r
+		from repos
 		%s
 		order by created desc
-		%s`,
-		whereClause,
-		limitClause,
-	)
-	rows, err := e.Query(repoQuery, args...)
+		%s
+	`, whereClause, pageClause)
+
+	rows, err := e.Query(query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute repo query: %w ", err)
+		return nil, err
 	}
 	defer rows.Close()
 
+	repoMap := make(map[syntax.ATURI]*models.Repo)
 	for rows.Next() {
 		var repo models.Repo
 		var createdAt string
@@ -80,12 +83,15 @@ func GetRepos(e Execer, limit int, filters ...orm.Filter) ([]models.Repo, error)
 			&spindle,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to execute repo query: %w ", err)
+			return nil, err
 		}
 
+		// parse created timestamp
 		if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
 			repo.Created = t
 		}
+
+		// handle nullable fields
 		if description.Valid {
 			repo.Description = description.String
 		}
@@ -107,66 +113,66 @@ func GetRepos(e Execer, limit int, filters ...orm.Filter) ([]models.Repo, error)
 	}
 
 	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to execute repo query: %w ", err)
+		return nil, err
 	}
 
+	// if no repos, return early
+	if len(repoMap) == 0 {
+		return nil, nil
+	}
+
+	// build IN clause for related queries
 	inClause := strings.TrimSuffix(strings.Repeat("?, ", len(repoMap)), ", ")
 	args = make([]any, len(repoMap))
-
 	i := 0
 	for _, r := range repoMap {
 		args[i] = r.RepoAt()
 		i++
 	}
 
-	// Get labels for all repos
+	// get labels for all repos
 	labelsQuery := fmt.Sprintf(
 		`select repo_at, label_at from repo_labels where repo_at in (%s)`,
 		inClause,
 	)
+
 	rows, err = e.Query(labelsQuery, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute labels query: %w ", err)
+		return nil, err
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var repoat, labelat string
 		if err := rows.Scan(&repoat, &labelat); err != nil {
-			log.Println("err", "err", err)
 			continue
 		}
 		if r, ok := repoMap[syntax.ATURI(repoat)]; ok {
 			r.Labels = append(r.Labels, labelat)
 		}
 	}
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to execute labels query: %w ", err)
-	}
 
-	languageQuery := fmt.Sprintf(
-		`
+	// get primary language for all repos
+	languageQuery := fmt.Sprintf(`
 		select repo_at, language
 		from (
 			select
-			repo_at,
-			language,
-			row_number() over (
-				partition by repo_at
-				order by bytes desc
-			) as rn
+				repo_at, language,
+				row_number() over (
+					partition by repo_at
+					order by bytes desc
+				) as rn
 			from repo_languages
 			where repo_at in (%s)
-			and is_default_ref = 1
-			and language <> ''
+				and is_default_ref = 1
+				and language <> ''
 		)
 		where rn = 1
-		`,
-		inClause,
-	)
+	`, inClause)
+
 	rows, err = e.Query(languageQuery, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute lang query: %w ", err)
+		return nil, fmt.Errorf("failed to execute lang query: %w", err)
 	}
 	defer rows.Close()
 
@@ -181,20 +187,18 @@ func GetRepos(e Execer, limit int, filters ...orm.Filter) ([]models.Repo, error)
 		}
 	}
 	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to execute lang query: %w ", err)
+		return nil, fmt.Errorf("failed to execute lang query: %w", err)
 	}
 
+	// get star counts
 	starCountQuery := fmt.Sprintf(
-		`select
-			subject_at, count(1)
-		from stars
-		where subject_at in (%s)
-		group by subject_at`,
+		`select subject_at, count(1) from stars where subject_at in (%s) group by subject_at`,
 		inClause,
 	)
+
 	rows, err = e.Query(starCountQuery, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute star-count query: %w ", err)
+		return nil, fmt.Errorf("failed to execute star-count query: %w", err)
 	}
 	defer rows.Close()
 
@@ -210,22 +214,23 @@ func GetRepos(e Execer, limit int, filters ...orm.Filter) ([]models.Repo, error)
 		}
 	}
 	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to execute star-count query: %w ", err)
+		return nil, fmt.Errorf("failed to execute star-count query: %w", err)
 	}
 
-	issueCountQuery := fmt.Sprintf(
-		`select
+	// get issue counts
+	issueCountQuery := fmt.Sprintf(`
+		select
 			repo_at,
 			count(case when open = 1 then 1 end) as open_count,
 			count(case when open = 0 then 1 end) as closed_count
 		from issues
 		where repo_at in (%s)
-		group by repo_at`,
-		inClause,
-	)
+		group by repo_at
+	`, inClause)
+
 	rows, err = e.Query(issueCountQuery, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute issue-count query: %w ", err)
+		return nil, fmt.Errorf("failed to execute issue-count query: %w", err)
 	}
 	defer rows.Close()
 
@@ -242,11 +247,12 @@ func GetRepos(e Execer, limit int, filters ...orm.Filter) ([]models.Repo, error)
 		}
 	}
 	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to execute issue-count query: %w ", err)
+		return nil, fmt.Errorf("failed to execute issue-count query: %w", err)
 	}
 
-	pullCountQuery := fmt.Sprintf(
-		`select
+	// get pull counts
+	pullCountQuery := fmt.Sprintf(`
+		select
 			repo_at,
 			count(case when state = ? then 1 end) as open_count,
 			count(case when state = ? then 1 end) as merged_count,
@@ -254,21 +260,19 @@ func GetRepos(e Execer, limit int, filters ...orm.Filter) ([]models.Repo, error)
 			count(case when state = ? then 1 end) as deleted_count
 		from pulls
 		where repo_at in (%s)
-		group by repo_at`,
-		inClause,
-	)
-	args = append([]any{
+		group by repo_at
+	`, inClause)
+
+	pullArgs := append([]any{
 		models.PullOpen,
 		models.PullMerged,
 		models.PullClosed,
 		models.PullDeleted,
 	}, args...)
-	rows, err = e.Query(
-		pullCountQuery,
-		args...,
-	)
+
+	rows, err = e.Query(pullCountQuery, pullArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute pulls-count query: %w ", err)
+		return nil, fmt.Errorf("failed to execute pulls-count query: %w", err)
 	}
 	defer rows.Close()
 
@@ -287,7 +291,7 @@ func GetRepos(e Execer, limit int, filters ...orm.Filter) ([]models.Repo, error)
 		}
 	}
 	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to execute pulls-count query: %w ", err)
+		return nil, fmt.Errorf("failed to execute pulls-count query: %w", err)
 	}
 
 	var repos []models.Repo
@@ -295,6 +299,7 @@ func GetRepos(e Execer, limit int, filters ...orm.Filter) ([]models.Repo, error)
 		repos = append(repos, *r)
 	}
 
+	// sort by created timestamp (desc)
 	slices.SortFunc(repos, func(a, b models.Repo) int {
 		if a.Created.After(b.Created) {
 			return -1
@@ -307,7 +312,7 @@ func GetRepos(e Execer, limit int, filters ...orm.Filter) ([]models.Repo, error)
 
 // helper to get exactly one repo
 func GetRepo(e Execer, filters ...orm.Filter) (*models.Repo, error) {
-	repos, err := GetRepos(e, 0, filters...)
+	repos, err := GetReposPaginated(e, pagination.Page{Limit: 1}, filters...)
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +322,7 @@ func GetRepo(e Execer, filters ...orm.Filter) (*models.Repo, error) {
 	}
 
 	if len(repos) != 1 {
-		return nil, fmt.Errorf("too many rows returned")
+		return nil, fmt.Errorf("too few rows returned")
 	}
 
 	return &repos[0], nil

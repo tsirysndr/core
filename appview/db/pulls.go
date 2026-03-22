@@ -264,7 +264,7 @@ func GetPullsPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 			sourceAts = append(sourceAts, *p.PullSource.RepoAt)
 		}
 	}
-	sourceRepos, err := GetRepos(e, 0, orm.FilterIn("at_uri", sourceAts))
+	sourceRepos, err := GetRepos(e, orm.FilterIn("at_uri", sourceAts))
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("failed to get source repos: %w", err)
 	}

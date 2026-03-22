@@ -197,7 +197,7 @@ func GetRepoStars(e Execer, limit int, filters ...orm.Filter) ([]models.RepoStar
 		return nil, nil
 	}
 
-	repos, err := GetRepos(e, 0, orm.FilterIn("at_uri", args))
+	repos, err := GetRepos(e, orm.FilterIn("at_uri", args))
 	if err != nil {
 		return nil, err
 	}
@@ -300,7 +300,7 @@ func GetTopStarredReposLastWeek(e Execer) ([]models.Repo, error) {
 	}
 
 	// get full repo data
-	repos, err := GetRepos(e, 0, orm.FilterIn("at_uri", repoUris))
+	repos, err := GetRepos(e, orm.FilterIn("at_uri", repoUris))
 	if err != nil {
 		return nil, err
 	}

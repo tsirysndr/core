@@ -66,7 +66,7 @@ func MakeProfileTimeline(e Execer, forDid string) (*models.ProfileTimeline, erro
 		*items = append(*items, &issue)
 	}
 
-	repos, err := GetRepos(e, 0, orm.FilterEq("did", forDid))
+	repos, err := GetRepos(e, orm.FilterEq("did", forDid))
 	if err != nil {
 		return nil, fmt.Errorf("error getting all repos by did: %w", err)
 	}
@@ -489,7 +489,7 @@ func ValidateProfile(e Execer, profile *models.Profile) error {
 	}
 
 	// ensure all pinned repos are either own repos or collaborating repos
-	repos, err := GetRepos(e, 0, orm.FilterEq("did", profile.Did))
+	repos, err := GetRepos(e, orm.FilterEq("did", profile.Did))
 	if err != nil {
 		log.Printf("getting repos for %s: %s", profile.Did, err)
 	}

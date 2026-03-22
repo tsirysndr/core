@@ -59,7 +59,7 @@ func CollaboratingIn(e Execer, collaborator string) ([]models.Repo, error) {
 		return nil, nil
 	}
 
-	return GetRepos(e, 0, orm.FilterIn("at_uri", repoAts))
+	return GetRepos(e, orm.FilterIn("at_uri", repoAts))
 }
 
 func GetCollaborators(e Execer, filters ...orm.Filter) ([]models.Collaborator, error) {

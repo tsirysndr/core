@@ -107,7 +107,6 @@ func ingestRefUpdate(ctx context.Context, d *db.DB, enforcer *rbac.Enforcer, pc 
 	var errWebhook error
 	repos, err := db.GetRepos(
 		d,
-		0,
 		orm.FilterEq("did", record.RepoDid),
 		orm.FilterEq("name", record.RepoName),
 	)
@@ -149,7 +148,6 @@ func triggerSitesDeployIfNeeded(ctx context.Context, d *db.DB, cfClient *cloudfl
 
 	repos, err := db.GetRepos(
 		d,
-		0,
 		orm.FilterEq("did", record.RepoDid),
 		orm.FilterEq("name", record.RepoName),
 	)
@@ -241,7 +239,6 @@ func updateRepoLanguages(d *db.DB, record tangled.GitRefUpdate) error {
 
 	repos, err := db.GetRepos(
 		d,
-		0,
 		orm.FilterEq("did", record.RepoDid),
 		orm.FilterEq("name", record.RepoName),
 	)
@@ -307,7 +304,6 @@ func ingestPipeline(d *db.DB, source ec.Source, msg ec.Message) error {
 	// does this repo have a spindle configured?
 	repos, err := db.GetRepos(
 		d,
-		0,
 		orm.FilterEq("did", record.TriggerMetadata.Repo.Did),
 		orm.FilterEq("name", record.TriggerMetadata.Repo.Repo),
 	)

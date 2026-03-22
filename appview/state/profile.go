@@ -139,7 +139,6 @@ func (s *State) profileOverview(w http.ResponseWriter, r *http.Request) {
 
 	repos, err := db.GetRepos(
 		s.db,
-		0,
 		orm.FilterEq("did", profile.UserDid),
 	)
 	if err != nil {
@@ -231,7 +230,6 @@ func (s *State) reposPage(w http.ResponseWriter, r *http.Request) {
 
 	repos, err := db.GetRepos(
 		s.db,
-		0,
 		orm.FilterEq("did", profile.UserDid),
 	)
 	if err != nil {
@@ -749,7 +747,7 @@ func (s *State) EditPinsFragment(w http.ResponseWriter, r *http.Request) {
 		profile = &models.Profile{Did: user.Active.Did}
 	}
 
-	repos, err := db.GetRepos(s.db, 0, orm.FilterEq("did", user.Active.Did))
+	repos, err := db.GetRepos(s.db, orm.FilterEq("did", user.Active.Did))
 	if err != nil {
 		log.Printf("getting repos for %s: %s", user.Active.Did, err)
 	}

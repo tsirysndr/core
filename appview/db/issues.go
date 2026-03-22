@@ -206,7 +206,7 @@ func GetIssuesPaginated(e Execer, page pagination.Page, filters ...orm.Filter) (
 		repoAts = append(repoAts, string(issue.RepoAt))
 	}
 
-	repos, err := GetRepos(e, 0, orm.FilterIn("at_uri", repoAts))
+	repos, err := GetRepos(e, orm.FilterIn("at_uri", repoAts))
 	if err != nil {
 		return nil, fmt.Errorf("failed to build repo mappings: %w", err)
 	}
