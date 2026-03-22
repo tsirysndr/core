@@ -73,3 +73,12 @@ func (ix *Indexer) NewPullState(ctx context.Context, actor syntax.DID, pull *mod
 		l.Error("failed to index a pr", "err", err)
 	}
 }
+
+func (ix *Indexer) NewRepo(ctx context.Context, repo *models.Repo) {
+	l := log.FromContext(ctx).With("notifier", "indexer", "repo", repo)
+	l.Debug("indexing new repo")
+	err := ix.Repos.Index(ctx, *repo)
+	if err != nil {
+		l.Error("failed to index a repo", "err", err)
+	}
+}
