@@ -118,6 +118,7 @@ in
         };
         services.tangled.spindle = {
           enable = true;
+          environmentFile = "/var/lib/spindle/.env";
           server = {
             owner = envVar "TANGLED_VM_SPINDLE_OWNER";
             hostname = envVarOr "TANGLED_VM_SPINDLE_HOST" "localhost:6555";
@@ -130,6 +131,10 @@ in
             secrets = {
               provider = "sqlite";
             };
+          };
+
+          pipelines = {
+            logBucket = envVarOr "SPINDLE_S3_LOG_BUCKET" "";
           };
         };
         services.postgresql = {

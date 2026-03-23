@@ -37,6 +37,11 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 		secretValues[i] = s.Value
 	}
 
+	s3, err := NewS3(cfg.S3.LogBucket)
+	if err != nil {
+		l.Error("error creating s3 client", "err", err)
+	}
+
 	var wg sync.WaitGroup
 	for eng, wfs := range pipeline.Workflows {
 		workflowTimeout := eng.WorkflowTimeout()
@@ -53,11 +58,9 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 				}
 
 				defer func() {
-					logBucket := cfg.S3.LogBucket
-
-					if logBucket != "" {
+					if s3 != nil {
 						logFile := filepath.Join(cfg.Server.LogDir, fmt.Sprintf("%s.log", wid.String()))
-						if err := uploadWorkflowLogs(ctx, logFile, "tangled-demo"); err != nil {
+						if err := s3.WriteFile(ctx, logFile); err != nil {
 							l.Error("error uploading logs", "err", err)
 						}
 					}
@@ -143,18 +146,4 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 
 	wg.Wait()
 	l.Info("all workflows completed")
-}
-
-func uploadWorkflowLogs(ctx context.Context, logfile, bucket string) error {
-	s3, err := NewS3(bucket)
-	if err != nil {
-		return fmt.Errorf("error creating s3 client: %w", err)
-	}
-
-	name := filepath.Join(logfile)
-	if err := s3.WriteFile(ctx, name); err != nil {
-		return fmt.Errorf("error saving logs: %w", err)
-	}
-
-	return nil
 }

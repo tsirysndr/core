@@ -116,6 +116,20 @@ in
             description = "S3 bucket for workflow logs";
           };
         };
+
+        environmentFile = mkOption {
+          type = with types; nullOr path;
+          default = null;
+          example = "/etc/spindle.env";
+          description = ''
+            Additional environment file as defined in {manpage}`systemd.exec(5)`.
+
+            Sensitive secrets such as {env}`AWS_SECRET_ACCESS_KEY`,
+            {env}`AWS_ACCESS_KEY_ID`, {env}`AWS_REGION`
+            may be passed to the service
+            without making them world readable in the nix store.
+          '';
+        };
       };
     };
 
@@ -129,6 +143,8 @@ in
         serviceConfig = {
           LogsDirectory = "spindle";
           StateDirectory = "spindle";
+          EnvironmentFile = mkIf (cfg.environmentFile != null) cfg.environmentFile;
+
           Environment = [
             "SPINDLE_SERVER_LISTEN_ADDR=${cfg.server.listenAddr}"
             "SPINDLE_SERVER_DB_PATH=${cfg.server.dbPath}"
@@ -144,10 +160,7 @@ in
             "SPINDLE_SERVER_SECRETS_OPENBAO_MOUNT=${cfg.server.secrets.openbao.mount}"
             "SPINDLE_NIXERY_PIPELINES_NIXERY=${cfg.pipelines.nixery}"
             "SPINDLE_NIXERY_PIPELINES_WORKFLOW_TIMEOUT=${cfg.pipelines.workflowTimeout}"
-            "SPINDLE_NIXERY_PIPELINES_LOG_BUCKET=${cfg.pipelines.logBucket}"
-            "AWS_ACCESS_KEY_ID=${builtins.getEnv "AWS_ACCESS_KEY_ID"}"
-            "AWS_SECRET_ACCESS_KEY=${builtins.getEnv "AWS_SECRET_ACCESS_KEY"}"
-            "AWS_REGION=${builtins.getEnv "AWS_REGION"}"
+            "SPINDLE_S3_LOG_BUCKET=${cfg.pipelines.logBucket}"
           ];
           ExecStart = "${cfg.package}/bin/spindle";
           Restart = "always";

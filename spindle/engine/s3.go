@@ -17,9 +17,13 @@ type S3 struct {
 	client *s3.Client
 }
 
-const BASE_S3_PATH = "spindle/workflows"
+const BaseS3Path = "spindle/workflows"
 
 func NewS3(bucket string) (*S3, error) {
+	if bucket == "" {
+		return nil, fmt.Errorf("s3 bucket not provided")
+	}
+
 	ctx := context.Background()
 	sdkConfig, err := config.LoadDefaultConfig(ctx)
 
@@ -35,7 +39,7 @@ func NewS3(bucket string) (*S3, error) {
 }
 
 func (s *S3) WriteFile(ctx context.Context, path string) error {
-	s3_key := fmt.Sprintf("%s/%s", BASE_S3_PATH, filepath.Base(path))
+	s3Key := fmt.Sprintf("%s/%s", BaseS3Path, filepath.Base(path))
 
 	file, err := os.Open(path)
 	if err != nil {
@@ -45,7 +49,7 @@ func (s *S3) WriteFile(ctx context.Context, path string) error {
 
 	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: &s.bucket,
-		Key:    &s3_key,
+		Key:    &s3Key,
 		Body:   file,
 	})
 
