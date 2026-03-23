@@ -2,7 +2,45 @@
 
 {{ define "profileContent" }}
   <div id="all-repos" class="md:col-span-8 order-2 md:order-2">
-      {{ block "ownRepos" . }}{{ end }}
+    <div class="mb-4">
+      <form id="search-form" class="flex relative" method="GET">
+        <input type="hidden" name="tab" value="repos">
+        <div class="flex-1 flex relative">
+          <input
+            id="search-q"
+            class="flex-1 py-1 pl-2 pr-10 mr-[-1px] rounded-r-none peer"
+            type="text"
+            name="q"
+            value="{{ .FilterQuery }}"
+            placeholder="search repos..."
+          >
+          <a
+            {{ if .FilterQuery }}href="?tab=repos"{{ else }}href="#"{{ end }}
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 {{ if not .FilterQuery }}hidden{{ end }} peer-[:not(:placeholder-shown)]:block"
+          >
+            {{ i "x" "w-4 h-4" }}
+          </a>
+        </div>
+        <button
+          type="submit"
+          class="p-2 text-gray-400 border rounded-r border-gray-300 dark:border-gray-600"
+        >
+          {{ i "search" "w-4 h-4" }}
+        </button>
+      </form>
+    </div>
+
+    {{ block "ownRepos" . }}{{ end }}
+
+    {{if gt .RepoCount .Page.Limit }}
+      {{ $handle := resolve .Card.UserDid }}
+      {{ template "fragments/pagination" (dict
+          "Page" .Page
+          "TotalCount" .RepoCount
+          "BasePath" (printf "/%s" $handle)
+          "QueryParams" (queryParams "tab" "repos" "q" .FilterQuery)
+      ) }}
+    {{ end }}
   </div>
 {{ end }}
 

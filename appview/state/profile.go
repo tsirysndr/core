@@ -17,8 +17,11 @@ import (
 	"github.com/gorilla/feeds"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/db"
+	"tangled.org/core/appview/middleware"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pages"
+	"tangled.org/core/appview/pagination"
+	"tangled.org/core/appview/searchquery"
 	"tangled.org/core/orm"
 	"tangled.org/core/xrpc"
 )
@@ -27,7 +30,9 @@ func (s *State) Profile(w http.ResponseWriter, r *http.Request) {
 	tabVal := r.URL.Query().Get("tab")
 	switch tabVal {
 	case "repos":
-		s.reposPage(w, r)
+		middleware.
+			Paginate(http.HandlerFunc(s.reposPage)).
+			ServeHTTP(w, r)
 	case "followers":
 		s.followersPage(w, r)
 	case "following":
@@ -228,21 +233,94 @@ func (s *State) reposPage(w http.ResponseWriter, r *http.Request) {
 	}
 	l = l.With("profileDid", profile.UserDid)
 
-	repos, err := db.GetRepos(
-		s.db,
-		orm.FilterEq("did", profile.UserDid),
-	)
-	if err != nil {
-		l.Error("failed to get repos", "err", err)
-		s.pages.Error500(w)
-		return
+	params := r.URL.Query()
+	page := pagination.FromContext(r.Context())
+
+	query := searchquery.Parse(params.Get("q"))
+
+	var language string
+	if lang := query.Get("language"); lang != nil {
+		language = *lang
+	}
+
+	tf := searchquery.ExtractTextFilters(query)
+
+	searchOpts := models.RepoSearchOptions{
+		Keywords:        tf.Keywords,
+		Phrases:         tf.Phrases,
+		NegatedKeywords: tf.NegatedKeywords,
+		NegatedPhrases:  tf.NegatedPhrases,
+		Did:             profile.UserDid,
+		Language:        language,
+		Page:            page,
+	}
+
+	var repos []models.Repo
+	var totalRepos int64
+
+	if searchOpts.HasSearchFilters() {
+		res, err := s.indexer.Repos.Search(r.Context(), searchOpts)
+		if err != nil {
+			l.Error("failed to search repos", "err", err)
+			s.pages.Error500(w)
+			return
+		}
+
+		if len(res.Hits) > 0 {
+			repos, err = db.GetRepos(s.db, orm.FilterIn("id", res.Hits))
+			if err != nil {
+				l.Error("failed to get repos by IDs", "err", err)
+				s.pages.Error500(w)
+				return
+			}
+
+			// sort repos to match search result order (by relevance)
+			repoMap := make(map[int64]models.Repo, len(repos))
+			for _, repo := range repos {
+				repoMap[repo.Id] = repo
+			}
+			repos = make([]models.Repo, 0, len(res.Hits))
+			for _, id := range res.Hits {
+				if repo, ok := repoMap[id]; ok {
+					repos = append(repos, repo)
+				}
+			}
+		}
+		totalRepos = int64(res.Total)
+	} else {
+		repos, err = db.GetReposPaginated(
+			s.db,
+			page,
+			orm.FilterEq("did", profile.UserDid),
+		)
+		if err != nil {
+			l.Error("failed to get repos", "err", err)
+			s.pages.Error500(w)
+			return
+		}
+
+		totalRepos, err = db.CountRepos(
+			s.db,
+			orm.FilterEq("did", profile.UserDid),
+		)
+		if err != nil {
+			l.Error("failed to count repos", "err", err)
+			s.pages.Error500(w)
+			return
+		}
 	}
 
 	err = s.pages.ProfileRepos(w, pages.ProfileReposParams{
 		LoggedInUser: s.oauth.GetMultiAccountUser(r),
 		Repos:        repos,
 		Card:         profile,
+		Page:         page,
+		RepoCount:    int(totalRepos),
+		FilterQuery:  query.String(),
 	})
+	if err != nil {
+		l.Error("failed to render page", "err", err)
+	}
 }
 
 func (s *State) starredPage(w http.ResponseWriter, r *http.Request) {

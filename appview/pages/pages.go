@@ -649,6 +649,9 @@ type ProfileReposParams struct {
 	Repos        []models.Repo
 	Card         *ProfileCard
 	Active       string
+	Page         pagination.Page
+	RepoCount    int
+	FilterQuery  string
 }
 
 func (p *Pages) ProfileRepos(w io.Writer, params ProfileReposParams) error {
