@@ -253,7 +253,7 @@ func GetReferencesAll(e Execer, filters ...orm.Filter) (map[syntax.ATURI][]synta
 func GetBacklinks(e Execer, target syntax.ATURI) ([]models.RichReferenceLink, error) {
 	rows, err := e.Query(
 		`select from_at from reference_links
-		where to_at = ?`,
+		where to_at = ? and from_at <> to_at`,
 		target,
 	)
 	if err != nil {
@@ -283,7 +283,7 @@ func GetBacklinks(e Execer, target syntax.ATURI) ([]models.RichReferenceLink, er
 		return nil, fmt.Errorf("get issue backlinks: %w", err)
 	}
 	backlinks = append(backlinks, ls...)
-	ls, err = getIssueCommentBacklinks(e, backlinksMap[tangled.RepoIssueCommentNSID])
+	ls, err = getIssueCommentBacklinks(e, target, backlinksMap[tangled.RepoIssueCommentNSID])
 	if err != nil {
 		return nil, fmt.Errorf("get issue_comment backlinks: %w", err)
 	}
@@ -293,7 +293,7 @@ func GetBacklinks(e Execer, target syntax.ATURI) ([]models.RichReferenceLink, er
 		return nil, fmt.Errorf("get pull backlinks: %w", err)
 	}
 	backlinks = append(backlinks, ls...)
-	ls, err = getPullCommentBacklinks(e, backlinksMap[tangled.RepoPullCommentNSID])
+	ls, err = getPullCommentBacklinks(e, target, backlinksMap[tangled.RepoPullCommentNSID])
 	if err != nil {
 		return nil, fmt.Errorf("get pull_comment backlinks: %w", err)
 	}
@@ -344,11 +344,12 @@ func getIssueBacklinks(e Execer, aturis []syntax.ATURI) ([]models.RichReferenceL
 	return refLinks, nil
 }
 
-func getIssueCommentBacklinks(e Execer, aturis []syntax.ATURI) ([]models.RichReferenceLink, error) {
+func getIssueCommentBacklinks(e Execer, target syntax.ATURI, aturis []syntax.ATURI) ([]models.RichReferenceLink, error) {
 	if len(aturis) == 0 {
 		return nil, nil
 	}
 	filter := orm.FilterIn("c.at_uri", aturis)
+	exclude := orm.FilterNotEq("i.at_uri", target)
 	rows, err := e.Query(
 		fmt.Sprintf(
 			`select r.did, r.name, i.issue_id, c.id, i.title, i.open
@@ -357,10 +358,11 @@ func getIssueCommentBacklinks(e Execer, aturis []syntax.ATURI) ([]models.RichRef
 				on i.at_uri = c.issue_at
 			join repos r
 				on r.at_uri = i.repo_at
-			where %s`,
+			where %s and %s`,
 			filter.Condition(),
+			exclude.Condition(),
 		),
-		filter.Arg()...,
+		append(filter.Arg(), exclude.Arg()...)...,
 	)
 	if err != nil {
 		return nil, err
@@ -424,11 +426,12 @@ func getPullBacklinks(e Execer, aturis []syntax.ATURI) ([]models.RichReferenceLi
 	return refLinks, nil
 }
 
-func getPullCommentBacklinks(e Execer, aturis []syntax.ATURI) ([]models.RichReferenceLink, error) {
+func getPullCommentBacklinks(e Execer, target syntax.ATURI, aturis []syntax.ATURI) ([]models.RichReferenceLink, error) {
 	if len(aturis) == 0 {
 		return nil, nil
 	}
 	filter := orm.FilterIn("c.comment_at", aturis)
+	exclude := orm.FilterNotEq("p.at_uri", target)
 	rows, err := e.Query(
 		fmt.Sprintf(
 			`select r.did, r.name, p.pull_id, c.id, p.title, p.state
@@ -437,10 +440,11 @@ func getPullCommentBacklinks(e Execer, aturis []syntax.ATURI) ([]models.RichRefe
 				on r.at_uri = p.repo_at
 			join pull_comments c
 				on r.at_uri = c.repo_at and p.pull_id = c.pull_id
-			where %s`,
+			where %s and %s`,
 			filter.Condition(),
+			exclude.Condition(),
 		),
-		filter.Arg()...,
+		append(filter.Arg(), exclude.Arg()...)...,
 	)
 	if err != nil {
 		return nil, err
