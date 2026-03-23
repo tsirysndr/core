@@ -26,7 +26,7 @@ func (rp *Repo) Opengraph(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		ownerHandle = f.Did
 	} else {
-		ownerHandle = "@" + owner.Handle.String()
+		ownerHandle = owner.Handle.String()
 	}
 
 	avatarUrl := rp.pages.AvatarUrl(ownerHandle, "256")
@@ -69,7 +69,7 @@ func (rp *Repo) Opengraph(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	var ogLanguages []ogre.LanguageData
+	ogLanguages := []ogre.LanguageData{}
 	for _, lang := range languageStats {
 		if len(ogLanguages) >= 5 {
 			break

@@ -30,7 +30,7 @@ func (s *Pulls) PullOpenGraphSummary(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		ownerHandle = f.Did
 	} else {
-		ownerHandle = "@" + owner.Handle.String()
+		ownerHandle = owner.Handle.String()
 	}
 
 	var authorHandle string

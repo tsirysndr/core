@@ -4,10 +4,10 @@ interface AvatarProps {
 }
 
 export function Avatar({ src, size = 64 }: AvatarProps) {
-  const avatarSrc =
-    src.includes("avatar.tangled.sh") && !src.includes("format=")
-      ? `${src}${src.includes("?") ? "&" : "?"}format=jpeg`
-      : src;
+  const avatarSrc = src.includes("avatar.tangled.sh")
+    ? src.replace(/[?&]format=\w+/, "").replace(/[?&]$/, "") +
+      (src.includes("?") ? "&" : "?") + "format=jpeg"
+    : src;
 
   return (
     <div
