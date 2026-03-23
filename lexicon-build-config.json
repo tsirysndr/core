@@ -1,5 +1,11 @@
 [
   {
+    "package": "atproto",
+    "prefix": "com.atproto",
+    "outdir": "/tmp/atproto",
+    "import": "github.com/bluesky-social/indigo/api/atproto"
+  },
+  {
     "package": "tangled",
     "prefix": "sh.tangled",
     "outdir": "api/tangled",
