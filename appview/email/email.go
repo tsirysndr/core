@@ -49,10 +49,33 @@ func IsValidEmail(email string) bool {
 	parts := strings.Split(addr.Address, "@")
 	domain := parts[1]
 
-	mx, err := net.LookupMX(domain)
-	if err != nil || len(mx) == 0 {
-		return false
+	canonical := coalesceToCanonicalName(domain)
+	mx, err := net.LookupMX(canonical)
+
+	// Don't check err here; mx will only contain valid mx records, and we should
+	// only fallback to an implicit mx if there are no mx records defined (whether
+	// they are valid or not).
+	if len(mx) != 0 {
+		return true
 	}
 
-	return true
+	if err != nil {
+		// If the domain resolves to an address, assume it's an implicit mx.
+		address, _ := net.LookupIP(canonical)
+		if len(address) != 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
+func coalesceToCanonicalName(domain string) string {
+	canonical, err := net.LookupCNAME(domain)
+	if err != nil {
+		// net.LookupCNAME() returns an error if there is no cname record *and* no
+		// a/aaaa records, but there may still be mx records.
+		return domain
+	}
+	return canonical
 }
