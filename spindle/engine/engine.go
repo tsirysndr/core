@@ -3,7 +3,9 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"path/filepath"
 	"sync"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
@@ -49,6 +51,17 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 					PipelineId: pipelineId,
 					Name:       w.Name,
 				}
+
+				defer func() {
+					logBucket := cfg.S3.LogBucket
+
+					if logBucket != "" {
+						logFile := filepath.Join(cfg.Server.LogDir, fmt.Sprintf("%s.log", wid.String()))
+						if err := uploadWorkflowLogs(ctx, logFile, "tangled-demo"); err != nil {
+							l.Error("error uploading logs", "err", err)
+						}
+					}
+				}()
 
 				wfLogger, err := models.NewFileWorkflowLogger(cfg.Server.LogDir, wid, secretValues)
 				if err != nil {
@@ -130,4 +143,18 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 
 	wg.Wait()
 	l.Info("all workflows completed")
+}
+
+func uploadWorkflowLogs(ctx context.Context, logfile, bucket string) error {
+	s3, err := NewS3(bucket)
+	if err != nil {
+		return fmt.Errorf("error creating s3 client: %w", err)
+	}
+
+	name := filepath.Join(logfile)
+	if err := s3.WriteFile(ctx, name); err != nil {
+		return fmt.Errorf("error saving logs: %w", err)
+	}
+
+	return nil
 }

@@ -109,6 +109,12 @@ in
             default = "5m";
             description = "Timeout for each step of a pipeline";
           };
+
+          logBucket = mkOption {
+            type = types.str;
+            default = "tangled-logs";
+            description = "S3 bucket for workflow logs";
+          };
         };
       };
     };
@@ -138,6 +144,10 @@ in
             "SPINDLE_SERVER_SECRETS_OPENBAO_MOUNT=${cfg.server.secrets.openbao.mount}"
             "SPINDLE_NIXERY_PIPELINES_NIXERY=${cfg.pipelines.nixery}"
             "SPINDLE_NIXERY_PIPELINES_WORKFLOW_TIMEOUT=${cfg.pipelines.workflowTimeout}"
+            "SPINDLE_NIXERY_PIPELINES_LOG_BUCKET=${cfg.pipelines.logBucket}"
+            "AWS_ACCESS_KEY_ID=${builtins.getEnv "AWS_ACCESS_KEY_ID"}"
+            "AWS_SECRET_ACCESS_KEY=${builtins.getEnv "AWS_SECRET_ACCESS_KEY"}"
+            "AWS_REGION=${builtins.getEnv "AWS_REGION"}"
           ];
           ExecStart = "${cfg.package}/bin/spindle";
           Restart = "always";

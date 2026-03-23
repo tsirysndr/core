@@ -41,9 +41,14 @@ type NixeryPipelines struct {
 	WorkflowTimeout string `env:"WORKFLOW_TIMEOUT, default=5m"`
 }
 
+type S3 struct {
+	LogBucket string `env:"LOG_BUCKET"`
+}
+
 type Config struct {
 	Server          Server          `env:",prefix=SPINDLE_SERVER_"`
 	NixeryPipelines NixeryPipelines `env:",prefix=SPINDLE_NIXERY_PIPELINES_"`
+	S3              S3              `env:",prefix=SPINDLE_S3_"`
 }
 
 func Load(ctx context.Context) (*Config, error) {
