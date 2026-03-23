@@ -100,6 +100,9 @@
 
 {{ define "contentAfter" }}
   <input type="hidden" id="round-link-base" value="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/round/{{ .ActiveRound }}" />
+  {{ if .IsInterdiff }}
+    <input type="hidden" id="is-interdiff" value="1" />
+  {{ end }}
   {{ template "repo/fragments/diff" (list .Diff .DiffOpts $) }}
 {{ end }}
 

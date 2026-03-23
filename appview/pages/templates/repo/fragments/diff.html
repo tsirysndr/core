@@ -14,6 +14,7 @@
     {{ template "fragments/resizable" }}
     {{ template "activeFileHighlight" }}
     {{ template "fragments/line-quote-button" }}
+    {{ template "reviewState" }}
   </div>
 {{ end }}
 
@@ -37,7 +38,7 @@
     {{ $stat := $diff.Stats }}
     {{ $count := len $diff.ChangedFiles }}
     {{ template "repo/fragments/diffStatPill" $stat }}
-    <span class="text-xs text-gray-600 dark:text-gray-400 hidden md:inline-flex">{{ $count }} changed file{{ if ne $count 1 }}s{{ end }}</span>
+    <span id="changed-files-label" class="text-xs text-gray-600 dark:text-gray-400 hidden md:inline-flex" data-total="{{ $count }}">{{ $count }} changed file{{ if ne $count 1 }}s{{ end }}</span>
 
     {{ if $root }}
       {{ if $root.IsInterdiff }}
@@ -178,6 +179,21 @@
               {{ end }}
             </div>
           </div>
+          <label
+            data-review-btn="file-{{ .Id }}"
+            onclick="event.stopPropagation()"
+            class="review-btn hidden p-2 items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-green-600 dark:hover:text-green-400 transition-colors cursor-pointer"
+            title="Mark as reviewed"
+          >
+            <input
+              type="checkbox"
+              class="sr-only peer review-checkbox"
+              data-file-id="file-{{ .Id }}"
+            />
+            <span class="peer-checked:hidden">{{ i "circle" "size-4" }}</span>
+            <span class="hidden peer-checked:inline text-green-600 dark:text-green-400">{{ i "circle-check" "size-4" }}</span>
+            <span class="hidden md:inline">reviewed</span>
+          </label>
         </div>
       </summary>
 
@@ -302,6 +318,134 @@
       window.__activeFileScrollHandler = updateActiveFile;
       document.addEventListener('scroll', updateActiveFile);
       updateActiveFile();
+    })();
+  </script>
+{{ end }}
+
+{{ define "reviewState" }}
+  <script>
+    (() => {
+      const linkBase = document.getElementById('round-link-base');
+      if (!linkBase) return;
+
+      const isInterdiff = !!document.getElementById('is-interdiff');
+      const basePath = linkBase.value.replace(/^\//, '');
+      const storageKey = 'reviewed:' + basePath + (isInterdiff ? '/interdiff' : '');
+
+      const REVIEWED_PREFIX = 'reviewed:';
+      const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+      const load = () => {
+        try {
+          const entry = JSON.parse(localStorage.getItem(storageKey) || '{}');
+          return new Set(Array.isArray(entry) ? entry : (entry.files || []));
+        }
+        catch { return new Set(); }
+      };
+
+      const save = (reviewed) => {
+        const liveIds = new Set(Array.from(allFiles()).map(d => d.id));
+        localStorage.setItem(storageKey, JSON.stringify({
+          files: Array.from(reviewed).filter(id => liveIds.has(id)),
+          ts: Date.now(),
+        }));
+      };
+
+      const pruneStale = () => {
+        const now = Date.now();
+        Object.keys(localStorage)
+          .filter(k => k.startsWith(REVIEWED_PREFIX) && k !== storageKey)
+          .forEach(k => {
+            try {
+              const entry = JSON.parse(localStorage.getItem(k));
+              if (!entry.ts || now - entry.ts > MAX_AGE_MS) localStorage.removeItem(k);
+            } catch { localStorage.removeItem(k); }
+          });
+      };
+      if (Math.random() < 0.1) pruneStale();
+
+      const allFiles = () =>
+        document.querySelectorAll('details[id^="file-"]');
+
+      const applyOne = (fileId, isReviewed) => {
+        const detail = document.getElementById(fileId);
+        if (!detail) return;
+
+        const btn = detail.querySelector('[data-review-btn]');
+        const checkbox = btn?.querySelector('input[type="checkbox"]');
+        const path = CSS.escape(fileId.replace('file-', ''));
+        const treeLink = document.querySelector(`.filetree-link[data-path="${path}"]`);
+
+        detail.classList.toggle('opacity-60', isReviewed);
+
+        if (checkbox) checkbox.checked = isReviewed;
+
+        if (treeLink) {
+          const existing = treeLink.parentElement.querySelector('.review-indicator');
+          if (isReviewed && !existing) {
+            const indicator = document.createElement('span');
+            indicator.className = 'review-indicator text-green-600 dark:text-green-400 flex-shrink-0';
+            indicator.innerHTML = '&#10003;';
+            treeLink.parentElement.appendChild(indicator);
+          } else if (!isReviewed && existing) {
+            existing.remove();
+          }
+        }
+      };
+
+      const updateProgress = (reviewed) => {
+        const el = document.getElementById('changed-files-label');
+        if (!el) return;
+        const total = parseInt(el.dataset.total, 10);
+        const files = allFiles();
+        const count = Array.from(files).filter(d => reviewed.has(d.id)).length;
+        const suffix = total === 1 ? 'file' : 'files';
+        const allDone = count === total;
+        el.classList.toggle('text-green-600', allDone);
+        el.classList.toggle('dark:text-green-400', allDone);
+        el.classList.toggle('text-gray-600', !allDone);
+        el.classList.toggle('dark:text-gray-400', !allDone);
+        el.textContent = count > 0
+          ? `${count}/${total} ${suffix} reviewed`
+          : `${total} changed ${suffix}`;
+      };
+
+      const reviewed = load();
+
+      const toggleReview = (fileId) => {
+        const detail = document.getElementById(fileId);
+        if (!detail) return;
+        const isNowReviewed = !reviewed.has(fileId);
+        if (isNowReviewed) {
+          reviewed.add(fileId);
+          detail.open = false;
+        } else {
+          reviewed.delete(fileId);
+        }
+        save(reviewed);
+        applyOne(fileId, isNowReviewed);
+        updateProgress(reviewed);
+      };
+
+      document.getElementById('diff-area').addEventListener('change', (e) => {
+        const checkbox = e.target.closest('.review-checkbox');
+        if (!checkbox) return;
+        const fileId = checkbox.dataset.fileId;
+        if (fileId) toggleReview(fileId);
+      });
+
+      document.querySelectorAll('.review-btn').forEach(btn => {
+        btn.classList.remove('hidden');
+        btn.classList.add('flex');
+      });
+
+      allFiles().forEach(detail => {
+        if (reviewed.has(detail.id)) {
+          applyOne(detail.id, true);
+          detail.open = false;
+        }
+      });
+      updateProgress(reviewed);
     })();
   </script>
 {{ end }}

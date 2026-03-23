@@ -84,12 +84,7 @@ func (d NiceDiff) ChangedFiles() []DiffFileRenderer {
 func (d NiceDiff) FileTree() *filetree.FileTreeNode {
 	fs := make([]string, len(d.Diff))
 	for i, s := range d.Diff {
-		n := s.Names()
-		if n.New == "" {
-			fs[i] = n.Old
-		} else {
-			fs[i] = n.New
-		}
+		fs[i] = s.Id()
 	}
 	return filetree.FileTree(fs)
 }
