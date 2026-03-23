@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-enry/go-enry/v2"
 	"tangled.org/core/appview/db"
-	"tangled.org/core/appview/ogcard"
+	"tangled.org/core/ogre"
 	"tangled.org/core/orm"
 	"tangled.org/core/types"
 )
@@ -69,18 +69,18 @@ func (rp *Repo) Opengraph(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	var ogLanguages []ogcard.LanguageData
+	var ogLanguages []ogre.LanguageData
 	for _, lang := range languageStats {
 		if len(ogLanguages) >= 5 {
 			break
 		}
-		ogLanguages = append(ogLanguages, ogcard.LanguageData{
+		ogLanguages = append(ogLanguages, ogre.LanguageData{
 			Color:      lang.Color,
 			Percentage: lang.Percentage,
 		})
 	}
 
-	payload := ogcard.RepositoryCardPayload{
+	payload := ogre.RepositoryCardPayload{
 		Type:        "repository",
 		RepoName:    f.Name,
 		OwnerHandle: ownerHandle,
@@ -92,7 +92,7 @@ func (rp *Repo) Opengraph(w http.ResponseWriter, r *http.Request) {
 		Languages:   ogLanguages,
 	}
 
-	imageBytes, err := rp.ogcardClient.RenderRepositoryCard(r.Context(), payload)
+	imageBytes, err := rp.ogreClient.RenderRepositoryCard(r.Context(), payload)
 	if err != nil {
 		log.Println("failed to render repository card", err)
 		http.Error(w, "failed to render repository card", http.StatusInternalServerError)

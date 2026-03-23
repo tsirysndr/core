@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"tangled.org/core/appview/models"
-	"tangled.org/core/appview/ogcard"
+	"tangled.org/core/ogre"
 )
 
 func (rp *Issues) IssueOpenGraphSummary(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +49,7 @@ func (rp *Issues) IssueOpenGraphSummary(w http.ResponseWriter, r *http.Request) 
 
 	commentCount := len(issue.Comments)
 
-	payload := ogcard.IssueCardPayload{
+	payload := ogre.IssueCardPayload{
 		Type:          "issue",
 		RepoName:      f.Name,
 		OwnerHandle:   ownerHandle,
@@ -57,13 +57,13 @@ func (rp *Issues) IssueOpenGraphSummary(w http.ResponseWriter, r *http.Request) 
 		Title:         issue.Title,
 		IssueNumber:   issue.IssueId,
 		Status:        status,
-		Labels:        []ogcard.LabelData{},
+		Labels:        []ogre.LabelData{},
 		CommentCount:  commentCount,
 		ReactionCount: 0,
 		CreatedAt:     issue.Created.Format(time.RFC3339),
 	}
 
-	imageBytes, err := rp.ogcardClient.RenderIssueCard(r.Context(), payload)
+	imageBytes, err := rp.ogreClient.RenderIssueCard(r.Context(), payload)
 	if err != nil {
 		log.Println("failed to render issue card", err)
 		http.Error(w, "failed to render issue card", http.StatusInternalServerError)

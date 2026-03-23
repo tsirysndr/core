@@ -3,11 +3,11 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@tangled/ogcard-worker",
+      "name": "@tangled/ogre-worker",
       "dependencies": {
         "@fontsource/inter": "^5.2.8",
         "@resvg/resvg-wasm": "^2.6.2",
-        "@tangled/ogcard-runtime": "*",
+        "@tangled/ogre-runtime": "*",
         "lucide-static": "^0.577.0",
         "preact": "^10.29.0",
         "satori": "0.25.0",
@@ -24,7 +24,7 @@
       },
     },
     "packages/runtime": {
-      "name": "@tangled/ogcard-runtime",
+      "name": "@tangled/ogre-runtime",
       "version": "1.0.0",
     },
   },
@@ -267,7 +267,7 @@
 
     "@speed-highlight/core": ["@speed-highlight/core@1.2.15", "", {}, "sha512-BMq1K3DsElxDWawkX6eLg9+CKJrTVGCBAWVuHXVUV2u0s2711qiChLSId6ikYPfxhdYocLNt3wWwSvDiTvFabw=="],
 
-    "@tangled/ogcard-runtime": ["@tangled/ogcard-runtime@workspace:packages/runtime"],
+    "@tangled/ogre-runtime": ["@tangled/ogre-runtime@workspace:packages/runtime"],
 
     "@tybys/wasm-util": ["@tybys/wasm-util@0.10.1", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg=="],
 

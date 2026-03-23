@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"tangled.org/core/appview/models"
-	"tangled.org/core/appview/ogcard"
+	"tangled.org/core/ogre"
 	"tangled.org/core/patchutil"
 )
 
@@ -71,7 +71,7 @@ func (s *Pulls) PullOpenGraphSummary(w http.ResponseWriter, r *http.Request) {
 		rounds = 1
 	}
 
-	payload := ogcard.PullRequestCardPayload{
+	payload := ogre.PullRequestCardPayload{
 		Type:              "pullRequest",
 		RepoName:          f.Name,
 		OwnerHandle:       ownerHandle,
@@ -88,7 +88,7 @@ func (s *Pulls) PullOpenGraphSummary(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:         pull.Created.Format(time.RFC3339),
 	}
 
-	imageBytes, err := s.ogcardClient.RenderPullRequestCard(r.Context(), payload)
+	imageBytes, err := s.ogreClient.RenderPullRequestCard(r.Context(), payload)
 	if err != nil {
 		log.Println("failed to render pull request card", err)
 		http.Error(w, "failed to render pull request card", http.StatusInternalServerError)

@@ -1,6 +1,6 @@
 import type { VNode } from "preact";
-import { initSatori, initResvg, loadFonts } from "@tangled/ogcard-runtime";
-import type { ResvgClass } from "@tangled/ogcard-runtime/types";
+import { initSatori, initResvg, loadFonts } from "@tangled/ogre-runtime";
+import type { ResvgClass } from "@tangled/ogre-runtime/types";
 
 let satoriFn: typeof import("satori").default | null = null;
 let Resvg: ResvgClass | null = null;

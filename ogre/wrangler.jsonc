@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "tangled-ogcard-worker",
+  "name": "ogre",
   "main": "src/index.tsx",
   "compatibility_date": "2026-03-07",
   "observability": {
@@ -8,8 +8,8 @@
   },
   "routes": [
     {
-      "pattern": "og.tangled.org/*",
-      "zone_name": "tangled.org",
+      "pattern": "ogre.tangled.network",
+      "custom_domain": true,
     },
   ],
   "vars": {

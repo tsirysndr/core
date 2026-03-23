@@ -1,4 +1,4 @@
-package ogcard
+package ogre
 
 import (
 	"bytes"

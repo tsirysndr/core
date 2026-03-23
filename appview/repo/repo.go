@@ -20,7 +20,7 @@ import (
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
 	"tangled.org/core/appview/oauth"
-	"tangled.org/core/appview/ogcard"
+	"tangled.org/core/ogre"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/reporesolver"
 	"tangled.org/core/appview/validator"
@@ -54,7 +54,7 @@ type Repo struct {
 	serviceAuth   *serviceauth.ServiceAuth
 	validator     *validator.Validator
 	cfClient      *cloudflare.Client
-	ogcardClient  *ogcard.Client
+	ogreClient  *ogre.Client
 }
 
 func New(
@@ -84,7 +84,7 @@ func New(
 		logger:        logger,
 		validator:     validator,
 		cfClient:      cfClient,
-		ogcardClient:  ogcard.NewClient(config.Ogcard.Host),
+		ogreClient:  ogre.NewClient(config.Ogre.Host),
 	}
 }
 
