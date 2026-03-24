@@ -151,6 +151,11 @@
             overflow-wrap: anywhere;
         }
 
+        .prose td,
+        .prose th {
+            overflow-wrap: normal;
+        }
+
         .prose hr {
             @apply my-2;
         }
