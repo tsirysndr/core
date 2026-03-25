@@ -71,12 +71,16 @@ func buildDefaultPolicy() *bluemonday.Policy {
 		"dl", "dt", "dd", "kbd", "q", "samp", "var", "hr", "ruby", "rt", "rp", "li", "tr", "td", "th", "s", "strike", "summary",
 		"details", "caption", "figure", "figcaption",
 		"abbr", "bdo", "cite", "dfn", "mark", "small", "span", "time", "video", "wbr",
+		"picture", "source",
 	}
 
 	policy.AllowAttrs(generalSafeAttrs...).OnElements(generalSafeElements...)
 
 	// video
 	policy.AllowAttrs("src", "autoplay", "controls").OnElements("video")
+
+	// picture/source for modern image formats (avif, webp, etc.)
+	policy.AllowAttrs("srcset", "type", "media").OnElements("source")
 
 	// checkboxes
 	policy.AllowAttrs("type").Matching(regexp.MustCompile(`^checkbox$`)).OnElements("input")
