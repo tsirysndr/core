@@ -298,7 +298,7 @@ func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source,
 		tpl := tangled.Pipeline{}
 		err := json.Unmarshal(msg.EventJson, &tpl)
 		if err != nil {
-			fmt.Println("error unmarshalling", err)
+			s.l.Error("failed to unmarshal pipeline event", "err", err)
 			return err
 		}
 
