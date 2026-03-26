@@ -37,6 +37,8 @@ func (s *State) Router() http.Handler {
 		s.logger,
 	)
 
+	router.Use(s.oauth.PdsRewriteMiddleware)
+
 	router.Get("/pwa-manifest.json", s.WebAppManifest)
 	router.Get("/robots.txt", s.RobotsTxt)
 	router.Get("/.well-known/security.txt", s.SecurityTxt)

@@ -96,7 +96,6 @@ func (o *OAuth) callback(w http.ResponseWriter, r *http.Request) {
 	go o.addToDefaultSpindle(sessData.AccountDID.String())
 	go o.ensureTangledProfile(sessData)
 	go o.autoClaimTnglShDomain(sessData.AccountDID.String())
-	go o.drainPdsRewrites(sessData)
 
 	if !o.Config.Core.Dev {
 		err = o.Posthog.Enqueue(posthog.Capture{
@@ -272,6 +271,19 @@ func (o *OAuth) ensureTangledProfile(sessData *oauth.ClientSessionData) {
 	}
 
 	l.Debug("successfully created empty Tangled profile on PDS and DB")
+}
+
+func (o *OAuth) PdsRewriteMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer next.ServeHTTP(w, r)
+
+		sess, err := o.ResumeSession(r)
+		if err != nil {
+			return
+		}
+
+		go o.drainPdsRewrites(sess.Data)
+	})
 }
 
 func (o *OAuth) drainPdsRewrites(sessData *oauth.ClientSessionData) {
