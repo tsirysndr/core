@@ -34,6 +34,7 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		"_journal_mode=WAL",
 		"_synchronous=NORMAL",
 		"_auto_vacuum=incremental",
+		"_busy_timeout=5000",
 	}
 
 	logger := log.FromContext(ctx)

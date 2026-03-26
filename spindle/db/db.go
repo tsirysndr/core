@@ -18,6 +18,7 @@ func Make(dbPath string) (*DB, error) {
 		"_journal_mode=WAL",
 		"_synchronous=NORMAL",
 		"_auto_vacuum=incremental",
+		"_busy_timeout=5000",
 	}
 
 	db, err := sql.Open("sqlite3", dbPath+"?"+strings.Join(opts, "&"))
