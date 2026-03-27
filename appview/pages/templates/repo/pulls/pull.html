@@ -179,9 +179,13 @@
         text-white md:text-black md:dark:text-white
         {{ $bgColor }}
         md:bg-white md:dark:bg-gray-800
-        drop-shadow-sm border-t md:border-x border-gray-200 dark:border-gray-700">
+        drop-shadow-sm border-t md:border-x border-gray-200 dark:border-gray-700
+        pointer-events-none
+        ">
         <h2 class="">History</h2>
-        {{ template "subsPanelSummary" $ }}
+        <span class="pointer-events-auto cursor-text">
+          {{ template "subsPanelSummary" $ }}
+        </span>
       </summary>
       <div class="max-h-[85vh] md:max-h-[calc(100vh-3rem-3rem)] w-full flex flex-col-reverse gap-4 overflow-y-auto bg-slate-100 dark:bg-gray-900 md:bg-transparent">
         {{ template "submissions" $root }}
