@@ -15,12 +15,14 @@
         this.handleMouseDown = this.handleMouseDown.bind(this);
         this.handleMouseMove = this.handleMouseMove.bind(this);
         this.handleMouseUp = this.handleMouseUp.bind(this);
+        this.handleDoubleClick = this.handleDoubleClick.bind(this);
 
         this.init();
       }
 
       init() {
         this.resizer.addEventListener('mousedown', this.handleMouseDown);
+        this.resizer.addEventListener('dblclick', this.handleDoubleClick);
       }
 
       handleMouseDown(e) {
@@ -86,8 +88,15 @@
         document.removeEventListener('mouseup', this.handleMouseUp);
       }
 
+      handleDoubleClick(e) {
+        e.preventDefault();
+        this.target.style.width = '';
+        this.target.style.flexShrink = '';
+      }
+
       destroy() {
         this.resizer.removeEventListener('mousedown', this.handleMouseDown);
+        this.resizer.removeEventListener('dblclick', this.handleDoubleClick);
         document.removeEventListener('mousemove', this.handleMouseMove);
         document.removeEventListener('mouseup', this.handleMouseUp);
       }
