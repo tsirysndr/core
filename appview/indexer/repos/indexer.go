@@ -241,6 +241,10 @@ type repoData struct {
 }
 
 func makeRepoData(repo *models.Repo) *repoData {
+	var language string
+	if repo.RepoStats != nil {
+		language = repo.RepoStats.Language
+	}
 	return &repoData{
 		ID:          repo.Id,
 		RepoAt:      repo.RepoAt().String(),
@@ -252,7 +256,7 @@ func makeRepoData(repo *models.Repo) *repoData {
 		Topics:      repo.Topics,
 		TopicsExact: repo.Topics,
 		Knot:        repo.Knot,
-		Language:    repo.RepoStats.Language,
+		Language:    language,
 	}
 }
 
