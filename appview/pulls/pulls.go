@@ -26,7 +26,6 @@ import (
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
 	"tangled.org/core/appview/oauth"
-	"tangled.org/core/ogre"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/pages/markup"
 	"tangled.org/core/appview/pages/repoinfo"
@@ -36,6 +35,7 @@ import (
 	"tangled.org/core/appview/validator"
 	"tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/idresolver"
+	"tangled.org/core/ogre"
 	"tangled.org/core/orm"
 	"tangled.org/core/patchutil"
 	"tangled.org/core/rbac"
@@ -66,7 +66,7 @@ type Pulls struct {
 	logger           *slog.Logger
 	validator        *validator.Validator
 	indexer          *pulls_indexer.Indexer
-	ogreClient     *ogre.Client
+	ogreClient       *ogre.Client
 }
 
 func New(
@@ -96,7 +96,7 @@ func New(
 		logger:           logger,
 		validator:        validator,
 		indexer:          indexer,
-		ogreClient:     ogre.NewClient(config.Ogre.Host),
+		ogreClient:       ogre.NewClient(config.Ogre.Host),
 	}
 }
 

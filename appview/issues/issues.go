@@ -23,7 +23,6 @@ import (
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
 	"tangled.org/core/appview/oauth"
-	"tangled.org/core/ogre"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/pages/repoinfo"
 	"tangled.org/core/appview/pagination"
@@ -31,6 +30,7 @@ import (
 	"tangled.org/core/appview/searchquery"
 	"tangled.org/core/appview/validator"
 	"tangled.org/core/idresolver"
+	"tangled.org/core/ogre"
 	"tangled.org/core/orm"
 	"tangled.org/core/rbac"
 	"tangled.org/core/tid"
@@ -49,7 +49,7 @@ type Issues struct {
 	logger           *slog.Logger
 	validator        *validator.Validator
 	indexer          *issues_indexer.Indexer
-	ogreClient     *ogre.Client
+	ogreClient       *ogre.Client
 }
 
 func New(
@@ -79,7 +79,7 @@ func New(
 		logger:           logger,
 		validator:        validator,
 		indexer:          indexer,
-		ogreClient:     ogre.NewClient(config.Ogre.Host),
+		ogreClient:       ogre.NewClient(config.Ogre.Host),
 	}
 }
 

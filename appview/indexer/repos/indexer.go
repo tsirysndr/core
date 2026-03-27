@@ -309,7 +309,6 @@ func (ix *Indexer) Search(ctx context.Context, opts models.RepoSearchOptions) (*
 	for _, keyword := range opts.NegatedKeywords {
 		mustNots = append(mustNots, bleve.NewDisjunctionQuery(
 			bleveutil.MatchAndQuery("name", keyword, repoIndexerAnalyzer, 0),
-			bleveutil.MatchAndQuery("name_trigram", keyword, "trigram", 0),
 			bleveutil.MatchAndQuery("description", keyword, repoIndexerAnalyzer, 0),
 			bleveutil.MatchAndQuery("website", keyword, repoIndexerAnalyzer, 0),
 			bleveutil.MatchAndQuery("topics", keyword, repoIndexerAnalyzer, 0),
