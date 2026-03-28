@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -107,13 +106,13 @@ func (s *Pulls) PullActions(w http.ResponseWriter, r *http.Request) {
 		user := s.oauth.GetMultiAccountUser(r)
 		f, err := s.repoResolver.Resolve(r)
 		if err != nil {
-			log.Println("failed to get repo and knot", err)
+			s.logger.Error("failed to get repo and knot", "err", err)
 			return
 		}
 
 		pull, ok := r.Context().Value("pull").(*models.Pull)
 		if !ok {
-			log.Println("failed to get pull")
+			s.logger.Error("failed to get pull")
 			s.pages.Notice(w, "pull-error", "Failed to edit patch. Try again later.")
 			return
 		}
@@ -128,7 +127,7 @@ func (s *Pulls) PullActions(w http.ResponseWriter, r *http.Request) {
 		}
 		if roundNumber >= len(pull.Submissions) {
 			http.Error(w, "bad round id", http.StatusBadRequest)
-			log.Println("failed to parse round id", err)
+			s.logger.Error("failed to parse round id", "err", err)
 			return
 		}
 
@@ -157,20 +156,20 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 	user := s.oauth.GetMultiAccountUser(r)
 	f, err := s.repoResolver.Resolve(r)
 	if err != nil {
-		log.Println("failed to get repo and knot", err)
+		s.logger.Error("failed to get repo and knot", "err", err)
 		return
 	}
 
 	pull, ok := r.Context().Value("pull").(*models.Pull)
 	if !ok {
-		log.Println("failed to get pull")
+		s.logger.Error("failed to get pull")
 		s.pages.Notice(w, "pull-error", "Failed to edit patch. Try again later.")
 		return
 	}
 
 	backlinks, err := db.GetBacklinks(s.db, pull.AtUri())
 	if err != nil {
-		log.Println("failed to get pull backlinks", err)
+		s.logger.Error("failed to get pull backlinks", "err", err)
 		s.pages.Notice(w, "pull-error", "Failed to get pull. Try again later.")
 		return
 	}
@@ -182,7 +181,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 	}
 	if roundIdInt >= len(pull.Submissions) {
 		http.Error(w, "bad round id", http.StatusBadRequest)
-		log.Println("failed to parse round id", err)
+		s.logger.Error("failed to parse round id", "err", err)
 		return
 	}
 
@@ -224,7 +223,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		orm.FilterIn("p.sha", shas),
 	)
 	if err != nil {
-		log.Printf("failed to fetch pipeline statuses: %s", err)
+		s.logger.Error("failed to fetch pipeline statuses", "err", err)
 		// non-fatal
 	}
 
@@ -234,7 +233,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 
 	reactionMap, err := db.GetReactionMap(s.db, 20, pull.AtUri())
 	if err != nil {
-		log.Println("failed to get pull reactions")
+		s.logger.Error("failed to get pull reactions", "err", err)
 	}
 
 	userReactions := map[models.ReactionKind]bool{}
@@ -248,7 +247,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		orm.FilterContains("scope", tangled.RepoPullNSID),
 	)
 	if err != nil {
-		log.Println("failed to fetch labels", err)
+		s.logger.Error("failed to fetch labels", "err", err)
 		s.pages.Error503(w)
 		return
 	}
@@ -265,14 +264,14 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 	if interdiff {
 		currentPatch, err := patchutil.AsDiff(pull.Submissions[roundIdInt].CombinedPatch())
 		if err != nil {
-			log.Println("failed to interdiff; current patch malformed")
+			s.logger.Error("failed to interdiff; current patch malformed", "err", err)
 			s.pages.Notice(w, fmt.Sprintf("interdiff-error-%d", roundIdInt), "Failed to calculate interdiff; current patch is invalid.")
 			return
 		}
 
 		previousPatch, err := patchutil.AsDiff(pull.Submissions[roundIdInt-1].CombinedPatch())
 		if err != nil {
-			log.Println("failed to interdiff; previous patch malformed")
+			s.logger.Error("failed to interdiff; previous patch malformed", "err", err)
 			s.pages.Notice(w, fmt.Sprintf("interdiff-error-%d", roundIdInt), "Failed to calculate interdiff; previous patch is invalid.")
 			return
 		}
@@ -306,7 +305,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 func (s *Pulls) RepoSinglePull(w http.ResponseWriter, r *http.Request) {
 	pull, ok := r.Context().Value("pull").(*models.Pull)
 	if !ok {
-		log.Println("failed to get pull")
+		s.logger.Error("failed to get pull")
 		s.pages.Notice(w, "pull-error", "Failed to edit patch. Try again later.")
 		return
 	}
@@ -350,7 +349,7 @@ func (s *Pulls) mergeCheck(r *http.Request, f *models.Repo, pull *models.Pull, s
 		},
 	)
 	if err := xrpcclient.HandleXrpcErr(xe); err != nil {
-		log.Println("failed to check for mergeability", "err", err)
+		s.logger.Error("failed to check for mergeability", "err", err)
 		return types.MergeCheckResponse{
 			Error: fmt.Sprintf("failed to check merge status: %s", err.Error()),
 		}
@@ -444,10 +443,10 @@ func (s *Pulls) resubmitCheck(r *http.Request, repo *models.Repo, pull *models.P
 	branchResp, err := tangled.GitTempGetBranch(r.Context(), xrpcc, pull.PullSource.Branch, sourceRepo.String())
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-			log.Println("failed to call XRPC repo.branches", xrpcerr)
+			s.logger.Error("failed to call XRPC repo.branches", "err", xrpcerr)
 			return pages.Unknown
 		}
-		log.Println("failed to reach knotserver", err)
+		s.logger.Error("failed to reach knotserver", "err", err)
 		return pages.Unknown
 	}
 
@@ -478,7 +477,7 @@ func (s *Pulls) RepoPullInterdiff(w http.ResponseWriter, r *http.Request) {
 func (s *Pulls) RepoPullPatchRaw(w http.ResponseWriter, r *http.Request) {
 	pull, ok := r.Context().Value("pull").(*models.Pull)
 	if !ok {
-		log.Println("failed to get pull")
+		s.logger.Error("failed to get pull")
 		s.pages.Notice(w, "pull-error", "Failed to edit patch. Try again later.")
 		return
 	}
@@ -487,7 +486,7 @@ func (s *Pulls) RepoPullPatchRaw(w http.ResponseWriter, r *http.Request) {
 	roundIdInt, err := strconv.Atoi(roundId)
 	if err != nil || roundIdInt >= len(pull.Submissions) {
 		http.Error(w, "bad round id", http.StatusBadRequest)
-		log.Println("failed to parse round id", err)
+		s.logger.Error("failed to parse round id", "err", err)
 		return
 	}
 
@@ -504,7 +503,7 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 
 	f, err := s.repoResolver.Resolve(r)
 	if err != nil {
-		log.Println("failed to get repo and knot", err)
+		s.logger.Error("failed to get repo and knot", "err", err)
 		return
 	}
 
@@ -673,7 +672,7 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 			if p.PullSource.RepoAt != nil {
 				pullSourceRepo, err = db.GetRepoByAtUri(s.db, p.PullSource.RepoAt.String())
 				if err != nil {
-					log.Printf("failed to get repo by at uri: %v", err)
+					s.logger.Error("failed to get repo by at uri", "err", err)
 					continue
 				} else {
 					p.PullSource.Repo = pullSourceRepo
@@ -716,7 +715,7 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 		orm.FilterIn("p.sha", shas),
 	)
 	if err != nil {
-		log.Printf("failed to fetch pipeline statuses: %s", err)
+		s.logger.Error("failed to fetch pipeline statuses", "err", err)
 		// non-fatal
 	}
 	m := make(map[string]models.Pipeline)
@@ -763,13 +762,13 @@ func (s *Pulls) PullComment(w http.ResponseWriter, r *http.Request) {
 	user := s.oauth.GetMultiAccountUser(r)
 	f, err := s.repoResolver.Resolve(r)
 	if err != nil {
-		log.Println("failed to get repo and knot", err)
+		s.logger.Error("failed to get repo and knot", "err", err)
 		return
 	}
 
 	pull, ok := r.Context().Value("pull").(*models.Pull)
 	if !ok {
-		log.Println("failed to get pull")
+		s.logger.Error("failed to get pull")
 		s.pages.Notice(w, "pull-error", "Failed to edit patch. Try again later.")
 		return
 	}
@@ -778,7 +777,7 @@ func (s *Pulls) PullComment(w http.ResponseWriter, r *http.Request) {
 	roundNumber, err := strconv.Atoi(roundNumberStr)
 	if err != nil || roundNumber >= len(pull.Submissions) {
 		http.Error(w, "bad round id", http.StatusBadRequest)
-		log.Println("failed to parse round id", err)
+		s.logger.Error("failed to parse round id", "err", err)
 		return
 	}
 
@@ -803,7 +802,7 @@ func (s *Pulls) PullComment(w http.ResponseWriter, r *http.Request) {
 		// Start a transaction
 		tx, err := s.db.BeginTx(r.Context(), nil)
 		if err != nil {
-			log.Println("failed to start transaction", err)
+			s.logger.Error("failed to start transaction", "err", err)
 			s.pages.Notice(w, "pull-comment", "Failed to create comment.")
 			return
 		}
@@ -813,7 +812,7 @@ func (s *Pulls) PullComment(w http.ResponseWriter, r *http.Request) {
 
 		client, err := s.oauth.AuthorizedClient(r)
 		if err != nil {
-			log.Println("failed to get authorized client", err)
+			s.logger.Error("failed to get authorized client", "err", err)
 			s.pages.Notice(w, "pull-comment", "Failed to create comment.")
 			return
 		}
@@ -830,7 +829,7 @@ func (s *Pulls) PullComment(w http.ResponseWriter, r *http.Request) {
 			},
 		})
 		if err != nil {
-			log.Println("failed to create pull comment", err)
+			s.logger.Error("failed to create pull comment", "err", err)
 			s.pages.Notice(w, "pull-comment", "Failed to create comment.")
 			return
 		}
@@ -849,14 +848,14 @@ func (s *Pulls) PullComment(w http.ResponseWriter, r *http.Request) {
 		// Create the pull comment in the database with the commentAt field
 		commentId, err := db.NewPullComment(tx, comment)
 		if err != nil {
-			log.Println("failed to create pull comment", err)
+			s.logger.Error("failed to create pull comment", "err", err)
 			s.pages.Notice(w, "pull-comment", "Failed to create comment.")
 			return
 		}
 
 		// Commit the transaction
 		if err = tx.Commit(); err != nil {
-			log.Println("failed to commit transaction", err)
+			s.logger.Error("failed to commit transaction", "err", err)
 			s.pages.Notice(w, "pull-comment", "Failed to create comment.")
 			return
 		}
@@ -873,7 +872,7 @@ func (s *Pulls) NewPull(w http.ResponseWriter, r *http.Request) {
 	user := s.oauth.GetMultiAccountUser(r)
 	f, err := s.repoResolver.Resolve(r)
 	if err != nil {
-		log.Println("failed to get repo and knot", err)
+		s.logger.Error("failed to get repo and knot", "err", err)
 		return
 	}
 
@@ -884,17 +883,17 @@ func (s *Pulls) NewPull(w http.ResponseWriter, r *http.Request) {
 		xrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
 		if err != nil {
 			if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-				log.Println("failed to call XRPC repo.branches", xrpcerr)
+				s.logger.Error("failed to call XRPC repo.branches", "err", xrpcerr)
 				s.pages.Error503(w)
 				return
 			}
-			log.Println("failed to fetch branches", err)
+			s.logger.Error("failed to fetch branches", "err", err)
 			return
 		}
 
 		var result types.RepoBranchesResponse
 		if err := json.Unmarshal(xrpcBytes, &result); err != nil {
-			log.Println("failed to decode XRPC response", err)
+			s.logger.Error("failed to decode XRPC response", "err", err)
 			s.pages.Error503(w)
 			return
 		}
@@ -1050,18 +1049,18 @@ func (s *Pulls) handleBranchBasedPull(
 	xrpcBytes, err := tangled.RepoCompare(r.Context(), xrpcc, didSlashRepo, targetBranch, sourceBranch)
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-			log.Println("failed to call XRPC repo.compare", xrpcerr)
+			s.logger.Error("failed to call XRPC repo.compare", "err", xrpcerr)
 			s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
 			return
 		}
-		log.Println("failed to compare", err)
+		s.logger.Error("failed to compare", "err", err)
 		s.pages.Notice(w, "pull", err.Error())
 		return
 	}
 
 	var comparison types.RepoFormatPatchResponse
 	if err := json.Unmarshal(xrpcBytes, &comparison); err != nil {
-		log.Println("failed to decode XRPC compare response", err)
+		s.logger.Error("failed to decode XRPC compare response", "err", err)
 		s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
 		return
 	}
@@ -1106,7 +1105,7 @@ func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo
 		s.pages.Notice(w, "pull", "No such fork.")
 		return
 	} else if err != nil {
-		log.Println("failed to fetch fork:", err)
+		s.logger.Error("failed to fetch fork:", "err", err)
 		s.pages.Notice(w, "pull", "Failed to fetch fork.")
 		return
 	}
@@ -1160,18 +1159,18 @@ func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo
 	forkXrpcBytes, err := tangled.RepoCompare(r.Context(), forkXrpcc, forkRepoId, hiddenRef, sourceBranch)
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-			log.Println("failed to call XRPC repo.compare for fork", xrpcerr)
+			s.logger.Error("failed to call XRPC repo.compare for fork", "err", xrpcerr)
 			s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
 			return
 		}
-		log.Println("failed to compare across branches", err)
+		s.logger.Error("failed to compare across branches", "err", err)
 		s.pages.Notice(w, "pull", err.Error())
 		return
 	}
 
 	var comparison types.RepoFormatPatchResponse
 	if err := json.Unmarshal(forkXrpcBytes, &comparison); err != nil {
-		log.Println("failed to decode XRPC compare response for fork", err)
+		s.logger.Error("failed to decode XRPC compare response for fork", "err", err)
 		s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
 		return
 	}
@@ -1232,14 +1231,14 @@ func (s *Pulls) createPullRequest(
 
 	client, err := s.oauth.AuthorizedClient(r)
 	if err != nil {
-		log.Println("failed to get authorized client", err)
+		s.logger.Error("failed to get authorized client", "err", err)
 		s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
 		return
 	}
 
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
-		log.Println("failed to start tx")
+		s.logger.Error("failed to start tx", "err", err)
 		s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
 		return
 	}
@@ -1290,20 +1289,20 @@ func (s *Pulls) createPullRequest(
 	}
 	err = db.NewPull(tx, pull)
 	if err != nil {
-		log.Println("failed to create pull request", err)
+		s.logger.Error("failed to create pull request", "err", err)
 		s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
 		return
 	}
 	pullId, err := db.NextPullId(tx, repo.RepoAt())
 	if err != nil {
-		log.Println("failed to get pull id", err)
+		s.logger.Error("failed to get pull id", "err", err)
 		s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
 		return
 	}
 
 	blob, err := xrpc.RepoUploadBlob(r.Context(), client, gz(patch), ApplicationGzip)
 	if err != nil {
-		log.Println("failed to upload patch", err)
+		s.logger.Error("failed to upload patch", "err", err)
 		s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
 		return
 	}
@@ -1326,13 +1325,13 @@ func (s *Pulls) createPullRequest(
 		},
 	})
 	if err != nil {
-		log.Println("failed to create pull request", err)
+		s.logger.Error("failed to create pull request", "err", err)
 		s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
 		return
 	}
 
 	if err = tx.Commit(); err != nil {
-		log.Println("failed to create pull request", err)
+		s.logger.Error("failed to create pull request", "err", err)
 		s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
 		return
 	}
@@ -1357,21 +1356,21 @@ func (s *Pulls) createStackedPullRequest(
 
 	//  must be branch or fork based
 	if sourceRev == "" {
-		log.Println("stacked PR from patch-based pull")
+		s.logger.Warn("stacked PR from patch-based pull")
 		s.pages.Notice(w, "pull", "Stacking is only supported on branch and fork based pull-requests.")
 		return
 	}
 
 	formatPatches, err := patchutil.ExtractPatches(patch)
 	if err != nil {
-		log.Println("failed to extract patches", err)
+		s.logger.Error("failed to extract patches", "err", err)
 		s.pages.Notice(w, "pull", fmt.Sprintf("Failed to extract patches: %v", err))
 		return
 	}
 
 	//  must have atleast 1 patch to begin with
 	if len(formatPatches) == 0 {
-		log.Println("empty patches")
+		s.logger.Error("empty patches")
 		s.pages.Notice(w, "pull", "No patches found in the generated format-patch.")
 		return
 	}
@@ -1380,14 +1379,14 @@ func (s *Pulls) createStackedPullRequest(
 	stackId := uuid.New()
 	stack, err := s.newStack(r.Context(), repo, user, targetBranch, patch, pullSource, stackId.String())
 	if err != nil {
-		log.Println("failed to create stack", err)
+		s.logger.Error("failed to create stack", "err", err)
 		s.pages.Notice(w, "pull", fmt.Sprintf("Failed to create stack: %v", err))
 		return
 	}
 
 	client, err := s.oauth.AuthorizedClient(r)
 	if err != nil {
-		log.Println("failed to get authorized client", err)
+		s.logger.Error("failed to get authorized client", "err", err)
 		s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
 		return
 	}
@@ -1397,7 +1396,7 @@ func (s *Pulls) createStackedPullRequest(
 	for _, p := range stack {
 		blob, err := xrpc.RepoUploadBlob(r.Context(), client, gz(p.LatestPatch()), ApplicationGzip)
 		if err != nil {
-			log.Println("failed to upload patch blob", err)
+			s.logger.Error("failed to upload patch blob", "err", err)
 			s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
 			return
 		}
@@ -1419,7 +1418,7 @@ func (s *Pulls) createStackedPullRequest(
 		Writes: writes,
 	})
 	if err != nil {
-		log.Println("failed to create stacked pull request", err)
+		s.logger.Error("failed to create stacked pull request", "err", err)
 		s.pages.Notice(w, "pull", "Failed to create stacked pull request. Try again later.")
 		return
 	}
@@ -1427,7 +1426,7 @@ func (s *Pulls) createStackedPullRequest(
 	// create all pulls at once
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
-		log.Println("failed to start tx")
+		s.logger.Error("failed to start tx", "err", err)
 		s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
 		return
 	}
@@ -1436,7 +1435,7 @@ func (s *Pulls) createStackedPullRequest(
 	for _, p := range stack {
 		err = db.NewPull(tx, p)
 		if err != nil {
-			log.Println("failed to create pull request", err)
+			s.logger.Error("failed to create pull request", "err", err)
 			s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
 			return
 		}
@@ -1444,7 +1443,7 @@ func (s *Pulls) createStackedPullRequest(
 	}
 
 	if err = tx.Commit(); err != nil {
-		log.Println("failed to create pull request", err)
+		s.logger.Error("failed to create pull request", "err", err)
 		s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
 		return
 	}
@@ -1463,7 +1462,7 @@ func (s *Pulls) createStackedPullRequest(
 func (s *Pulls) ValidatePatch(w http.ResponseWriter, r *http.Request) {
 	_, err := s.repoResolver.Resolve(r)
 	if err != nil {
-		log.Println("failed to get repo and knot", err)
+		s.logger.Error("failed to get repo and knot", "err", err)
 		return
 	}
 
@@ -1498,7 +1497,7 @@ func (s *Pulls) CompareBranchesFragment(w http.ResponseWriter, r *http.Request) 
 	user := s.oauth.GetMultiAccountUser(r)
 	f, err := s.repoResolver.Resolve(r)
 	if err != nil {
-		log.Println("failed to get repo and knot", err)
+		s.logger.Error("failed to get repo and knot", "err", err)
 		return
 	}
 
@@ -1506,14 +1505,14 @@ func (s *Pulls) CompareBranchesFragment(w http.ResponseWriter, r *http.Request) 
 
 	xrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
 	if err != nil {
-		log.Println("failed to fetch branches", err)
+		s.logger.Error("failed to fetch branches", "err", err)
 		s.pages.Error503(w)
 		return
 	}
 
 	var result types.RepoBranchesResponse
 	if err := json.Unmarshal(xrpcBytes, &result); err != nil {
-		log.Println("failed to decode XRPC response", err)
+		s.logger.Error("failed to decode XRPC response", "err", err)
 		s.pages.Error503(w)
 		return
 	}
@@ -1542,7 +1541,7 @@ func (s *Pulls) CompareForksFragment(w http.ResponseWriter, r *http.Request) {
 
 	forks, err := db.GetForksByDid(s.db, user.Active.Did)
 	if err != nil {
-		log.Println("failed to get forks", err)
+		s.logger.Error("failed to get forks", "err", err)
 		return
 	}
 
@@ -1558,7 +1557,7 @@ func (s *Pulls) CompareForksBranchesFragment(w http.ResponseWriter, r *http.Requ
 
 	f, err := s.repoResolver.Resolve(r)
 	if err != nil {
-		log.Println("failed to get repo and knot", err)
+		s.logger.Error("failed to get repo and knot", "err", err)
 		return
 	}
 
@@ -1575,25 +1574,25 @@ func (s *Pulls) CompareForksBranchesFragment(w http.ResponseWriter, r *http.Requ
 		orm.FilterEq("name", forkName),
 	)
 	if err != nil {
-		log.Println("failed to get repo", "did", forkOwnerDid, "name", forkName, "err", err)
+		s.logger.Error("failed to get repo", "did", forkOwnerDid, "name", forkName, "err", err)
 		return
 	}
 
 	sourceXrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, repo.RepoAt().String())
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-			log.Println("failed to call XRPC repo.branches for source", xrpcerr)
+			s.logger.Error("failed to call XRPC repo.branches for source", "err", xrpcerr)
 			s.pages.Error503(w)
 			return
 		}
-		log.Println("failed to fetch source branches", err)
+		s.logger.Error("failed to fetch source branches", "err", err)
 		return
 	}
 
 	// Decode source branches
 	var sourceBranches types.RepoBranchesResponse
 	if err := json.Unmarshal(sourceXrpcBytes, &sourceBranches); err != nil {
-		log.Println("failed to decode source branches XRPC response", err)
+		s.logger.Error("failed to decode source branches XRPC response", "err", err)
 		s.pages.Error503(w)
 		return
 	}
@@ -1601,18 +1600,18 @@ func (s *Pulls) CompareForksBranchesFragment(w http.ResponseWriter, r *http.Requ
 	targetXrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-			log.Println("failed to call XRPC repo.branches for target", xrpcerr)
+			s.logger.Error("failed to call XRPC repo.branches for target", "err", xrpcerr)
 			s.pages.Error503(w)
 			return
 		}
-		log.Println("failed to fetch target branches", err)
+		s.logger.Error("failed to fetch target branches", "err", err)
 		return
 	}
 
 	// Decode target branches
 	var targetBranches types.RepoBranchesResponse
 	if err := json.Unmarshal(targetXrpcBytes, &targetBranches); err != nil {
-		log.Println("failed to decode target branches XRPC response", err)
+		s.logger.Error("failed to decode target branches XRPC response", "err", err)
 		s.pages.Error503(w)
 		return
 	}
@@ -1633,7 +1632,7 @@ func (s *Pulls) ResubmitPull(w http.ResponseWriter, r *http.Request) {
 
 	pull, ok := r.Context().Value("pull").(*models.Pull)
 	if !ok {
-		log.Println("failed to get pull")
+		s.logger.Error("failed to get pull")
 		s.pages.Notice(w, "pull-error", "Failed to edit patch. Try again later.")
 		return
 	}
@@ -1664,19 +1663,19 @@ func (s *Pulls) resubmitPatch(w http.ResponseWriter, r *http.Request) {
 
 	pull, ok := r.Context().Value("pull").(*models.Pull)
 	if !ok {
-		log.Println("failed to get pull")
+		s.logger.Error("failed to get pull")
 		s.pages.Notice(w, "pull-error", "Failed to edit patch. Try again later.")
 		return
 	}
 
 	f, err := s.repoResolver.Resolve(r)
 	if err != nil {
-		log.Println("failed to get repo and knot", err)
+		s.logger.Error("failed to get repo and knot", "err", err)
 		return
 	}
 
 	if user.Active.Did != pull.OwnerDid {
-		log.Println("unauthorized user")
+		s.logger.Warn("unauthorized user")
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -1691,26 +1690,26 @@ func (s *Pulls) resubmitBranch(w http.ResponseWriter, r *http.Request) {
 
 	pull, ok := r.Context().Value("pull").(*models.Pull)
 	if !ok {
-		log.Println("failed to get pull")
+		s.logger.Error("failed to get pull")
 		s.pages.Notice(w, "resubmit-error", "Failed to edit patch. Try again later.")
 		return
 	}
 
 	f, err := s.repoResolver.Resolve(r)
 	if err != nil {
-		log.Println("failed to get repo and knot", err)
+		s.logger.Error("failed to get repo and knot", "err", err)
 		return
 	}
 
 	if user.Active.Did != pull.OwnerDid {
-		log.Println("unauthorized user")
+		s.logger.Warn("unauthorized user")
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
 	roles := repoinfo.RolesInRepo{Roles: s.enforcer.GetPermissionsInRepo(user.Active.Did, f.Knot, f.DidSlashRepo())}
 	if !roles.IsPushAllowed() {
-		log.Println("unauthorized user")
+		s.logger.Warn("unauthorized user")
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -1728,18 +1727,18 @@ func (s *Pulls) resubmitBranch(w http.ResponseWriter, r *http.Request) {
 	xrpcBytes, err := tangled.RepoCompare(r.Context(), xrpcc, repo, pull.TargetBranch, pull.PullSource.Branch)
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-			log.Println("failed to call XRPC repo.compare", xrpcerr)
+			s.logger.Error("failed to call XRPC repo.compare", "err", xrpcerr)
 			s.pages.Notice(w, "resubmit-error", "Failed to create pull request. Try again later.")
 			return
 		}
-		log.Printf("compare request failed: %s", err)
+		s.logger.Error("compare request failed", "err", err)
 		s.pages.Notice(w, "resubmit-error", err.Error())
 		return
 	}
 
 	var comparison types.RepoFormatPatchResponse
 	if err := json.Unmarshal(xrpcBytes, &comparison); err != nil {
-		log.Println("failed to decode XRPC compare response", err)
+		s.logger.Error("failed to decode XRPC compare response", "err", err)
 		s.pages.Notice(w, "resubmit-error", "Failed to create pull request. Try again later.")
 		return
 	}
@@ -1756,26 +1755,26 @@ func (s *Pulls) resubmitFork(w http.ResponseWriter, r *http.Request) {
 
 	pull, ok := r.Context().Value("pull").(*models.Pull)
 	if !ok {
-		log.Println("failed to get pull")
+		s.logger.Error("failed to get pull")
 		s.pages.Notice(w, "resubmit-error", "Failed to edit patch. Try again later.")
 		return
 	}
 
 	f, err := s.repoResolver.Resolve(r)
 	if err != nil {
-		log.Println("failed to get repo and knot", err)
+		s.logger.Error("failed to get repo and knot", "err", err)
 		return
 	}
 
 	if user.Active.Did != pull.OwnerDid {
-		log.Println("unauthorized user")
+		s.logger.Warn("unauthorized user")
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
 	forkRepo, err := db.GetRepoByAtUri(s.db, pull.PullSource.RepoAt.String())
 	if err != nil {
-		log.Println("failed to get source repo", err)
+		s.logger.Error("failed to get source repo", "err", err)
 		s.pages.Notice(w, "resubmit-error", "Failed to create pull request. Try again later.")
 		return
 	}
@@ -1788,7 +1787,7 @@ func (s *Pulls) resubmitFork(w http.ResponseWriter, r *http.Request) {
 		oauth.WithDev(s.config.Core.Dev),
 	)
 	if err != nil {
-		log.Printf("failed to connect to knot server: %v", err)
+		s.logger.Error("failed to connect to knot server", "err", err)
 		return
 	}
 
@@ -1806,7 +1805,7 @@ func (s *Pulls) resubmitFork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !resp.Success {
-		log.Println("Failed to update tracking ref.", "err", resp.Error)
+		s.logger.Warn("failed to update tracking ref", "err", resp.Error)
 		s.pages.Notice(w, "resubmit-error", "Failed to update tracking ref.")
 		return
 	}
@@ -1822,18 +1821,18 @@ func (s *Pulls) resubmitFork(w http.ResponseWriter, r *http.Request) {
 	forkXrpcBytes, err := tangled.RepoCompare(r.Context(), &indigoxrpc.Client{Host: forkHost}, forkRepoId, hiddenRef, pull.PullSource.Branch)
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-			log.Println("failed to call XRPC repo.compare for fork", xrpcerr)
+			s.logger.Error("failed to call XRPC repo.compare for fork", "err", xrpcerr)
 			s.pages.Notice(w, "resubmit-error", "Failed to create pull request. Try again later.")
 			return
 		}
-		log.Printf("failed to compare branches: %s", err)
+		s.logger.Error("failed to compare branches", "err", err)
 		s.pages.Notice(w, "resubmit-error", "Failed to create pull request. Try again later.")
 		return
 	}
 
 	var forkComparison types.RepoFormatPatchResponse
 	if err := json.Unmarshal(forkXrpcBytes, &forkComparison); err != nil {
-		log.Println("failed to decode XRPC compare response for fork", err)
+		s.logger.Error("failed to decode XRPC compare response for fork", "err", err)
 		s.pages.Notice(w, "resubmit-error", "Failed to create pull request. Try again later.")
 		return
 	}
@@ -1859,7 +1858,7 @@ func (s *Pulls) resubmitPullHelper(
 	sourceRev string,
 ) {
 	if pull.IsStacked() {
-		log.Println("resubmitting stacked PR")
+		s.logger.Info("resubmitting stacked PR")
 		s.resubmitStackedPullHelper(w, r, repo, user, pull, patch, pull.StackId)
 		return
 	}
@@ -1884,7 +1883,7 @@ func (s *Pulls) resubmitPullHelper(
 
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
-		log.Println("failed to start tx")
+		s.logger.Error("failed to start tx", "err", err)
 		s.pages.Notice(w, "resubmit-error", "Failed to create pull request. Try again later.")
 		return
 	}
@@ -1897,13 +1896,13 @@ func (s *Pulls) resubmitPullHelper(
 	combinedPatch := combined
 	err = db.ResubmitPull(tx, pullAt, newRoundNumber, newPatch, combinedPatch, newSourceRev)
 	if err != nil {
-		log.Println("failed to create pull request", err)
+		s.logger.Error("failed to create pull request", "err", err)
 		s.pages.Notice(w, "resubmit-error", "Failed to create pull request. Try again later.")
 		return
 	}
 	client, err := s.oauth.AuthorizedClient(r)
 	if err != nil {
-		log.Println("failed to authorize client")
+		s.logger.Error("failed to authorize client", "err", err)
 		s.pages.Notice(w, "resubmit-error", "Failed to create pull request. Try again later.")
 		return
 	}
@@ -1917,7 +1916,7 @@ func (s *Pulls) resubmitPullHelper(
 
 	blob, err := xrpc.RepoUploadBlob(r.Context(), client, gz(patch), ApplicationGzip)
 	if err != nil {
-		log.Println("failed to upload patch blob", err)
+		s.logger.Error("failed to upload patch blob", "err", err)
 		s.pages.Notice(w, "resubmit-error", "Failed to update pull request on the PDS. Try again later.")
 		return
 	}
@@ -1939,13 +1938,13 @@ func (s *Pulls) resubmitPullHelper(
 		},
 	})
 	if err != nil {
-		log.Println("failed to update record", err)
+		s.logger.Error("failed to update record", "err", err)
 		s.pages.Notice(w, "resubmit-error", "Failed to update pull request on the PDS. Try again later.")
 		return
 	}
 
 	if err = tx.Commit(); err != nil {
-		log.Println("failed to commit transaction", err)
+		s.logger.Error("failed to commit transaction", "err", err)
 		s.pages.Notice(w, "resubmit-error", "Failed to resubmit pull.")
 		return
 	}
@@ -1968,7 +1967,7 @@ func (s *Pulls) resubmitStackedPullHelper(
 	origStack, _ := r.Context().Value("stack").(models.Stack)
 	newStack, err := s.newStack(r.Context(), repo, user, targetBranch, patch, pull.PullSource, stackId)
 	if err != nil {
-		log.Println("failed to create resubmitted stack", err)
+		s.logger.Error("failed to create resubmitted stack", "err", err)
 		s.pages.Notice(w, "pull-merge-error", "Failed to merge pull request. Try again later.")
 		return
 	}
@@ -2015,7 +2014,7 @@ func (s *Pulls) resubmitStackedPullHelper(
 
 	tx, err := s.db.Begin()
 	if err != nil {
-		log.Println("failed to start transaction", err)
+		s.logger.Error("failed to start transaction", "err", err)
 		s.pages.Notice(w, "pull-resubmit-error", "Failed to resubmit pull request. Try again later.")
 		return
 	}
@@ -2023,7 +2022,7 @@ func (s *Pulls) resubmitStackedPullHelper(
 
 	client, err := s.oauth.AuthorizedClient(r)
 	if err != nil {
-		log.Println("failed to authorize client")
+		s.logger.Error("failed to authorize client", "err", err)
 		s.pages.Notice(w, "resubmit-error", "Failed to create pull request. Try again later.")
 		return
 	}
@@ -2040,7 +2039,7 @@ func (s *Pulls) resubmitStackedPullHelper(
 
 		err := db.DeletePull(tx, p.RepoAt, p.PullId)
 		if err != nil {
-			log.Println("failed to delete pull", err, p.PullId)
+			s.logger.Error("failed to delete pull", "err", err, "pull_id", p.PullId)
 			s.pages.Notice(w, "pull-resubmit-error", "Failed to resubmit pull request. Try again later.")
 			return
 		}
@@ -2056,14 +2055,14 @@ func (s *Pulls) resubmitStackedPullHelper(
 	for _, p := range additions {
 		err := db.NewPull(tx, p)
 		if err != nil {
-			log.Println("failed to create pull", err, p.PullId)
+			s.logger.Error("failed to create pull", "err", err, "pull_id", p.PullId)
 			s.pages.Notice(w, "pull-resubmit-error", "Failed to resubmit pull request. Try again later.")
 			return
 		}
 
 		blob, err := xrpc.RepoUploadBlob(r.Context(), client, gz(patch), ApplicationGzip)
 		if err != nil {
-			log.Println("failed to upload patch blob", err)
+			s.logger.Error("failed to upload patch blob", "err", err)
 			s.pages.Notice(w, "resubmit-error", "Failed to update pull request on the PDS. Try again later.")
 			return
 		}
@@ -2098,14 +2097,14 @@ func (s *Pulls) resubmitStackedPullHelper(
 		newSourceRev := np.LatestSha()
 		err := db.ResubmitPull(tx, pullAt, newRoundNumber, newPatch, combinedPatch, newSourceRev)
 		if err != nil {
-			log.Println("failed to update pull", err, op.PullId)
+			s.logger.Error("failed to update pull", "err", err, "pull_id", op.PullId)
 			s.pages.Notice(w, "pull-resubmit-error", "Failed to resubmit pull request. Try again later.")
 			return
 		}
 
 		blob, err := xrpc.RepoUploadBlob(r.Context(), client, gz(patch), ApplicationGzip)
 		if err != nil {
-			log.Println("failed to upload patch blob", err)
+			s.logger.Error("failed to upload patch blob", "err", err)
 			s.pages.Notice(w, "resubmit-error", "Failed to update pull request on the PDS. Try again later.")
 			return
 		}
@@ -2134,7 +2133,7 @@ func (s *Pulls) resubmitStackedPullHelper(
 		)
 
 		if err != nil {
-			log.Println("failed to update pull", err, p.PullId)
+			s.logger.Error("failed to update pull", "err", err, "pull_id", p.PullId)
 			s.pages.Notice(w, "pull-resubmit-error", "Failed to resubmit pull request. Try again later.")
 			return
 		}
@@ -2142,7 +2141,7 @@ func (s *Pulls) resubmitStackedPullHelper(
 
 	err = tx.Commit()
 	if err != nil {
-		log.Println("failed to resubmit pull", err)
+		s.logger.Error("failed to resubmit pull", "err", err)
 		s.pages.Notice(w, "pull-resubmit-error", "Failed to resubmit pull request. Try again later.")
 		return
 	}
@@ -2152,7 +2151,7 @@ func (s *Pulls) resubmitStackedPullHelper(
 		Writes: writes,
 	})
 	if err != nil {
-		log.Println("failed to create stacked pull request", err)
+		s.logger.Error("failed to create stacked pull request", "err", err)
 		s.pages.Notice(w, "pull", "Failed to create stacked pull request. Try again later.")
 		return
 	}
@@ -2165,14 +2164,14 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 	user := s.oauth.GetMultiAccountUser(r)
 	f, err := s.repoResolver.Resolve(r)
 	if err != nil {
-		log.Println("failed to resolve repo:", err)
+		s.logger.Error("failed to resolve repo:", "err", err)
 		s.pages.Notice(w, "pull-merge-error", "Failed to merge pull request. Try again later.")
 		return
 	}
 
 	pull, ok := r.Context().Value("pull").(*models.Pull)
 	if !ok {
-		log.Println("failed to get pull")
+		s.logger.Error("failed to get pull")
 		s.pages.Notice(w, "pull-merge-error", "Failed to merge patch. Try again later.")
 		return
 	}
@@ -2182,7 +2181,7 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 	if pull.IsStacked() {
 		stack, ok := r.Context().Value("stack").(models.Stack)
 		if !ok {
-			log.Println("failed to get stack")
+			s.logger.Error("failed to get stack")
 			s.pages.Notice(w, "pull-merge-error", "Failed to merge patch. Try again later.")
 			return
 		}
@@ -2199,14 +2198,14 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 
 	ident, err := s.idResolver.ResolveIdent(r.Context(), pull.OwnerDid)
 	if err != nil {
-		log.Printf("resolving identity: %s", err)
+		s.logger.Error("resolving identity", "err", err)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
 	email, err := db.GetPrimaryEmail(s.db, pull.OwnerDid)
 	if err != nil {
-		log.Printf("failed to get primary email: %s", err)
+		s.logger.Error("failed to get primary email", "err", err)
 	}
 
 	authorName := ident.Handle.String()
@@ -2234,7 +2233,7 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 		oauth.WithDev(s.config.Core.Dev),
 	)
 	if err != nil {
-		log.Printf("failed to connect to knot server: %v", err)
+		s.logger.Error("failed to connect to knot server", "err", err)
 		s.pages.Notice(w, "pull-merge-error", "Failed to merge pull request. Try again later.")
 		return
 	}
@@ -2247,7 +2246,7 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 
 	tx, err := s.db.Begin()
 	if err != nil {
-		log.Println("failed to start transcation", err)
+		s.logger.Error("failed to start transaction", "err", err)
 		s.pages.Notice(w, "pull-merge-error", "Failed to merge pull request. Try again later.")
 		return
 	}
@@ -2256,7 +2255,7 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 	for _, p := range pullsToMerge {
 		err := db.MergePull(tx, f.RepoAt(), p.PullId)
 		if err != nil {
-			log.Printf("failed to update pull request status in database: %s", err)
+			s.logger.Error("failed to update pull request status in database", "err", err)
 			s.pages.Notice(w, "pull-merge-error", "Failed to merge pull request. Try again later.")
 			return
 		}
@@ -2266,7 +2265,7 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 	err = tx.Commit()
 	if err != nil {
 		// TODO: this is unsound, we should also revert the merge from the knotserver here
-		log.Printf("failed to update pull request status in database: %s", err)
+		s.logger.Error("failed to update pull request status in database", "err", err)
 		s.pages.Notice(w, "pull-merge-error", "Failed to merge pull request. Try again later.")
 		return
 	}
@@ -2285,13 +2284,13 @@ func (s *Pulls) ClosePull(w http.ResponseWriter, r *http.Request) {
 
 	f, err := s.repoResolver.Resolve(r)
 	if err != nil {
-		log.Println("malformed middleware")
+		s.logger.Error("malformed middleware", "err", err)
 		return
 	}
 
 	pull, ok := r.Context().Value("pull").(*models.Pull)
 	if !ok {
-		log.Println("failed to get pull")
+		s.logger.Error("failed to get pull")
 		s.pages.Notice(w, "pull-error", "Failed to edit patch. Try again later.")
 		return
 	}
@@ -2303,7 +2302,7 @@ func (s *Pulls) ClosePull(w http.ResponseWriter, r *http.Request) {
 	isPullAuthor := user.Active.Did == pull.OwnerDid
 	isCloseAllowed := isOwner || isCollaborator || isPullAuthor
 	if !isCloseAllowed {
-		log.Println("failed to close pull")
+		s.logger.Warn("failed to close pull: unauthorized")
 		s.pages.Notice(w, "pull-close", "You are unauthorized to close this pull.")
 		return
 	}
@@ -2311,7 +2310,7 @@ func (s *Pulls) ClosePull(w http.ResponseWriter, r *http.Request) {
 	// Start a transaction
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
-		log.Println("failed to start transaction", err)
+		s.logger.Error("failed to start transaction", "err", err)
 		s.pages.Notice(w, "pull-close", "Failed to close pull.")
 		return
 	}
@@ -2331,7 +2330,7 @@ func (s *Pulls) ClosePull(w http.ResponseWriter, r *http.Request) {
 		// Close the pull in the database
 		err = db.ClosePull(tx, f.RepoAt(), p.PullId)
 		if err != nil {
-			log.Println("failed to close pull", err)
+			s.logger.Error("failed to close pull", "err", err)
 			s.pages.Notice(w, "pull-close", "Failed to close pull.")
 			return
 		}
@@ -2340,7 +2339,7 @@ func (s *Pulls) ClosePull(w http.ResponseWriter, r *http.Request) {
 
 	// Commit the transaction
 	if err = tx.Commit(); err != nil {
-		log.Println("failed to commit transaction", err)
+		s.logger.Error("failed to commit transaction", "err", err)
 		s.pages.Notice(w, "pull-close", "Failed to close pull.")
 		return
 	}
@@ -2358,14 +2357,14 @@ func (s *Pulls) ReopenPull(w http.ResponseWriter, r *http.Request) {
 
 	f, err := s.repoResolver.Resolve(r)
 	if err != nil {
-		log.Println("failed to resolve repo", err)
+		s.logger.Error("failed to resolve repo", "err", err)
 		s.pages.Notice(w, "pull-reopen", "Failed to reopen pull.")
 		return
 	}
 
 	pull, ok := r.Context().Value("pull").(*models.Pull)
 	if !ok {
-		log.Println("failed to get pull")
+		s.logger.Error("failed to get pull")
 		s.pages.Notice(w, "pull-error", "Failed to edit patch. Try again later.")
 		return
 	}
@@ -2377,7 +2376,7 @@ func (s *Pulls) ReopenPull(w http.ResponseWriter, r *http.Request) {
 	isPullAuthor := user.Active.Did == pull.OwnerDid
 	isCloseAllowed := isOwner || isCollaborator || isPullAuthor
 	if !isCloseAllowed {
-		log.Println("failed to close pull")
+		s.logger.Warn("failed to close pull: unauthorized")
 		s.pages.Notice(w, "pull-close", "You are unauthorized to close this pull.")
 		return
 	}
@@ -2385,7 +2384,7 @@ func (s *Pulls) ReopenPull(w http.ResponseWriter, r *http.Request) {
 	// Start a transaction
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
-		log.Println("failed to start transaction", err)
+		s.logger.Error("failed to start transaction", "err", err)
 		s.pages.Notice(w, "pull-reopen", "Failed to reopen pull.")
 		return
 	}
@@ -2405,7 +2404,7 @@ func (s *Pulls) ReopenPull(w http.ResponseWriter, r *http.Request) {
 		// Close the pull in the database
 		err = db.ReopenPull(tx, f.RepoAt(), p.PullId)
 		if err != nil {
-			log.Println("failed to close pull", err)
+			s.logger.Error("failed to close pull", "err", err)
 			s.pages.Notice(w, "pull-close", "Failed to close pull.")
 			return
 		}
@@ -2414,7 +2413,7 @@ func (s *Pulls) ReopenPull(w http.ResponseWriter, r *http.Request) {
 
 	// Commit the transaction
 	if err = tx.Commit(); err != nil {
-		log.Println("failed to commit transaction", err)
+		s.logger.Error("failed to commit transaction", "err", err)
 		s.pages.Notice(w, "pull-reopen", "Failed to reopen pull.")
 		return
 	}
