@@ -47,6 +47,8 @@ var (
 	EmptyPatchError   error = errors.New("patch is empty")
 	GenericPatchError error = errors.New("patch is invalid")
 	FormatPatchError  error = errors.New("patch is not a valid format-patch")
+
+	formatPatchSplitRe = regexp.MustCompile(`(?m)^From [0-9a-f]{40} .*$`)
 )
 
 func IsPatchValid(patch string) error {
@@ -115,9 +117,7 @@ func IsFormatPatch(patch string) bool {
 }
 
 func splitFormatPatch(patchText string) []string {
-	re := regexp.MustCompile(`(?m)^From [0-9a-f]{40} .*$`)
-
-	indexes := re.FindAllStringIndex(patchText, -1)
+	indexes := formatPatchSplitRe.FindAllStringIndex(patchText, -1)
 
 	if len(indexes) == 0 {
 		return []string{}
