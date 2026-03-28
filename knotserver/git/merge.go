@@ -22,7 +22,8 @@ type MergeCheckCache struct {
 }
 
 var (
-	mergeCheckCache MergeCheckCache
+	mergeCheckCache    MergeCheckCache
+	conflictErrorRegex = regexp.MustCompile(`^error: (.*):(\d+): (.*)$`)
 )
 
 func init() {
@@ -408,7 +409,7 @@ func parseGitApplyErrors(errorOutput string) []ConflictInfo {
 			continue
 		}
 
-		if match := regexp.MustCompile(`^error: (.*):(\d+): (.*)$`).FindStringSubmatch(line); len(match) >= 4 {
+		if match := conflictErrorRegex.FindStringSubmatch(line); len(match) >= 4 {
 			if currentFile == "" {
 				currentFile = match[1]
 			}
