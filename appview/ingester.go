@@ -529,6 +529,7 @@ func (i *Ingester) ingestSpindle(ctx context.Context, e *jmodels.Event) error {
 
 		// get record from db first
 		spindles, err := db.GetSpindles(
+			ctx,
 			ddb,
 			orm.FilterEq("owner", did),
 			orm.FilterEq("instance", instance),

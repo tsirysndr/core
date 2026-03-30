@@ -27,6 +27,7 @@ func Spindlestream(ctx context.Context, c *config.Config, d *db.DB, enforcer *rb
 	logger = log.SubLogger(logger, "spindlestream")
 
 	spindles, err := db.GetSpindles(
+		ctx,
 		d,
 		orm.FilterIsNot("verified", "null"),
 	)
@@ -105,7 +106,7 @@ func ingestPipelineStatus(ctx context.Context, logger *slog.Logger, d *db.DB, so
 		ExitCode:     exitCode,
 	}
 
-	err = db.AddPipelineStatus(d, status)
+	err = db.AddPipelineStatus(ctx, d, status)
 	if err != nil {
 		return fmt.Errorf("failed to add pipeline status: %w", err)
 	}

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -132,7 +133,7 @@ func AddTrigger(e Execer, trigger models.Trigger) (int64, error) {
 	return res.LastInsertId()
 }
 
-func AddPipelineStatus(e Execer, status models.PipelineStatus) error {
+func AddPipelineStatus(ctx context.Context, e Execer, status models.PipelineStatus) error {
 	args := []any{
 		status.Spindle,
 		status.Rkey,
@@ -164,7 +165,7 @@ func AddPipelineStatus(e Execer, status models.PipelineStatus) error {
 	) values (%s)
 	`, strings.Join(placeholders, ","))
 
-	_, err := e.Exec(query, args...)
+	_, err := e.ExecContext(ctx, query, args...)
 	return err
 }
 

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -10,7 +11,7 @@ import (
 	"tangled.org/core/orm"
 )
 
-func GetSpindles(e Execer, filters ...orm.Filter) ([]models.Spindle, error) {
+func GetSpindles(ctx context.Context, e Execer, filters ...orm.Filter) ([]models.Spindle, error) {
 	var spindles []models.Spindle
 
 	var conditions []string
@@ -34,7 +35,7 @@ func GetSpindles(e Execer, filters ...orm.Filter) ([]models.Spindle, error) {
 		whereClause,
 	)
 
-	rows, err := e.Query(query, args...)
+	rows, err := e.QueryContext(ctx, query, args...)
 
 	if err != nil {
 		return nil, err

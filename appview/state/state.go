@@ -295,6 +295,7 @@ func (s *State) UpgradeBanner(w http.ResponseWriter, r *http.Request) {
 	}
 
 	spindles, err := db.GetSpindles(
+		r.Context(),
 		s.db,
 		orm.FilterEq("owner", user.Active.Did),
 		orm.FilterEq("needs_upgrade", 1),

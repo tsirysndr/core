@@ -58,6 +58,7 @@ func (s *Spindles) Router() http.Handler {
 func (s *Spindles) spindles(w http.ResponseWriter, r *http.Request) {
 	user := s.OAuth.GetMultiAccountUser(r)
 	all, err := db.GetSpindles(
+		r.Context(),
 		s.Db,
 		orm.FilterEq("owner", user.Active.Did),
 	)
@@ -87,6 +88,7 @@ func (s *Spindles) dashboard(w http.ResponseWriter, r *http.Request) {
 	l = l.With("instance", instance)
 
 	spindles, err := db.GetSpindles(
+		r.Context(),
 		s.Db,
 		orm.FilterEq("instance", instance),
 		orm.FilterEq("owner", user.Active.Did),
@@ -274,6 +276,7 @@ func (s *Spindles) delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	spindles, err := db.GetSpindles(
+		r.Context(),
 		s.Db,
 		orm.FilterEq("owner", user.Active.Did),
 		orm.FilterEq("instance", instance),
@@ -394,6 +397,7 @@ func (s *Spindles) retry(w http.ResponseWriter, r *http.Request) {
 	l = l.With("user", user.Active.Did)
 
 	spindles, err := db.GetSpindles(
+		r.Context(),
 		s.Db,
 		orm.FilterEq("owner", user.Active.Did),
 		orm.FilterEq("instance", instance),
@@ -437,6 +441,7 @@ func (s *Spindles) retry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	verifiedSpindle, err := db.GetSpindles(
+		r.Context(),
 		s.Db,
 		orm.FilterEq("id", rowId),
 	)
@@ -470,6 +475,7 @@ func (s *Spindles) addMember(w http.ResponseWriter, r *http.Request) {
 	l = l.With("user", user.Active.Did)
 
 	spindles, err := db.GetSpindles(
+		r.Context(),
 		s.Db,
 		orm.FilterEq("owner", user.Active.Did),
 		orm.FilterEq("instance", instance),
@@ -606,6 +612,7 @@ func (s *Spindles) removeMember(w http.ResponseWriter, r *http.Request) {
 	l = l.With("user", user.Active.Did)
 
 	spindles, err := db.GetSpindles(
+		r.Context(),
 		s.Db,
 		orm.FilterEq("owner", user.Active.Did),
 		orm.FilterEq("instance", instance),
