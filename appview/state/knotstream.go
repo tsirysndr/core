@@ -96,6 +96,16 @@ func ingestRefUpdate(ctx context.Context, d *db.DB, enforcer *rbac.Enforcer, pc 
 		return fmt.Errorf("%s does not belong to %s, something is fishy", record.CommitterDid, source.Key())
 	}
 
+	repo, err := db.GetRepo(
+		d,
+		orm.FilterEq("did", record.RepoDid),
+		orm.FilterEq("name", record.RepoName),
+		orm.FilterEq("knot", source.Key()),
+	)
+	if err != nil {
+		return fmt.Errorf("repo %s/%s on knot %s not found", record.RepoDid, record.RepoName, source.Key())
+	}
+
 	logger.Info("processing gitRefUpdate event",
 		"repo_did", record.RepoDid,
 		"repo_name", record.RepoName,
@@ -103,18 +113,7 @@ func ingestRefUpdate(ctx context.Context, d *db.DB, enforcer *rbac.Enforcer, pc 
 		"old_sha", record.OldSha,
 		"new_sha", record.NewSha)
 
-	// trigger webhook notifications first (before other ops that might fail)
-	var errWebhook error
-	repos, err := db.GetRepos(
-		d,
-		orm.FilterEq("did", record.RepoDid),
-		orm.FilterEq("name", record.RepoName),
-	)
-	if err != nil {
-		errWebhook = fmt.Errorf("failed to lookup repo for webhooks: %w", err)
-	} else if len(repos) == 1 {
-		notifier.Push(ctx, &repos[0], record.Ref, record.OldSha, record.NewSha, record.CommitterDid)
-	}
+	notifier.Push(ctx, repo, record.Ref, record.OldSha, record.NewSha, record.CommitterDid)
 
 	errPunchcard := populatePunchcard(d, record)
 	errLanguages := updateRepoLanguages(d, record)
@@ -132,7 +131,7 @@ func ingestRefUpdate(ctx context.Context, d *db.DB, enforcer *rbac.Enforcer, pc 
 		go triggerSitesDeployIfNeeded(ctx, d, cfClient, c, record, source)
 	}
 
-	return errors.Join(errWebhook, errPunchcard, errLanguages, errPosthog)
+	return errors.Join(errPunchcard, errLanguages, errPosthog)
 }
 
 // triggerSitesDeployIfNeeded checks whether the pushed ref matches the sites
@@ -301,19 +300,26 @@ func ingestPipeline(d *db.DB, source ec.Source, msg ec.Message) error {
 		return fmt.Errorf("empty repo: nsid %s, rkey %s", msg.Nsid, msg.Rkey)
 	}
 
-	// does this repo have a spindle configured?
-	repos, err := db.GetRepos(
+	repo, err := db.GetRepo(
 		d,
 		orm.FilterEq("did", record.TriggerMetadata.Repo.Did),
 		orm.FilterEq("name", record.TriggerMetadata.Repo.Repo),
+		orm.FilterEq("knot", source.Key()),
 	)
 	if err != nil {
-		return fmt.Errorf("failed to look for repo in DB: nsid %s, rkey %s, %w", msg.Nsid, msg.Rkey, err)
+		return fmt.Errorf(
+			"failed to look for repo in DB: nsid %s, rkey %s, %s/%s, knot %s, %w",
+			msg.Nsid,
+			msg.Rkey,
+			record.TriggerMetadata.Repo.Did,
+			record.TriggerMetadata.Repo.Did,
+			source.Key(),
+			err,
+		)
 	}
-	if len(repos) != 1 {
-		return fmt.Errorf("incorrect number of repos returned: %d (expected 1)", len(repos))
-	}
-	if repos[0].Spindle == "" {
+
+	// does this repo have a spindle configured?
+	if repo.Spindle == "" {
 		return fmt.Errorf("repo does not have a spindle configured yet: nsid %s, rkey %s", msg.Nsid, msg.Rkey)
 	}
 
