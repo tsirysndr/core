@@ -40,6 +40,12 @@ func GetVerifiedCommits(e db.Execer, emailToDid map[string]string, ndCommits []t
 	didPubkeyCache := make(map[string][]models.PublicKey)
 
 	for _, commit := range ndCommits {
+		// skip unsigned commits early: no signature means no DB lookup needed,
+		// and most commits in a typical log are unsigned.
+		if commit.PGPSignature == "" {
+			continue
+		}
+
 		committerEmail := commit.Committer.Email
 		if did, exists := emailToDid[committerEmail]; exists {
 			// check if we've already fetched public keys for this did
