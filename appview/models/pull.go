@@ -162,8 +162,10 @@ func PullFromRecord(did, rkey string, record tangled.RepoPull, blobs []*io.ReadC
 	var targetRepoAt syntax.ATURI
 	var targetBranch string
 	if record.Target != nil {
-		if uri, err := syntax.ParseATURI(record.Target.Repo); err == nil {
-			targetRepoAt = uri
+		if record.Target.Repo != nil {
+			if uri, err := syntax.ParseATURI(*record.Target.Repo); err == nil {
+				targetRepoAt = uri
+			}
 		}
 		targetBranch = record.Target.Branch
 	}

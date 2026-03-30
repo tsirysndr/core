@@ -17,9 +17,8 @@ import (
 func ExtractPatches(formatPatch string) ([]types.FormatPatch, error) {
 	patches := splitFormatPatch(formatPatch)
 
-	result := []types.FormatPatch{}
-
-	for _, patch := range patches {
+	result := make([]types.FormatPatch, len(patches))
+	for i, patch := range patches {
 		files, headerStr, err := gitdiff.Parse(strings.NewReader(patch))
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse patch: %w", err)
@@ -30,11 +29,11 @@ func ExtractPatches(formatPatch string) ([]types.FormatPatch, error) {
 			return nil, fmt.Errorf("failed to parse patch header: %w", err)
 		}
 
-		result = append(result, types.FormatPatch{
+		result[i] = types.FormatPatch{
 			Files:       files,
 			PatchHeader: header,
 			Raw:         patch,
-		})
+		}
 	}
 
 	return result, nil

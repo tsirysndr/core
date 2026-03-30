@@ -266,7 +266,7 @@ func (mw Middleware) ResolvePull() middlewareFunc {
 				return
 			}
 
-			pr, err := db.GetPull(mw.db, f.RepoAt(), prIdInt)
+			pr, err := db.GetPull(mw.db, orm.FilterEq("repo_at", f.RepoAt()), orm.FilterEq("pull_id", prIdInt))
 			if err != nil {
 				l.Error("failed to get pull and comments", "err", err)
 				mw.pages.Error404(w)
@@ -275,21 +275,14 @@ func (mw Middleware) ResolvePull() middlewareFunc {
 
 			ctx := context.WithValue(r.Context(), "pull", pr)
 
-			if pr.IsStacked() {
-				stack, err := db.GetStack(mw.db, pr.StackId)
-				if err != nil {
-					l.Error("failed to get stack", "err", err)
-					return
-				}
-				abandonedPulls, err := db.GetAbandonedPulls(mw.db, pr.StackId)
-				if err != nil {
-					l.Error("failed to get abandoned pulls", "err", err)
-					return
-				}
-
-				ctx = context.WithValue(ctx, "stack", stack)
-				ctx = context.WithValue(ctx, "abandonedPulls", abandonedPulls)
+			stack, err := db.GetStack(mw.db, pr.AtUri())
+			if err != nil {
+				l.Error("failed to get stack", "err", err)
+				mw.pages.Error404(w)
+				return
 			}
+
+			ctx = context.WithValue(ctx, "stack", stack)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

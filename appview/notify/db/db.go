@@ -285,8 +285,8 @@ func (n *databaseNotifier) NewPullComment(ctx context.Context, comment *models.P
 	l := log.FromContext(ctx)
 
 	pull, err := db.GetPull(n.db,
-		syntax.ATURI(comment.RepoAt),
-		comment.PullId,
+		orm.FilterEq("repo_at", syntax.ATURI(comment.RepoAt)),
+		orm.FilterEq("pull_id", comment.PullId),
 	)
 	if err != nil {
 		l.Error("failed to get pulls", "err", err)

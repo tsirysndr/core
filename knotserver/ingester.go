@@ -13,8 +13,9 @@ import (
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/bluesky-social/indigo/xrpc"
-	"github.com/bluesky-social/jetstream/pkg/models"
+	jmodels "github.com/bluesky-social/jetstream/pkg/models"
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/appview/models"
 	"tangled.org/core/knotserver/db"
 	"tangled.org/core/knotserver/git"
 	"tangled.org/core/log"
@@ -22,7 +23,7 @@ import (
 	"tangled.org/core/workflow"
 )
 
-func (h *Knot) processPublicKey(ctx context.Context, event *models.Event) error {
+func (h *Knot) processPublicKey(ctx context.Context, event *jmodels.Event) error {
 	l := log.FromContext(ctx)
 	raw := json.RawMessage(event.Commit.Record)
 	did := event.Did
@@ -44,7 +45,7 @@ func (h *Knot) processPublicKey(ctx context.Context, event *models.Event) error 
 	return nil
 }
 
-func (h *Knot) processKnotMember(ctx context.Context, event *models.Event) error {
+func (h *Knot) processKnotMember(ctx context.Context, event *jmodels.Event) error {
 	l := log.FromContext(ctx)
 	raw := json.RawMessage(event.Commit.Record)
 	did := event.Did
@@ -84,32 +85,25 @@ func (h *Knot) processKnotMember(ctx context.Context, event *models.Event) error
 	return nil
 }
 
-func (h *Knot) processPull(ctx context.Context, event *models.Event) error {
-	raw := json.RawMessage(event.Commit.Record)
-	did := event.Did
+// returns a repo path on disk if present, and error if not
+type targetRepo struct {
+	RepoPath string
+	OwnerDid string
+	RepoName string
+	RepoDid  string
+}
 
-	var record tangled.RepoPull
-	if err := json.Unmarshal(raw, &record); err != nil {
-		return fmt.Errorf("failed to unmarshal record: %w", err)
-	}
-
-	l := log.FromContext(ctx)
-	l = l.With("handler", "processPull")
-	l = l.With("did", did)
-
+func (h *Knot) validatePullRecord(ctx context.Context, record *tangled.RepoPull) (*targetRepo, error) {
 	if record.Target == nil {
-		return fmt.Errorf("ignoring pull record: target repo is nil")
+		return nil, fmt.Errorf("ignoring pull record: target repo is nil")
 	}
-
-	l = l.With("target_repo", record.Target.Repo, "target_repo_did", record.Target.RepoDid)
-	l = l.With("target_branch", record.Target.Branch)
 
 	if record.Source == nil {
-		return fmt.Errorf("ignoring pull record: not a branch-based pull request")
+		return nil, fmt.Errorf("ignoring pull record: not a branch-based pull request")
 	}
 
 	if record.Source.Repo != nil || record.Source.RepoDid != nil {
-		return fmt.Errorf("ignoring pull record: fork based pull")
+		return nil, fmt.Errorf("ignoring pull record: fork based pull")
 	}
 
 	var repoPath, ownerDid, repoName, repoDid string
@@ -119,19 +113,19 @@ func (h *Knot) processPull(ctx context.Context, event *models.Event) error {
 		var lookupErr error
 		repoPath, ownerDid, repoName, lookupErr = h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
 		if lookupErr != nil {
-			return fmt.Errorf("unknown target repo DID %s: %w", repoDid, lookupErr)
+			return nil, fmt.Errorf("unknown target repo DID %s: %w", repoDid, lookupErr)
 		}
 
 	case record.Target.Repo != nil:
 		// TODO: get rid of this PDS fetch once all repos have DIDs
 		repoAt, parseErr := syntax.ParseATURI(*record.Target.Repo)
 		if parseErr != nil {
-			return fmt.Errorf("failed to parse ATURI: %w", parseErr)
+			return nil, fmt.Errorf("failed to parse ATURI: %w", parseErr)
 		}
 
 		ident, resolveErr := h.resolver.ResolveIdent(ctx, repoAt.Authority().String())
 		if resolveErr != nil || ident.Handle.IsInvalidHandle() {
-			return fmt.Errorf("failed to resolve handle: %w", resolveErr)
+			return nil, fmt.Errorf("failed to resolve handle: %w", resolveErr)
 		}
 
 		xrpcc := xrpc.Client{
@@ -140,13 +134,13 @@ func (h *Knot) processPull(ctx context.Context, event *models.Event) error {
 
 		resp, getErr := comatproto.RepoGetRecord(ctx, &xrpcc, "", tangled.RepoNSID, repoAt.Authority().String(), repoAt.RecordKey().String())
 		if getErr != nil {
-			return fmt.Errorf("failed to resolve repo: %w", getErr)
+			return nil, fmt.Errorf("failed to resolve repo: %w", getErr)
 		}
 
 		repo := resp.Value.Val.(*tangled.Repo)
 
 		if repo.Knot != h.c.Server.Hostname {
-			return fmt.Errorf("rejected pull record: not this knot, %s != %s", repo.Knot, h.c.Server.Hostname)
+			return nil, fmt.Errorf("rejected pull record: not this knot, %s != %s", repo.Knot, h.c.Server.Hostname)
 		}
 
 		ownerDid = ident.DID.String()
@@ -154,27 +148,83 @@ func (h *Knot) processPull(ctx context.Context, event *models.Event) error {
 
 		repoDid, didErr := h.db.GetRepoDid(ownerDid, repoName)
 		if didErr != nil {
-			return fmt.Errorf("failed to resolve repo DID for %s/%s: %w", ownerDid, repoName, didErr)
+			return nil, fmt.Errorf("failed to resolve repo DID for %s/%s: %w", ownerDid, repoName, didErr)
 		}
 
 		var lookupErr error
 		repoPath, _, _, lookupErr = h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
 		if lookupErr != nil {
-			return fmt.Errorf("failed to resolve repo on disk: %w", lookupErr)
+			return nil, fmt.Errorf("failed to resolve repo on disk: %w", lookupErr)
 		}
 
 	default:
-		return fmt.Errorf("ignoring pull record: target has neither repo nor repoDid")
+		return nil, fmt.Errorf("ignoring pull record: target has neither repo nor repoDid")
 	}
 
-	gr, err := git.Open(repoPath, record.Source.Sha)
+	_, err := git.Open(repoPath, record.Source.Branch)
 	if err != nil {
-		return fmt.Errorf("failed to open git repository: %w", err)
+		return nil, fmt.Errorf("failed to open git repository: %w", err)
+	}
+
+	return &targetRepo{
+		RepoPath: repoPath,
+		OwnerDid: ownerDid,
+		RepoName: repoName,
+		RepoDid:  repoDid,
+	}, nil
+}
+
+func (h *Knot) fetchLatestSubmission(ctx context.Context, did, rkey string, record *tangled.RepoPull) (*models.PullSubmission, error) {
+	// resolve the PR owner's identity to fetch the blob from their PDS
+	prOwnerIdent, err := h.resolver.ResolveIdent(ctx, did)
+	if err != nil || prOwnerIdent.Handle.IsInvalidHandle() {
+		return nil, fmt.Errorf("failed to resolve PR owner handle: %w", err)
+	}
+
+	roundNumber := len(record.Rounds) - 1
+	round := record.Rounds[roundNumber]
+
+	// fetch the blob from the PR owner's PDS
+	prOwnerPds := prOwnerIdent.PDSEndpoint()
+	blobUrl, err := url.Parse(fmt.Sprintf("%s/xrpc/com.atproto.sync.getBlob", prOwnerPds))
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct blob URL: %w", err)
+	}
+	q := blobUrl.Query()
+	q.Set("cid", round.PatchBlob.Ref.String())
+	q.Set("did", did)
+	blobUrl.RawQuery = q.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, blobUrl.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create blob request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	blobResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch blob: %w", err)
+	}
+	defer blobResp.Body.Close()
+
+	blob := io.ReadCloser(blobResp.Body)
+	latestSubmission, err := models.PullSubmissionFromRecord(did, rkey, roundNumber, round, &blob)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse submission: %w", err)
+	}
+
+	return latestSubmission, nil
+}
+
+func (h *Knot) discoverWorkflows(ctx context.Context, repoPath, sha string) (workflow.RawPipeline, error) {
+	gr, err := git.Open(repoPath, sha)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open git repository: %w", err)
 	}
 
 	workflowDir, err := gr.FileTree(ctx, workflow.WorkflowDir)
 	if err != nil {
-		return fmt.Errorf("failed to open workflow directory: %w", err)
+		return nil, fmt.Errorf("failed to open workflow directory: %w", err)
 	}
 
 	var pipeline workflow.RawPipeline
@@ -195,11 +245,17 @@ func (h *Knot) processPull(ctx context.Context, event *models.Event) error {
 		})
 	}
 
+	return pipeline, nil
+}
+
+func (h *Knot) compilePipeline(ctx context.Context, targetRepo *targetRepo, sourceBranch, sourceSha, targetBranch string, rawPipeline workflow.RawPipeline) tangled.Pipeline {
+	l := log.FromContext(ctx)
+
 	trigger := tangled.Pipeline_PullRequestTriggerData{
 		Action:       "create",
-		SourceBranch: record.Source.Branch,
-		SourceSha:    record.Source.Sha,
-		TargetBranch: record.Target.Branch,
+		SourceBranch: sourceBranch,
+		SourceSha:    sourceSha,
+		TargetBranch: targetBranch,
 	}
 
 	compiler := workflow.Compiler{
@@ -207,23 +263,79 @@ func (h *Knot) processPull(ctx context.Context, event *models.Event) error {
 			Kind:        string(workflow.TriggerKindPullRequest),
 			PullRequest: &trigger,
 			Repo: &tangled.Pipeline_TriggerRepo{
-				Did:     ownerDid,
 				Knot:    h.c.Server.Hostname,
-				Repo:    &repoName,
-				RepoDid: &repoDid,
+				RepoDid: &targetRepo.RepoDid,
+				Did:     targetRepo.OwnerDid,
+				Repo:    &targetRepo.RepoName,
 			},
 		},
 	}
 
-	cp := compiler.Compile(compiler.Parse(pipeline))
-	eventJson, err := json.Marshal(cp)
-	if err != nil {
-		return fmt.Errorf("failed to marshal pipeline event: %w", err)
+	l.Info("raw", "raw", rawPipeline)
+	parsed := compiler.Parse(rawPipeline)
+	l.Info("parsed", "parsed", parsed)
+	compiled := compiler.Compile(parsed)
+
+	l.Info("compiler diagnostics", "diagnostics", compiler.Diagnostics)
+
+	return compiled
+}
+
+func (h *Knot) processPull(ctx context.Context, event *jmodels.Event) error {
+	raw := json.RawMessage(event.Commit.Record)
+	rkey := event.Commit.RKey
+	did := event.Did
+
+	var record tangled.RepoPull
+	if err := json.Unmarshal(raw, &record); err != nil {
+		return fmt.Errorf("failed to unmarshal record: %w", err)
 	}
+
+	l := log.FromContext(ctx)
+	l = l.With("handler", "processPull")
+	l = l.With("did", did)
+
+	l.Info("validating pull record")
+	targetRepo, err := h.validatePullRecord(ctx, &record)
+	if err != nil {
+		l.Warn("pull record did not validate, skipping...")
+		return err
+	}
+
+	l = l.With("target_repo", record.Target.Repo)
+	l = l.With("target_branch", record.Target.Branch)
+
+	l.Info("fetching latest submission")
+	latestSubmission, err := h.fetchLatestSubmission(ctx, did, rkey, &record)
+	if err != nil {
+		return err
+	}
+
+	sha := latestSubmission.SourceRev
+	if sha == "" {
+		return fmt.Errorf("failed to extract source SHA from pull submission")
+	}
+	l = l.With("sha", sha)
+
+	l.Info("discovering workflows", "repo_path", targetRepo.RepoPath)
+	pipeline, err := h.discoverWorkflows(ctx, targetRepo.RepoPath, sha)
+	if err != nil {
+		return err
+	}
+
+	l.Info("compiling pipeline", "workflow_count", len(pipeline))
+	cp := h.compilePipeline(ctx, targetRepo, record.Source.Branch, sha, record.Target.Branch, pipeline)
 
 	// do not run empty pipelines
 	if cp.Workflows == nil {
+		l.Info("skipping empty pipeline")
 		return nil
+	}
+
+	l.Info("marshaling pipeline event")
+	eventJson, err := json.Marshal(cp)
+	if err != nil {
+		return fmt.Errorf("failed to marshal pipeline event: %w", err)
 	}
 
 	ev := db.Event{
@@ -232,11 +344,12 @@ func (h *Knot) processPull(ctx context.Context, event *models.Event) error {
 		EventJson: string(eventJson),
 	}
 
+	l.Info("inserting pipeline event")
 	return h.db.InsertEvent(ev, h.n)
 }
 
 // duplicated from add collaborator
-func (h *Knot) processCollaborator(ctx context.Context, event *models.Event) error {
+func (h *Knot) processCollaborator(ctx context.Context, event *jmodels.Event) error {
 	raw := json.RawMessage(event.Commit.Record)
 	did := event.Did
 
@@ -357,8 +470,8 @@ func (h *Knot) fetchAndAddKeys(ctx context.Context, did string) error {
 	return nil
 }
 
-func (h *Knot) processMessages(ctx context.Context, event *models.Event) error {
-	if event.Kind != models.EventKindCommit {
+func (h *Knot) processMessages(ctx context.Context, event *jmodels.Event) error {
+	if event.Kind != jmodels.EventKindCommit {
 		return nil
 	}
 
