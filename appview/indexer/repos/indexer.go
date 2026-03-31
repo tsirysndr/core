@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"time"
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/analysis/analyzer/custom"
@@ -16,6 +17,7 @@ import (
 	"github.com/blevesearch/bleve/v2/analysis/tokenizer/unicode"
 	"github.com/blevesearch/bleve/v2/index/upsidedown"
 	"github.com/blevesearch/bleve/v2/mapping"
+	"github.com/blevesearch/bleve/v2/search"
 	"github.com/blevesearch/bleve/v2/search/query"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/indexer/base36"
@@ -32,7 +34,7 @@ const (
 	unicodeNormalizeName = "unicodeNormalize"
 
 	// Bump this when the index mapping changes to trigger a rebuild.
-	repoIndexerVersion = 5
+	repoIndexerVersion = 6
 )
 
 type Indexer struct {
@@ -89,6 +91,23 @@ func generateRepoIndexMapping() (mapping.IndexMapping, error) {
 	trigramFieldMapping.IncludeInAll = false
 	trigramFieldMapping.Analyzer = "trigram"
 
+	// numeric field mapping for sorting by counts
+	numericFieldMapping := bleve.NewNumericFieldMapping()
+	numericFieldMapping.Store = false
+	numericFieldMapping.IncludeInAll = false
+	numericFieldMapping.DocValues = true // required for sorting
+
+	// datetime field mapping for sorting by creation date
+	dateFieldMapping := bleve.NewDateTimeFieldMapping()
+	dateFieldMapping.Store = false
+	dateFieldMapping.IncludeInAll = false
+	dateFieldMapping.DocValues = true // required for sorting
+
+	// boolean field mapping for fork detection
+	booleanFieldMapping := bleve.NewBooleanFieldMapping()
+	booleanFieldMapping.Store = false
+	booleanFieldMapping.IncludeInAll = false
+
 	// text fields
 	docMapping.AddFieldMappingsAt("name", textFieldMapping)
 	docMapping.AddFieldMappingsAt("name_trigram", trigramFieldMapping)
@@ -102,6 +121,17 @@ func generateRepoIndexMapping() (mapping.IndexMapping, error) {
 	docMapping.AddFieldMappingsAt("did", keywordFieldMapping)
 	docMapping.AddFieldMappingsAt("knot", keywordFieldMapping)
 	docMapping.AddFieldMappingsAt("repo_at", keywordFieldMapping)
+
+	// fork indicator for down-ranking
+	docMapping.AddFieldMappingsAt("is_fork", booleanFieldMapping)
+
+	// sortable numeric fields
+	docMapping.AddFieldMappingsAt("star_count", numericFieldMapping)
+	docMapping.AddFieldMappingsAt("issue_count", numericFieldMapping)
+	docMapping.AddFieldMappingsAt("pull_count", numericFieldMapping)
+
+	// sortable date field
+	docMapping.AddFieldMappingsAt("created", dateFieldMapping)
 
 	err := mapping.AddCustomTokenFilter(unicodeNormalizeName, map[string]any{
 		"type": unicodenorm.Name,
@@ -238,13 +268,30 @@ type repoData struct {
 	TopicsExact []string `json:"topics_exact"`
 	Knot        string   `json:"knot"`
 	Language    string   `json:"language"`
+	IsFork      bool     `json:"is_fork"`
+
+	// sortable fields
+	StarCount  int       `json:"star_count"`
+	IssueCount int       `json:"issue_count"`
+	PullCount  int       `json:"pull_count"`
+	Created    time.Time `json:"created"`
 }
 
 func makeRepoData(repo *models.Repo) *repoData {
 	var language string
+	var starCount, issueCount, pullCount int
+
 	if repo.RepoStats != nil {
 		language = repo.RepoStats.Language
+		starCount = repo.RepoStats.StarCount
+		issueCount = repo.RepoStats.IssueCount.Open + repo.RepoStats.IssueCount.Closed
+		pullCount = repo.RepoStats.PullCount.Open +
+			repo.RepoStats.PullCount.Merged +
+			repo.RepoStats.PullCount.Closed
 	}
+
+	isFork := repo.Source != ""
+
 	return &repoData{
 		ID:          repo.Id,
 		RepoAt:      repo.RepoAt().String(),
@@ -257,6 +304,11 @@ func makeRepoData(repo *models.Repo) *repoData {
 		TopicsExact: repo.Topics,
 		Knot:        repo.Knot,
 		Language:    language,
+		IsFork:      isFork,
+		StarCount:   starCount,
+		IssueCount:  issueCount,
+		PullCount:   pullCount,
+		Created:     repo.Created,
 	}
 }
 
@@ -266,8 +318,9 @@ func (r *repoData) Type() string {
 }
 
 type SearchResult struct {
-	Hits  []int64
-	Total uint64
+	Hits     []int64
+	Total    uint64
+	Duration time.Duration
 }
 
 const maxBatchSize = 20
@@ -285,6 +338,10 @@ func (ix *Indexer) Index(ctx context.Context, repos ...models.Repo) error {
 
 func (ix *Indexer) Delete(ctx context.Context, repoID int64) error {
 	return ix.indexer.Delete(base36.Encode(repoID))
+}
+
+func (ix *Indexer) TotalDocCount() (uint64, error) {
+	return ix.indexer.DocCount()
 }
 
 func (ix *Indexer) Search(ctx context.Context, opts models.RepoSearchOptions) (*SearchResult, error) {
@@ -355,14 +412,64 @@ func (ix *Indexer) Search(ctx context.Context, opts models.RepoSearchOptions) (*
 	}
 	indexerQuery.AddMust(musts...)
 	indexerQuery.AddMustNot(mustNots...)
-	searchReq := bleve.NewSearchRequestOptions(indexerQuery, opts.Page.Limit, opts.Page.Offset, false)
+
+	// use a disjunction where:
+	// - Non-forks get normal relevance score
+	// - Forks match but get penalized with lower boost
+	finalQuery := bleve.NewDisjunctionQuery()
+
+	// add the main query
+	finalQuery.AddQuery(indexerQuery)
+
+	// add a boosted query for non-forks
+	notForkQuery := bleve.NewBooleanQuery()
+	notForkQuery.AddMust(indexerQuery)
+	isForkQuery := bleve.NewBoolFieldQuery(true)
+	isForkQuery.SetField("is_fork")
+	notForkQuery.AddMustNot(isForkQuery)
+	notForkQuery.SetBoost(2.0)
+	finalQuery.AddQuery(notForkQuery)
+
+	// use minimum of 1 to ensure all results match at least one clause
+	finalQuery.SetMin(1)
+
+	searchReq := bleve.NewSearchRequestOptions(finalQuery, opts.Page.Limit, opts.Page.Offset, false)
+
+	if opts.SortField != "" && opts.SortField != "relevance" {
+		var sortField string
+
+		switch opts.SortField {
+		case "created":
+			sortField = "created"
+		case "stars":
+			sortField = "star_count"
+		case "issues":
+			sortField = "issue_count"
+		case "pulls":
+			sortField = "pull_count"
+		default:
+			// invalid field, fall back to relevance
+			sortField = ""
+		}
+
+		if sortField != "" {
+			searchReq.SortByCustom(search.SortOrder{
+				&search.SortField{
+					Field: sortField,
+					Desc:  opts.SortDesc,
+				},
+			})
+		}
+	}
+
 	res, err := ix.indexer.SearchInContext(ctx, searchReq)
 	if err != nil {
 		return nil, nil
 	}
 	ret := &SearchResult{
-		Total: res.Total,
-		Hits:  make([]int64, len(res.Hits)),
+		Total:    res.Total,
+		Duration: res.Took,
+		Hits:     make([]int64, len(res.Hits)),
 	}
 	for i, hit := range res.Hits {
 		id, err := base36.Decode(hit.ID)
