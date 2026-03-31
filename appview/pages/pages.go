@@ -731,6 +731,7 @@ func (p *Pages) FollowFragment(w io.Writer, params FollowFragmentParams) error {
 type EditBioParams struct {
 	LoggedInUser *oauth.MultiAccountUser
 	Profile      *models.Profile
+	AlsoKnownAs  []string
 }
 
 func (p *Pages) EditBioFragment(w io.Writer, params EditBioParams) error {

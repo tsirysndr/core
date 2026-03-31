@@ -26,7 +26,7 @@ func (t *ActorProfile) MarshalCBOR(w io.Writer) error {
 	}
 
 	cw := cbg.NewCborWriter(w)
-	fieldCount := 9
+	fieldCount := 10
 
 	if t.Avatar == nil {
 		fieldCount--
@@ -45,6 +45,10 @@ func (t *ActorProfile) MarshalCBOR(w io.Writer) error {
 	}
 
 	if t.PinnedRepositories == nil {
+		fieldCount--
+	}
+
+	if t.PreferredHandle == nil {
 		fieldCount--
 	}
 
@@ -277,6 +281,38 @@ func (t *ActorProfile) MarshalCBOR(w io.Writer) error {
 				return err
 			}
 			if _, err := cw.WriteString(string(*t.Description)); err != nil {
+				return err
+			}
+		}
+	}
+
+	// t.PreferredHandle (string) (string)
+	if t.PreferredHandle != nil {
+
+		if len("preferredHandle") > 1000000 {
+			return xerrors.Errorf("Value in field \"preferredHandle\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("preferredHandle"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("preferredHandle")); err != nil {
+			return err
+		}
+
+		if t.PreferredHandle == nil {
+			if _, err := cw.Write(cbg.CborNull); err != nil {
+				return err
+			}
+		} else {
+			if len(*t.PreferredHandle) > 1000000 {
+				return xerrors.Errorf("Value in field t.PreferredHandle was too long")
+			}
+
+			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(*t.PreferredHandle))); err != nil {
+				return err
+			}
+			if _, err := cw.WriteString(string(*t.PreferredHandle)); err != nil {
 				return err
 			}
 		}
@@ -551,6 +587,27 @@ func (t *ActorProfile) UnmarshalCBOR(r io.Reader) (err error) {
 					}
 
 					t.Description = (*string)(&sval)
+				}
+			}
+			// t.PreferredHandle (string) (string)
+		case "preferredHandle":
+
+			{
+				b, err := cr.ReadByte()
+				if err != nil {
+					return err
+				}
+				if b != cbg.CborNull[0] {
+					if err := cr.UnreadByte(); err != nil {
+						return err
+					}
+
+					sval, err := cbg.ReadStringWithMax(cr, 1000000)
+					if err != nil {
+						return err
+					}
+
+					t.PreferredHandle = (*string)(&sval)
 				}
 			}
 			// t.PinnedRepositories ([]string) (slice)

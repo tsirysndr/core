@@ -13,14 +13,15 @@ type Profile struct {
 	Did string
 
 	// data
-	Avatar         string // CID of the avatar blob
-	Description    string
-	IncludeBluesky bool
-	Location       string
-	Links          [5]string
-	Stats          [2]VanityStat
-	PinnedRepos    [6]syntax.ATURI
-	Pronouns       string
+	Avatar          string // CID of the avatar blob
+	Description     string
+	IncludeBluesky  bool
+	Location        string
+	Links           [5]string
+	Stats           [2]VanityStat
+	PinnedRepos     [6]syntax.ATURI
+	Pronouns        string
+	PreferredHandle syntax.Handle
 }
 
 func (p Profile) IsLinksEmpty() bool {

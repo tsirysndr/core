@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/bluesky-social/indigo/atproto/identity"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/oauth"
@@ -188,7 +189,14 @@ func (mw Middleware) ResolveIdent() middlewareFunc {
 
 			id, err := mw.idResolver.ResolveIdent(req.Context(), didOrHandle)
 			if err != nil {
-				// invalid did or handle
+				if h, parseErr := syntax.ParseHandle(didOrHandle); parseErr == nil {
+					if did, lookupErr := db.GetDidByPreferredHandle(mw.db, h); lookupErr == nil {
+						id, err = mw.idResolver.ResolveIdent(req.Context(), string(did))
+					}
+				}
+			}
+			// invalid did or handle
+			if err != nil {
 				log.Printf("failed to resolve did/handle '%s': %s\n", didOrHandle, err)
 				mw.pages.Error404(w)
 				return

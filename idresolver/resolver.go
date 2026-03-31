@@ -15,9 +15,10 @@ import (
 
 type Resolver struct {
 	directory identity.Directory
+	base      *identity.BaseDirectory
 }
 
-func BaseDirectory(plcUrl string) identity.Directory {
+func BaseDirectory(plcUrl string) *identity.BaseDirectory {
 	base := identity.BaseDirectory{
 		PLCURL: plcUrl,
 		HTTPClient: http.Client{
@@ -42,36 +43,36 @@ func BaseDirectory(plcUrl string) identity.Directory {
 	return &base
 }
 
-func RedisDirectory(url, plcUrl string) (identity.Directory, error) {
-	hitTTL := time.Hour * 24
-	errTTL := time.Second * 30
-	invalidHandleTTL := time.Minute * 5
-	return redisdir.NewRedisDirectory(
-		BaseDirectory(plcUrl),
-		url,
-		hitTTL,
-		errTTL,
-		invalidHandleTTL,
-		10000,
-	)
-}
-
 func DefaultResolver(plcUrl string) *Resolver {
 	base := BaseDirectory(plcUrl)
 	cached := identity.NewCacheDirectory(base, 250_000, time.Hour*24, time.Minute*2, time.Minute*5)
 	return &Resolver{
 		directory: cached,
+		base:      base,
 	}
 }
 
+func RedisDirectory(base *identity.BaseDirectory, url string) (identity.Directory, error) {
+	hitTTL := time.Hour * 24
+	errTTL := time.Second * 30
+	invalidHandleTTL := time.Minute * 5
+	return redisdir.NewRedisDirectory(base, url, hitTTL, errTTL, invalidHandleTTL, 10000)
+}
+
 func RedisResolver(redisUrl, plcUrl string) (*Resolver, error) {
-	directory, err := RedisDirectory(redisUrl, plcUrl)
+	base := BaseDirectory(plcUrl)
+	directory, err := RedisDirectory(base, redisUrl)
 	if err != nil {
 		return nil, err
 	}
 	return &Resolver{
 		directory: directory,
+		base:      base,
 	}, nil
+}
+
+func (r *Resolver) ResolveHandle(ctx context.Context, handle syntax.Handle) (syntax.DID, error) {
+	return r.base.ResolveHandle(ctx, handle)
 }
 
 func (r *Resolver) ResolveIdent(ctx context.Context, arg string) (*identity.Identity, error) {

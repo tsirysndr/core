@@ -74,6 +74,12 @@
             "type": "string",
             "description": "Preferred gender pronouns.",
             "maxLength": 40
+          },
+          "preferredHandle": {
+            "type": "string",
+            "description": "A handle the user prefers to be displayed as.",
+            "format": "handle",
+            "maxLength": 253
           }
         }
       }

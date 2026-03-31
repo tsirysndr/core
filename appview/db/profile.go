@@ -162,15 +162,17 @@ func UpsertProfile(tx *sql.Tx, profile *models.Profile) error {
 			description,
 			include_bluesky,
 			location,
-			pronouns
+			pronouns,
+			preferred_handle
 		)
-		values (?, ?, ?, ?, ?, ?)`,
+		values (?, ?, ?, ?, ?, ?, ?)`,
 		profile.Did,
 		profile.Avatar,
 		profile.Description,
 		includeBskyValue,
 		profile.Location,
 		profile.Pronouns,
+		string(profile.PreferredHandle),
 	)
 
 	if err != nil {
@@ -252,7 +254,8 @@ func GetProfiles(e Execer, filters ...orm.Filter) (map[string]*models.Profile, e
 			description,
 			include_bluesky,
 			location,
-			pronouns
+			pronouns,
+			preferred_handle
 		from
 			profile
 		%s`,
@@ -269,8 +272,9 @@ func GetProfiles(e Execer, filters ...orm.Filter) (map[string]*models.Profile, e
 		var profile models.Profile
 		var includeBluesky int
 		var pronouns sql.Null[string]
+		var preferredHandle sql.Null[string]
 
-		err = rows.Scan(&profile.ID, &profile.Did, &profile.Description, &includeBluesky, &profile.Location, &pronouns)
+		err = rows.Scan(&profile.ID, &profile.Did, &profile.Description, &includeBluesky, &profile.Location, &pronouns, &preferredHandle)
 		if err != nil {
 			return nil, err
 		}
@@ -281,6 +285,10 @@ func GetProfiles(e Execer, filters ...orm.Filter) (map[string]*models.Profile, e
 
 		if pronouns.Valid {
 			profile.Pronouns = pronouns.V
+		}
+
+		if preferredHandle.Valid {
+			profile.PreferredHandle = syntax.Handle(preferredHandle.V)
 		}
 
 		profileMap[profile.Did] = &profile
@@ -346,19 +354,32 @@ func GetProfiles(e Execer, filters ...orm.Filter) (map[string]*models.Profile, e
 	return profileMap, nil
 }
 
+func GetDidByPreferredHandle(e Execer, handle syntax.Handle) (syntax.DID, error) {
+	var did string
+	err := e.QueryRow(
+		`select did from profile where preferred_handle = ?`,
+		string(handle),
+	).Scan(&did)
+	if err != nil {
+		return "", err
+	}
+	return syntax.DID(did), nil
+}
+
 func GetProfile(e Execer, did string) (*models.Profile, error) {
 	var profile models.Profile
 	var pronouns sql.Null[string]
 	var avatar sql.Null[string]
+	var preferredHandle sql.Null[string]
 
 	profile.Did = did
 
 	includeBluesky := 0
 
 	err := e.QueryRow(
-		`select avatar, description, include_bluesky, location, pronouns from profile where did = ?`,
+		`select avatar, description, include_bluesky, location, pronouns, preferred_handle from profile where did = ?`,
 		did,
-	).Scan(&avatar, &profile.Description, &includeBluesky, &profile.Location, &pronouns)
+	).Scan(&avatar, &profile.Description, &includeBluesky, &profile.Location, &pronouns, &preferredHandle)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -377,6 +398,10 @@ func GetProfile(e Execer, did string) (*models.Profile, error) {
 
 	if avatar.Valid {
 		profile.Avatar = avatar.V
+	}
+
+	if preferredHandle.Valid {
+		profile.PreferredHandle = syntax.Handle(preferredHandle.V)
 	}
 
 	rows, err := e.Query(`select link from profile_links where did = ?`, did)
@@ -480,6 +505,17 @@ func ValidateProfile(e Execer, profile *models.Profile) error {
 	// ensure pronouns are not too long
 	if len(profile.Pronouns) > 40 {
 		return fmt.Errorf("Entered pronouns are too long.")
+	}
+
+	if profile.PreferredHandle != "" {
+		if _, err := syntax.ParseHandle(string(profile.PreferredHandle)); err != nil {
+			return fmt.Errorf("Invalid preferred handle format.")
+		}
+
+		claimant, err := GetDidByPreferredHandle(e, profile.PreferredHandle)
+		if err == nil && string(claimant) != profile.Did {
+			return fmt.Errorf("Preferred handle is already claimed by another user.")
+		}
 	}
 
 	// ensure links are in order

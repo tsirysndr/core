@@ -663,6 +663,23 @@ func (s *State) UpdateProfileBio(w http.ResponseWriter, r *http.Request) {
 	profile.IncludeBluesky = r.FormValue("includeBluesky") == "on"
 	profile.Location = r.FormValue("location")
 	profile.Pronouns = r.FormValue("pronouns")
+	rawPreferredHandle := strings.TrimSpace(r.FormValue("preferredHandle"))
+	if rawPreferredHandle != "" {
+		h, err := syntax.ParseHandle(rawPreferredHandle)
+		if err != nil {
+			s.pages.Notice(w, "update-profile", "Invalid handle format.")
+			return
+		}
+
+		ident, err := s.idResolver.ResolveIdent(r.Context(), user.Active.Did)
+		if err != nil || !slices.Contains(ident.AlsoKnownAs, "at://"+rawPreferredHandle) {
+			s.pages.Notice(w, "update-profile", "Handle not found in your DID document.")
+			return
+		}
+		profile.PreferredHandle = h
+	} else {
+		profile.PreferredHandle = ""
+	}
 
 	var links [5]string
 	for i := range 5 {
@@ -759,8 +776,12 @@ func (s *State) updateProfile(profile *models.Profile, w http.ResponseWriter, r 
 
 	ex, _ := comatproto.RepoGetRecord(r.Context(), client, "", tangled.ActorProfileNSID, user.Active.Did, "self")
 	var cid *string
+	var existingAvatar *lexutil.LexBlob
 	if ex != nil {
 		cid = ex.Cid
+		if rec, ok := ex.Value.Val.(*tangled.ActorProfile); ok {
+			existingAvatar = rec.Avatar
+		}
 	}
 
 	_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
@@ -769,6 +790,7 @@ func (s *State) updateProfile(profile *models.Profile, w http.ResponseWriter, r 
 		Rkey:       "self",
 		Record: &lexutil.LexiconTypeDecoder{
 			Val: &tangled.ActorProfile{
+				Avatar:             existingAvatar,
 				Bluesky:            profile.IncludeBluesky,
 				Description:        &profile.Description,
 				Links:              profile.Links[:],
@@ -776,6 +798,7 @@ func (s *State) updateProfile(profile *models.Profile, w http.ResponseWriter, r 
 				PinnedRepositories: pinnedRepoStrings,
 				Stats:              vanityStats[:],
 				Pronouns:           &profile.Pronouns,
+				PreferredHandle:    (*string)(&profile.PreferredHandle),
 			}},
 		SwapRecord: cid,
 	})
@@ -808,9 +831,16 @@ func (s *State) EditBioFragment(w http.ResponseWriter, r *http.Request) {
 		profile = &models.Profile{Did: user.Active.Did}
 	}
 
+	var alsoKnownAs []string
+	ident, err := s.idResolver.ResolveIdent(r.Context(), user.Active.Did)
+	if err == nil {
+		alsoKnownAs = ident.AlsoKnownAs
+	}
+
 	s.pages.EditBioFragment(w, pages.EditBioParams{
 		LoggedInUser: user,
 		Profile:      profile,
+		AlsoKnownAs:  alsoKnownAs,
 	})
 }
 

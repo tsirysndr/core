@@ -65,8 +65,12 @@ func (p *Pages) funcMap() template.FuncMap {
 			return mapValue.MapIndex(keyValue).IsValid()
 		},
 		"resolve": func(s string) string {
-			identity, err := p.resolver.ResolveIdent(context.Background(), s)
+			profile, err := db.GetProfile(p.db, s)
+			if err == nil && profile != nil && profile.PreferredHandle != "" {
+				return string(profile.PreferredHandle)
+			}
 
+			identity, err := p.resolver.ResolveIdent(context.Background(), s)
 			if err != nil {
 				return s
 			}

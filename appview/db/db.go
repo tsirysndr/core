@@ -1288,6 +1288,13 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "add-preferred-handle-profile", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			alter table profile add column preferred_handle text;
+		`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,

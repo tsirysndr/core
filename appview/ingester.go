@@ -66,7 +66,7 @@ func (i *Ingester) Ingest() processFunc {
 			case tangled.RepoArtifactNSID:
 				err = i.ingestArtifact(e)
 			case tangled.ActorProfileNSID:
-				err = i.ingestProfile(e)
+				err = i.ingestProfile(ctx, e)
 			case tangled.SpindleMemberNSID:
 				err = i.ingestSpindleMember(ctx, e)
 			case tangled.SpindleNSID:
@@ -264,7 +264,7 @@ func (i *Ingester) ingestArtifact(e *jmodels.Event) error {
 	return nil
 }
 
-func (i *Ingester) ingestProfile(e *jmodels.Event) error {
+func (i *Ingester) ingestProfile(ctx context.Context, e *jmodels.Event) error {
 	did := e.Did
 	var err error
 
@@ -328,16 +328,27 @@ func (i *Ingester) ingestProfile(e *jmodels.Event) error {
 			}
 		}
 
+		var preferredHandle syntax.Handle
+		if record.PreferredHandle != nil {
+			if h, err := syntax.ParseHandle(*record.PreferredHandle); err == nil {
+				ident, identErr := i.IdResolver.ResolveIdent(ctx, did)
+				if identErr == nil && slices.Contains(ident.AlsoKnownAs, "at://"+string(h)) {
+					preferredHandle = h
+				}
+			}
+		}
+
 		profile := models.Profile{
-			Did:            did,
-			Avatar:         avatar,
-			Description:    description,
-			IncludeBluesky: includeBluesky,
-			Location:       location,
-			Links:          links,
-			Stats:          stats,
-			PinnedRepos:    pinned,
-			Pronouns:       pronouns,
+			Did:             did,
+			Avatar:          avatar,
+			Description:     description,
+			IncludeBluesky:  includeBluesky,
+			Location:        location,
+			Links:           links,
+			Stats:           stats,
+			PinnedRepos:     pinned,
+			Pronouns:        pronouns,
+			PreferredHandle: preferredHandle,
 		}
 
 		ddb, ok := i.Db.Execer.(*db.DB)
