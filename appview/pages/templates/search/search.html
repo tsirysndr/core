@@ -1,0 +1,176 @@
+{{ define "title" }}Search{{ end }}
+
+{{ define "content" }}
+  <h1 class="text-2xl font-bold mb-4 px-2">Search</h1>
+
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4 px-2">
+    <div class="col-span-1 md:col-span-3 space-y-4">
+      {{ template "searchBar" . }}
+      {{ template "searchResults" . }}
+    </div>
+
+    <div class="col-span-1 md:sticky md:top-2 md:self-start hidden md:block">
+      {{ template "searchOptionsPanel" . }}
+    </div>
+  </div>
+{{ end }}
+
+{{ define "searchBar" }}
+  <form id="search-form" method="GET" class="flex items-center gap-2">
+    <div class="flex relative w-full">
+      <div class="flex-1 flex relative">
+        <input
+          id="search-q"
+          class="flex-1 py-1 pl-2 pr-10 mr-[-1px] rounded-r-none peer"
+          type="text"
+          name="q"
+          value="{{ .FilterQuery }}"
+          placeholder="search repos..."
+        >
+        <a
+          href="/search"
+          class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 {{ if not .FilterQuery }}hidden{{ end }} peer-[:not(:placeholder-shown)]:block"
+        >
+          {{ i "x" "w-4 h-4" }}
+        </a>
+      </div>
+      <button
+        type="submit"
+        class="p-2 text-gray-400 border rounded-r border-gray-300 dark:border-gray-600"
+      >
+        {{ i "search" "w-4 h-4" }}
+      </button>
+    </div>
+    <div class="md:hidden">
+      {{ template "sortOptionsList" . }}
+    </div>
+  </form>
+
+  <div class="md:hidden mt-3">
+    <div class="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
+      {{ template "languageFilters" . }}
+    </div>
+  </div>
+{{ end }}
+
+{{ define "searchResults" }}
+  <div id="repos" class="grid grid-cols-1 gap-4 mb-6">
+    {{ range .Repos }}
+      <div class="border border-gray-200 dark:border-gray-700 rounded-sm">
+         {{ template "user/fragments/repoCard" (list $ . true) }}
+      </div>
+    {{ else }}
+        <div class="text-base text-gray-500 flex items-center justify-center italic p-12 border border-gray-200 dark:border-gray-700 rounded">
+          <span>No repos found.</span>
+        </div>
+    {{ end }}
+  </div>
+
+  <div class="md:hidden mb-4">
+    {{ template "searchStatistics" . }}
+  </div>
+
+  {{if gt .ResultCount .Page.Limit }}
+    {{ template "fragments/pagination" (dict
+        "Page" .Page
+        "TotalCount" .ResultCount
+        "BasePath" "search"
+        "QueryParams" (queryParams "q" .FilterQuery "sort" .SortParam)
+    ) }}
+  {{ end }}
+{{ end }}
+
+{{ define "searchOptionsPanel" }}
+  <div class="flex flex-col gap-6 px-2 md:px-0">
+    <div>
+      <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+        Sort by
+      </h3>
+      {{ template "sortOptionsList" . }}
+    </div>
+
+    <div>
+      <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+        Languages
+      </h3>
+      {{ template "languageFilters" . }}
+    </div>
+
+    {{ template "searchStatistics" . }}
+  </div>
+{{ end }}
+
+{{ define "sortOptionsList" }}
+  {{ $currentQuery := .FilterQuery }}
+  <select
+    name="sort"
+    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 dark:text-white text-sm"
+    onchange="window.location.href='/search?q={{ .FilterQuery }}&sort=' + this.value"
+    >
+    {{ $currentSort := .SortParam }}
+    {{ if eq $currentSort "" }}
+      {{ $currentSort = "relevance" }}
+    {{ end }}
+
+    {{ $options := list
+      (dict "value" "relevance" "name" "Relevance")
+      (dict "value" "created-desc" "name" "Newest")
+      (dict "value" "created-asc" "name" "Oldest")
+      (dict "value" "stars-desc" "name" "Most Stars")
+      (dict "value" "stars-asc" "name" "Fewest Stars")
+      (dict "value" "issues-desc" "name" "Most Issues")
+      (dict "value" "issues-asc" "name" "Fewest Issues")
+      (dict "value" "pulls-desc" "name" "Most Pulls")
+      (dict "value" "pulls-asc" "name" "Fewest Pulls")
+    }}
+
+    {{ range $options }}
+      <option value="{{ .value }}" {{ if eq $currentSort .value }}selected{{ end }}>
+        {{ .name }}
+      </option>
+    {{ end }}
+  </select>
+{{ end }}
+
+{{ define "languageFilters" }}
+  {{ $commonLanguages := list "Go" "JavaScript" "TypeScript" "Python" "Rust" "OCaml" "Haskell" "C" "C++" "Ruby" "Swift" }}
+
+  <div class="flex gap-2 md:flex-wrap">
+    {{ range $commonLanguages }}
+      {{ $lang := . }}
+      {{ template "languageFilterChip" (dict "Language" $lang "CurrentQuery" $.FilterQuery) }}
+    {{ end }}
+  </div>
+
+  <p class="hidden md:block text-gray-500 dark:text-gray-400 text-xs mt-3">
+    Click a language to filter results. You can also filter by language by
+    adding <code class="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded
+    text-xs">language:name</code> to the search bar.
+  </p>
+{{ end }}
+
+{{ define "languageFilterChip" }}
+  {{ $lang := .Language }}
+  {{ $currentQuery := .CurrentQuery }}
+  {{ $langColor := langColor $lang }}
+  {{ $newQuery := queryParams "q" (printf "language:%s %s" $lang $currentQuery) }}
+
+  <a
+    href="/search?{{ safeUrl $newQuery.Encode }}"
+    class="w-fit flex items-center flex-shrink-0 gap-2 font-normal
+      normal-case rounded py-1 px-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm
+      hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors no-underline hover:no-underline">
+    {{ template "repo/fragments/colorBall" (dict "color" $langColor) }}
+    <span>{{ $lang }}</span>
+  </a>
+{{ end }}
+
+{{ define "searchStatistics" }}
+  {{ if gt .ResultCount 0 }}
+  <div class="text-xs text-gray-600 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 py-2">
+    Returned {{ .ResultCount }} of {{ .DocCount }} repos in {{ .TimeTaken }}
+  </div>
+  {{ end }}
+{{ end }}
+
+
