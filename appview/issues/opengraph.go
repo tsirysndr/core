@@ -2,12 +2,16 @@ package issues
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
 
+	"tangled.org/core/api/tangled"
+	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/ogre"
+	"tangled.org/core/orm"
 )
 
 func (rp *Issues) IssueOpenGraphSummary(w http.ResponseWriter, r *http.Request) {
@@ -24,6 +28,45 @@ func (rp *Issues) IssueOpenGraphSummary(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	labelDefs, err := db.GetLabelDefinitions(
+		rp.db,
+		orm.FilterIn("at_uri", f.Labels),
+		orm.FilterContains("scope", tangled.RepoIssueNSID),
+	)
+	if err != nil {
+		log.Println("failed to fetch label definitions")
+		http.Error(w, "label definitions not found", http.StatusInternalServerError)
+		return
+	}
+
+	defs := make(map[string]*models.LabelDefinition)
+	for _, l := range labelDefs {
+		defs[l.AtUri().String()] = &l
+	}
+
+	labels := []ogre.LabelData{}
+	for _, def := range defs {
+		for val := range issue.Labels.GetValSet(def.AtUri().String()) {
+			name := def.Name
+			value := ""
+
+			if !def.ValueType.IsNull() {
+				name = fmt.Sprintf("%s/", def.Name)
+				value = val
+
+				if def.ValueType.IsDidFormat() {
+					if o, err := rp.idResolver.ResolveIdent(context.Background(), val); err == nil {
+						value = o.Handle.String()
+					}
+				}
+			}
+			labels = append(labels, ogre.LabelData{
+				Color: def.GetColor(),
+				Name:  fmt.Sprintf("%s%s", name, value),
+			})
+		}
+	}
+
 	var ownerHandle string
 	owner, err := rp.idResolver.ResolveIdent(context.Background(), f.Did)
 	if err != nil {
@@ -32,15 +75,7 @@ func (rp *Issues) IssueOpenGraphSummary(w http.ResponseWriter, r *http.Request) 
 		ownerHandle = owner.Handle.String()
 	}
 
-	var authorHandle string
-	author, err := rp.idResolver.ResolveIdent(context.Background(), issue.Did)
-	if err != nil {
-		authorHandle = issue.Did
-	} else {
-		authorHandle = "@" + author.Handle.String()
-	}
-
-	avatarUrl := rp.pages.AvatarUrl(authorHandle, "256")
+	avatarUrl := rp.pages.AvatarUrl(ownerHandle, "256")
 
 	status := "closed"
 	if issue.Open {
@@ -48,6 +83,8 @@ func (rp *Issues) IssueOpenGraphSummary(w http.ResponseWriter, r *http.Request) 
 	}
 
 	commentCount := len(issue.Comments)
+
+	reactionCount, _ := db.GetReactionCount(rp.db, issue.AtUri())
 
 	payload := ogre.IssueCardPayload{
 		Type:          "issue",
@@ -57,9 +94,9 @@ func (rp *Issues) IssueOpenGraphSummary(w http.ResponseWriter, r *http.Request) 
 		Title:         issue.Title,
 		IssueNumber:   issue.IssueId,
 		Status:        status,
-		Labels:        []ogre.LabelData{},
+		Labels:        labels,
 		CommentCount:  commentCount,
-		ReactionCount: 0,
+		ReactionCount: reactionCount,
 		CreatedAt:     issue.Created.Format(time.RFC3339),
 	}
 
