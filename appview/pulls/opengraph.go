@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/ogre"
 	"tangled.org/core/patchutil"
@@ -33,15 +34,7 @@ func (s *Pulls) PullOpenGraphSummary(w http.ResponseWriter, r *http.Request) {
 		ownerHandle = owner.Handle.String()
 	}
 
-	var authorHandle string
-	author, err := s.idResolver.ResolveIdent(context.Background(), pull.OwnerDid)
-	if err != nil {
-		authorHandle = pull.OwnerDid
-	} else {
-		authorHandle = "@" + author.Handle.String()
-	}
-
-	avatarUrl := s.pages.AvatarUrl(authorHandle, "256")
+	avatarUrl := s.pages.AvatarUrl(ownerHandle, "256")
 
 	var status string
 	if pull.State.IsOpen() {
@@ -66,10 +59,9 @@ func (s *Pulls) PullOpenGraphSummary(w http.ResponseWriter, r *http.Request) {
 
 	commentCount := pull.TotalComments()
 
-	rounds := len(pull.Submissions)
-	if rounds == 0 {
-		rounds = 1
-	}
+	reactionCount, _ := db.GetReactionCount(s.db, pull.AtUri())
+
+	rounds := max(1, len(pull.Submissions))
 
 	payload := ogre.PullRequestCardPayload{
 		Type:              "pullRequest",
@@ -84,7 +76,7 @@ func (s *Pulls) PullOpenGraphSummary(w http.ResponseWriter, r *http.Request) {
 		Deletions:         int(deletions),
 		Rounds:            rounds,
 		CommentCount:      commentCount,
-		ReactionCount:     0,
+		ReactionCount:     reactionCount,
 		CreatedAt:         pull.Created.Format(time.RFC3339),
 	}
 
