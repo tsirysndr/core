@@ -156,6 +156,8 @@ func (s *State) StandardRouter(mw *middleware.Middleware) http.Handler {
 	r.Post("/login", s.Login)
 	r.Post("/logout", s.Logout)
 
+	r.With(middleware.Paginate).Get("/search", s.Search)
+
 	r.Post("/account/switch", s.SwitchAccount)
 	r.With(middleware.AuthMiddleware(s.oauth)).Delete("/account/{did}", s.RemoveAccount)
 

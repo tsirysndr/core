@@ -67,6 +67,10 @@ type RepoSearchOptions struct {
 	NegatedPhrases  []string
 	NegatedTopics   []string
 
+	// Sort configuration
+	SortField string
+	SortDesc  bool
+
 	Page pagination.Page
 }
 

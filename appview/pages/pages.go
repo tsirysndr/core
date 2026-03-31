@@ -1590,6 +1590,21 @@ func (p *Pages) SingleString(w io.Writer, params SingleStringParams) error {
 	return p.execute("strings/string", w, params)
 }
 
+type SearchReposParams struct {
+	LoggedInUser *oauth.MultiAccountUser
+	Repos        []models.Repo
+	Page         pagination.Page
+	ResultCount  int
+	FilterQuery  string
+	SortParam    string
+	TimeTaken    time.Duration
+	DocCount     int64
+}
+
+func (p *Pages) SearchRepos(w io.Writer, params SearchReposParams) error {
+	return p.execute("search/search", w, params)
+}
+
 func (p *Pages) Home(w io.Writer, params TimelineParams) error {
 	return p.execute("timeline/home", w, params)
 }
