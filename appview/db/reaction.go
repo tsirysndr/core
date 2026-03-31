@@ -52,7 +52,16 @@ func DeleteReactionByRkey(e Execer, reactedByDid string, rkey string) error {
 	return err
 }
 
-func GetReactionCount(e Execer, threadAt syntax.ATURI, kind models.ReactionKind) (int, error) {
+func GetReactionCount(e Execer, threadAt syntax.ATURI) (int, error) {
+	count := 0
+	err := e.QueryRow(`select count(reacted_by_did) from reactions where thread_at = ?`, threadAt).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func GetReactionCountByKind(e Execer, threadAt syntax.ATURI, kind models.ReactionKind) (int, error) {
 	count := 0
 	err := e.QueryRow(
 		`select count(reacted_by_did) from reactions where thread_at = ? and kind = ?`, threadAt, kind).Scan(&count)
