@@ -17,24 +17,26 @@ type Indexer struct {
 	Pulls  *pulls_indexer.Indexer
 	Repos  *repos_indexer.Indexer
 	logger *slog.Logger
+	Db     *db.DB
 	notify.BaseNotifier
 }
 
-func New(logger *slog.Logger) *Indexer {
+func New(logger *slog.Logger, db *db.DB) *Indexer {
 	return &Indexer{
 		issues_indexer.NewIndexer("indexes/issues.bleve"),
 		pulls_indexer.NewIndexer("indexes/pulls.bleve"),
 		repos_indexer.NewIndexer("indexes/repos.bleve"),
 		logger,
+		db,
 		notify.BaseNotifier{},
 	}
 }
 
 // Init initializes all indexers
-func (ix *Indexer) Init(ctx context.Context, db *db.DB) error {
+func (ix *Indexer) Init(ctx context.Context) error {
 	ctx = tlog.IntoContext(ctx, ix.logger)
-	ix.Issues.Init(ctx, db)
-	ix.Pulls.Init(ctx, db)
-	ix.Repos.Init(ctx, db)
+	ix.Issues.Init(ctx, ix.Db)
+	ix.Pulls.Init(ctx, ix.Db)
+	ix.Repos.Init(ctx, ix.Db)
 	return nil
 }

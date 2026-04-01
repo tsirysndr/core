@@ -77,8 +77,8 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 		return nil, fmt.Errorf("failed to create db: %w", err)
 	}
 
-	indexer := indexer.New(log.SubLogger(logger, "indexer"))
-	err = indexer.Init(ctx, d)
+	indexer := indexer.New(log.SubLogger(logger, "indexer"), d)
+	err = indexer.Init(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create indexer: %w", err)
 	}
