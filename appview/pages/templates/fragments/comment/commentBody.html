@@ -1,5 +1,5 @@
-{{ define "repo/issues/fragments/issueCommentBody" }}
-<div id="comment-body-{{.Comment.Id}}">
+{{ define "fragments/comment/commentBody" }}
+<div class="comment-body">
   {{ if not .Comment.Deleted }}
     <div class="prose dark:prose-invert">{{ .Comment.Body.Text | markdown }}</div>
   {{ else }}

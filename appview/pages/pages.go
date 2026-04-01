@@ -1238,50 +1238,6 @@ func (p *Pages) RepoNewIssue(w io.Writer, params RepoNewIssueParams) error {
 	return p.executeRepo("repo/issues/new", w, params)
 }
 
-type EditIssueCommentParams struct {
-	LoggedInUser *oauth.MultiAccountUser
-	RepoInfo     repoinfo.RepoInfo
-	Issue        *models.Issue
-	Comment      *models.Comment
-}
-
-func (p *Pages) EditIssueCommentFragment(w io.Writer, params EditIssueCommentParams) error {
-	return p.executePlain("repo/issues/fragments/editIssueComment", w, params)
-}
-
-type ReplyIssueCommentPlaceholderParams struct {
-	LoggedInUser *oauth.MultiAccountUser
-	RepoInfo     repoinfo.RepoInfo
-	Issue        *models.Issue
-	Comment      *models.Comment
-}
-
-func (p *Pages) ReplyIssueCommentPlaceholderFragment(w io.Writer, params ReplyIssueCommentPlaceholderParams) error {
-	return p.executePlain("repo/issues/fragments/replyIssueCommentPlaceholder", w, params)
-}
-
-type ReplyIssueCommentParams struct {
-	LoggedInUser *oauth.MultiAccountUser
-	RepoInfo     repoinfo.RepoInfo
-	Issue        *models.Issue
-	Comment      *models.Comment
-}
-
-func (p *Pages) ReplyIssueCommentFragment(w io.Writer, params ReplyIssueCommentParams) error {
-	return p.executePlain("repo/issues/fragments/replyComment", w, params)
-}
-
-type IssueCommentBodyParams struct {
-	LoggedInUser *oauth.MultiAccountUser
-	RepoInfo     repoinfo.RepoInfo
-	Issue        *models.Issue
-	Comment      *models.Comment
-}
-
-func (p *Pages) IssueCommentBodyFragment(w io.Writer, params IssueCommentBodyParams) error {
-	return p.executePlain("repo/issues/fragments/issueCommentBody", w, params)
-}
-
 type StackedDiff struct {
 	Diff *types.NiceDiff
 	Opts types.DiffOpts
@@ -1714,6 +1670,40 @@ func (p *Pages) SearchQuickMobile(w io.Writer, params SearchQuickParams) error {
 
 func (p *Pages) Home(w io.Writer, params TimelineParams) error {
 	return p.execute("timeline/home", w, params)
+}
+
+type CommentBodyFragmentParams struct {
+	Comment     models.Comment
+	Reactions   map[models.ReactionKind]models.ReactionDisplayData
+	UserReacted map[models.ReactionKind]bool
+}
+
+func (p *Pages) CommentBodyFragment(w io.Writer, params CommentBodyFragmentParams) error {
+	return p.executePlain("fragments/comment/commentBody", w, params)
+}
+
+type EditCommentFragmentParams struct {
+	Comment models.Comment
+}
+
+func (p *Pages) EditCommentFragment(w io.Writer, params EditCommentFragmentParams) error {
+	return p.executePlain("fragments/comment/edit", w, params)
+}
+
+type ReplyCommentFragmentParams struct {
+	LoggedInUser *oauth.MultiAccountUser
+}
+
+func (p *Pages) ReplyCommentFragment(w io.Writer, params ReplyCommentFragmentParams) error {
+	return p.executePlain("fragments/comment/reply", w, params)
+}
+
+type ReplyPlaceholderFragmentParams struct {
+	LoggedInUser *oauth.MultiAccountUser
+}
+
+func (p *Pages) ReplyPlaceholderFragment(w io.Writer, params ReplyPlaceholderFragmentParams) error {
+	return p.executePlain("fragments/comment/replyPlaceholder", w, params)
 }
 
 func (p *Pages) Static() http.Handler {

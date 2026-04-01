@@ -27,10 +27,7 @@ func (s *Pulls) Router(mw *middleware.Middleware) http.Handler {
 			r.Get("/", s.RepoPullPatch)
 			r.Get("/interdiff", s.RepoPullInterdiff)
 			r.Get("/actions", s.PullActions)
-			r.With(middleware.AuthMiddleware(s.oauth)).Route("/comment", func(r chi.Router) {
-				r.Get("/", s.PullComment)
-				r.Post("/", s.PullComment)
-			})
+			r.Get("/comment", s.PullComment)
 		})
 
 		r.Route("/round/{round}.patch", func(r chi.Router) {

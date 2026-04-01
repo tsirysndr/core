@@ -1,22 +1,23 @@
 {{ define "repo/pulls/fragments/pullNewComment" }}
-<div
-  id="pull-comment-card-{{ .RoundNumber }}"
-  class="w-full flex flex-col gap-2">
+<div class="w-full flex flex-col gap-2">
   {{ template "user/fragments/picHandleLink" .LoggedInUser.Did }}
   <form
-    hx-post="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/round/{{ .RoundNumber }}/comment"
-    hx-trigger="submit, keydown[(ctrlKey || metaKey) && key=='Enter'] from:#pull-comment-textarea"
-    hx-swap="none"
-    hx-on::after-request="if(event.detail.successful) this.reset()"
-    hx-disabled-elt="#reply-{{ .RoundNumber }}"
     class="w-full flex flex-wrap gap-2 group"
+    hx-post="/comment"
+    hx-trigger="submit, keydown[(ctrlKey || metaKey) && key=='Enter'] from:find textarea"
+    hx-swap="none"
+    hx-indicator="find button[type='submit']"
+    hx-disabled-elt="find button[type='submit']"
+    hx-on::after-request="if(event.detail.successful) this.reset()"
   >
+    <input name="subject-uri" type="hidden" value="{{ .Pull.AtUri }}">
+    <input name="pull-round-idx" type="hidden" value="{{ .RoundNumber }}">
     <textarea
-        id="pull-comment-textarea"
-        name="body"
-        class="w-full p-2 rounded border"
-        rows=8
-        placeholder="Add to the discussion..."></textarea
+      id="comment-textarea"
+      name="body"
+      class="w-full p-2 rounded border"
+      rows=8
+      placeholder="Add to the discussion..."></textarea
     >
     {{ template "replyActions" . }}
     <div id="pull-comment"></div>
@@ -47,7 +48,6 @@
 {{ define "reply" }}
   <button
     type="submit"
-    id="reply-{{ .RoundNumber }}"
     class="btn-create-flat flex items-center gap-2">
       {{ i "reply" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
       {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}

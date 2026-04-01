@@ -595,7 +595,11 @@
     </summary>
     <div>
       {{ range $item.Comments }}
-        {{ template "submissionComment" (list . $root) }}
+        {{/* template "submissionComment" . */}}
+        {{ template "comment"
+          (dict "LoggedInUser" $root.LoggedInUser
+                "VouchRelationship" (index $root.VouchRelationships .Did)
+                "Comment" .) }}
       {{ end }}
     </div>
     {{ if gt $c 0}}
@@ -610,8 +614,10 @@
         {{ block "resubmitStatus" $root }} {{ end }}
       {{ end }}
     </div>
-    <div class="relative -ml-10 bg-gray-50 dark:bg-gray-900">
+    <div hx-include="this" class="relative -ml-10 bg-gray-50 dark:bg-gray-900">
       {{ if $root.LoggedInUser }}
+        <input name="subject-uri" type="hidden" value="{{ $root.Pull.AtUri }}">
+        <input name="pull-round-idx" type="hidden" value="{{ $item.RoundNumber }}">
         {{ template "repo/pulls/fragments/pullActions"
           (dict
             "LoggedInUser" $root.LoggedInUser
@@ -625,6 +631,20 @@
       {{ end }}
     </div>
   </details>
+{{ end }}
+
+{{ define "comment" }}
+<div class="flex gap-2 -ml-4 py-4 w-full mx-auto">
+  <!-- left column: profile picture -->
+  <div class="flex-shrink-0 h-fit relative">
+    {{ template "user/fragments/picLink" (list .Comment.Did.String "size-8") }}
+  </div>
+  <!-- right column: name and body in two rows -->
+  <div class="flex-1 min-w-0">
+    {{ template "fragments/comment/commentHeader" . }}
+    {{ template "fragments/comment/commentBody" . }}
+  </div>
+</div>
 {{ end }}
 
 {{ define "submissionComment" }}

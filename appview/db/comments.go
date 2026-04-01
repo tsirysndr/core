@@ -154,6 +154,17 @@ func DeleteComments(e Execer, filters ...orm.Filter) error {
 	return err
 }
 
+func GetComment(e Execer, filters ...orm.Filter) (models.Comment, error) {
+	comments, err := GetComments(e, filters...)
+	if err != nil {
+		return models.Comment{}, err
+	}
+	if len(comments) != 1 {
+		return models.Comment{}, fmt.Errorf("expected 1 comment, got %d", len(comments))
+	}
+	return comments[0], nil
+}
+
 func GetComments(e Execer, filters ...orm.Filter) ([]models.Comment, error) {
 	var comments []models.Comment
 

@@ -55,9 +55,6 @@ func (s *Strings) Router(mw *middleware.Middleware) http.Handler {
 				r.Get("/raw", s.contents)
 				r.Get("/edit", s.edit)
 				r.Post("/edit", s.edit)
-				r.
-					With(middleware.AuthMiddleware(s.OAuth)).
-					Post("/comment", s.comment)
 			})
 		})
 
@@ -436,7 +433,4 @@ func (s *Strings) delete(w http.ResponseWriter, r *http.Request) {
 	s.Notifier.DeleteString(r.Context(), user.Did, rkey)
 
 	s.Pages.HxRedirect(w, "/strings/"+user.Did)
-}
-
-func (s *Strings) comment(w http.ResponseWriter, r *http.Request) {
 }

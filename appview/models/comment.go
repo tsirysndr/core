@@ -31,18 +31,18 @@ type Comment struct {
 	Deleted *time.Time
 }
 
-func (c *Comment) AtUri() syntax.ATURI {
+func (c Comment) AtUri() syntax.ATURI {
 	return syntax.ATURI(fmt.Sprintf("at://%s/%s/%s", c.Did, c.Collection, c.Rkey))
 }
 
-func (c *Comment) StrongRef() comatproto.RepoStrongRef {
+func (c Comment) StrongRef() comatproto.RepoStrongRef {
 	return comatproto.RepoStrongRef{
 		Uri: c.AtUri().String(),
 		Cid: c.Cid.String(),
 	}
 }
 
-func (c *Comment) AsRecord() typegen.CBORMarshaler {
+func (c Comment) AsRecord() typegen.CBORMarshaler {
 	// can't convert to record for legacy types
 	if c.Collection != tangled.FeedCommentNSID {
 		return nil
@@ -61,14 +61,14 @@ func (c *Comment) AsRecord() typegen.CBORMarshaler {
 	}
 }
 
-func (c *Comment) EditableBody() string {
+func (c Comment) EditableBody() string {
 	if c.Body.Original != nil {
 		return *c.Body.Original
 	}
 	return c.Body.Text
 }
 
-func (c *Comment) IsLegacy() bool {
+func (c Comment) IsLegacy() bool {
 	return c.Collection != tangled.FeedCommentNSID
 }
 

@@ -1,14 +1,21 @@
-{{ define "repo/issues/fragments/editIssueComment" }}
-  <div id="comment-body-{{.Comment.Id}}" class="pt-2">
+{{ define "fragments/comment/edit" }}
+  <form
+    class="pt-2"
+    hx-patch="/comment"
+    hx-swap="outerHTML"
+    hx-trigger="submit, keydown[(ctrlKey || metaKey) && key=='Enter'] from:find textarea"
+    hx-indicator="find button[type='submit']"
+    hx-disabled-elt="find button[type='submit']"
+  >
+    <input name="aturi" type="hidden" value="{{ .Comment.AtUri }}">
     <textarea
-      id="edit-textarea-{{ .Comment.Id }}"
       name="body"
       class="w-full p-2 rounded border border-gray-200 dark:border-gray-700"
       rows="5"
       autofocus>{{ .Comment.EditableBody }}</textarea>
-
+    <div id="comment-error" class="error"></div>
     {{ template "editActions" $ }}
-  </div>
+  </form>
 {{ end }}
 
 {{ define "editActions" }}
@@ -20,12 +27,9 @@
 
 {{ define "save" }}
   <button
+    type="submit"
     class="btn-create py-0 flex gap-1 items-center group text-sm"
-    hx-post="/{{ .RepoInfo.FullName }}/issues/{{ .Issue.IssueId }}/comment/{{ .Comment.Id }}/edit"
-    hx-trigger="click, keydown[(ctrlKey || metaKey) && key=='Enter'] from:#edit-textarea-{{ .Comment.Id }}"
-    hx-include="#edit-textarea-{{ .Comment.Id }}"
-    hx-target="#comment-body-{{ .Comment.Id }}"
-    hx-swap="outerHTML">
+  >
     {{ i "check" "size-4" }}
     save
     {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
@@ -35,9 +39,10 @@
 {{ define "cancel" }}
   <button
     class="btn py-0 text-red-500 dark:text-red-400 flex gap-1 items-center group"
-    hx-get="/{{ .RepoInfo.FullName }}/issues/{{ .Issue.IssueId }}/comment/{{ .Comment.Id }}/"
-    hx-target="#comment-body-{{ .Comment.Id }}"
-    hx-swap="outerHTML">
+    hx-get="/comment?aturi={{ .Comment.AtUri }}"
+    hx-target="closest form"
+    hx-swap="outerHTML"
+  >
     {{ i "x" "size-4" }}
     cancel
   </button>

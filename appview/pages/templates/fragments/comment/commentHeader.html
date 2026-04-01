@@ -1,5 +1,8 @@
-{{ define "repo/issues/fragments/issueCommentHeader" }}
-  <div class="flex flex-wrap items-center gap-2 text-sm text-gray-500 dark:text-gray-400 ">
+{{ define "fragments/comment/commentHeader" }}
+  <div
+    class="flex flex-wrap items-center gap-2 text-sm text-gray-500 dark:text-gray-400 "
+    hx-target="next .comment-body"
+  >
     {{ $handle := resolve .Comment.Did.String }}
     <a class="text-gray-500 dark:text-gray-400 hover:text-gray-500 dark:hover:text-gray-300" href="/{{ $handle }}">{{ $handle }}</a>
     {{ template "hats" $ }}
@@ -8,9 +11,9 @@
     {{ $isCommentOwner := and .LoggedInUser (eq .LoggedInUser.Did .Comment.Did.String) }}
     {{ if and $isCommentOwner (not .Comment.Deleted) }}
       {{ if not .Comment.IsLegacy }}
-        {{ template "editIssueComment" . }}
+        {{ template "editCommentBtn" . }}
       {{ end }}
-      {{ template "deleteIssueComment" . }}
+      {{ template "deleteCommentBtn" . }}
     {{ end }}
   </div>
 {{ end }}
@@ -36,25 +39,22 @@
   </a>
 {{ end }}
 
-{{ define "editIssueComment" }}
+{{ define "editCommentBtn" }}
   <a
     class="text-gray-500 dark:text-gray-400 flex gap-1 items-center group cursor-pointer"
-    hx-get="/{{ .RepoInfo.FullName }}/issues/{{ .Issue.IssueId }}/comment/{{ .Comment.Id }}/edit"
-    hx-swap="outerHTML"
-    hx-target="#comment-body-{{.Comment.Id}}">
+    hx-get="/comment/edit?aturi={{ .Comment.AtUri }}"
+  >
     {{ i "pencil" "size-3 inline group-[.htmx-request]:hidden" }}
     {{ i "loader-circle" "size-3 animate-spin hidden group-[.htmx-request]:inline" }}
   </a>
 {{ end }}
 
-{{ define "deleteIssueComment" }}
+{{ define "deleteCommentBtn" }}
   <a
     class="text-gray-500 dark:text-gray-400 flex gap-1 items-center group cursor-pointer"
-    hx-delete="/{{ .RepoInfo.FullName }}/issues/{{ .Issue.IssueId }}/comment/{{ .Comment.Id }}/"
+    hx-delete="/comment?aturi={{ .Comment.AtUri }}"
     hx-confirm="Are you sure you want to delete your comment?"
-    hx-swap="outerHTML"
-    hx-target="#comment-body-{{.Comment.Id}}"
-    >
+  >
     {{ i "trash-2" "size-3 inline group-[.htmx-request]:hidden" }}
     {{ i "loader-circle" "size-3 animate-spin hidden group-[.htmx-request]:inline" }}
   </a>

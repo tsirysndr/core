@@ -21,15 +21,6 @@ func (i *Issues) Router(mw *middleware.Middleware) http.Handler {
 			// authenticated routes
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.AuthMiddleware(i.oauth))
-				r.Post("/comment", i.NewIssueComment)
-				r.Route("/comment/{commentId}/", func(r chi.Router) {
-					r.Get("/", i.IssueComment)
-					r.Delete("/", i.DeleteIssueComment)
-					r.Get("/edit", i.EditIssueComment)
-					r.Post("/edit", i.EditIssueComment)
-					r.Get("/reply", i.ReplyIssueComment)
-					r.Get("/replyPlaceholder", i.ReplyIssueCommentPlaceholder)
-				})
 				r.Get("/edit", i.EditIssue)
 				r.Post("/edit", i.EditIssue)
 				r.Delete("/", i.DeleteIssue)

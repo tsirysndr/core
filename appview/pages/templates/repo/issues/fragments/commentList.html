@@ -1,43 +1,49 @@
 {{ define "repo/issues/fragments/commentList" }}
   <div class="flex flex-col gap-4">
     {{ range $item := .CommentList }}
-      {{ template "commentListing" (list $ .) }}
+      {{ template "commentListItem" (list $ .) }}
     {{ end }}
   </div>
 {{ end }}
 
-{{ define "commentListing" }}
+{{ define "commentListItem" }}
   {{ $root := index . 0 }}
-  {{ $comment := index . 1 }}
+  {{ $item := index . 1 }}
   {{ $params :=
         (dict
-          "RepoInfo" $root.RepoInfo
-          "LoggedInUser" $root.LoggedInUser
-          "Issue" $root.Issue
-          "Comment" $comment.Self
-          "VouchRelationship" (index $root.VouchRelationships $comment.Self.Did)
-          ) }}
+          "LoggedInUser"      $root.LoggedInUser
+          "VouchRelationship" (index $root.VouchRelationships $item.Self.Did)
+          "Comment"           $item.Self) }}
 
   <div class="rounded border border-gray-200 dark:border-gray-700 w-full overflow-hidden shadow-sm bg-gray-50 dark:bg-gray-800/50">
     {{ template "topLevelComment" $params }}
 
     <div class="relative ml-10 border-l-2 border-gray-200 dark:border-gray-700">
-      {{ range $index, $reply := $comment.Replies }}
+      {{ range $index, $reply := $item.Replies }}
         <div class="-ml-4">
           {{
             template "replyComment"
             (dict
-              "RepoInfo" $root.RepoInfo
-              "LoggedInUser" $root.LoggedInUser
-              "Issue" $root.Issue
-              "Comment" $reply
+              "LoggedInUser"      $root.LoggedInUser
               "VouchRelationship" (index $root.VouchRelationships $reply.Did)
-          ) }}
+              "Comment"           $reply) }}
         </div>
       {{ end }}
     </div>
 
-    {{ template "repo/issues/fragments/replyIssueCommentPlaceholder" $params }}
+    <div hx-include="this">
+      <input name="subject-uri" type="hidden" value="{{ $item.Self.Subject.Uri }}">
+      <input name="subject-cid" type="hidden" value="{{ $item.Self.Subject.Cid }}">
+      <input name="reply-to-uri" type="hidden" value="{{ $item.Self.AtUri }}">
+      <input name="reply-to-cid" type="hidden" value="{{ $item.Self.Cid }}">
+      {{ if $item.Self.IsLegacy }}
+        <div class="py-2 px-6 border-t flex gap-2 items-center border-gray-300 dark:border-gray-700">
+          <span class="text-orange-500">Can't reply to legacy comment.</span>
+        </div>
+      {{ else }}
+        {{ template "fragments/comment/replyPlaceholder" (dict "LoggedInUser" $root.LoggedInUser) }}
+      {{ end }}
+    </div>
   </div>
 {{ end }}
 
@@ -47,8 +53,8 @@
     {{ template "user/fragments/picLink" (list .Comment.Did.String "size-8 mr-1" .VouchRelationship) }}
   </div>
   <div class="flex-1 min-w-0">
-    {{ template "repo/issues/fragments/issueCommentHeader" . }}
-    {{ template "repo/issues/fragments/issueCommentBody" . }}
+    {{ template "fragments/comment/commentHeader" . }}
+    {{ template "fragments/comment/commentBody" . }}
   </div>
 </div>
 {{ end }}
@@ -59,8 +65,8 @@
     {{ template "user/fragments/picLink" (list .Comment.Did.String "size-8 mr-1" .VouchRelationship) }}
   </div>
   <div class="flex-1 min-w-0">
-    {{ template "repo/issues/fragments/issueCommentHeader" . }}
-    {{ template "repo/issues/fragments/issueCommentBody" . }}
+    {{ template "fragments/comment/commentHeader" . }}
+    {{ template "fragments/comment/commentBody" . }}
   </div>
 </div>
 {{ end }}

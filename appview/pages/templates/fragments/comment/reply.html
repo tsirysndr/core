@@ -1,0 +1,50 @@
+{{ define "fragments/comment/reply" }}
+  <form
+    class="p-2 group w-full border-t border-gray-200 dark:border-gray-700 flex flex-col gap-2"
+    hx-post="/comment"
+    hx-swap="none"
+    hx-trigger="submit, keydown[(ctrlKey || metaKey) && key=='Enter'] from:find textarea"
+    hx-on::after-request="if(event.detail.successful) this.reset()"
+    hx-disabled-elt="find button[type='submit']"
+  >
+    {{ template "user/fragments/picHandleLink" .LoggedInUser.Did }}
+    <textarea
+      name="body"
+      class="w-full p-2"
+      placeholder="Leave a reply..."
+      autofocus
+      rows="3"></textarea>
+    <div id="comment-error" class="error"></div>
+    {{ template "replyActions" . }}
+  </form>
+{{ end }}
+
+{{ define "replyActions" }}
+  <div class="flex flex-wrap items-stretch justify-end gap-2 text-gray-500 dark:text-gray-400 text-sm">
+    {{ template "cancel" . }}
+    {{ template "reply" . }}
+  </div>
+{{ end }}
+
+{{ define "cancel" }}
+  <button
+    class="btn text-red-500 dark:text-red-400 flex gap-2 items-center group"
+    hx-get="/comment/reply/placeholder"
+    hx-target="closest form"
+    hx-swap="outerHTML"
+  >
+    {{ i "x" "size-4" }}
+    cancel
+  </button>
+{{ end }}
+
+{{ define "reply" }}
+  <button
+    type="submit"
+    class="btn-create flex items-center gap-2 no-underline hover:no-underline"
+  >
+    {{ i "reply" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
+    {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+    reply
+  </button>
+{{ end }}

@@ -212,6 +212,16 @@ func (s *State) StandardRouter(mw *middleware.Middleware) http.Handler {
 		r.Delete("/", s.React)
 	})
 
+	r.With(middleware.AuthMiddleware(s.oauth)).Route("/comment", func(r chi.Router) {
+		r.Get("/", s.CommentBodyFragment)
+		r.Get("/edit", s.EditCommentFragment)
+		r.Get("/reply", s.NewReplyCommentFragment)
+		r.Get("/reply/placeholder", s.ReplyPlaceholderFragment)
+		r.Post("/", s.NewComment)
+		r.Patch("/", s.EditComment)
+		r.Delete("/", s.DeleteComment)
+	})
+
 	r.Get("/profile/popover", s.ProfilePopover)
 
 	r.Route("/profile", func(r chi.Router) {

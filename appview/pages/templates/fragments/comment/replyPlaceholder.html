@@ -1,0 +1,15 @@
+{{ define "fragments/comment/replyPlaceholder" }}
+<div class="py-2 px-6 border-t flex gap-2 items-center border-gray-300 dark:border-gray-700">
+  {{ if .LoggedInUser }}
+    {{ template "user/fragments/pic" (list .LoggedInUser.Did "size-8 mr-1") }}
+  {{ end }}
+  <input
+    class="w-full p-0 border-none focus:outline-none bg-transparent"
+    placeholder="Leave a reply..."
+    hx-get="/comment/reply"
+    hx-trigger="focus"
+    hx-target="closest div"
+    hx-swap="outerHTML"
+  >
+</div>
+{{ end }}

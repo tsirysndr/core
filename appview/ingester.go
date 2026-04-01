@@ -1621,9 +1621,10 @@ func (i *Ingester) ingestComment(e *jmodels.Event) error {
 			return fmt.Errorf("failed to validate comment: %w", err)
 		}
 
+		var mentions []syntax.DID
 		var references []syntax.ATURI
 		if comment.Body.Original != nil {
-			_, references = i.MentionsResolver.Resolve(ctx, *comment.Body.Original)
+			mentions, references = i.MentionsResolver.Resolve(ctx, *comment.Body.Original)
 		}
 
 		tx, err := i.Db.Begin()
@@ -1639,6 +1640,10 @@ func (i *Ingester) ingestComment(e *jmodels.Event) error {
 
 		if err := tx.Commit(); err != nil {
 			return err
+		}
+
+		if e.Commit.Operation == jmodels.CommitOperationCreate {
+			i.Notifier.NewComment(ctx, comment, mentions)
 		}
 
 	case jmodels.CommitOperationDelete:
