@@ -35,8 +35,10 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 
 	file, err := x.getFile(r.Context(), repo, ref, path)
 	if err != nil {
-		// TODO: better error return
-		l.Error("failed to get blob", "err", err)
+		l.Warn("local mirror failed, trying proxy", "err", err)
+		if x.proxyToKnot(w, r, repo) {
+			return
+		}
 		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to get blob"})
 		return
 	}

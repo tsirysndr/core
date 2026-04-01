@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/go-chi/chi/v5"
@@ -17,20 +18,24 @@ import (
 )
 
 type Xrpc struct {
-	cfg      *config.Config
-	db       *sql.DB
-	resolver *idresolver.Resolver
-	ks       *knotstream.KnotStream
-	logger   *slog.Logger
+	cfg        *config.Config
+	db         *sql.DB
+	resolver   *idresolver.Resolver
+	ks         *knotstream.KnotStream
+	logger     *slog.Logger
+	httpClient *http.Client
 }
 
 func New(logger *slog.Logger, cfg *config.Config, db *sql.DB, resolver *idresolver.Resolver, ks *knotstream.KnotStream) *Xrpc {
 	return &Xrpc{
-		cfg,
-		db,
-		resolver,
-		ks,
-		log.SubLogger(logger, "xrpc"),
+		cfg:      cfg,
+		db:       db,
+		resolver: resolver,
+		ks:       ks,
+		logger:   log.SubLogger(logger, "xrpc"),
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 	}
 }
 

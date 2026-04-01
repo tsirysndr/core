@@ -44,12 +44,12 @@ func (x *Xrpc) ListBranches(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	l := x.logger.With("repo", repoQuery, "limit", limit, "cursor", cursor)
-
 	out, err := x.listBranches(r.Context(), repo, limit, cursor)
 	if err != nil {
-		// TODO: better error return
-		l.Error("failed to list branches", "err", err)
+		x.logger.Warn("local mirror failed, trying proxy", "repo", repo, "err", err)
+		if x.proxyToKnot(w, r, repo) {
+			return
+		}
 		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to list branches"})
 		return
 	}

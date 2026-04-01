@@ -30,12 +30,12 @@ func (x *Xrpc) GetTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	l := x.logger.With("repo", repo, "tag", tagName)
-
 	out, err := x.getTag(r.Context(), repo, tagName)
 	if err != nil {
-		// TODO: better error return
-		l.Error("failed to get tag", "err", err)
+		x.logger.Warn("local mirror failed, trying proxy", "repo", repo, "err", err)
+		if x.proxyToKnot(w, r, repo) {
+			return
+		}
 		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to get tag"})
 		return
 	}

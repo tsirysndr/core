@@ -42,14 +42,20 @@ func (x *Xrpc) GetArchive(w http.ResponseWriter, r *http.Request) {
 
 	repoPath, err := x.makeRepoPath(ctx, repo)
 	if err != nil {
-		l.Error("failed to resolve repo at-uri", "err", err)
+		l.Warn("local mirror failed, trying proxy", "err", err)
+		if x.proxyToKnot(w, r, repo) {
+			return
+		}
 		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to resolve repo"})
 		return
 	}
 
 	gr, err := git.Open(repoPath, ref)
 	if err != nil {
-		l.Error("failed to open git repo", "err", err)
+		l.Warn("local mirror failed, trying proxy", "err", err)
+		if x.proxyToKnot(w, r, repo) {
+			return
+		}
 		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to open git repo"})
 		return
 	}
@@ -65,7 +71,10 @@ func (x *Xrpc) GetArchive(w http.ResponseWriter, r *http.Request) {
 		return r.Name, nil
 	}()
 	if err != nil {
-		l.Error("failed to get repo name", "err", err)
+		l.Warn("local mirror failed, trying proxy", "err", err)
+		if x.proxyToKnot(w, r, repo) {
+			return
+		}
 		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to retrieve repo name"})
 		return
 	}

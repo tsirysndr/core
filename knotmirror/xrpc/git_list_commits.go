@@ -44,12 +44,12 @@ func (x *Xrpc) ListCommits(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	l := x.logger.With("repo", repo, "ref", ref)
-
 	out, err := x.listCommits(r.Context(), repo, ref, limit, cursor)
 	if err != nil {
-		// TODO: better error return
-		l.Error("failed to list commits", "err", err)
+		x.logger.Warn("local mirror failed, trying proxy", "repo", repo, "err", err)
+		if x.proxyToKnot(w, r, repo) {
+			return
+		}
 		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to list commits"})
 		return
 	}

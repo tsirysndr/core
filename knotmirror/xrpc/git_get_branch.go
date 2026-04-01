@@ -33,12 +33,12 @@ func (x *Xrpc) GetBranch(w http.ResponseWriter, r *http.Request) {
 	}
 	branchName, _ := url.PathUnescape(nameQuery)
 
-	l := x.logger.With("repo", repo, "branch", branchName)
-
 	out, err := x.getBranch(r.Context(), repo, branchName)
 	if err != nil {
-		// TODO: better error return
-		l.Error("failed to get branch", "err", err)
+		x.logger.Warn("local mirror failed, trying proxy", "repo", repo, "err", err)
+		if x.proxyToKnot(w, r, repo) {
+			return
+		}
 		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to get branch"})
 		return
 	}

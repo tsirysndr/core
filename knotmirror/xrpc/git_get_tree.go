@@ -28,12 +28,12 @@ func (x *Xrpc) GetTree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	l := x.logger.With("repo", repo, "ref", ref, "path", path)
-
 	out, err := x.getTree(r.Context(), repo, ref, path)
 	if err != nil {
-		// TODO: better error return
-		l.Error("failed to get tree", "err", err)
+		x.logger.Warn("local mirror failed, trying proxy", "repo", repo, "err", err)
+		if x.proxyToKnot(w, r, repo) {
+			return
+		}
 		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to get tree"})
 		return
 	}

@@ -29,7 +29,10 @@ func (x *Xrpc) ListLanguages(w http.ResponseWriter, r *http.Request) {
 
 	out, err := x.listLanguages(r.Context(), repo, ref)
 	if err != nil {
-		l.Error("failed to list languages", "err", err)
+		l.Warn("local mirror failed, trying proxy", "err", err)
+		if x.proxyToKnot(w, r, repo) {
+			return
+		}
 		writeErr(w, err)
 		return
 	}
