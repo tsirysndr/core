@@ -77,6 +77,16 @@ func (g *GitRepo) Diff() (*types.NiceDiff, error) {
 	return &nd, nil
 }
 
+func (g *GitRepo) MergeBase(a, b *object.Commit) (*object.Commit, error) {
+	out, err := g.mergeBase(a.Hash.String(), b.Hash.String())
+	if err != nil {
+		return nil, fmt.Errorf("merge-base %s %s: %w", a.Hash, b.Hash, err)
+	}
+
+	hash := plumbing.NewHash(strings.TrimSpace(string(out)))
+	return g.r.CommitObject(hash)
+}
+
 func (g *GitRepo) DiffTree(commit1, commit2 *object.Commit) (*types.DiffTree, error) {
 	tree1, err := commit1.Tree()
 	if err != nil {

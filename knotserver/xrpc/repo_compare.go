@@ -76,12 +76,17 @@ func (x *Xrpc) RepoCompare(w http.ResponseWriter, r *http.Request) {
 	var combinedPatchRaw string
 	// we need the combined patch
 	if len(formatPatch) >= 2 {
-		diffTree, err := gr.DiffTree(commit1, commit2)
+		mergeBaseCommit, err := gr.MergeBase(commit1, commit2)
 		if err != nil {
 			x.Logger.Error("error comparing revisions", "msg", err.Error())
 		} else {
-			combinedPatch = diffTree.Diff
-			combinedPatchRaw = diffTree.Patch
+			diffTree, err := gr.DiffTree(mergeBaseCommit, commit2)
+			if err != nil {
+				x.Logger.Error("error comparing revisions", "msg", err.Error())
+			} else {
+				combinedPatch = diffTree.Diff
+				combinedPatchRaw = diffTree.Patch
+			}
 		}
 	}
 

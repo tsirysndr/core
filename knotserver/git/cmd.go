@@ -40,3 +40,7 @@ func (g *GitRepo) forEachRef(extraArgs ...string) ([]byte, error) {
 func (g *GitRepo) revParse(extraArgs ...string) ([]byte, error) {
 	return g.runGitCmd("rev-parse", extraArgs...)
 }
+
+func (g *GitRepo) mergeBase(extraArgs ...string) ([]byte, error) {
+	return g.runGitCmd("merge-base", extraArgs...)
+}
