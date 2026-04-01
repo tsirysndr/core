@@ -9,8 +9,10 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/bluesky-social/indigo/xrpc"
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/knotserver/db"
 	"tangled.org/core/knotserver/git"
 	"tangled.org/core/rbac"
+	"tangled.org/core/tid"
 
 	xrpcerr "tangled.org/core/xrpc/errors"
 )
@@ -87,6 +89,24 @@ func (x *Xrpc) SetDefaultBranch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, xrpcerr.GitError(err), http.StatusInternalServerError)
 		return
 	}
+
+	ownerDid := ident.DID.String()
+	refUpdate := tangled.GitRefUpdate{
+		RepoDid:      repo.RepoDid,
+		OwnerDid:     &ownerDid,
+		RepoName:     repo.Name,
+		CommitterDid: actorDid.String(),
+	}
+	eventJson, err := json.Marshal(refUpdate)
+	if err != nil {
+		return
+	}
+
+	x.Db.InsertEvent(db.Event{
+		Rkey:      tid.TID(),
+		Nsid:      tangled.GitRefUpdateNSID,
+		EventJson: string(eventJson),
+	}, x.Notifier)
 
 	w.WriteHeader(http.StatusOK)
 }
