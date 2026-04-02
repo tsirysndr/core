@@ -118,7 +118,6 @@ in
         };
         services.tangled.spindle = {
           enable = true;
-          environmentFile = "/var/lib/spindle/.env";
           server = {
             owner = envVar "TANGLED_VM_SPINDLE_OWNER";
             hostname = envVarOr "TANGLED_VM_SPINDLE_HOST" "localhost:6555";
