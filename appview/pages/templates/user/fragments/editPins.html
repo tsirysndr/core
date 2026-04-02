@@ -24,7 +24,7 @@
       <div id="repos" class="grid grid-cols-1 gap-1 mb-6 bg-white dark:bg-gray-800  border border-gray-200 dark:border-gray-700">
         {{ range $idx, $r := .AllRepos }}
         <div class="flex items-center gap-2 text-base p-2 border-b border-gray-200 dark:border-gray-700">
-          <input type="checkbox" id="repo-{{$idx}}" name="pinnedRepo{{$idx}}" value="{{.RepoAt}}" {{if .IsPinned}}checked{{end}}>
+          <input type="checkbox" id="repo-{{$idx}}" name="pinnedRepo{{$idx}}" value="{{.PinIdentifier}}" {{if .IsPinned}}checked{{end}}>
           <label for="repo-{{$idx}}" class="my-0 py-0 normal-case font-normal w-full">
             <div class="flex justify-between items-center w-full">
               <span class="flex-shrink-0 overflow-hidden text-ellipsis ">{{ resolve .Did }}/{{.Name}}</span>

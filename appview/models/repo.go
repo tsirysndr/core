@@ -81,6 +81,13 @@ func (r Repo) RepoIdentifier() string {
 	return p
 }
 
+func (r Repo) PinIdentifier() string {
+	if r.RepoDid != "" {
+		return r.RepoDid
+	}
+	return string(r.RepoAt())
+}
+
 func (r Repo) TopicStr() string {
 	return strings.Join(r.Topics, " ")
 }

@@ -26,7 +26,7 @@ func (t *ActorProfile) MarshalCBOR(w io.Writer) error {
 	}
 
 	cw := cbg.NewCborWriter(w)
-	fieldCount := 11
+	fieldCount := 10
 
 	if t.Avatar == nil {
 		fieldCount--
@@ -45,10 +45,6 @@ func (t *ActorProfile) MarshalCBOR(w io.Writer) error {
 	}
 
 	if t.PinnedRepositories == nil {
-		fieldCount--
-	}
-
-	if t.PinnedRepositoryDids == nil {
 		fieldCount--
 	}
 
@@ -357,42 +353,6 @@ func (t *ActorProfile) MarshalCBOR(w io.Writer) error {
 
 		}
 	}
-
-	// t.PinnedRepositoryDids ([]string) (slice)
-	if t.PinnedRepositoryDids != nil {
-
-		if len("pinnedRepositoryDids") > 1000000 {
-			return xerrors.Errorf("Value in field \"pinnedRepositoryDids\" was too long")
-		}
-
-		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("pinnedRepositoryDids"))); err != nil {
-			return err
-		}
-		if _, err := cw.WriteString(string("pinnedRepositoryDids")); err != nil {
-			return err
-		}
-
-		if len(t.PinnedRepositoryDids) > 8192 {
-			return xerrors.Errorf("Slice value in field t.PinnedRepositoryDids was too long")
-		}
-
-		if err := cw.WriteMajorTypeHeader(cbg.MajArray, uint64(len(t.PinnedRepositoryDids))); err != nil {
-			return err
-		}
-		for _, v := range t.PinnedRepositoryDids {
-			if len(v) > 1000000 {
-				return xerrors.Errorf("Value in field v was too long")
-			}
-
-			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(v))); err != nil {
-				return err
-			}
-			if _, err := cw.WriteString(string(v)); err != nil {
-				return err
-			}
-
-		}
-	}
 	return nil
 }
 
@@ -421,7 +381,7 @@ func (t *ActorProfile) UnmarshalCBOR(r io.Reader) (err error) {
 
 	n := extra
 
-	nameBuf := make([]byte, 20)
+	nameBuf := make([]byte, 18)
 	for i := uint64(0); i < n; i++ {
 		nameLen, ok, err := cbg.ReadFullStringIntoBuf(cr, nameBuf, 1000000)
 		if err != nil {
@@ -686,46 +646,6 @@ func (t *ActorProfile) UnmarshalCBOR(r io.Reader) (err error) {
 						}
 
 						t.PinnedRepositories[i] = string(sval)
-					}
-
-				}
-			}
-			// t.PinnedRepositoryDids ([]string) (slice)
-		case "pinnedRepositoryDids":
-
-			maj, extra, err = cr.ReadHeader()
-			if err != nil {
-				return err
-			}
-
-			if extra > 8192 {
-				return fmt.Errorf("t.PinnedRepositoryDids: array too large (%d)", extra)
-			}
-
-			if maj != cbg.MajArray {
-				return fmt.Errorf("expected cbor array")
-			}
-
-			if extra > 0 {
-				t.PinnedRepositoryDids = make([]string, extra)
-			}
-
-			for i := 0; i < int(extra); i++ {
-				{
-					var maj byte
-					var extra uint64
-					var err error
-					_ = maj
-					_ = extra
-					_ = err
-
-					{
-						sval, err := cbg.ReadStringWithMax(cr, 1000000)
-						if err != nil {
-							return err
-						}
-
-						t.PinnedRepositoryDids[i] = string(sval)
 					}
 
 				}

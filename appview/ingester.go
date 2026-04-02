@@ -364,10 +364,10 @@ func (i *Ingester) ingestProfile(ctx context.Context, e *jmodels.Event) error {
 			}
 		}
 
-		var pinned [6]syntax.ATURI
+		var pinned [6]string
 		for i, r := range record.PinnedRepositories {
 			if i < 6 {
-				pinned[i] = syntax.ATURI(r)
+				pinned[i] = r
 			}
 		}
 

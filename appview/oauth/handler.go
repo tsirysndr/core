@@ -376,18 +376,20 @@ func (o *OAuth) rewritePdsRecord(ctx context.Context, client *atpclient.APIClien
 		if !ok {
 			return fmt.Errorf("unexpected type for profile record")
 		}
-		var dids []string
-		var remaining []string
-		for _, pinUri := range rec.PinnedRepositories {
-			repo, repoErr := db.GetRepoByAtUri(o.Db, pinUri)
-			if repoErr != nil || repo.RepoDid == "" {
-				remaining = append(remaining, pinUri)
+		rewritten := make([]string, 0, len(rec.PinnedRepositories))
+		for _, pin := range rec.PinnedRepositories {
+			if strings.HasPrefix(pin, "did:") {
+				rewritten = append(rewritten, pin)
 				continue
 			}
-			dids = append(dids, repo.RepoDid)
+			repo, repoErr := db.GetRepoByAtUri(o.Db, pin)
+			if repoErr != nil || repo.RepoDid == "" {
+				rewritten = append(rewritten, pin)
+				continue
+			}
+			rewritten = append(rewritten, repo.RepoDid)
 		}
-		rec.PinnedRepositoryDids = append(rec.PinnedRepositoryDids, dids...)
-		rec.PinnedRepositories = remaining
+		rec.PinnedRepositories = rewritten
 
 	default:
 		return fmt.Errorf("unsupported NSID for PDS rewrite: %s", rw.RecordNsid)

@@ -220,7 +220,7 @@ func UpsertProfile(tx *sql.Tx, profile *models.Profile) error {
 		}
 
 		_, err := tx.Exec(
-			`insert into profile_pinned_repositories (did, at_uri) values (?, ?)`,
+			`insert into profile_pinned_repositories (did, pin) values (?, ?)`,
 			profile.Did,
 			pin,
 		)
@@ -328,7 +328,7 @@ func GetProfiles(e Execer, filters ...orm.Filter) (map[string]*models.Profile, e
 		idxs[did] = idx + 1
 	}
 
-	pinsQuery := fmt.Sprintf("select at_uri, did from profile_pinned_repositories where did in (%s)", inClause)
+	pinsQuery := fmt.Sprintf("select pin, did from profile_pinned_repositories where did in (%s)", inClause)
 	rows, err = e.Query(pinsQuery, args...)
 	if err != nil {
 		return nil, err
@@ -340,14 +340,14 @@ func GetProfiles(e Execer, filters ...orm.Filter) (map[string]*models.Profile, e
 		idxs[did] = 0
 	}
 	for rows.Next() {
-		var link syntax.ATURI
+		var pin string
 		var did string
-		if err = rows.Scan(&link, &did); err != nil {
+		if err = rows.Scan(&pin, &did); err != nil {
 			return nil, err
 		}
 
 		idx := idxs[did]
-		profileMap[did].PinnedRepos[idx] = link
+		profileMap[did].PinnedRepos[idx] = pin
 		idxs[did] = idx + 1
 	}
 
@@ -435,7 +435,7 @@ func GetProfile(e Execer, did string) (*models.Profile, error) {
 		i++
 	}
 
-	rows, err = e.Query(`select at_uri from profile_pinned_repositories where did = ?`, did)
+	rows, err = e.Query(`select pin from profile_pinned_repositories where did = ?`, did)
 	if err != nil {
 		return nil, err
 	}
@@ -524,7 +524,6 @@ func ValidateProfile(e Execer, profile *models.Profile) error {
 		return err
 	}
 
-	// ensure all pinned repos are either own repos or collaborating repos
 	repos, err := GetRepos(e, orm.FilterEq("did", profile.Did))
 	if err != nil {
 		log.Printf("getting repos for %s: %s", profile.Did, err)
@@ -535,20 +534,21 @@ func ValidateProfile(e Execer, profile *models.Profile) error {
 		log.Printf("getting collaborating repos for %s: %s", profile.Did, err)
 	}
 
-	var validRepos []syntax.ATURI
-	for _, r := range repos {
-		validRepos = append(validRepos, r.RepoAt())
-	}
-	for _, r := range collaboratingRepos {
-		validRepos = append(validRepos, r.RepoAt())
-	}
+	// ensure all pinned repos are either own repos or collaborating repos
+	allRepos := append(repos, collaboratingRepos...)
 
 	for _, pinned := range profile.PinnedRepos {
 		if pinned == "" {
 			continue
 		}
-		if !slices.Contains(validRepos, pinned) {
-			return fmt.Errorf("Invalid pinned repo: `%s, does not belong to own or collaborating repos", pinned)
+		matched := slices.ContainsFunc(allRepos, func(r models.Repo) bool {
+			if strings.HasPrefix(pinned, "did:") {
+				return pinned == r.RepoDid
+			}
+			return pinned == string(r.RepoAt())
+		})
+		if !matched {
+			return fmt.Errorf("Invalid pinned repo: `%s`, does not belong to own or collaborating repos", pinned)
 		}
 	}
 

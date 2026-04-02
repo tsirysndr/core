@@ -255,7 +255,19 @@
     <div id="repos" class="grid grid-cols-1 gap-4 items-stretch">
       {{ range .Repos }}
       <div class="border border-gray-200 dark:border-gray-700 rounded-sm">
-        {{ template "user/fragments/repoCard" (list $ . false) }}
+        {{ if .RepoDid }}
+          {{ template "user/fragments/repoCard" (list $ . false) }}
+        {{ else }}
+          <div class="py-4 px-6 gap-1 flex flex-col drop-shadow-sm rounded bg-gray-50 dark:bg-gray-900 min-h-32 opacity-60">
+            <div class="font-medium dark:text-white flex items-center">
+              {{ i "book-marked" "w-4 h-4 mr-1.5 shrink-0" }}
+              <span class="truncate min-w-0">{{ resolve .Did }}/{{ .Name }}</span>
+            </div>
+            <div class="text-gray-500 dark:text-gray-400 text-sm italic">
+              This repo is hosted on a legacy knot that ought to be upgraded.
+            </div>
+          </div>
+        {{ end }}
       </div>
       {{ else }}
         <div class="text-base text-gray-500 flex items-center justify-center italic p-12 border border-gray-200 dark:border-gray-700 rounded">
@@ -275,7 +287,19 @@
       <div id="collaborating" class="grid grid-cols-1 gap-4">
         {{ range .CollaboratingRepos }}
         <div class="border border-gray-200 dark:border-gray-700 rounded-sm">
-          {{ template "user/fragments/repoCard" (list $ . true) }}
+          {{ if .RepoDid }}
+            {{ template "user/fragments/repoCard" (list $ . true) }}
+          {{ else }}
+            <div class="py-4 px-6 gap-1 flex flex-col drop-shadow-sm rounded bg-gray-50 dark:bg-gray-900 min-h-32 opacity-60">
+              <div class="font-medium dark:text-white flex items-center">
+                {{ i "book-marked" "w-4 h-4 mr-1.5 shrink-0" }}
+                <span class="truncate min-w-0">{{ resolve .Did }}/{{ .Name }}</span>
+              </div>
+              <div class="text-gray-500 dark:text-gray-400 text-sm italic">
+                This repo is hosted on a legacy knot that ought to be upgraded.
+              </div>
+            </div>
+          {{ end }}
         </div>
         {{ else }}
             <p class="px-6 dark:text-white">This user is not collaborating.</p>

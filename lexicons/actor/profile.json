@@ -60,23 +60,13 @@
             "maxGraphemes": 40,
             "maxLength": 400
           },
-          "pinnedRepositoryDids": {
-            "type": "array",
-            "minLength": 0,
-            "maxLength": 6,
-            "items": {
-              "type": "string",
-              "format": "did"
-            }
-          },
           "pinnedRepositories": {
             "type": "array",
-            "description": "Any ATURI, it is up to appviews to validate these fields.",
+            "description": "Pinned repositories. Values are repo DIDs for repos that have them, or AT-URIs for legacy repos.",
             "minLength": 0,
             "maxLength": 6,
             "items": {
-              "type": "string",
-              "format": "at-uri"
+              "type": "string"
             }
           },
           "pronouns": {

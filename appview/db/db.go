@@ -1334,6 +1334,40 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	conn.ExecContext(ctx, "pragma foreign_keys = off;")
+	orm.RunMigration(conn, logger, "drop-pinned-repos-at-uri-fk", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			create table if not exists profile_pinned_repositories_new (
+				id integer primary key autoincrement,
+				did text not null,
+				pin text not null,
+
+				unique(did, pin),
+				foreign key (did) references profile(did) on delete cascade
+			);
+
+			insert into profile_pinned_repositories_new (id, did, pin)
+			select id, did, at_uri from profile_pinned_repositories;
+
+			drop table profile_pinned_repositories;
+
+			alter table profile_pinned_repositories_new rename to profile_pinned_repositories;
+		`)
+		return err
+	})
+	conn.ExecContext(ctx, "pragma foreign_keys = on;")
+
+	orm.RunMigration(conn, logger, "reset-profile-pin-rewrites", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			update pds_rewrite_status
+			set status = 'pending',
+			    updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+			where record_nsid = 'sh.tangled.actor.profile'
+			  and status = 'done'
+		`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,

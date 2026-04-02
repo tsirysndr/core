@@ -2,6 +2,7 @@ package models
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/api/tangled"
@@ -19,7 +20,7 @@ type Profile struct {
 	Location        string
 	Links           [5]string
 	Stats           [2]VanityStat
-	PinnedRepos     [6]syntax.ATURI
+	PinnedRepos     [6]string
 	Pronouns        string
 	PreferredHandle syntax.Handle
 }
@@ -49,6 +50,22 @@ func (p Profile) IsPinnedReposEmpty() bool {
 		}
 	}
 	return true
+}
+
+func (p Profile) MatchesPinnedRepo(repo Repo) bool {
+	for _, pin := range p.PinnedRepos {
+		if pin == "" {
+			continue
+		}
+		if strings.HasPrefix(pin, "did:") {
+			if pin == repo.RepoDid {
+				return true
+			}
+		} else if pin == string(repo.RepoAt()) {
+			return true
+		}
+	}
+	return false
 }
 
 type VanityStatKind string

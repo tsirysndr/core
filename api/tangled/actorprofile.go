@@ -27,9 +27,8 @@ type ActorProfile struct {
 	Links       []string `json:"links,omitempty" cborgen:"links,omitempty"`
 	// location: Free-form location text.
 	Location *string `json:"location,omitempty" cborgen:"location,omitempty"`
-	// pinnedRepositories: Any ATURI, it is up to appviews to validate these fields.
-	PinnedRepositories   []string `json:"pinnedRepositories,omitempty" cborgen:"pinnedRepositories,omitempty"`
-	PinnedRepositoryDids []string `json:"pinnedRepositoryDids,omitempty" cborgen:"pinnedRepositoryDids,omitempty"`
+	// pinnedRepositories: Pinned repositories. Values are repo DIDs for repos that have them, or AT-URIs for legacy repos.
+	PinnedRepositories []string `json:"pinnedRepositories,omitempty" cborgen:"pinnedRepositories,omitempty"`
 	// preferredHandle: A handle the user prefers to be displayed as.
 	PreferredHandle *string `json:"preferredHandle,omitempty" cborgen:"preferredHandle,omitempty"`
 	// pronouns: Preferred gender pronouns.

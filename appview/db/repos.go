@@ -630,7 +630,7 @@ func EnqueuePdsRewritesForRepo(tx *sql.Tx, repoDid, repoAtUri string) error {
 	}
 
 	profileRows, err := tx.Query(
-		`SELECT DISTINCT did FROM profile_pinned_repositories WHERE at_uri = ?`,
+		`SELECT DISTINCT did FROM profile_pinned_repositories WHERE pin = ?`,
 		repoAtUri,
 	)
 	if err != nil {

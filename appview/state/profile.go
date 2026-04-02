@@ -153,13 +153,9 @@ func (s *State) profileOverview(w http.ResponseWriter, r *http.Request) {
 	// filter out ones that are pinned
 	pinnedRepos := []models.Repo{}
 	for i, r := range repos {
-		// if this is a pinned repo, add it
-		if slices.Contains(profile.Profile.PinnedRepos[:], r.RepoAt()) {
+		if profile.Profile.MatchesPinnedRepo(r) {
 			pinnedRepos = append(pinnedRepos, r)
-		}
-
-		// if there are no saved pins, add the first 4 repos
-		if profile.Profile.IsPinnedReposEmpty() && i < 4 {
+		} else if profile.Profile.IsPinnedReposEmpty() && i < 4 {
 			pinnedRepos = append(pinnedRepos, r)
 		}
 	}
@@ -171,8 +167,7 @@ func (s *State) profileOverview(w http.ResponseWriter, r *http.Request) {
 
 	pinnedCollaboratingRepos := []models.Repo{}
 	for _, r := range collaboratingRepos {
-		// if this is a pinned repo, add it
-		if slices.Contains(profile.Profile.PinnedRepos[:], r.RepoAt()) {
+		if profile.Profile.MatchesPinnedRepo(r) {
 			pinnedCollaboratingRepos = append(pinnedCollaboratingRepos, r)
 		}
 	}
@@ -723,7 +718,7 @@ func (s *State) UpdateProfilePins(w http.ResponseWriter, r *http.Request) {
 	}
 
 	i := 0
-	var pinnedRepos [6]syntax.ATURI
+	var pinnedRepos [6]string
 	for key, values := range r.Form {
 		if i >= 6 {
 			log.Println("invalid pin update form", err)
@@ -731,13 +726,7 @@ func (s *State) UpdateProfilePins(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if strings.HasPrefix(key, "pinnedRepo") && len(values) > 0 && values[0] != "" && i < 6 {
-			aturi, err := syntax.ParseATURI(values[0])
-			if err != nil {
-				log.Println("invalid profile update form", err)
-				s.pages.Notice(w, "update-profile", "Invalid form.")
-				return
-			}
-			pinnedRepos[i] = aturi
+			pinnedRepos[i] = values[0]
 			i++
 		}
 	}
@@ -762,11 +751,11 @@ func (s *State) updateProfile(profile *models.Profile, w http.ResponseWriter, r 
 		return
 	}
 
-	// yeah... lexgen dose not support syntax.ATURI in the record for some reason,
-	// nor does it support exact size arrays
 	var pinnedRepoStrings []string
 	for _, r := range profile.PinnedRepos {
-		pinnedRepoStrings = append(pinnedRepoStrings, r.String())
+		if r != "" {
+			pinnedRepoStrings = append(pinnedRepoStrings, r)
+		}
 	}
 
 	var vanityStats []string
@@ -868,16 +857,14 @@ func (s *State) EditPinsFragment(w http.ResponseWriter, r *http.Request) {
 	allRepos := []pages.PinnedRepo{}
 
 	for _, r := range repos {
-		isPinned := slices.Contains(profile.PinnedRepos[:], r.RepoAt())
 		allRepos = append(allRepos, pages.PinnedRepo{
-			IsPinned: isPinned,
+			IsPinned: profile.MatchesPinnedRepo(r),
 			Repo:     r,
 		})
 	}
 	for _, r := range collaboratingRepos {
-		isPinned := slices.Contains(profile.PinnedRepos[:], r.RepoAt())
 		allRepos = append(allRepos, pages.PinnedRepo{
-			IsPinned: isPinned,
+			IsPinned: profile.MatchesPinnedRepo(r),
 			Repo:     r,
 		})
 	}
