@@ -198,18 +198,34 @@ func (h *InternalHandle) PostReceiveHook(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	repoDid := gitRelativeDir
-	if !strings.HasPrefix(repoDid, "did:") {
-		l.Error("invalid git dir, expected repo DID", "gitRelativeDir", gitRelativeDir)
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
+	var repoDid string
+	var ownerDid, repoName string
 
-	ownerDid, repoName, err := h.db.GetRepoKeyOwner(repoDid)
-	if err != nil {
-		l.Error("failed to resolve repo DID from git dir", "repoDid", repoDid, "err", err)
-		w.WriteHeader(http.StatusBadRequest)
-		return
+	if strings.HasPrefix(gitRelativeDir, "did:") {
+		repoDid = gitRelativeDir
+		var err error
+		ownerDid, repoName, err = h.db.GetRepoKeyOwner(repoDid)
+		if err != nil {
+			l.Error("failed to resolve repo DID from git dir", "repoDid", repoDid, "err", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+	} else {
+		components := strings.SplitN(gitRelativeDir, "/", 2)
+		if len(components) != 2 {
+			l.Error("invalid git dir, expected repo DID or owner/repo", "gitRelativeDir", gitRelativeDir)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		ownerDid = components[0]
+		repoName = components[1]
+		var didErr error
+		repoDid, didErr = h.db.GetRepoDid(ownerDid, repoName)
+		if didErr != nil {
+			l.Error("failed to resolve repo DID from legacy path", "gitRelativeDir", gitRelativeDir, "err", didErr)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 	}
 
 	gitUserDid := r.Header.Get("X-Git-User-Did")
