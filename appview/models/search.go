@@ -72,7 +72,7 @@ type RepoSearchOptions struct {
 
 func (o *RepoSearchOptions) HasSearchFilters() bool {
 	return len(o.Keywords) > 0 || len(o.Phrases) > 0 ||
-		o.Language != "" || o.Did != "" ||
+		o.Language != "" ||
 		len(o.Topics) > 0 || len(o.NegatedTopics) > 0 ||
 		len(o.NegatedKeywords) > 0 || len(o.NegatedPhrases) > 0
 }
