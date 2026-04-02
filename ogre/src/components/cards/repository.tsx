@@ -8,10 +8,10 @@ import { TYPOGRAPHY } from "../shared/constants";
 import type { RepositoryCardData } from "../../validation";
 
 function repoNameFontSize(name: string): number {
-  // Available width ~1000px (1104px card content minus language circles area).
+  // Available width ~756px
   // Inter 600 average char width is ~0.58× the font size.
   const maxSize = TYPOGRAPHY.repoName.fontSize;
-  const fitted = Math.floor(1000 / (name.length * 0.58));
+  const fitted = Math.floor(756 / (name.length * 0.58));
   return Math.min(maxSize, Math.max(fitted, 48));
 }
 
@@ -19,13 +19,21 @@ export function RepositoryCard(data: RepositoryCardData) {
   const fontSize = repoNameFontSize(data.repoName);
   return (
     <Card>
-      <LanguageCircles languages={data.languages} />
+      <div
+        style={{
+          display: "flex",
+          position: "absolute",
+          right: -380,
+          top: -380,
+        }}>
+        <LanguageCircles width={760} languages={data.languages} />
+      </div>
 
       <Col style={{ gap: 64 }}>
-        <Col style={{ gap: 24 }}>
-          <span style={{ ...TYPOGRAPHY.repoName, fontSize, color: "#000000" }}>
+        <Col style={{ gap: 24, maxWidth: 756 }}>
+          <div style={{ ...TYPOGRAPHY.repoName, fontSize, color: "#000000" }}>
             {data.repoName}
-          </span>
+          </div>
 
           <Row style={{ gap: 16 }}>
             <Avatar src={data.avatarUrl} size={64} />

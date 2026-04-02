@@ -2,55 +2,45 @@ import type { Language } from "../../validation";
 
 interface LanguageCirclesProps {
   languages: Language[];
+  width: number;
 }
 
-const MAX_RADIUS = 380;
+export function LanguageCircles({ languages, width }: LanguageCirclesProps) {
+  const MAX_RADIUS = width || 100;
 
-function percentageToThickness(percentage: number): number {
-  return (percentage / 100) * MAX_RADIUS;
-}
-
-export function LanguageCircles({ languages }: LanguageCirclesProps) {
   const sortedLanguages = [...languages]
     .sort((a, b) => b.percentage - a.percentage)
-    .slice(0, 5)
-    .reverse();
+    .slice(0, 5);
 
-  let cumulativeRadius = 0;
+  let cumulativePercentage = 0;
+  const circles: { color: string; radius: number }[] = [];
+
+  for (const lang of sortedLanguages) {
+    // Radius decreases as we go inward, but ring area is proportional to percentage
+    // Using sqrt to make area (πr²) proportional to remaining percentage
+    const radius = Math.max(
+      1,
+      Math.round(MAX_RADIUS * Math.sqrt(1 - cumulativePercentage / 100) * 100) /
+        100,
+    );
+    circles.push({ color: lang.color, radius });
+    cumulativePercentage += lang.percentage;
+  }
 
   return (
-    <div
-      style={{
-        position: "absolute",
-        right: -MAX_RADIUS,
-        top: -MAX_RADIUS,
-        width: MAX_RADIUS * 2,
-        height: MAX_RADIUS * 2,
-        display: "flex",
-      }}>
-      {sortedLanguages.map((lang, i) => {
-        const thickness = percentageToThickness(lang.percentage);
-        const contentSize = cumulativeRadius * 2;
-
-        cumulativeRadius += thickness;
-
-        return (
-          <div
-            key={i}
-            style={{
-              position: "absolute",
-              left: "50%",
-              top: "50%",
-              transform: "translate(-50%, -50%)",
-              width: contentSize,
-              height: contentSize,
-              borderRadius: "50%",
-              border: `${thickness}px solid ${lang.color}`,
-              boxSizing: "content-box",
-            }}
-          />
-        );
-      })}
-    </div>
+    <svg
+      width={MAX_RADIUS}
+      height={MAX_RADIUS}
+      viewBox={`0 0 ${MAX_RADIUS * 2} ${MAX_RADIUS * 2}`}>
+      {circles.map((circle, i) => (
+        <circle
+          key={i}
+          cx="50%"
+          cy="50%"
+          r={circle.radius}
+          fill={circle.color}
+        />
+      ))}
+    </svg>
   );
 }

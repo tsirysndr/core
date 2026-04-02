@@ -43,8 +43,13 @@ const savePng = (filename: string, buffer: Uint8Array) => {
   writeFileSync(join(outputDir, filename), buffer);
 };
 
+const saveSvg = (filename: string, svg: string) => {
+  writeFileSync(join(outputDir, filename), svg);
+};
+
 const renderAndSave = async <P>(component: VNode<P>, filename: string) => {
-  const { png } = await renderCard(component as VNode);
+  const { svg, png } = await renderCard(component as VNode);
+  saveSvg(filename.replace(".png", ".svg"), svg);
   savePng(filename, png);
 };
 

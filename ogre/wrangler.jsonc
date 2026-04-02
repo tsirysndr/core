@@ -6,6 +6,9 @@
   "observability": {
     "enabled": true,
   },
+  "limits": {
+      "cpu_ms": 300000
+  },
   "routes": [
     {
       "pattern": "ogre.tangled.network",
@@ -18,8 +21,34 @@
   "rules": [
     {
       "type": "Data",
-      "globs": ["**/*.woff"],
+      "globs": ["**/*.wasm", "**/*.woff"],
       "fallthrough": true,
     },
   ],
+  "env": {
+    "dev": {
+      "name": "ogre-dev",
+      "vars": {
+        "ENVIRONMENT": "development"
+      },
+      "routes": [
+        {
+          "pattern": "ogre-dev.tangled.network",
+          "custom_domain": true
+        }
+      ]
+    },
+    "production": {
+      "name": "ogre",
+      "vars": {
+        "ENVIRONMENT": "production"
+      },
+      "routes": [
+        {
+          "pattern": "ogre.tangled.network",
+          "custom_domain": true
+        }
+      ]
+    }
+  }
 }
