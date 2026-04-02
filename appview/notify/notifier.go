@@ -35,6 +35,8 @@ type Notifier interface {
 	DeleteString(ctx context.Context, did, rkey string)
 
 	Push(ctx context.Context, repo *models.Repo, ref, oldSha, newSha, committerDid string)
+
+	Clone(ctx context.Context, repo *models.Repo)
 }
 
 // BaseNotifier is a listener that does nothing
@@ -72,3 +74,5 @@ func (m *BaseNotifier) DeleteString(ctx context.Context, did, rkey string) {}
 
 func (m *BaseNotifier) Push(ctx context.Context, repo *models.Repo, ref, oldSha, newSha, committerDid string) {
 }
+
+func (m *BaseNotifier) Clone(ctx context.Context, repo *models.Repo) {}

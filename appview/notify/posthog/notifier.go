@@ -180,6 +180,17 @@ func (n *posthogNotifier) NewString(ctx context.Context, string *models.String) 
 	}
 }
 
+func (n *posthogNotifier) Clone(ctx context.Context, repo *models.Repo) {
+	err := n.client.Enqueue(posthog.Capture{
+		DistinctId: repo.Did,
+		Event:      "clone",
+		Properties: posthog.Properties{"repo": repo.Name, "repo_at": repo.RepoAt()},
+	})
+	if err != nil {
+		log.Println("failed to enqueue posthog event:", err)
+	}
+}
+
 func (n *posthogNotifier) NewIssueComment(ctx context.Context, comment *models.IssueComment, mentions []syntax.DID) {
 	err := n.client.Enqueue(posthog.Capture{
 		DistinctId: comment.Did,

@@ -361,6 +361,10 @@ func (n *databaseNotifier) Push(ctx context.Context, repo *models.Repo, ref, old
 	// no-op for now; webhooks are handled by the webhook notifier
 }
 
+func (n *databaseNotifier) Clone(ctx context.Context, repo *models.Repo) {
+	// no-op
+}
+
 func (n *databaseNotifier) NewIssueState(ctx context.Context, actor syntax.DID, issue *models.Issue) {
 	l := log.FromContext(ctx)
 

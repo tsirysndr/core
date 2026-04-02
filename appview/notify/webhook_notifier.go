@@ -69,6 +69,8 @@ func (w *WebhookNotifier) Push(ctx context.Context, repo *models.Repo, ref, oldS
 	}
 }
 
+func (w *WebhookNotifier) Clone(ctx context.Context, repo *models.Repo) {}
+
 // buildPushPayload creates the webhook payload
 func (w *WebhookNotifier) buildPushPayload(repo *models.Repo, ref, oldSha, newSha, committerDid string) (*models.WebhookPayload, error) {
 	owner := repo.Did

@@ -118,3 +118,8 @@ func (l *loggingNotifier) Push(ctx context.Context, repo *models.Repo, ref, oldS
 	ctx = tlog.IntoContext(ctx, tlog.SubLogger(l.logger, "Push"))
 	l.inner.Push(ctx, repo, ref, oldSha, newSha, committerDid)
 }
+
+func (l *loggingNotifier) Clone(ctx context.Context, repo *models.Repo) {
+	ctx = tlog.IntoContext(ctx, tlog.SubLogger(l.logger, "Clone"))
+	l.inner.Clone(ctx, repo)
+}

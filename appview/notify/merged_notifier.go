@@ -105,3 +105,7 @@ func (m *mergedNotifier) DeleteString(ctx context.Context, did, rkey string) {
 func (m *mergedNotifier) Push(ctx context.Context, repo *models.Repo, ref, oldSha, newSha, committerDid string) {
 	m.fanout(func(n Notifier) { n.Push(ctx, repo, ref, oldSha, newSha, committerDid) })
 }
+
+func (m *mergedNotifier) Clone(ctx context.Context, repo *models.Repo) {
+	m.fanout(func(n Notifier) { n.Clone(ctx, repo) })
+}

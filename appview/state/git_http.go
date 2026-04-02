@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -51,6 +52,7 @@ func (s *State) InfoRefs(w http.ResponseWriter, r *http.Request) {
 		contentType = "application/x-git-receive-pack-advertisement"
 	default:
 		contentType = "application/x-git-upload-pack-advertisement"
+		go s.notifier.Clone(context.Background(), repo)
 	}
 
 	targetURL := fmt.Sprintf("%s://%s/%s/info/refs?%s", scheme, repo.Knot, repo.RepoIdentifier(), r.URL.RawQuery)
