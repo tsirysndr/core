@@ -1499,6 +1499,22 @@ This document is laid out in reverse-chronological order.
 Newer migration guides are listed first, and older guides
 are further down the page.
 
+## Upgrading to v1.13.0-alpha
+
+Starting with v1.13.0-alpha, every repository on a knot is
+assigned a DID. This makes repositories stable across
+renames and transfers.
+
+When you upgrade your knot to this version, the server will
+automatically mint DIDs for all existing repositories on
+startup. This is a one-time process and you may see
+additional log output during the first boot as DIDs are
+assigned.
+
+- Upgrade to the latest tag (v1.13.0 or above)
+- Head to the [knot dashboard](https://tangled.org/settings/knots) and
+  hit the "retry" button to verify your knot
+
 ## Upgrading from v1.8.x
 
 After v1.8.2, the HTTP API for knots and spindles has been
