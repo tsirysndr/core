@@ -8,11 +8,11 @@ buildGoModule {
   src = fetchFromGitHub {
     owner = "bluesky-social";
     repo = "indigo";
-    rev = "498ecb9693e8ae050f73234c86f340f51ad896a9";
-    sha256 = "sha256-KASCdwkg/hlKBt7RTW3e3R5J3hqJkphoarFbaMgtN1k=";
+    rev = "cbaa83aee9dd4aa015fd0c245e1fb3cfbbe32817";
+    sha256 = "sha256-QQvkfNjsfU3vReyd8xB2Dtdqninyv5Zem9SuRVTdnK4=";
   };
   subPackages = ["cmd/tap"];
-  vendorHash = "sha256-UOedwNYnM8Jx6B7Y9tFcZX8IeUBESAFAPTRYk7n0yo8=";
+  vendorHash = "sha256-s1S+b+QbptqJ2mxqkvsn7M5VWfLrlwpWgRjg6lq2WVE=";
   doCheck = false;
   meta = {
     mainProgram = "tap";
