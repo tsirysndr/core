@@ -17,6 +17,8 @@ func (rp *Repo) Router(mw *middleware.Middleware) http.Handler {
 		r.Get("/", rp.Index)
 		r.Get("/*", rp.Tree)
 	})
+	r.Get("/commit/{ref}.diff", rp.CommitRawDiff)
+	r.Get("/commit/{ref}.patch", rp.CommitRawPatch)
 	r.Get("/commit/{ref}", rp.Commit)
 	r.Get("/branches", rp.Branches)
 	r.Delete("/branches", rp.DeleteBranch)

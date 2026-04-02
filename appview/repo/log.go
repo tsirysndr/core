@@ -3,6 +3,7 @@ package repo
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -19,6 +20,66 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 )
+
+func (rp *Repo) CommitRawDiff(w http.ResponseWriter, r *http.Request) {
+	rp.serveRawCommit(w, r, "diff")
+}
+
+func (rp *Repo) CommitRawPatch(w http.ResponseWriter, r *http.Request) {
+	rp.serveRawCommit(w, r, "patch")
+}
+
+func (rp *Repo) serveRawCommit(w http.ResponseWriter, r *http.Request, format string) {
+	l := rp.logger.With("handler", "CommitRaw", "format", format)
+
+	f, err := rp.repoResolver.Resolve(r)
+	if err != nil {
+		l.Error("failed to resolve repo", "err", err)
+		return
+	}
+
+	ref := chi.URLParam(r, "ref")
+	ref, _ = url.PathUnescape(ref)
+
+	if !plumbing.IsHash(ref) {
+		rp.pages.Error404(w)
+		return
+	}
+
+	scheme := "http"
+	if !rp.config.Core.Dev {
+		scheme = "https"
+	}
+
+	xrpcc := &indigoxrpc.Client{
+		Host: fmt.Sprintf("%s://%s", scheme, f.Knot),
+	}
+
+	xrpcBytes, err := tangled.RepoDiff(r.Context(), xrpcc, ref, f.RepoIdentifier())
+	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+		l.Error("failed to call XRPC repo.diff", "err", xrpcerr)
+		rp.pages.Error503(w)
+		return
+	}
+
+	var result types.RepoCommitResponse
+	if err := json.Unmarshal(xrpcBytes, &result); err != nil {
+		l.Error("failed to decode XRPC response", "err", err)
+		rp.pages.Error503(w)
+		return
+	}
+
+	filename := ref[:7] + "." + format
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", filename))
+
+	switch format {
+	case "patch":
+		io.WriteString(w, renderFormatPatch(result.Diff))
+	default:
+		io.WriteString(w, renderUnifiedDiff(result.Diff))
+	}
+}
 
 func (rp *Repo) Log(w http.ResponseWriter, r *http.Request) {
 	l := rp.logger.With("handler", "RepoLog")
