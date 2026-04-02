@@ -116,6 +116,12 @@ func (s *KnotSlurper) Subscribe(ctx context.Context, host models.Host) error {
 
 func (s *KnotSlurper) subscribeWithRedialer(ctx context.Context, host models.Host, sub *subscription) {
 	l := s.logger.With("host", host.Hostname)
+	defer func() {
+		s.subsLk.Lock()
+		defer s.subsLk.Unlock()
+
+		delete(s.subs, host.Hostname)
+	}()
 
 	dialer := websocket.Dialer{
 		HandshakeTimeout: time.Second * 5,
