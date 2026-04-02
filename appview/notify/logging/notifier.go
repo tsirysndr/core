@@ -1,28 +1,25 @@
-package notify
+package logging
 
 import (
 	"context"
 	"log/slog"
 
-	"tangled.org/core/appview/models"
-	tlog "tangled.org/core/log"
-
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	"tangled.org/core/appview/models"
+	"tangled.org/core/appview/notify"
+	tlog "tangled.org/core/log"
 )
 
 type loggingNotifier struct {
-	inner  Notifier
+	inner  notify.Notifier
 	logger *slog.Logger
 }
 
-func NewLoggingNotifier(inner Notifier, logger *slog.Logger) Notifier {
-	return &loggingNotifier{
-		inner,
-		logger,
-	}
+func NewLoggingNotifier(inner notify.Notifier, logger *slog.Logger) notify.Notifier {
+	return &loggingNotifier{inner, logger}
 }
 
-var _ Notifier = &loggingNotifier{}
+var _ notify.Notifier = &loggingNotifier{}
 
 func (l *loggingNotifier) NewRepo(ctx context.Context, repo *models.Repo) {
 	ctx = tlog.IntoContext(ctx, tlog.SubLogger(l.logger, "NewRepo"))

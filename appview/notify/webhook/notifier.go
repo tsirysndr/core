@@ -1,4 +1,4 @@
-package notify
+package webhook
 
 import (
 	"bytes"
@@ -17,18 +17,19 @@ import (
 	"github.com/google/uuid"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
+	"tangled.org/core/appview/notify"
 	"tangled.org/core/log"
 )
 
-type WebhookNotifier struct {
-	BaseNotifier
+type Notifier struct {
+	notify.BaseNotifier
 	db     *db.DB
 	logger *slog.Logger
 	client *http.Client
 }
 
-func NewWebhookNotifier(database *db.DB) *WebhookNotifier {
-	return &WebhookNotifier{
+func NewNotifier(database *db.DB) *Notifier {
+	return &Notifier{
 		db:     database,
 		logger: log.New("webhook-notifier"),
 		client: &http.Client{
@@ -37,15 +38,15 @@ func NewWebhookNotifier(database *db.DB) *WebhookNotifier {
 	}
 }
 
-// Push implements the Notifier interface for git push events
-func (w *WebhookNotifier) Push(ctx context.Context, repo *models.Repo, ref, oldSha, newSha, committerDid string) {
+var _ notify.Notifier = &Notifier{}
+
+func (w *Notifier) Push(ctx context.Context, repo *models.Repo, ref, oldSha, newSha, committerDid string) {
 	webhooks, err := db.GetActiveWebhooksForRepo(w.db, repo.RepoAt())
 	if err != nil {
 		w.logger.Error("failed to get webhooks for repo", "repo", repo.RepoAt(), "err", err)
 		return
 	}
 
-	// check if any webhooks are subscribed to push events
 	var pushWebhooks []models.Webhook
 	for _, webhook := range webhooks {
 		if webhook.HasEvent(models.WebhookEventPush) {
@@ -63,16 +64,12 @@ func (w *WebhookNotifier) Push(ctx context.Context, repo *models.Repo, ref, oldS
 		return
 	}
 
-	// Send webhooks
 	for _, webhook := range pushWebhooks {
 		go w.sendWebhook(ctx, webhook, string(models.WebhookEventPush), payload)
 	}
 }
 
-func (w *WebhookNotifier) Clone(ctx context.Context, repo *models.Repo) {}
-
-// buildPushPayload creates the webhook payload
-func (w *WebhookNotifier) buildPushPayload(repo *models.Repo, ref, oldSha, newSha, committerDid string) (*models.WebhookPayload, error) {
+func (w *Notifier) buildPushPayload(repo *models.Repo, ref, oldSha, newSha, committerDid string) (*models.WebhookPayload, error) {
 	owner := repo.Did
 
 	pusher := committerDid
@@ -80,7 +77,6 @@ func (w *WebhookNotifier) buildPushPayload(repo *models.Repo, ref, oldSha, newSh
 		pusher = owner
 	}
 
-	// Build repository object
 	repository := models.WebhookRepository{
 		Name:        repo.Name,
 		FullName:    fmt.Sprintf("%s/%s", repo.Did, repo.Name),
@@ -96,7 +92,6 @@ func (w *WebhookNotifier) buildPushPayload(repo *models.Repo, ref, oldSha, newSh
 		},
 	}
 
-	// Add optional fields
 	if repo.Website != "" {
 		repository.Website = repo.Website
 	}
@@ -105,7 +100,6 @@ func (w *WebhookNotifier) buildPushPayload(repo *models.Repo, ref, oldSha, newSh
 		repository.OpenIssues = repo.RepoStats.IssueCount.Open
 	}
 
-	// Build payload
 	payload := &models.WebhookPayload{
 		Ref:        ref,
 		Before:     oldSha,
@@ -119,8 +113,7 @@ func (w *WebhookNotifier) buildPushPayload(repo *models.Repo, ref, oldSha, newSh
 	return payload, nil
 }
 
-// sendWebhook sends the webhook http request
-func (w *WebhookNotifier) sendWebhook(ctx context.Context, webhook models.Webhook, event string, payload *models.WebhookPayload) {
+func (w *Notifier) sendWebhook(ctx context.Context, webhook models.Webhook, event string, payload *models.WebhookPayload) {
 	deliveryId := uuid.New().String()
 
 	payloadBytes, err := json.Marshal(payload)
@@ -157,7 +150,6 @@ func (w *WebhookNotifier) sendWebhook(ctx context.Context, webhook models.Webhoo
 		RequestBody: string(payloadBytes),
 	}
 
-	// retry webhook delivery with exponential backoff
 	retryOpts := []retry.Option{
 		retry.Attempts(3),
 		retry.Delay(1 * time.Second),
@@ -172,11 +164,7 @@ func (w *WebhookNotifier) sendWebhook(ctx context.Context, webhook models.Webhoo
 		}),
 		retry.Context(ctx),
 		retry.RetryIf(func(err error) bool {
-			// only retry on network errors or 5xx responses
-			if err != nil {
-				return true
-			}
-			return false
+			return err != nil
 		}),
 	}
 
@@ -187,13 +175,10 @@ func (w *WebhookNotifier) sendWebhook(ctx context.Context, webhook models.Webhoo
 		if err != nil {
 			return err
 		}
-
-		// retry on 5xx server errors
 		if resp.StatusCode >= 500 {
 			defer resp.Body.Close()
 			return fmt.Errorf("server error: %d", resp.StatusCode)
 		}
-
 		return nil
 	}, retryOpts...)
 
@@ -207,7 +192,6 @@ func (w *WebhookNotifier) sendWebhook(ctx context.Context, webhook models.Webhoo
 		delivery.ResponseCode = resp.StatusCode
 		delivery.Success = resp.StatusCode >= 200 && resp.StatusCode < 300
 
-		// Read response body (limit to 10KB)
 		bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024))
 		if err != nil {
 			w.logger.Warn("failed to read webhook response body", "webhook_id", webhook.Id, "err", err)
@@ -233,8 +217,7 @@ func (w *WebhookNotifier) sendWebhook(ctx context.Context, webhook models.Webhoo
 	}
 }
 
-// computeSignature computes HMAC-SHA256 signature for the payload
-func (w *WebhookNotifier) computeSignature(payload []byte, secret string) string {
+func (w *Notifier) computeSignature(payload []byte, secret string) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(payload)
 	return hex.EncodeToString(mac.Sum(nil))

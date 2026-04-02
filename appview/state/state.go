@@ -21,7 +21,9 @@ import (
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
 	dbnotify "tangled.org/core/appview/notify/db"
+	lognotify "tangled.org/core/appview/notify/logging"
 	phnotify "tangled.org/core/appview/notify/posthog"
+	whnotify "tangled.org/core/appview/notify/webhook"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/reporesolver"
@@ -168,11 +170,10 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 	}
 	notifiers = append(notifiers, indexer)
 
-	// Add webhook notifier
-	notifiers = append(notifiers, notify.NewWebhookNotifier(d))
+	notifiers = append(notifiers, whnotify.NewNotifier(d))
 
 	notifier := notify.NewMergedNotifier(notifiers)
-	notifier = notify.NewLoggingNotifier(notifier, tlog.SubLogger(logger, "notify"))
+	notifier = lognotify.NewLoggingNotifier(notifier, tlog.SubLogger(logger, "notify"))
 
 	var cfClient *cloudflare.Client
 	if config.Cloudflare.ApiToken != "" {
