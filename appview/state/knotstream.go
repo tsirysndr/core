@@ -117,6 +117,11 @@ func ingestRefUpdate(ctx context.Context, d *db.DB, enforcer *rbac.Enforcer, pc 
 	ownerDid := ""
 	if record.OwnerDid != nil {
 		ownerDid = *record.OwnerDid
+	} else {
+		// handle legacy event
+		if record.RepoDid != nil {
+			ownerDid = *record.RepoDid
+		}
 	}
 
 	repo, lookupErr := resolveRepo(d, record.RepoDid, ownerDid, record.RepoName)

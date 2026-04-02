@@ -280,13 +280,18 @@ func (s *KnotSlurper) ProcessLegacyGitRefUpdate(ctx context.Context, source stri
 
 	l := s.logger.With("src", source)
 
-	repoDid := ""
-	if evt.Event.RepoDid != nil {
-		repoDid = *evt.Event.RepoDid
+	ownerDid := ""
+	if evt.Event.OwnerDid != nil {
+		ownerDid = *evt.Event.OwnerDid
+	} else {
+		// handle legacy event
+		if evt.Event.RepoDid != nil {
+			ownerDid = *evt.Event.RepoDid
+		}
 	}
-	curr, err := db.GetRepoByName(ctx, s.db, syntax.DID(repoDid), evt.Event.RepoName)
+	curr, err := db.GetRepoByName(ctx, s.db, syntax.DID(ownerDid), evt.Event.RepoName)
 	if err != nil {
-		return fmt.Errorf("failed to get repo '%s': %w", repoDid+"/"+evt.Event.RepoName, err)
+		return fmt.Errorf("failed to get repo '%s': %w", ownerDid+"/"+evt.Event.RepoName, err)
 	}
 	if curr == nil {
 		// if repo doesn't exist in DB, just ignore the event. That repo is unknown.
@@ -296,7 +301,7 @@ func (s *KnotSlurper) ProcessLegacyGitRefUpdate(ctx context.Context, source stri
 		// But we want to store that in did/rkey in knot-mirror.
 		// Therefore, we should ignore when the repository is unknown.
 		// Hopefully crawler will sync it later.
-		l.Warn("skipping event from unknown repo", "did/name", repoDid+"/"+evt.Event.RepoName)
+		l.Warn("skipping event from unknown repo", "did/name", ownerDid+"/"+evt.Event.RepoName)
 		knotstreamEventsSkipped.Inc()
 		return nil
 	}
