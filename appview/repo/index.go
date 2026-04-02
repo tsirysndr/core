@@ -164,7 +164,10 @@ func (rp *Repo) getLanguageInfo(
 
 	if err != nil || langs == nil {
 		// non-fatal, fetch langs from ks via XRPC
-		xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+		xrpcc := &indigoxrpc.Client{
+			Host:   rp.config.KnotMirror.Url,
+			Client: http.DefaultClient,
+		}
 		ls, err := tangled.GitTempListLanguages(ctx, xrpcc, currentRef, repo.RepoAt().String())
 		if err != nil {
 			return nil, fmt.Errorf("calling knotmirror git.listLanguages: %w", err)
