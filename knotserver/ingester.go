@@ -363,14 +363,6 @@ func (h *Knot) processMessages(ctx context.Context, event *models.Event) error {
 	}
 
 	var err error
-	defer func() {
-		eventTime := event.TimeUS
-		lastTimeUs := eventTime + 1
-		if err := h.db.SaveLastTimeUs(lastTimeUs); err != nil {
-			err = fmt.Errorf("(deferred) failed to save last time us: %w", err)
-		}
-	}()
-
 	switch event.Commit.Collection {
 	case tangled.PublicKeyNSID:
 		err = h.processPublicKey(ctx, event)
@@ -383,7 +375,12 @@ func (h *Knot) processMessages(ctx context.Context, event *models.Event) error {
 	}
 
 	if err != nil {
-		h.l.Debug("failed to process event", "nsid", event.Commit.Collection, "err", err)
+		h.l.Warn("failed to process event, skipping", "nsid", event.Commit.Collection, "err", err)
+	}
+
+	lastTimeUs := event.TimeUS + 1
+	if saveErr := h.db.SaveLastTimeUs(lastTimeUs); saveErr != nil {
+		h.l.Error("failed to save cursor", "err", saveErr)
 	}
 
 	return nil

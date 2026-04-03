@@ -123,6 +123,7 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 			tangled.KnotMemberNSID,
 			tangled.SpindleMemberNSID,
 			tangled.SpindleNSID,
+			tangled.KnotNSID,
 			tangled.StringNSID,
 			tangled.RepoIssueNSID,
 			tangled.RepoIssueCommentNSID,

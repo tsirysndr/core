@@ -159,15 +159,15 @@ func (c *Consumer) worker(ctx context.Context) {
 				return
 			}
 
+			if err := c.cfg.ProcessFunc(ctx, j.source, msg); err != nil {
+				c.logger.Error("error processing message", "source", j.source, "err", err)
+			}
+
 			cursorVal := msg.Created
 			if cursorVal == 0 {
 				cursorVal = time.Now().UnixNano()
 			}
 			c.cfg.CursorStore.Set(j.source.Key(), cursorVal)
-
-			if err := c.cfg.ProcessFunc(ctx, j.source, msg); err != nil {
-				c.logger.Error("error processing message", "source", j.source, "err", err)
-			}
 		}
 	}
 }

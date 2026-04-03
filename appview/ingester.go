@@ -12,6 +12,7 @@ import (
 
 	"time"
 
+	"github.com/avast/retry-go/v4"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	jmodels "github.com/bluesky-social/jetstream/pkg/models"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -41,13 +42,6 @@ type processFunc func(ctx context.Context, e *jmodels.Event) error
 func (i *Ingester) Ingest() processFunc {
 	return func(ctx context.Context, e *jmodels.Event) error {
 		var err error
-		defer func() {
-			eventTime := e.TimeUS
-			lastTimeUs := eventTime + 1
-			if err := i.Db.SaveLastTimeUs(lastTimeUs); err != nil {
-				err = fmt.Errorf("(deferred) failed to save last time us: %w", err)
-			}
-		}()
 
 		l := i.Logger.With("kind", e.Kind)
 		switch e.Kind {
@@ -92,7 +86,12 @@ func (i *Ingester) Ingest() processFunc {
 		}
 
 		if err != nil {
-			l.Warn("refused to ingest record", "err", err)
+			l.Warn("failed to ingest record, skipping", "err", err)
+		}
+
+		lastTimeUs := e.TimeUS + 1
+		if saveErr := i.Db.SaveLastTimeUs(lastTimeUs); saveErr != nil {
+			l.Error("failed to save cursor", "err", saveErr)
 		}
 
 		return nil
@@ -560,9 +559,13 @@ func (i *Ingester) ingestSpindle(ctx context.Context, e *jmodels.Event) error {
 			return err
 		}
 
-		err = serververify.RunVerification(ctx, instance, did, i.Config.Core.Dev)
+		err = retry.Do(
+			func() error { return serververify.RunVerification(ctx, instance, did, i.Config.Core.Dev) },
+			retry.Attempts(5), retry.Delay(5*time.Second), retry.MaxDelay(80*time.Second),
+			retry.DelayType(retry.BackOffDelay), retry.LastErrorOnly(true),
+		)
 		if err != nil {
-			l.Error("failed to add spindle to db", "err", err, "instance", instance)
+			l.Error("failed to verify spindle after retries", "err", err, "instance", instance)
 			return err
 		}
 
@@ -778,9 +781,15 @@ func (i *Ingester) ingestKnot(e *jmodels.Event) error {
 			return err
 		}
 
-		err = serververify.RunVerification(context.Background(), domain, did, i.Config.Core.Dev)
+		err = retry.Do(
+			func() error {
+				return serververify.RunVerification(context.Background(), domain, did, i.Config.Core.Dev)
+			},
+			retry.Attempts(5), retry.Delay(5*time.Second), retry.MaxDelay(80*time.Second),
+			retry.DelayType(retry.BackOffDelay), retry.LastErrorOnly(true),
+		)
 		if err != nil {
-			l.Error("failed to verify knot", "err", err, "domain", domain)
+			l.Error("failed to verify knot after retries", "err", err, "domain", domain)
 			return err
 		}
 

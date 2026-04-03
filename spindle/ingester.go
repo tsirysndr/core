@@ -24,19 +24,11 @@ type Ingester func(ctx context.Context, e *models.Event) error
 
 func (s *Spindle) ingest() Ingester {
 	return func(ctx context.Context, e *models.Event) error {
-		var err error
-		defer func() {
-			eventTime := e.TimeUS
-			lastTimeUs := eventTime + 1
-			if err := s.db.SaveLastTimeUs(lastTimeUs); err != nil {
-				err = fmt.Errorf("(deferred) failed to save last time us: %w", err)
-			}
-		}()
-
 		if e.Kind != models.EventKindCommit {
 			return nil
 		}
 
+		var err error
 		switch e.Commit.Collection {
 		case tangled.SpindleMemberNSID:
 			err = s.ingestMember(ctx, e)
@@ -47,7 +39,12 @@ func (s *Spindle) ingest() Ingester {
 		}
 
 		if err != nil {
-			s.l.Debug("failed to process message", "nsid", e.Commit.Collection, "err", err)
+			s.l.Warn("failed to process message, skipping", "nsid", e.Commit.Collection, "err", err)
+		}
+
+		lastTimeUs := e.TimeUS + 1
+		if saveErr := s.db.SaveLastTimeUs(lastTimeUs); saveErr != nil {
+			s.l.Error("failed to save cursor", "err", saveErr)
 		}
 
 		return nil
