@@ -1,8 +1,8 @@
 {{define "notifications/fragments/item"}}
   <a href="{{ template "notificationUrl" . }}" class="block no-underline hover:no-underline">
-    <div 
+    <div
       class="
-        w-full mx-auto rounded drop-shadow-sm dark:text-white bg-white dark:bg-gray-800 px-2 md:px-6 py-4 transition-colors 
+        w-full mx-auto rounded drop-shadow-sm dark:text-white bg-white dark:bg-gray-800 px-2 md:px-6 py-4 transition-colors
         {{if not .Read}}bg-blue-50 dark:bg-blue-800/20 border border-blue-500 dark:border-sky-800{{end}}
         flex gap-2 items-center
         ">
@@ -20,8 +20,8 @@
 {{end}}
 
 {{ define "notificationIcon" }}
-  <div class="flex-shrink-0 max-h-full w-16 h-16 relative">
-    <img class="object-cover rounded-full p-2 w-16 h-16" src="{{ fullAvatar .ActorDid }}" />
+  <div class="flex-shrink-0 max-h-full relative">
+    <img class="object-cover size-16 rounded-full p-2" src="{{ fullAvatar .ActorDid }}" />
     <div class="absolute border-2 border-white dark:border-gray-800 bg-gray-200 dark:bg-gray-700 bottom-1 right-1 rounded-full p-1 flex items-center justify-center z-10">
       {{ i .Icon "size-3 text-black dark:text-white" }}
     </div>
