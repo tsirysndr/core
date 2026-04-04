@@ -463,6 +463,10 @@ func ingestDIDAssign(d *db.DB, enforcer *rbac.Enforcer, source ec.Source, msg ec
 		}
 	}
 
+	if err := enforcer.E.SavePolicy(); err != nil {
+		return fmt.Errorf("save RBAC policies after didAssign: %w", err)
+	}
+
 	logger.Info("didAssign processed successfully",
 		"repo_did", record.RepoDid,
 		"owner_did", record.OwnerDid,
