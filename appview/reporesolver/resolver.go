@@ -19,9 +19,8 @@ import (
 )
 
 var (
-	blobPattern    = regexp.MustCompile(`blob/[^/]+/(.*)$`)
-	treePattern    = regexp.MustCompile(`tree/[^/]+/(.*)$`)
-	pathAfterRefRE = regexp.MustCompile(`(?:blob|tree|raw)/[^/]+/(.*)$`)
+	blobPattern = regexp.MustCompile(`blob/[^/]+/(.*)$`)
+	treePattern = regexp.MustCompile(`tree/[^/]+/(.*)$`)
 )
 
 type RepoResolver struct {
@@ -166,22 +165,4 @@ func extractCurrentDir(fullPath string) string {
 	}
 
 	return "."
-}
-
-// extractPathAfterRef gets the actual repository path
-// after the ref. for example:
-//
-//	/@icyphox.sh/foorepo/blob/main/abc/xyz/ => abc/xyz/
-func extractPathAfterRef(fullPath string) string {
-	fullPath = strings.TrimPrefix(fullPath, "/")
-
-	// pathAfterRefRE matches blob/, tree/, or raw/ followed by any ref and then a slash;
-	// it captures everything after the final slash.
-	matches := pathAfterRefRE.FindStringSubmatch(fullPath)
-
-	if len(matches) > 1 {
-		return matches[1]
-	}
-
-	return ""
 }
