@@ -326,6 +326,87 @@ content
 	}
 }
 
+func TestIsFormatPatch(t *testing.T) {
+	tests := []struct {
+		name  string
+		patch string
+		want  bool
+	}{
+		// fast path: sentinel timestamp
+		{
+			name:  "sentinel timestamp",
+			patch: "From 3c5035488318164b81f60fe3adcd6c9199d76331 Mon Sep 17 00:00:00 2001\nFrom: Author <a@example.com>\n",
+			want:  true,
+		},
+		// header-count path: various two-header combinations
+		{
+			name:  "From and Date headers",
+			patch: "From: Author <a@example.com>\nDate: Mon, 1 Jan 2024 00:00:00 +0000\n",
+			want:  true,
+		},
+		{
+			name:  "From and Subject headers",
+			patch: "From: Author <a@example.com>\nSubject: [PATCH] fix thing\n",
+			want:  true,
+		},
+		{
+			name:  "Subject and Date headers",
+			patch: "Subject: [PATCH] fix thing\nDate: Mon, 1 Jan 2024 00:00:00 +0000\n",
+			want:  true,
+		},
+		{
+			name:  "commit and From headers",
+			patch: "commit abc123\nFrom: Author <a@example.com>\n",
+			want:  true,
+		},
+		// boundary: headers at lines 9 and 10 (0-indexed 8 and 9, last scanned)
+		{
+			name:  "headers at lines 9 and 10",
+			patch: "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nFrom: Author <a@example.com>\nSubject: [PATCH] fix\n",
+			want:  true,
+		},
+		// false cases
+		{
+			name:  "empty string",
+			patch: "",
+			want:  false,
+		},
+		{
+			name:  "single line",
+			patch: "From: Author <a@example.com>",
+			want:  false,
+		},
+		{
+			name:  "plain diff",
+			patch: "diff --git a/f.txt b/f.txt\n--- a/f.txt\n+++ b/f.txt\n",
+			want:  false,
+		},
+		{
+			name:  "From prefix but wrong timestamp falls through to header count of 1",
+			patch: "From 3c5035488318164b81f60fe3adcd6c9199d76331 Tue Oct 10 12:00:00 2023\nFrom: Author <a@example.com>\n",
+			want:  false,
+		},
+		{
+			name:  "only one recognized header",
+			patch: "Subject: [PATCH] fix thing\nsome other line\n",
+			want:  false,
+		},
+		{
+			name:  "headers pushed past line 10 are not counted",
+			patch: "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nFrom: Author <a@example.com>\nSubject: [PATCH] fix\n",
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsFormatPatch(tt.patch); got != tt.want {
+				t.Errorf("IsFormatPatch() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestImplsInterfaces(t *testing.T) {
 	id := &InterdiffResult{}
 	_ = isDiffsRenderer(id)
