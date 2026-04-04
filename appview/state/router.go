@@ -38,9 +38,6 @@ func (s *State) Router() http.Handler {
 		s.logger,
 	)
 
-	// TODO(boltless): merge this into BackgroundMigrationMiddleware
-	router.Use(s.oauth.PdsRewriteMiddleware)
-
 	m := migration.NewMigration(s.db, s.oauth, s.idResolver.Directory(), s.logger)
 	router.Use(m.BackgroundMigrationMiddleware)
 

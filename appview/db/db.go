@@ -1451,6 +1451,30 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "unify-pds-record-migration-table", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			insert into pds_migration (
+				name,
+				did,
+				collection,
+				rkey,
+				status,
+				updated_at
+			)
+			select
+				'add-repo-did',
+				user_did,
+				record_nsid,
+				record_rkey,
+				status,
+				updated_at
+			from pds_rewrite_status;
+
+			drop table pds_rewrite_status;
+		`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,

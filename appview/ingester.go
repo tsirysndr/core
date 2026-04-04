@@ -70,11 +70,11 @@ func (i *Ingester) Ingest() processFunc {
 			case tangled.GraphVouchNSID:
 				err = i.ingestVouch(ctx, e)
 			case tangled.FeedStarNSID:
-				err = i.ingestStar(e)
+				err = i.ingestStar(ctx, e)
 			case tangled.PublicKeyNSID:
 				err = i.ingestPublicKey(e)
 			case tangled.RepoArtifactNSID:
-				err = i.ingestArtifact(e)
+				err = i.ingestArtifact(ctx, e)
 			case tangled.ActorProfileNSID:
 				err = i.ingestProfile(ctx, e)
 			case tangled.SpindleMemberNSID:
@@ -114,7 +114,7 @@ func (i *Ingester) Ingest() processFunc {
 	}
 }
 
-func (i *Ingester) ingestStar(e *jmodels.Event) error {
+func (i *Ingester) ingestStar(ctx context.Context, e *jmodels.Event) error {
 	var err error
 	did := e.Did
 
@@ -154,7 +154,7 @@ func (i *Ingester) ingestStar(e *jmodels.Event) error {
 			star.RepoAt = subjectUri
 			repo, repoErr := db.GetRepoByAtUri(i.Db, subjectUri.String())
 			if repoErr == nil && repo.RepoDid != "" {
-				if enqErr := db.EnqueuePdsRewrite(i.Db, did, repo.RepoDid, tangled.FeedStarNSID, e.Commit.RKey, *record.Subject); enqErr != nil {
+				if enqErr := db.EnqueuePdsRecordMigration(ctx, i.Db, "add-repo-did", syntax.DID(did), syntax.NSID(tangled.FeedStarNSID), syntax.RecordKey(e.Commit.RKey)); enqErr != nil {
 					l.Warn("failed to enqueue PDS rewrite for star", "err", enqErr, "did", did, "repoDid", repo.RepoDid)
 				}
 			}
@@ -325,7 +325,7 @@ func (i *Ingester) ingestPublicKey(e *jmodels.Event) error {
 	return nil
 }
 
-func (i *Ingester) ingestArtifact(e *jmodels.Event) error {
+func (i *Ingester) ingestArtifact(ctx context.Context, e *jmodels.Event) error {
 	did := e.Did
 	var err error
 
@@ -373,7 +373,7 @@ func (i *Ingester) ingestArtifact(e *jmodels.Event) error {
 			repoDid = *record.RepoDid
 		}
 		if repoDid != "" && (record.RepoDid == nil || *record.RepoDid == "") && record.Repo != nil {
-			if enqErr := db.EnqueuePdsRewrite(i.Db, did, repoDid, tangled.RepoArtifactNSID, e.Commit.RKey, *record.Repo); enqErr != nil {
+			if enqErr := db.EnqueuePdsRecordMigration(ctx, i.Db, "add-repo-did", syntax.DID(did), syntax.NSID(tangled.RepoArtifactNSID), syntax.RecordKey(e.Commit.RKey)); enqErr != nil {
 				l.Warn("failed to enqueue PDS rewrite for artifact", "err", enqErr, "did", did, "repoDid", repoDid)
 			}
 		}
@@ -1011,7 +1011,7 @@ func (i *Ingester) ingestIssue(ctx context.Context, e *jmodels.Event) error {
 		if record.Repo != nil {
 			repo, repoErr := db.GetRepoByAtUri(i.Db, *record.Repo)
 			if repoErr == nil && repo.RepoDid != "" {
-				if enqErr := db.EnqueuePdsRewrite(i.Db, did, repo.RepoDid, tangled.RepoIssueNSID, rkey, *record.Repo); enqErr != nil {
+				if enqErr := db.EnqueuePdsRecordMigration(ctx, i.Db, "add-repo-did", syntax.DID(did), syntax.NSID(tangled.RepoIssueNSID), syntax.RecordKey(e.Commit.RKey)); enqErr != nil {
 					l.Warn("failed to enqueue PDS rewrite for issue", "err", enqErr, "did", did, "repoDid", repo.RepoDid)
 				}
 			}
