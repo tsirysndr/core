@@ -311,9 +311,12 @@ func (s *State) NewComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: return comment or reply-comment fragment
-	// onattach, htmx-callback to focus on comment.
-	s.pages.HxRefresh(w)
+	target, err := s.pages.MakeCommentUrl(ctx, comment.AtUri())
+	if err != nil {
+		s.pages.HxRefresh(w)
+	}
+
+	s.pages.HxLocation(w, target)
 }
 
 func (s *State) EditComment(w http.ResponseWriter, r *http.Request) {
