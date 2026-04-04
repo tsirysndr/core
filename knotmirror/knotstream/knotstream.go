@@ -66,7 +66,17 @@ func (s *KnotStream) SubscribeHost(ctx context.Context, hostname string, noSSL b
 	if host.Status == models.HostStatusBanned {
 		return fmt.Errorf("cannot subscribe to banned knot")
 	}
-	return s.slurper.Subscribe(ctx, *host)
+	// `Subscribe` expects long-living context
+	if err := s.slurper.Subscribe(*host); err != nil {
+		return fmt.Errorf("slurper: %w", err)
+	}
+
+	host.Status = models.HostStatusActive
+	if err := db.UpsertHost(ctx, s.db, host); err != nil {
+		return fmt.Errorf("upserting host status to db: %w", err)
+	}
+
+	return nil
 }
 
 func (s *KnotStream) ResubscribeAllHosts(ctx context.Context) error {
@@ -78,7 +88,7 @@ func (s *KnotStream) ResubscribeAllHosts(ctx context.Context) error {
 	for _, host := range hosts {
 		l := s.logger.With("hostname", host.Hostname)
 		l.Info("re-subscribing to active host")
-		if err := s.slurper.Subscribe(ctx, host); err != nil {
+		if err := s.slurper.Subscribe(host); err != nil {
 			l.Warn("failed to re-subscribe to host", "err", err)
 		}
 		// sleep for a very short period, so we don't open tons of sockets at the same time

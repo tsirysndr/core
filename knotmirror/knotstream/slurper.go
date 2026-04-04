@@ -89,7 +89,7 @@ func (s *KnotSlurper) persistCursors(ctx context.Context) error {
 	return err
 }
 
-func (s *KnotSlurper) Subscribe(ctx context.Context, host models.Host) error {
+func (s *KnotSlurper) Subscribe(host models.Host) error {
 	s.subsLk.Lock()
 	defer s.subsLk.Unlock()
 
@@ -109,6 +109,10 @@ func (s *KnotSlurper) Subscribe(ctx context.Context, host models.Host) error {
 	}
 	s.subs[host.Hostname] = sub
 
+	// TODO: use service level context, not the top-most one.
+	// Using top-most context should be avoided to do graceful shutdown.
+	ctx := context.TODO()
+
 	sub.scheduler.Start(ctx)
 	go s.subscribeWithRedialer(ctx, host, sub)
 	return nil
@@ -120,6 +124,7 @@ func (s *KnotSlurper) subscribeWithRedialer(ctx context.Context, host models.Hos
 		s.subsLk.Lock()
 		defer s.subsLk.Unlock()
 
+		l.Info("unsubscribing knot")
 		delete(s.subs, host.Hostname)
 	}()
 
