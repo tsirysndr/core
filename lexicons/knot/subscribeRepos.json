@@ -17,7 +17,7 @@
       "message": {
         "schema": {
           "type": "union",
-          "refs": ["#identity", "gitRefUpdate"]
+          "refs": ["#identity", "sh.tangled.git.refUpdate"]
         }
       },
       "errors": [
@@ -50,7 +50,7 @@
       "required": ["seq", "repo"],
       "properties": {
         "seq": { "type": "integer", "description": "The stream sequence number of this message." },
-        "did": { "type": "string", "format": "at-uri", "description": "Repository AT-URI identifier" }
+        "repo": { "type": "string", "format": "at-uri", "description": "Repository AT-URI identifier" }
       }
     }
   }
