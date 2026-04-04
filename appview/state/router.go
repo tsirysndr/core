@@ -12,6 +12,7 @@ import (
 	"tangled.org/core/appview/knots"
 	"tangled.org/core/appview/labels"
 	"tangled.org/core/appview/middleware"
+	"tangled.org/core/appview/migration"
 	"tangled.org/core/appview/notifications"
 	"tangled.org/core/appview/pipelines"
 	"tangled.org/core/appview/pulls"
@@ -37,7 +38,11 @@ func (s *State) Router() http.Handler {
 		s.logger,
 	)
 
+	// TODO(boltless): merge this into BackgroundMigrationMiddleware
 	router.Use(s.oauth.PdsRewriteMiddleware)
+
+	m := migration.NewMigration(s.db, s.oauth, s.idResolver.Directory(), s.logger)
+	router.Use(m.BackgroundMigrationMiddleware)
 
 	router.Get("/pwa-manifest.json", s.WebAppManifest)
 	router.Get("/robots.txt", s.RobotsTxt)

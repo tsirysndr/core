@@ -1429,6 +1429,28 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "add-pds-migration", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			create table if not exists pds_migration (
+				name text not null,
+
+				-- record at_uri
+				did        text not null,
+				collection text not null,
+				rkey       text not null,
+
+				status      text not null default 'pending',
+				error_msg   text,
+				retry_count integer not null default 0,
+				retry_after integer not null default 0,
+				updated_at  text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+
+				unique(name, did, collection, rkey)
+			);
+		`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,
