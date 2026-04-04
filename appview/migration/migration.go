@@ -45,7 +45,8 @@ func NewMigration(db *db.DB, oauth *oauth.OAuth, dir identity.Directory, logger 
 		onPermAuthErr: oauth.HandlePermanentAuthErr,
 	}
 	m.migrators = map[string]migrator{
-		"add-repo-did": m.migrateAddRepoDid,
+		"add-repo-did":     m.migrateAddRepoDid,
+		"use-feed-comment": m.migrateUseFeedComment,
 	}
 	return m
 }
@@ -121,6 +122,9 @@ func (s *Migration) migrate(ctx context.Context, client *atclient.APIClient, ses
 	if err == nil {
 		l.Info("migrated")
 		migration.Status = models.PDSMigrationStatusDone
+		migration.ErrorMsg = nil
+		migration.RetryCount = 0
+		migration.RetryAfter = 0
 	} else {
 		l.Warn("failed to migrate", "err", err)
 

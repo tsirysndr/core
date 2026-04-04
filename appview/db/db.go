@@ -2073,6 +2073,20 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "migrate-legacy-comments", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			insert into pds_migration (name, did, collection, rkey)
+			select
+				'use-feed-comment',
+				did,
+				collection,
+				rkey
+			from comments
+			where collection <> 'sh.tangled.feed.comment';
+		`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,
