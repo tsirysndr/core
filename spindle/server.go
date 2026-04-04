@@ -361,7 +361,15 @@ func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source,
 
 				ewf, err := s.engs[w.Engine].InitWorkflow(*w, tpl)
 				if err != nil {
-					return fmt.Errorf("init workflow: %w", err)
+					err = s.db.StatusFailed(models.WorkflowId{
+						PipelineId: pipelineId,
+						Name:       w.Name,
+					}, fmt.Sprintf("init workflow: %s", err), -1, s.n)
+					if err != nil {
+						return fmt.Errorf("db.StatusFailed: %w", err)
+					}
+
+					continue
 				}
 
 				// inject TANGLED_* env vars after InitWorkflow
