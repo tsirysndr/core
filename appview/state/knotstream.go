@@ -158,7 +158,7 @@ func ingestRefUpdate(ctx context.Context, d *db.DB, enforcer *rbac.Enforcer, pc 
 
 // triggerSitesDeployIfNeeded checks whether the pushed ref matches the sites
 // branch configured for this repo and, if so, syncs the site to R2
-func triggerSitesDeployIfNeeded(ctx context.Context, d *db.DB, cfClient *cloudflare.Client, c *config.Config, record tangled.GitRefUpdate, source ec.Source) {
+func triggerSitesDeployIfNeeded(ctx context.Context, d *db.DB, cfClient *cloudflare.Client, cfg *config.Config, record tangled.GitRefUpdate, source ec.Source) {
 	logger := log.FromContext(ctx)
 
 	ref := plumbing.ReferenceName(record.Ref)
@@ -185,12 +185,6 @@ func triggerSitesDeployIfNeeded(ctx context.Context, d *db.DB, cfClient *cloudfl
 		return
 	}
 
-	scheme := "https"
-	if c.Core.Dev {
-		scheme = "http"
-	}
-	knotHost := fmt.Sprintf("%s://%s", scheme, source.Key())
-
 	deploy := &models.SiteDeploy{
 		RepoAt:    repo.RepoAt().String(),
 		Branch:    siteConfig.Branch,
@@ -199,7 +193,7 @@ func triggerSitesDeployIfNeeded(ctx context.Context, d *db.DB, cfClient *cloudfl
 		Trigger:   models.SiteDeployTriggerPush,
 	}
 
-	deployErr := sites.Deploy(ctx, cfClient, knotHost, repo.RepoIdentifier(), record.RepoName, siteConfig.Branch, siteConfig.Dir)
+	deployErr := sites.Deploy(ctx, cfClient, cfg, repo, siteConfig.Branch, siteConfig.Dir)
 	if deployErr != nil {
 		logger.Error("sites: R2 sync failed on push", "repo", repo.RepoIdentifier(), "err", deployErr)
 		deploy.Status = models.SiteDeployStatusFailure

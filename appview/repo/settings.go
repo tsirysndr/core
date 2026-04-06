@@ -295,12 +295,6 @@ func (rp *Repo) SaveRepoSiteConfig(w http.ResponseWriter, r *http.Request) {
 	if ownerClaim == nil {
 		rp.logger.Info("skipping deploy: no active domain claim", "repo", f.RepoIdentifier())
 	} else if rp.cfClient.Enabled() {
-		scheme := "http"
-		if !rp.config.Core.Dev {
-			scheme = "https"
-		}
-		knotHost := fmt.Sprintf("%s://%s", scheme, f.Knot)
-
 		go func() {
 			ctx := context.Background()
 
@@ -311,7 +305,7 @@ func (rp *Repo) SaveRepoSiteConfig(w http.ResponseWriter, r *http.Request) {
 				Trigger: models.SiteDeployTriggerConfigChange,
 			}
 
-			deployErr := sites.Deploy(ctx, rp.cfClient, knotHost, f.Did, f.Name, branch, dir)
+			deployErr := sites.Deploy(ctx, rp.cfClient, rp.config, f, branch, dir)
 			if deployErr != nil {
 				l.Error("sites: initial R2 sync failed", "repo", f.RepoIdentifier(), "err", deployErr)
 				deploy.Status = models.SiteDeployStatusFailure

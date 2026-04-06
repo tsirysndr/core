@@ -16,6 +16,8 @@ import (
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/cloudflare"
+	"tangled.org/core/appview/config"
+	"tangled.org/core/appview/models"
 )
 
 // DomainMapping is the value stored in Workers KV, keyed by the bare domain.
@@ -114,7 +116,10 @@ func prefix(repoDid, repoName string) string {
 func Deploy(
 	ctx context.Context,
 	cf *cloudflare.Client,
-	knotHost, repoDid, repoName, branch, deployDir string,
+	config *config.Config,
+	f *models.Repo,
+	branch string,
+	deployDir string,
 ) error {
 	tmpDir, err := os.MkdirTemp("", "tangled-sites-*")
 	if err != nil {
@@ -122,7 +127,7 @@ func Deploy(
 	}
 	defer os.RemoveAll(tmpDir)
 
-	if err := extractArchive(ctx, knotHost, repoDid, repoName, branch, tmpDir); err != nil {
+	if err := extractArchive(ctx, config, f, branch, tmpDir); err != nil {
 		return fmt.Errorf("extracting archive: %w", err)
 	}
 
@@ -153,7 +158,7 @@ func Deploy(
 		return fmt.Errorf("walking deploy dir: %w", err)
 	}
 
-	if err := cf.SyncFiles(ctx, prefix(repoDid, repoName), files); err != nil {
+	if err := cf.SyncFiles(ctx, prefix(f.Did, f.Name), files); err != nil {
 		return fmt.Errorf("syncing files to R2: %w", err)
 	}
 
@@ -170,9 +175,15 @@ func Delete(ctx context.Context, cf *cloudflare.Client, repoDid, repoName string
 
 // extractArchive fetches the tar.gz archive for the given repo+branch from
 // the knot via XRPC and extracts it into destDir.
-func extractArchive(ctx context.Context, knotHost, repoDid, repoName, branch, destDir string) error {
+func extractArchive(ctx context.Context, config *config.Config, f *models.Repo, branch, destDir string) error {
+	scheme := "https"
+	if config.Core.Dev {
+		scheme = "http"
+	}
+	knotHost := fmt.Sprintf("%s://%s", scheme, f.Knot)
+
 	xrpcc := &indigoxrpc.Client{Host: knotHost}
-	data, err := tangled.RepoArchive(ctx, xrpcc, "tar.gz", "", branch, repoDid+"/"+repoName)
+	data, err := tangled.RepoArchive(ctx, xrpcc, "tar.gz", "", branch, f.RepoIdentifier())
 	if err != nil {
 		return fmt.Errorf("fetching archive: %w", err)
 	}
