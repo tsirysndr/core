@@ -105,9 +105,18 @@ func (ix *Indexer) NewPullState(ctx context.Context, actor syntax.DID, pull *mod
 }
 
 func (ix *Indexer) NewRepo(ctx context.Context, repo *models.Repo) {
-	l := log.FromContext(ctx).With("notifier", "indexer", "repo", repo)
+	l := log.FromContext(ctx).With("notifier", "indexer", "repo", repo.RepoIdentifier(), "owner", repo.Did, "name", repo.Name)
 	l.Debug("indexing new repo")
 	err := ix.Repos.Index(ctx, *repo)
+	if err != nil {
+		l.Error("failed to index a repo", "err", err)
+	}
+}
+
+func (ix *Indexer) DeleteRepo(ctx context.Context, repo *models.Repo) {
+	l := log.FromContext(ctx).With("notifier", "indexer", "repo", repo)
+	l.Debug("deleting repo from index")
+	err := ix.Repos.Delete(ctx, repo.Id)
 	if err != nil {
 		l.Error("failed to index a repo", "err", err)
 	}

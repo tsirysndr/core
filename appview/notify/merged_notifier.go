@@ -34,6 +34,10 @@ func (m *mergedNotifier) NewRepo(ctx context.Context, repo *models.Repo) {
 	m.fanout(func(n Notifier) { n.NewRepo(ctx, repo) })
 }
 
+func (m *mergedNotifier) DeleteRepo(ctx context.Context, repo *models.Repo) {
+	m.fanout(func(n Notifier) { n.DeleteRepo(ctx, repo) })
+}
+
 func (m *mergedNotifier) NewStar(ctx context.Context, star *models.Star) {
 	m.fanout(func(n Notifier) { n.NewStar(ctx, star) })
 }

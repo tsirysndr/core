@@ -417,7 +417,7 @@ func AddRepo(tx *sql.Tx, repo *models.Repo) error {
 	if repo.RepoDid != "" {
 		repoDid = &repo.RepoDid
 	}
-	_, err := tx.Exec(
+	result, err := tx.Exec(
 		`insert into repos
 		(did, name, knot, rkey, at_uri, description, website, topics, source, repo_did)
 		values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -426,6 +426,12 @@ func AddRepo(tx *sql.Tx, repo *models.Repo) error {
 	if err != nil {
 		return fmt.Errorf("failed to insert repo: %w", err)
 	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("failed to get last insert id: %w", err)
+	}
+	repo.Id = id
 
 	for _, dl := range repo.Labels {
 		if err := SubscribeLabel(tx, &models.RepoLabel{

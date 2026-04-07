@@ -940,6 +940,7 @@ func (rp *Repo) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	rp.notifier.DeleteRepo(r.Context(), f)
 	rp.pages.HxRedirect(w, fmt.Sprintf("/%s", f.Did))
 }
 

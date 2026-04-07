@@ -47,8 +47,9 @@ func (s *State) Search(w http.ResponseWriter, r *http.Request) {
 	var resultCount int
 	var searchDuration time.Duration
 	var docCount int64
+	method := "bleve"
 
-	if searchOpts.HasSearchFilters() || sortField != "" {
+	if searchOpts.HasSearchFilters() || sortParam != "" {
 		res, err := s.indexer.Repos.Search(r.Context(), searchOpts)
 		if err != nil {
 			l.Error("failed to search repos", "err", err)
@@ -87,6 +88,7 @@ func (s *State) Search(w http.ResponseWriter, r *http.Request) {
 		docCount = int64(dc)
 
 	} else {
+		method = "db"
 		repos, err = db.GetReposPaginated(
 			s.db,
 			page,
@@ -109,6 +111,16 @@ func (s *State) Search(w http.ResponseWriter, r *http.Request) {
 		resultCount = int(rc)
 		docCount = int64(rc)
 	}
+
+	l.Info(
+		"RepoSearch",
+		"method", method,
+		"resultCount", resultCount,
+		"docCount", docCount,
+		"time", searchDuration,
+		"filterQuery", query.String(),
+		"sortParam", sortParam,
+	)
 
 	err = s.pages.SearchRepos(w, pages.SearchReposParams{
 		LoggedInUser: s.oauth.GetMultiAccountUser(r),

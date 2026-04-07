@@ -26,6 +26,11 @@ func (l *loggingNotifier) NewRepo(ctx context.Context, repo *models.Repo) {
 	l.inner.NewRepo(ctx, repo)
 }
 
+func (l *loggingNotifier) DeleteRepo(ctx context.Context, repo *models.Repo) {
+	ctx = tlog.IntoContext(ctx, tlog.SubLogger(l.logger, "DeleteRepo"))
+	l.inner.DeleteRepo(ctx, repo)
+}
+
 func (l *loggingNotifier) NewStar(ctx context.Context, star *models.Star) {
 	ctx = tlog.IntoContext(ctx, tlog.SubLogger(l.logger, "NewStar"))
 	l.inner.NewStar(ctx, star)

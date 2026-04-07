@@ -36,6 +36,9 @@ var _ notify.Notifier = &databaseNotifier{}
 func (n *databaseNotifier) NewRepo(ctx context.Context, repo *models.Repo) {
 	// no-op for now
 }
+func (n *databaseNotifier) DeleteRepo(ctx context.Context, repo *models.Repo) {
+	// no-op for now
+}
 
 func (n *databaseNotifier) NewStar(ctx context.Context, star *models.Star) {
 	l := log.FromContext(ctx)
