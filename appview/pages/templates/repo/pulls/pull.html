@@ -180,7 +180,7 @@
         {{ $bgColor }}
         md:bg-white md:dark:bg-gray-800
         drop-shadow-sm border-t md:border-x border-gray-200 dark:border-gray-700
-        sm:pointer-events-none
+        md:pointer-events-none
         ">
         <h2 class="">History</h2>
         <span class="pointer-events-auto cursor-text">
@@ -625,7 +625,7 @@
 {{ end }}
 
 {{ define "submissionComment" }}
-  <div id="comment-{{.ID}}" class="flex gap-2 -ml-4 py-4 w-full mx-auto">
+  <div id="comment-{{.ID}}" class="flex gap-2 -ml-4 py-4 w-full mx-auto group/comment">
     <!-- left column: profile picture -->
     <div class="flex-shrink-0 h-fit relative">
       {{ template "user/fragments/picLink" (list .OwnerDid "size-8") }}
@@ -633,7 +633,7 @@
     <!-- right column: name and body in two rows -->
     <div class="flex-1 min-w-0">
       <!-- Row 1: Author and timestamp -->
-      <div class="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
+      <div class="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1 group-target/comment:bg-yellow-200/30 group-target/comment:dark:bg-yellow-600/30">
         {{ $handle := resolve .OwnerDid }}
         <a class="text-gray-500 dark:text-gray-400 hover:text-gray-500 dark:hover:text-gray-300" href="/{{ $handle }}">{{ $handle }}</a>
         <span class="before:content-['·']"></span>
