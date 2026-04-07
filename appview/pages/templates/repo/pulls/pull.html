@@ -625,13 +625,7 @@
 {{ end }}
 
 {{ define "submissionComment" }}
-  <div id="comment-{{.ID}}" class="flex gap-2 -ml-4 py-4 w-full mx-auto
-    target:ring-1 target:ring-gray-200 target:dark:ring-gray-700
-    target:px-2 target:-ml-6
-    first:target:translate-y-6 first:target:mb-6
-    last:target:-translate-y-6 last:target:mt-6
-    target:rounded-sm
-    ">
+  <div id="comment-{{.ID}}" class="flex gap-2 -ml-4 py-4 w-full mx-auto">
     <!-- left column: profile picture -->
     <div class="flex-shrink-0 h-fit relative">
       {{ template "user/fragments/picLink" (list .OwnerDid "size-8") }}
