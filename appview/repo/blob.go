@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -193,18 +194,28 @@ func (rp *Repo) RepoBlobRaw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.HasPrefix(contentType, "text/") || isTextualMimeType(contentType) {
-		// serve all textual content as text/plain
+	// Normalize to bare media type before classification; strips parameters
+	// (e.g. "; charset=utf-8") and prevents bypass attempts like
+	// "image/svg+xml; innocent=param".  A parse error yields an empty string
+	// which falls through to the 415 default — the safe outcome.
+	mediaType, _, _ := mime.ParseMediaType(contentType)
+
+	// Prevent browser sniffing regardless of branch taken below.
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+
+	switch {
+	case strings.HasPrefix(mediaType, "text/") || isTextualMimeType(mediaType):
+		// Serve all textual content as plain text so the browser never
+		// interprets knot-supplied markup or scripts.
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Write(body)
-	} else if strings.HasPrefix(contentType, "image/") || strings.HasPrefix(contentType, "video/") {
-		// serve images and videos with their original content type
-		w.Header().Set("Content-Type", contentType)
+	case safeBinaryMIMEType(mediaType):
+		// Use the normalized type, never the raw knot-supplied string.
+		w.Header().Set("Content-Type", mediaType)
 		w.Write(body)
-	} else {
+	default:
 		w.WriteHeader(http.StatusUnsupportedMediaType)
 		w.Write([]byte("unsupported content type"))
-		return
 	}
 }
 
@@ -307,6 +318,24 @@ func generateBlobURL(config *config.Config, repo *models.Repo, ref, filePath str
 		return markup.GenerateCamoURL(config.Camo.Host, config.Camo.SharedSecret, blobURL)
 	}
 	return blobURL
+}
+
+// safeBinaryMIMETypes is an explicit allowlist of binary content types that
+// are safe to serve inline. SVG is intentionally absent: it supports embedded
+// scripts and would enable XSS if a malicious knot returned one.
+var safeBinaryMIMETypes = map[string]bool{
+	"image/png":  true,
+	"image/jpeg": true,
+	"image/gif":  true,
+	"image/webp": true,
+	"image/avif": true,
+	"video/mp4":  true,
+	"video/webm": true,
+	"video/ogg":  true,
+}
+
+func safeBinaryMIMEType(mediaType string) bool {
+	return safeBinaryMIMETypes[mediaType]
 }
 
 func isTextualMimeType(mimeType string) bool {
