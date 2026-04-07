@@ -40,7 +40,8 @@
     hx-get="/{{ .RepoInfo.FullName }}/issues/{{ .Issue.IssueId }}/comment/{{ .Comment.Id }}/edit"
     hx-swap="outerHTML"
     hx-target="#comment-body-{{.Comment.Id}}">
-    {{ i "pencil" "size-3" }}
+    {{ i "pencil" "size-3 inline group-[.htmx-request]:hidden" }}
+    {{ i "loader-circle" "size-3 animate-spin hidden group-[.htmx-request]:inline" }}
   </a>
 {{ end }}
 
@@ -52,7 +53,7 @@
     hx-swap="outerHTML"
     hx-target="#comment-body-{{.Comment.Id}}"
     >
-    {{ i "trash-2" "size-3" }}
+    {{ i "trash-2" "size-3 inline group-[.htmx-request]:hidden" }}
     {{ i "loader-circle" "size-3 animate-spin hidden group-[.htmx-request]:inline" }}
   </a>
 {{ end }}

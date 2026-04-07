@@ -4,9 +4,9 @@
       id="comment-form"
       hx-post="/{{ .RepoInfo.FullName }}/issues/{{ .Issue.IssueId }}/comment"
       hx-trigger="submit, keydown[commentButtonEnabled() && (ctrlKey || metaKey) && key=='Enter'] from:#comment-textarea"
-      hx-indicator="#comment-button"
       hx-disabled-elt="#comment-form button"
       hx-on::after-request="if(event.detail.successful) this.reset()"
+      class="group/form"
   >
     <div class="bg-white dark:bg-gray-800 rounded drop-shadow-sm py-4 px-4 relative w-full">
       <div class="text-sm pb-2 text-gray-500 dark:text-gray-400">
@@ -28,12 +28,12 @@
         <button
             id="comment-button"
             type="submit"
-            class="btn-create p-2 flex items-center gap-2 no-underline hover:no-underline group"
+            class="btn-create p-2 flex items-center gap-2 no-underline hover:no-underline"
             disabled
         >
-            {{ i "message-square-plus" "w-4 h-4" }}
+            {{ i "message-square-plus" "w-4 h-4 inline group-[.htmx-request]/form:hidden" }}
+            {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]/form:inline" }}
             comment
-            {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
         </button>
 
         {{ $isIssueAuthor := and .LoggedInUser (eq .LoggedInUser.Did .Issue.Did) }}
@@ -43,15 +43,12 @@
         <button
             id="close-button"
             type="button"
-            class="btn flex items-center gap-2"
-            hx-indicator="#close-spinner"
+            class="btn flex items-center gap-2 group/close"
             hx-trigger="click"
         >
-            {{ i "ban" "w-4 h-4" }}
-            close
-            <span id="close-spinner" class="group">
-                {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-            </span>
+            {{ i "ban" "w-4 h-4 inline group-[.htmx-request]/close:hidden" }}
+            {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]/close:inline" }}
+            <span id="close-button-text">close</span>
         </button>
         <div
             id="close-with-comment"
@@ -59,9 +56,9 @@
             hx-trigger="click from:#close-button"
             hx-disabled-elt="#close-with-comment"
             hx-target="#issue-comment"
-            hx-indicator="#close-spinner"
             hx-vals="js:{body: document.getElementById('comment-textarea').value.trim() !== '' ? document.getElementById('comment-textarea').value : ''}"
             hx-swap="none"
+            hx-indicator="#close-button"
         >
         </div>
         <div
@@ -70,8 +67,8 @@
             hx-post="/{{ .RepoInfo.FullName }}/issues/{{ .Issue.IssueId }}/close"
             hx-trigger="click from:#close-button"
             hx-target="#issue-action"
-            hx-indicator="#close-spinner"
             hx-swap="none"
+            hx-indicator="#close-button"
         >
         </div>
         <script>
@@ -88,16 +85,13 @@
         {{ else if and (or $isIssueAuthor $isRepoCollaborator $isRepoOwner) (not .Issue.Open) }}
         <button
             type="button"
-            class="btn flex items-center gap-2"
+            class="btn flex items-center gap-2 group"
             hx-post="/{{ .RepoInfo.FullName }}/issues/{{ .Issue.IssueId }}/reopen"
-            hx-indicator="#reopen-spinner"
             hx-swap="none"
         >
-            {{ i "refresh-ccw-dot" "w-4 h-4" }}
+            {{ i "refresh-ccw-dot" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
+            {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
             reopen
-            <span id="reopen-spinner" class="group">
-              {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-            </span>
         </button>
         {{ end }}
 
@@ -110,7 +104,7 @@
         function updateCommentForm() {
             const textarea = document.getElementById('comment-textarea');
             const commentButton = document.getElementById('comment-button');
-            const closeButton = document.getElementById('close-button');
+            const closeButtonText = document.getElementById('close-button-text');
 
             if (textarea.value.trim() !== '') {
                 commentButton.removeAttribute('disabled');
@@ -118,21 +112,11 @@
                 commentButton.setAttribute('disabled', '');
             }
 
-            if (closeButton) {
+            if (closeButtonText) {
                 if (textarea.value.trim() !== '') {
-                    closeButton.innerHTML = `
-{{ i "ban" "w-4 h-4" }}
-<span>close with comment</span>
-<span id="close-spinner" class="group">
-    {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-</span>`;
+                  closeButtonText.innerHTML = `close with comment`;
                 } else {
-                    closeButton.innerHTML = `
-{{ i "ban" "w-4 h-4" }}
-<span>close</span>
-<span id="close-spinner" class="group">
-    {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-</span>`;
+                  closeButtonText.innerHTML = `close`;
                 }
             }
         }
