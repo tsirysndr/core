@@ -11,6 +11,7 @@
                 {{ with .LoggedInUser }}
                     {{ block "newButton" . }} {{ end }}
                     {{ template "notifications/fragments/bell" }}
+                    {{ block "searchButton" . }} {{ end }}
                     {{ block "profileDropdown" . }} {{ end }}
                 {{ else }}
                     <a href="/login">login</a>
@@ -40,6 +41,10 @@
         </a>
     </div>
 </details>
+{{ end }}
+
+{{ define "searchButton" }}
+<a href="/search">{{ i "search" "size-5 text-gray-500 dark:text-gray-400" }}</a>
 {{ end }}
 
 {{ define "profileDropdown" }}
