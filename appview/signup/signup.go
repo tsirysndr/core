@@ -332,7 +332,7 @@ func (s *Signup) executeSignupTransaction(ctx context.Context, username, passwor
 	// if we get here, we've successfully created the account and added the email
 	success = true
 
-	s.pages.Notice(w, "signup-msg", fmt.Sprintf(`Account created successfully. You can now
+	s.pages.NoticeHTML(w, "signup-msg", fmt.Sprintf(`Account created successfully. You can now
 		<a class="underline text-black dark:text-white" href="/login">login</a>
 		with <code>%s.tngl.sh</code>.`, username))
 
