@@ -495,7 +495,7 @@ func (ix *Indexer) Search(ctx context.Context, opts models.RepoSearchOptions) (*
 
 	res, err := ix.indexer.SearchInContext(ctx, searchReq)
 	if err != nil {
-		return nil, nil
+		return nil, err
 	}
 	ret := &SearchResult{
 		Total:    res.Total,

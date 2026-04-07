@@ -310,7 +310,7 @@ func (ix *Indexer) Search(ctx context.Context, opts models.PullSearchOptions) (*
 	searchReq := bleve.NewSearchRequestOptions(indexerQuery, limit, opts.Page.Offset, false)
 	res, err := ix.indexer.SearchInContext(ctx, searchReq)
 	if err != nil {
-		return nil, nil
+		return nil, err
 	}
 	ret := &searchResult{
 		Total: res.Total,
