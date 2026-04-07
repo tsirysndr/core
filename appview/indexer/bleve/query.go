@@ -31,3 +31,9 @@ func KeywordFieldQuery(field, keyword string) query.Query {
 	q.FieldVal = field
 	return q
 }
+
+func NumericRangeQuery(field string, min, max *float64) query.Query {
+	q := bleve.NewNumericRangeQuery(min, max)
+	q.FieldVal = field
+	return q
+}

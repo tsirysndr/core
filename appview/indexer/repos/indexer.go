@@ -414,8 +414,9 @@ func (ix *Indexer) Search(ctx context.Context, opts models.RepoSearchOptions) (*
 	indexerQuery.AddMustNot(mustNots...)
 
 	// use a disjunction where:
-	// - Non-forks get normal relevance score
-	// - Forks match but get penalized with lower boost
+	// - repos with more stars get higher boost
+	// - non-forks get a boost
+	// - boosts stack
 	finalQuery := bleve.NewDisjunctionQuery()
 
 	// add the main query
@@ -429,6 +430,36 @@ func (ix *Indexer) Search(ctx context.Context, opts models.RepoSearchOptions) (*
 	notForkQuery.AddMustNot(isForkQuery)
 	notForkQuery.SetBoost(2.0)
 	finalQuery.AddQuery(notForkQuery)
+
+	// add boosted queries for repos with more stars
+	// 10-99 stars
+	tier2Query := bleve.NewBooleanQuery()
+	tier2Query.AddMust(indexerQuery)
+	min10 := float64(10)
+	max99 := float64(99)
+	starRange2 := bleveutil.NumericRangeQuery("star_count", &min10, &max99)
+	tier2Query.AddMust(starRange2)
+	tier2Query.SetBoost(1.5)
+	finalQuery.AddQuery(tier2Query)
+
+	// 100-999 stars
+	tier3Query := bleve.NewBooleanQuery()
+	tier3Query.AddMust(indexerQuery)
+	min100 := float64(100)
+	max999 := float64(999)
+	starRange3 := bleveutil.NumericRangeQuery("star_count", &min100, &max999)
+	tier3Query.AddMust(starRange3)
+	tier3Query.SetBoost(2.5)
+	finalQuery.AddQuery(tier3Query)
+
+	// 1000+ stars
+	tier4Query := bleve.NewBooleanQuery()
+	tier4Query.AddMust(indexerQuery)
+	min1000 := float64(1000)
+	starRange4 := bleveutil.NumericRangeQuery("star_count", &min1000, nil)
+	tier4Query.AddMust(starRange4)
+	tier4Query.SetBoost(4.0)
+	finalQuery.AddQuery(tier4Query)
 
 	// use minimum of 1 to ensure all results match at least one clause
 	finalQuery.SetMin(1)

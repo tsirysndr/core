@@ -637,3 +637,99 @@ func TestDelete(t *testing.T) {
 	assert.Equal(t, uint64(1), result.Total)
 	assert.Contains(t, result.Hits, int64(2))
 }
+
+func TestStarCountBoosting(t *testing.T) {
+	ix, cleanup := setupTestIndexer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	err := ix.Index(ctx,
+		models.Repo{
+			Id:          1,
+			Did:         "did:plc:alice",
+			Name:        "repo",
+			Description: "testing",
+			RepoStats:   &models.RepoStats{StarCount: 5000},
+		},
+		models.Repo{
+			Id:          2,
+			Did:         "did:plc:bob",
+			Name:        "repo",
+			Description: "testing",
+			RepoStats:   &models.RepoStats{StarCount: 150},
+		},
+		models.Repo{
+			Id:          3,
+			Did:         "did:plc:charlie",
+			Name:        "repo",
+			Description: "testing",
+			RepoStats:   &models.RepoStats{StarCount: 5},
+		},
+		models.Repo{
+			Id:          4,
+			Did:         "did:plc:dana",
+			Name:        "repo",
+			Description: "testing",
+			RepoStats:   &models.RepoStats{StarCount: 25},
+		},
+	)
+	require.NoError(t, err)
+
+	// search for "testing" - should rank by star count when all else equal
+	result, err := ix.Search(ctx, models.RepoSearchOptions{
+		Keywords: []string{"testing"},
+		Page:     pagination.Page{Limit: 10},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, uint64(4), result.Total)
+
+	// verify that repos with more stars rank higher than those with fewer
+	popularIdx := -1
+	smallIdx := -1
+	for i, hit := range result.Hits {
+		if hit == 1 { // 5000 stars
+			popularIdx = i
+		}
+		if hit == 3 { // 5 stars
+			smallIdx = i
+		}
+	}
+	assert.True(t, popularIdx < smallIdx, "repo with 5000 stars should rank above repo with 5 stars")
+}
+
+func TestStarBoostingWithForkPenalty(t *testing.T) {
+	ix, cleanup := setupTestIndexer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	err := ix.Index(ctx,
+		models.Repo{
+			Id:          1,
+			Did:         "did:plc:alice",
+			Name:        "original-popular",
+			Description: "test project",
+			Source:      "",
+			RepoStats:   &models.RepoStats{StarCount: 100},
+		},
+		models.Repo{
+			Id:          2,
+			Did:         "did:plc:bob",
+			Name:        "fork-very-popular",
+			Description: "test project",
+			Source:      "did:plc:someone/original",
+			RepoStats:   &models.RepoStats{StarCount: 1000},
+		},
+	)
+	require.NoError(t, err)
+
+	result, err := ix.Search(ctx, models.RepoSearchOptions{
+		Keywords: []string{"project"},
+		Page:     pagination.Page{Limit: 10},
+	})
+	require.NoError(t, err)
+
+	// fork with 1000 stars (4.0x) vs non-fork with 100 stars (2.0 * 2.5 = 5.0x)
+	assert.Equal(t, int64(1), result.Hits[0], "non-fork with fewer stars can still rank higher due to combined boost")
+}
