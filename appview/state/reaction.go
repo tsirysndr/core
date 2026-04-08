@@ -1,7 +1,6 @@
 package state
 
 import (
-	"log"
 	"net/http"
 	"time"
 
@@ -17,29 +16,30 @@ import (
 )
 
 func (s *State) React(w http.ResponseWriter, r *http.Request) {
+	l := s.logger.With("handler", "React")
 	currentUser := s.oauth.GetMultiAccountUser(r)
 
 	subject := r.URL.Query().Get("subject")
 	if subject == "" {
-		log.Println("invalid form")
+		l.Warn("invalid form")
 		return
 	}
 
 	subjectUri, err := syntax.ParseATURI(subject)
 	if err != nil {
-		log.Println("invalid form")
+		l.Warn("invalid form", "subject", subject, "err", err)
 		return
 	}
 
 	reactionKind, ok := models.ParseReactionKind(r.URL.Query().Get("kind"))
 	if !ok {
-		log.Println("invalid reaction kind")
+		l.Warn("invalid reaction kind", "kind", r.URL.Query().Get("kind"))
 		return
 	}
 
 	client, err := s.oauth.AuthorizedClient(r)
 	if err != nil {
-		log.Println("failed to authorize client", err)
+		l.Error("failed to authorize client", "err", err)
 		return
 	}
 
@@ -60,22 +60,22 @@ func (s *State) React(w http.ResponseWriter, r *http.Request) {
 			},
 		})
 		if err != nil {
-			log.Println("failed to create atproto record", err)
+			l.Error("failed to create atproto record", "err", err)
 			return
 		}
 
 		err = db.AddReaction(s.db, currentUser.Active.Did, subjectUri, reactionKind, rkey)
 		if err != nil {
-			log.Println("failed to react", err)
+			l.Error("failed to react", "err", err)
 			return
 		}
 
 		reactionMap, err := db.GetReactionMap(s.db, 20, subjectUri)
 		if err != nil {
-			log.Println("failed to get reactions for ", subjectUri)
+			l.Error("failed to get reactions", "subjectUri", subjectUri, "err", err)
 		}
 
-		log.Println("created atproto record: ", resp.Uri)
+		l.Info("created atproto record", "uri", resp.Uri)
 
 		s.pages.ThreadReactionFragment(w, pages.ThreadReactionFragmentParams{
 			ThreadAt:  subjectUri,
@@ -89,7 +89,7 @@ func (s *State) React(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		reaction, err := db.GetReaction(s.db, currentUser.Active.Did, subjectUri, reactionKind)
 		if err != nil {
-			log.Println("failed to get reaction relationship for", currentUser.Active.Did, subjectUri)
+			l.Error("failed to get reaction relationship", "did", currentUser.Active.Did, "subjectUri", subjectUri, "err", err)
 			return
 		}
 
@@ -100,19 +100,19 @@ func (s *State) React(w http.ResponseWriter, r *http.Request) {
 		})
 
 		if err != nil {
-			log.Println("failed to remove reaction")
+			l.Error("failed to remove reaction", "err", err)
 			return
 		}
 
 		err = db.DeleteReactionByRkey(s.db, currentUser.Active.Did, reaction.Rkey)
 		if err != nil {
-			log.Println("failed to delete reaction from DB")
+			l.Warn("failed to delete reaction from DB", "err", err)
 			// this is not an issue, the firehose event might have already done this
 		}
 
 		reactionMap, err := db.GetReactionMap(s.db, 20, subjectUri)
 		if err != nil {
-			log.Println("failed to get reactions for ", subjectUri)
+			l.Error("failed to get reactions", "subjectUri", subjectUri, "err", err)
 			return
 		}
 

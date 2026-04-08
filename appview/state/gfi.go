@@ -1,7 +1,6 @@
 package state
 
 import (
-	"log"
 	"net/http"
 	"sort"
 
@@ -15,6 +14,7 @@ import (
 )
 
 func (s *State) GoodFirstIssues(w http.ResponseWriter, r *http.Request) {
+	l := s.logger.With("handler", "GoodFirstIssues")
 	user := s.oauth.GetMultiAccountUser(r)
 
 	page := pagination.FromContext(r.Context())
@@ -23,14 +23,14 @@ func (s *State) GoodFirstIssues(w http.ResponseWriter, r *http.Request) {
 
 	gfiLabelDef, err := db.GetLabelDefinition(s.db, orm.FilterEq("at_uri", goodFirstIssueLabel))
 	if err != nil {
-		log.Println("failed to get gfi label def", err)
+		l.Error("failed to get gfi label def", "err", err)
 		s.pages.Error500(w)
 		return
 	}
 
 	repoLabels, err := db.GetRepoLabels(s.db, orm.FilterEq("label_at", goodFirstIssueLabel))
 	if err != nil {
-		log.Println("failed to get repo labels", err)
+		l.Error("failed to get repo labels", "err", err)
 		s.pages.Error503(w)
 		return
 	}
@@ -60,7 +60,7 @@ func (s *State) GoodFirstIssues(w http.ResponseWriter, r *http.Request) {
 		orm.FilterEq("open", 1),
 	)
 	if err != nil {
-		log.Println("failed to get issues", err)
+		l.Error("failed to get issues", "err", err)
 		s.pages.Error503(w)
 		return
 	}
@@ -135,7 +135,7 @@ func (s *State) GoodFirstIssues(w http.ResponseWriter, r *http.Request) {
 		if len(uriList) > 0 {
 			allLabelDefs, err = db.GetLabelDefinitions(s.db, orm.FilterIn("at_uri", uriList))
 			if err != nil {
-				log.Println("failed to fetch labels", err)
+				l.Error("failed to fetch labels", "err", err)
 			}
 		}
 	}

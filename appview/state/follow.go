@@ -1,7 +1,6 @@
 package state
 
 import (
-	"log"
 	"net/http"
 	"time"
 
@@ -15,28 +14,29 @@ import (
 )
 
 func (s *State) Follow(w http.ResponseWriter, r *http.Request) {
+	l := s.logger.With("handler", "Follow")
 	currentUser := s.oauth.GetMultiAccountUser(r)
 
 	subject := r.URL.Query().Get("subject")
 	if subject == "" {
-		log.Println("invalid form")
+		l.Warn("invalid form")
 		return
 	}
 
 	subjectIdent, err := s.idResolver.ResolveIdent(r.Context(), subject)
 	if err != nil {
-		log.Println("failed to follow, invalid did")
+		l.Error("failed to follow, invalid did", "subject", subject, "err", err)
 		return
 	}
 
 	if currentUser.Active.Did == subjectIdent.DID.String() {
-		log.Println("cant follow or unfollow yourself")
+		l.Warn("cant follow or unfollow yourself")
 		return
 	}
 
 	client, err := s.oauth.AuthorizedClient(r)
 	if err != nil {
-		log.Println("failed to authorize client")
+		l.Error("failed to authorize client", "err", err)
 		return
 	}
 
@@ -55,11 +55,11 @@ func (s *State) Follow(w http.ResponseWriter, r *http.Request) {
 				}},
 		})
 		if err != nil {
-			log.Println("failed to create atproto record", err)
+			l.Error("failed to create atproto record", "err", err)
 			return
 		}
 
-		log.Println("created atproto record: ", resp.Uri)
+		l.Info("created atproto record", "uri", resp.Uri)
 
 		follow := &models.Follow{
 			UserDid:    currentUser.Active.Did,
@@ -69,7 +69,7 @@ func (s *State) Follow(w http.ResponseWriter, r *http.Request) {
 
 		err = db.AddFollow(s.db, follow)
 		if err != nil {
-			log.Println("failed to follow", err)
+			l.Error("failed to follow", "err", err)
 			return
 		}
 
@@ -77,7 +77,7 @@ func (s *State) Follow(w http.ResponseWriter, r *http.Request) {
 
 		followStats, err := db.GetFollowerFollowingCount(s.db, subjectIdent.DID.String())
 		if err != nil {
-			log.Println("failed to get follow stats", err)
+			l.Error("failed to get follow stats", "err", err)
 		}
 
 		s.pages.FollowFragment(w, pages.FollowFragmentParams{
@@ -91,7 +91,7 @@ func (s *State) Follow(w http.ResponseWriter, r *http.Request) {
 		// find the record in the db
 		follow, err := db.GetFollow(s.db, currentUser.Active.Did, subjectIdent.DID.String())
 		if err != nil {
-			log.Println("failed to get follow relationship")
+			l.Error("failed to get follow relationship", "err", err)
 			return
 		}
 
@@ -102,19 +102,19 @@ func (s *State) Follow(w http.ResponseWriter, r *http.Request) {
 		})
 
 		if err != nil {
-			log.Println("failed to unfollow")
+			l.Error("failed to unfollow", "err", err)
 			return
 		}
 
 		err = db.DeleteFollowByRkey(s.db, currentUser.Active.Did, follow.Rkey)
 		if err != nil {
-			log.Println("failed to delete follow from DB")
+			l.Warn("failed to delete follow from DB", "err", err)
 			// this is not an issue, the firehose event might have already done this
 		}
 
 		followStats, err := db.GetFollowerFollowingCount(s.db, subjectIdent.DID.String())
 		if err != nil {
-			log.Println("failed to get follow stats", err)
+			l.Error("failed to get follow stats", "err", err)
 		}
 
 		s.pages.FollowFragment(w, pages.FollowFragmentParams{

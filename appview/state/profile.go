@@ -3,7 +3,6 @@ package state
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"slices"
 	"strings"
@@ -418,7 +417,7 @@ func (s *State) followPage(
 
 	followStatsMap, err := db.GetFollowerFollowingCounts(s.db, followDids)
 	if err != nil {
-		log.Printf("getting follow counts for %s: %s", followDids, err)
+		l.Error("getting follow counts", "followDids", followDids, "err", err)
 	}
 
 	loggedInUserFollowing := make(map[string]struct{})
@@ -637,18 +636,19 @@ func (s *State) createRepoItem(ctx context.Context, repo models.RepoEvent, autho
 }
 
 func (s *State) UpdateProfileBio(w http.ResponseWriter, r *http.Request) {
+	l := s.logger.With("handler", "UpdateProfileBio")
 	user := s.oauth.GetMultiAccountUser(r)
 
 	err := r.ParseForm()
 	if err != nil {
-		log.Println("invalid profile update form", err)
+		l.Error("invalid profile update form", "err", err)
 		s.pages.Notice(w, "update-profile", "Invalid form.")
 		return
 	}
 
 	profile, err := db.GetProfile(s.db, user.Active.Did)
 	if err != nil {
-		log.Printf("getting profile data for %s: %s", user.Active.Did, err)
+		l.Error("getting profile data", "did", user.Active.Did, "err", err)
 	}
 	if profile == nil {
 		profile = &models.Profile{Did: user.Active.Did}
@@ -691,7 +691,7 @@ func (s *State) UpdateProfileBio(w http.ResponseWriter, r *http.Request) {
 	profile.Stats[1].Kind = models.ParseVanityStatKind(stat1)
 
 	if err := db.ValidateProfile(s.db, profile); err != nil {
-		log.Println("invalid profile", err)
+		l.Error("invalid profile", "err", err)
 		s.pages.Notice(w, "update-profile", err.Error())
 		return
 	}
@@ -700,18 +700,19 @@ func (s *State) UpdateProfileBio(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *State) UpdateProfilePins(w http.ResponseWriter, r *http.Request) {
+	l := s.logger.With("handler", "UpdateProfilePins")
 	user := s.oauth.GetMultiAccountUser(r)
 
 	err := r.ParseForm()
 	if err != nil {
-		log.Println("invalid profile update form", err)
+		l.Error("invalid profile update form", "err", err)
 		s.pages.Notice(w, "update-profile", "Invalid form.")
 		return
 	}
 
 	profile, err := db.GetProfile(s.db, user.Active.Did)
 	if err != nil {
-		log.Printf("getting profile data for %s: %s", user.Active.Did, err)
+		l.Error("getting profile data", "did", user.Active.Did, "err", err)
 	}
 	if profile == nil {
 		profile = &models.Profile{Did: user.Active.Did}
@@ -721,7 +722,7 @@ func (s *State) UpdateProfilePins(w http.ResponseWriter, r *http.Request) {
 	var pinnedRepos [6]string
 	for key, values := range r.Form {
 		if i >= 6 {
-			log.Println("invalid pin update form", err)
+			l.Warn("too many pinned repos")
 			s.pages.Notice(w, "update-profile", "Only 6 repositories can be pinned at a time.")
 			return
 		}
@@ -736,17 +737,18 @@ func (s *State) UpdateProfilePins(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *State) updateProfile(profile *models.Profile, w http.ResponseWriter, r *http.Request) {
+	l := s.logger.With("handler", "updateProfile")
 	user := s.oauth.GetMultiAccountUser(r)
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
-		log.Println("failed to start transaction", err)
+		l.Error("failed to start transaction", "err", err)
 		s.pages.Notice(w, "update-profile", "Failed to update profile, try again later.")
 		return
 	}
 
 	client, err := s.oauth.AuthorizedClient(r)
 	if err != nil {
-		log.Println("failed to get authorized client", err)
+		l.Error("failed to get authorized client", "err", err)
 		s.pages.Notice(w, "update-profile", "Failed to update profile, try again later.")
 		return
 	}
@@ -792,14 +794,14 @@ func (s *State) updateProfile(profile *models.Profile, w http.ResponseWriter, r 
 		SwapRecord: cid,
 	})
 	if err != nil {
-		log.Println("failed to update profile", err)
+		l.Error("failed to update profile on PDS", "err", err)
 		s.pages.Notice(w, "update-profile", "Failed to update PDS, try again later.")
 		return
 	}
 
 	err = db.UpsertProfile(tx, profile)
 	if err != nil {
-		log.Println("failed to update profile", err)
+		l.Error("failed to update profile in DB", "err", err)
 		s.pages.Notice(w, "update-profile", "Failed to update profile, try again later.")
 		return
 	}
@@ -810,11 +812,12 @@ func (s *State) updateProfile(profile *models.Profile, w http.ResponseWriter, r 
 }
 
 func (s *State) EditBioFragment(w http.ResponseWriter, r *http.Request) {
+	l := s.logger.With("handler", "EditBioFragment")
 	user := s.oauth.GetMultiAccountUser(r)
 
 	profile, err := db.GetProfile(s.db, user.Active.Did)
 	if err != nil {
-		log.Printf("getting profile data for %s: %s", user.Active.Did, err)
+		l.Error("getting profile data", "did", user.Active.Did, "err", err)
 	}
 	if profile == nil {
 		profile = &models.Profile{Did: user.Active.Did}
@@ -834,11 +837,12 @@ func (s *State) EditBioFragment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *State) EditPinsFragment(w http.ResponseWriter, r *http.Request) {
+	l := s.logger.With("handler", "EditPinsFragment")
 	user := s.oauth.GetMultiAccountUser(r)
 
 	profile, err := db.GetProfile(s.db, user.Active.Did)
 	if err != nil {
-		log.Printf("getting profile data for %s: %s", user.Active.Did, err)
+		l.Error("getting profile data", "did", user.Active.Did, "err", err)
 	}
 	if profile == nil {
 		profile = &models.Profile{Did: user.Active.Did}
@@ -846,12 +850,12 @@ func (s *State) EditPinsFragment(w http.ResponseWriter, r *http.Request) {
 
 	repos, err := db.GetRepos(s.db, orm.FilterEq("did", user.Active.Did))
 	if err != nil {
-		log.Printf("getting repos for %s: %s", user.Active.Did, err)
+		l.Error("getting repos", "did", user.Active.Did, "err", err)
 	}
 
 	collaboratingRepos, err := db.CollaboratingIn(s.db, user.Active.Did)
 	if err != nil {
-		log.Printf("getting collaborating repos for %s: %s", user.Active.Did, err)
+		l.Error("getting collaborating repos", "did", user.Active.Did, "err", err)
 	}
 
 	allRepos := []pages.PinnedRepo{}
@@ -1071,9 +1075,10 @@ func (s *State) RemoveProfileAvatar(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *State) UpdateProfilePunchcardSetting(w http.ResponseWriter, r *http.Request) {
+	l := s.logger.With("handler", "UpdateProfilePunchcardSetting")
 	err := r.ParseForm()
 	if err != nil {
-		log.Println("invalid profile update form", err)
+		l.Error("invalid profile update form", "err", err)
 		return
 	}
 	user := s.oauth.GetUser(r)
@@ -1090,7 +1095,7 @@ func (s *State) UpdateProfilePunchcardSetting(w http.ResponseWriter, r *http.Req
 
 	err = db.UpsertPunchcardPreference(s.db, user.Did, hideMine, hideOthers)
 	if err != nil {
-		log.Println("failed to update punchcard preferences", err)
+		l.Error("failed to update punchcard preferences", "err", err)
 		return
 	}
 
