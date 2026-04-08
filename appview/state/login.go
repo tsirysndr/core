@@ -106,7 +106,7 @@ func (s *State) Login(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if err := s.oauth.SetAuthReturn(w, r, returnURL, addAccount); err != nil {
+		if err := s.oauth.SetAuthReturn(w, r, sanitizeReturnURL(returnURL), addAccount); err != nil {
 			l.Error("failed to set auth return", "err", err)
 		}
 
@@ -123,6 +123,16 @@ func (s *State) Login(w http.ResponseWriter, r *http.Request) {
 
 		s.pages.HxRedirect(w, redirectURL)
 	}
+}
+
+// sanitizeReturnURL ensures the return URL is a relative path on the same
+// origin. Anything else — absolute URLs, protocol-relative URLs — is replaced
+// with "/" to prevent open redirect after OAuth login.
+func sanitizeReturnURL(s string) string {
+	if strings.HasPrefix(s, "/") && !strings.HasPrefix(s, "//") {
+		return s
+	}
+	return "/"
 }
 
 func (s *State) Logout(w http.ResponseWriter, r *http.Request) {
