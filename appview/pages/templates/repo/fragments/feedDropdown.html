@@ -1,0 +1,117 @@
+{{ define "repo/fragments/feedDropdown" }}
+  <button
+    popovertarget="feed-dropdown"
+    popovertargetaction="toggle"
+    class="btn text-sm cursor-pointer list-none flex items-center gap-2">
+    {{ i "rss" "size-4" }}
+    <span class="hidden md:inline">atom</span>
+  </button>
+
+  <div
+    popover
+    id="feed-dropdown"
+    class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700
+           dark:text-white backdrop:bg-gray-400/50 dark:backdrop:bg-gray-800/50
+           w-96 p-4 rounded drop-shadow overflow-visible">
+
+    <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+      Configure Feed
+    </h3>
+
+    <div class="space-y-2 mb-4">
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          id="feed-issues"
+          class="feed-checkbox"
+          data-type="issues"
+          checked>
+        <span class="text-sm">Issues</span>
+      </label>
+
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          id="feed-pulls"
+          class="feed-checkbox"
+          data-type="pulls"
+          checked>
+        <span class="text-sm">Pull Requests</span>
+      </label>
+
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          id="feed-commits"
+          class="feed-checkbox"
+          data-type="commits"
+          checked>
+        <span class="text-sm">Commits</span>
+      </label>
+
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          id="feed-tags"
+          class="feed-checkbox"
+          data-type="tags"
+          checked>
+        <span class="text-sm">Tags</span>
+      </label>
+    </div>
+
+    <!-- generated url display -->
+    <div>
+      <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1 normal-case">
+        Feed URL
+      </label>
+      <div class="flex items-stretch border border-gray-300 dark:border-gray-600 divide-x divide-gray-300 dark:divide-gray-600 rounded">
+        <input
+          type="text"
+          id="feed-url"
+          readonly
+          value="/{{ .RepoInfo.FullName }}/feed.atom"
+          class="flex-1 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 select-all cursor-pointer whitespace-nowrap overflow-x-auto font-mono bg-gray-200 dark:bg-gray-700 border-0 outline-none"
+          onclick="this.select()">
+        <button
+          id="feed-copy-btn"
+          onclick="copyFeedUrl(this)"
+          class="px-3 py-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          title="Copy to clipboard">
+          {{ i "copy" "w-4 h-4" }}
+        </button>
+      </div>
+    </div>
+
+    <p class="text-xs text-gray-500 dark:text-gray-400 mt-3">
+      Select the types of activity you want to include in your feed.
+    </p>
+  </div>
+
+  <script>
+    (function() {
+      const updateFeedUrl = () => {
+        const popover = document.getElementById('feed-dropdown');
+        if (!popover) return;
+
+        const allCheckboxes = popover.querySelectorAll('.feed-checkbox');
+        const selectedTypes = [...allCheckboxes].filter(cb => cb.checked).map(cb => cb.dataset.type);
+        const baseUrl = '/{{ .RepoInfo.FullName }}/feed.atom';
+        const query = selectedTypes.length === allCheckboxes.length ? '' : `?include=${selectedTypes.join(',')}`;
+
+        document.getElementById('feed-url').value = window.location.origin + baseUrl + query;
+      };
+
+      window.copyFeedUrl = (button) => {
+        navigator.clipboard.writeText(document.getElementById('feed-url').value).then(() => {
+          const original = button.innerHTML;
+          button.innerHTML = `{{ i "check" "w-4 h-4" }}`;
+          setTimeout(() => button.innerHTML = original, 2000);
+        });
+      };
+
+      document.querySelectorAll('.feed-checkbox').forEach(cb => cb.addEventListener('change', updateFeedUrl));
+      document.getElementById('feed-dropdown')?.addEventListener('toggle', e => e.newState === 'open' && updateFeedUrl());
+    })();
+  </script>
+{{ end }}

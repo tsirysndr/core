@@ -125,11 +125,6 @@
       fork
       {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
     </a>
-    <a
-      class="btn text-sm no-underline hover:no-underline flex items-center gap-2 group"
-      href="/{{ .RepoInfo.FullName }}/feed.atom">
-      {{ i "rss" "size-4" }}
-      <span class="md:hidden">atom</span>
-    </a>
+    {{ template "repo/fragments/feedDropdown" . }}
   </div>
 {{ end }}
