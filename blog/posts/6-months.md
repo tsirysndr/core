@@ -86,7 +86,7 @@ easier to follow!
 
 ## hosted PDS
 
-A complaint we often recieved was the need for a Bluesky account to use
+A complaint we often received was the need for a Bluesky account to use
 Tangled; and besides, we realised that the overlap between Bluesky users
 and possible Tangled users only goes so far -- we aim to be a generic
 code forge after all, AT just happens to be an implementation

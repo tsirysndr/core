@@ -51,7 +51,7 @@ should feel natural and stay out of the way. Tangled's architecture
 enables common workflows to work as you'd expect, all while remaining
 decentralized.
 
-We believe that atproto has greatly simplfied one of the hardest parts
+We believe that atproto has greatly simplified one of the hardest parts
 of social media: having your friends on it. Today, we're rolling out
 invite-only access to Tangled -- join us on IRC at `#tangled` on
 [libera.chat](https://libera.chat) and we'll get you set up.

@@ -51,7 +51,7 @@ func NewIndexer(indexDir string) *Indexer {
 // Init initializes the indexer
 func (ix *Indexer) Init(ctx context.Context, e db.Execer) {
 	l := tlog.FromContext(ctx)
-	existed, err := ix.intialize(ctx)
+	existed, err := ix.initialize(ctx)
 	if err != nil {
 		log.Fatalln("failed to initialize repo indexer", err)
 	}
@@ -188,7 +188,7 @@ func generateRepoIndexMapping() (mapping.IndexMapping, error) {
 	return mapping, nil
 }
 
-func (ix *Indexer) intialize(ctx context.Context) (bool, error) {
+func (ix *Indexer) initialize(ctx context.Context) (bool, error) {
 	if ix.indexer != nil {
 		return false, errors.New("indexer is already initialized")
 	}

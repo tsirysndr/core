@@ -818,7 +818,7 @@ func (i *Ingester) ingestKnot(e *jmodels.Event) error {
 			return fmt.Errorf("failed to get registration: %w", err)
 		}
 		if len(registrations) != 1 {
-			return fmt.Errorf("got incorret number of registrations: %d, expected 1", len(registrations))
+			return fmt.Errorf("got incorrect number of registrations: %d, expected 1", len(registrations))
 		}
 		registration := registrations[0]
 
@@ -1100,7 +1100,7 @@ func (i *Ingester) ingestLabelOp(e *jmodels.Event) error {
 			}
 			repo = i[0].Repo
 		default:
-			return fmt.Errorf("unsupport label subject: %s", collection)
+			return fmt.Errorf("unsupported label subject: %s", collection)
 		}
 
 		actx, err := db.NewLabelApplicationCtx(ddb, orm.FilterIn("at_uri", repo.Labels))

@@ -36,7 +36,7 @@ generation of open source. Whatever that looks like: hundreds of devs
 building artisanal libraries, or one dev and a hundred agents building a
 micro-SaaS.
 
-And finding the right investors to help us acheive this vision wasn't
+And finding the right investors to help us achieve this vision wasn't
 something we took lightly. We spent months getting to know potential
 partners -- among which, byFounders stood out immediately. Like us,
 they're community-driven at their core, and their commitment to

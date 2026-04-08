@@ -97,7 +97,7 @@ func (k *Knots) dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(registrations) != 1 {
-		l.Error("got incorret number of registrations", "got", len(registrations), "expected", 1)
+		l.Error("got incorrect number of registrations", "got", len(registrations), "expected", 1)
 		return
 	}
 	registration := registrations[0]
@@ -285,7 +285,7 @@ func (k *Knots) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(registrations) != 1 {
-		l.Error("got incorret number of registrations", "got", len(registrations), "expected", 1)
+		l.Error("got incorrect number of registrations", "got", len(registrations), "expected", 1)
 		fail()
 		return
 	}
@@ -394,7 +394,7 @@ func (k *Knots) retry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(registrations) != 1 {
-		l.Error("got incorret number of registrations", "got", len(registrations), "expected", 1)
+		l.Error("got incorrect number of registrations", "got", len(registrations), "expected", 1)
 		fail()
 		return
 	}
@@ -485,7 +485,7 @@ func (k *Knots) retry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(registrations) != 1 {
-		l.Error("got incorret number of registrations", "got", len(registrations), "expected", 1)
+		l.Error("got incorrect number of registrations", "got", len(registrations), "expected", 1)
 		fail()
 		return
 	}
@@ -521,7 +521,7 @@ func (k *Knots) addMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(registrations) != 1 {
-		l.Error("got incorret number of registrations", "got", len(registrations), "expected", 1)
+		l.Error("got incorrect number of registrations", "got", len(registrations), "expected", 1)
 		return
 	}
 	registration := registrations[0]
@@ -629,7 +629,7 @@ func (k *Knots) removeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(registrations) != 1 {
-		l.Error("got incorret number of registrations", "got", len(registrations), "expected", 1)
+		l.Error("got incorrect number of registrations", "got", len(registrations), "expected", 1)
 		return
 	}
 

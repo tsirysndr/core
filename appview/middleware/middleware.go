@@ -124,7 +124,7 @@ func (mw Middleware) knotRoleMiddleware(group string) middlewareFunc {
 			if actor == nil {
 				// we need a logged in user
 				l.Warn("not logged in, redirecting")
-				http.Error(w, "Forbiden", http.StatusUnauthorized)
+				http.Error(w, "Forbidden", http.StatusUnauthorized)
 				return
 			}
 			domain := chi.URLParam(r, "domain")
@@ -136,7 +136,7 @@ func (mw Middleware) knotRoleMiddleware(group string) middlewareFunc {
 			ok, err := mw.enforcer.E.HasGroupingPolicy(actor.Active.Did, group, domain)
 			if err != nil || !ok {
 				l.Warn("permission denied", "did", actor.Active.Did, "group", group, "domain", domain)
-				http.Error(w, "Forbiden", http.StatusUnauthorized)
+				http.Error(w, "Forbidden", http.StatusUnauthorized)
 				return
 			}
 
@@ -158,7 +158,7 @@ func (mw Middleware) RepoPermissionMiddleware(requiredPerm string) middlewareFun
 			if actor == nil {
 				// we need a logged in user
 				l.Warn("not logged in, redirecting")
-				http.Error(w, "Forbiden", http.StatusUnauthorized)
+				http.Error(w, "Forbidden", http.StatusUnauthorized)
 				return
 			}
 			f, err := mw.repoResolver.Resolve(r)
@@ -170,7 +170,7 @@ func (mw Middleware) RepoPermissionMiddleware(requiredPerm string) middlewareFun
 			ok, err := mw.enforcer.E.Enforce(actor.Active.Did, f.Knot, f.RepoIdentifier(), requiredPerm)
 			if err != nil || !ok {
 				l.Warn("permission denied", "did", actor.Active.Did, "perm", requiredPerm, "repo", f.RepoIdentifier())
-				http.Error(w, "Forbiden", http.StatusUnauthorized)
+				http.Error(w, "Forbidden", http.StatusUnauthorized)
 				return
 			}
 
@@ -332,7 +332,7 @@ func (mw Middleware) ResolveIssue(next http.Handler) http.Handler {
 // a 404 like tangled.sh/oppi.li/go-git/v5
 //
 // we're keeping the tangled.sh go-import tag too to maintain backward
-// compatiblity for modules that still point there. they will be redirected
+// compatibility for modules that still point there. they will be redirected
 // to fetch source from tangled.org
 func (mw Middleware) GoImport() middlewareFunc {
 	return func(next http.Handler) http.Handler {

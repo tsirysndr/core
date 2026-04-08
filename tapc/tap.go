@@ -133,9 +133,9 @@ func (c *Client) handleConnection(ctx context.Context, conn *websocket.Conn, han
 
 	defer func() {
 		conn.Close()
-		l.Warn("closed tap conection")
+		l.Warn("closed tap connection")
 	}()
-	l.Info("established tap conection")
+	l.Info("established tap connection")
 
 	for {
 		select {

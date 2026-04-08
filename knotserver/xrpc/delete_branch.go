@@ -68,7 +68,7 @@ func (x *Xrpc) DeleteBranch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if ok, err := x.Enforcer.IsPushAllowed(actorDid.String(), rbac.ThisServer, repoDid); !ok || err != nil {
-		l.Error("insufficent permissions", "did", actorDid.String(), "repo", repoDid)
+		l.Error("insufficient permissions", "did", actorDid.String(), "repo", repoDid)
 		writeError(w, xrpcerr.AccessControlError(actorDid.String()), http.StatusUnauthorized)
 		return
 	}

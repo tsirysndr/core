@@ -119,7 +119,7 @@ func (t *Tap) processRepo(ctx context.Context, evt *tapc.RecordEventData) error 
 		if evt.Action == tapc.RecordUpdateAction {
 			exist, err := t.gitm.Exist(repo)
 			if err != nil {
-				return fmt.Errorf("checking git repo existance: %w", err)
+				return fmt.Errorf("checking git repo existence: %w", err)
 			}
 			if exist {
 				// update git repo remote url

@@ -245,7 +245,7 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 				Target:   "/tmp",
 				ReadOnly: false,
 				TmpfsOptions: &mount.TmpfsOptions{
-					Mode: 0o1777, // world-writeable sticky bit
+					Mode: 0o1777, // world-writable sticky bit
 					Options: [][]string{
 						{"exec"},
 					},

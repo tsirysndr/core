@@ -1,0 +1,23 @@
+[files]
+# Don't check these files
+extend-exclude = [
+    ".git/",
+    "*.lock",
+    "go.mod",
+    "go.sum",
+]
+
+[default.extend-words]
+# False positives - words that typos incorrectly flags
+# Go variable name commonly used for NiceDiff
+"nd" = "nd"
+# Acronym for "Does Not Exist" used in label operations  
+"DNE" = "DNE"
+# CSS class for syntax highlighting (other)
+"ot" = "ot"
+# Brand name HashiCorp
+"Hashi" = "Hashi"
+# External API from goldmark-callout package (unfixable upstream typo)
+"Extention" = "Extention"
+# External API from goldmark package (unfixable upstream typo)
+"Precending" = "Precending"

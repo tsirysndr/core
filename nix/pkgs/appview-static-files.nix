@@ -12,7 +12,7 @@
   src,
 }:
 runCommandLocal "appview-static-files" {
-  # TOOD(winter): figure out why this is even required after
+  # TODO(winter): figure out why this is even required after
   # changing the libraries that the tailwindcss binary loads
   sandboxProfile = ''
     (allow file-read* (subpath "/System/Library/OpenSSL"))

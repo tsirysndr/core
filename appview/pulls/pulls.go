@@ -1469,7 +1469,7 @@ func (s *Pulls) ValidatePatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.validator.ValidatePatch(&patch); err != nil {
-		s.logger.Error("faield to validate patch", "err", err)
+		s.logger.Error("failed to validate patch", "err", err)
 		s.pages.Notice(w, "patch-error", "Invalid patch format. Please provide a valid git diff or format-patch.")
 		return
 	}
@@ -1983,7 +1983,7 @@ func (s *Pulls) resubmitStackedPullHelper(
 	deletions := make(map[string]*models.Pull)
 	updated := make(map[string]struct{})
 
-	// pulls in orignal stack but not in new one
+	// pulls in original stack but not in new one
 	for _, op := range origStack {
 		if _, ok := newById[op.ChangeId]; !ok {
 			deletions[op.ChangeId] = op

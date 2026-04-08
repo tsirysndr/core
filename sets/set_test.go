@@ -240,7 +240,7 @@ func TestCollect(t *testing.T) {
 	}
 }
 
-func TestPropertySingleonLen(t *testing.T) {
+func TestPropertySingletonLen(t *testing.T) {
 	f := func(item int) bool {
 		single := Singleton(item)
 		return single.Len() == 1

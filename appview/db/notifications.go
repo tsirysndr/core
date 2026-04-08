@@ -191,7 +191,7 @@ func GetNotificationsWithEntities(e Execer, page pagination.Page, filters ...orm
 			return nil, fmt.Errorf("failed to parse created timestamp: %w", err)
 		}
 
-		nwe := &models.NotificationWithEntity{Notification: &n}
+		entry := &models.NotificationWithEntity{Notification: &n}
 
 		// populate repo if present
 		if rId.Valid {
@@ -211,7 +211,7 @@ func GetNotificationsWithEntities(e Execer, page pagination.Page, filters ...orm
 			if rTopicStr.Valid {
 				repo.Topics = strings.Fields(rTopicStr.String)
 			}
-			nwe.Repo = &repo
+			entry.Repo = &repo
 		}
 
 		// populate issue if present
@@ -229,7 +229,7 @@ func GetNotificationsWithEntities(e Execer, page pagination.Page, filters ...orm
 			if iOpen.Valid {
 				issue.Open = iOpen.Bool
 			}
-			nwe.Issue = &issue
+			entry.Issue = &issue
 		}
 
 		// populate pull if present
@@ -247,10 +247,10 @@ func GetNotificationsWithEntities(e Execer, page pagination.Page, filters ...orm
 			if pState.Valid {
 				pull.State = models.PullState(pState.Int64)
 			}
-			nwe.Pull = &pull
+			entry.Pull = &pull
 		}
 
-		notifications = append(notifications, nwe)
+		notifications = append(notifications, entry)
 	}
 
 	return notifications, nil

@@ -69,7 +69,7 @@ func (x *Xrpc) AddSecret(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if ok, err := x.Enforcer.IsSettingsAllowed(actorDid.String(), rbac.ThisServer, didPath); !ok || err != nil {
-		l.Error("insufficent permissions", "did", actorDid.String())
+		l.Error("insufficient permissions", "did", actorDid.String())
 		writeError(w, xrpcerr.AccessControlError(actorDid.String()), http.StatusUnauthorized)
 		return
 	}
