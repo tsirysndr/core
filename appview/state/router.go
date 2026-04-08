@@ -33,6 +33,7 @@ func (s *State) Router() http.Handler {
 		s.repoResolver,
 		s.idResolver,
 		s.pages,
+		s.logger,
 	)
 
 	router.Get("/pwa-manifest.json", s.WebAppManifest)

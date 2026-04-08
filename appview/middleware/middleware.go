@@ -3,7 +3,7 @@ package middleware
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -31,9 +31,10 @@ type Middleware struct {
 	repoResolver *reporesolver.RepoResolver
 	idResolver   *idresolver.Resolver
 	pages        *pages.Pages
+	logger       *slog.Logger
 }
 
-func New(oauth *oauth.OAuth, db *db.DB, enforcer *rbac.Enforcer, repoResolver *reporesolver.RepoResolver, idResolver *idresolver.Resolver, pages *pages.Pages) Middleware {
+func New(oauth *oauth.OAuth, db *db.DB, enforcer *rbac.Enforcer, repoResolver *reporesolver.RepoResolver, idResolver *idresolver.Resolver, pages *pages.Pages, logger *slog.Logger) Middleware {
 	return Middleware{
 		oauth:        oauth,
 		db:           db,
@@ -41,6 +42,7 @@ func New(oauth *oauth.OAuth, db *db.DB, enforcer *rbac.Enforcer, repoResolver *r
 		repoResolver: repoResolver,
 		idResolver:   idResolver,
 		pages:        pages,
+		logger:       logger,
 	}
 }
 
@@ -68,13 +70,13 @@ func AuthMiddleware(o *oauth.OAuth) middlewareFunc {
 
 			sess, err := o.ResumeSession(r)
 			if err != nil {
-				log.Println("failed to resume session, redirecting...", "err", err, "url", r.URL.String())
+				slog.Default().Warn("failed to resume session, redirecting", "err", err, "url", r.URL.String())
 				redirectFunc(w, r)
 				return
 			}
 
 			if sess == nil {
-				log.Printf("session is nil, redirecting...")
+				slog.Default().Warn("session is nil, redirecting")
 				redirectFunc(w, r)
 				return
 			}
@@ -92,7 +94,7 @@ func Paginate(next http.Handler) http.Handler {
 		if offsetVal != "" {
 			offset, err := strconv.Atoi(offsetVal)
 			if err != nil {
-				log.Println("invalid offset")
+				slog.Default().Warn("invalid offset", "value", offsetVal)
 			} else {
 				page.Offset = offset
 			}
@@ -102,7 +104,7 @@ func Paginate(next http.Handler) http.Handler {
 		if limitVal != "" {
 			limit, err := strconv.Atoi(limitVal)
 			if err != nil {
-				log.Println("invalid limit")
+				slog.Default().Warn("invalid limit", "value", limitVal)
 			} else {
 				page.Limit = limit
 			}
@@ -116,11 +118,12 @@ func Paginate(next http.Handler) http.Handler {
 func (mw Middleware) knotRoleMiddleware(group string) middlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			l := mw.logger.With("middleware", "knotRoleMiddleware")
 			// requires auth also
 			actor := mw.oauth.GetMultiAccountUser(r)
 			if actor == nil {
 				// we need a logged in user
-				log.Printf("not logged in, redirecting")
+				l.Warn("not logged in, redirecting")
 				http.Error(w, "Forbiden", http.StatusUnauthorized)
 				return
 			}
@@ -132,7 +135,7 @@ func (mw Middleware) knotRoleMiddleware(group string) middlewareFunc {
 
 			ok, err := mw.enforcer.E.HasGroupingPolicy(actor.Active.Did, group, domain)
 			if err != nil || !ok {
-				log.Printf("%s does not have perms of a %s in domain %s", actor.Active.Did, group, domain)
+				l.Warn("permission denied", "did", actor.Active.Did, "group", group, "domain", domain)
 				http.Error(w, "Forbiden", http.StatusUnauthorized)
 				return
 			}
@@ -149,11 +152,12 @@ func (mw Middleware) KnotOwner() middlewareFunc {
 func (mw Middleware) RepoPermissionMiddleware(requiredPerm string) middlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			l := mw.logger.With("middleware", "RepoPermissionMiddleware")
 			// requires auth also
 			actor := mw.oauth.GetMultiAccountUser(r)
 			if actor == nil {
 				// we need a logged in user
-				log.Printf("not logged in, redirecting")
+				l.Warn("not logged in, redirecting")
 				http.Error(w, "Forbiden", http.StatusUnauthorized)
 				return
 			}
@@ -165,7 +169,7 @@ func (mw Middleware) RepoPermissionMiddleware(requiredPerm string) middlewareFun
 
 			ok, err := mw.enforcer.E.Enforce(actor.Active.Did, f.Knot, f.RepoIdentifier(), requiredPerm)
 			if err != nil || !ok {
-				log.Printf("%s does not have perms of a %s in repo %s", actor.Active.Did, requiredPerm, f.RepoIdentifier())
+				l.Warn("permission denied", "did", actor.Active.Did, "perm", requiredPerm, "repo", f.RepoIdentifier())
 				http.Error(w, "Forbiden", http.StatusUnauthorized)
 				return
 			}
@@ -197,7 +201,7 @@ func (mw Middleware) ResolveIdent() middlewareFunc {
 				}
 			}
 			if err != nil {
-				log.Printf("failed to resolve did/handle '%s': %s\n", didOrHandle, err)
+				mw.logger.Error("failed to resolve did/handle", "didOrHandle", didOrHandle, "err", err)
 				mw.pages.Error404(w)
 				return
 			}
@@ -212,12 +216,13 @@ func (mw Middleware) ResolveIdent() middlewareFunc {
 func (mw Middleware) ResolveRepo() middlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			l := mw.logger.With("middleware", "ResolveRepo")
 			repoName := chi.URLParam(req, "repo")
 			repoName = strings.TrimSuffix(repoName, ".git")
 
 			id, ok := req.Context().Value("resolvedId").(identity.Identity)
 			if !ok {
-				log.Println("malformed middleware")
+				l.Error("malformed middleware")
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
@@ -228,7 +233,7 @@ func (mw Middleware) ResolveRepo() middlewareFunc {
 				orm.FilterEq("name", repoName),
 			)
 			if err != nil {
-				log.Println("failed to resolve repo", "err", err)
+				l.Error("failed to resolve repo", "err", err)
 				w.WriteHeader(http.StatusNotFound)
 				mw.pages.ErrorKnot404(w)
 				return
@@ -244,9 +249,10 @@ func (mw Middleware) ResolveRepo() middlewareFunc {
 func (mw Middleware) ResolvePull() middlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			l := mw.logger.With("middleware", "ResolvePull")
 			f, err := mw.repoResolver.Resolve(r)
 			if err != nil {
-				log.Println("failed to fully resolve repo", err)
+				l.Error("failed to fully resolve repo", "err", err)
 				w.WriteHeader(http.StatusNotFound)
 				mw.pages.ErrorKnot404(w)
 				return
@@ -255,14 +261,14 @@ func (mw Middleware) ResolvePull() middlewareFunc {
 			prId := chi.URLParam(r, "pull")
 			prIdInt, err := strconv.Atoi(prId)
 			if err != nil {
-				log.Println("failed to parse pr id", err)
+				l.Error("failed to parse pr id", "err", err)
 				mw.pages.Error404(w)
 				return
 			}
 
 			pr, err := db.GetPull(mw.db, f.RepoAt(), prIdInt)
 			if err != nil {
-				log.Println("failed to get pull and comments", err)
+				l.Error("failed to get pull and comments", "err", err)
 				mw.pages.Error404(w)
 				return
 			}
@@ -272,12 +278,12 @@ func (mw Middleware) ResolvePull() middlewareFunc {
 			if pr.IsStacked() {
 				stack, err := db.GetStack(mw.db, pr.StackId)
 				if err != nil {
-					log.Println("failed to get stack", err)
+					l.Error("failed to get stack", "err", err)
 					return
 				}
 				abandonedPulls, err := db.GetAbandonedPulls(mw.db, pr.StackId)
 				if err != nil {
-					log.Println("failed to get abandoned pulls", err)
+					l.Error("failed to get abandoned pulls", "err", err)
 					return
 				}
 
@@ -292,10 +298,11 @@ func (mw Middleware) ResolvePull() middlewareFunc {
 
 // middleware that is tacked on top of /{user}/{repo}/issues/{issue}
 func (mw Middleware) ResolveIssue(next http.Handler) http.Handler {
+	l := mw.logger.With("middleware", "ResolveIssue")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f, err := mw.repoResolver.Resolve(r)
 		if err != nil {
-			log.Println("failed to fully resolve repo", err)
+			l.Error("failed to fully resolve repo", "err", err)
 			w.WriteHeader(http.StatusNotFound)
 			mw.pages.ErrorKnot404(w)
 			return
@@ -304,14 +311,14 @@ func (mw Middleware) ResolveIssue(next http.Handler) http.Handler {
 		issueIdStr := chi.URLParam(r, "issue")
 		issueId, err := strconv.Atoi(issueIdStr)
 		if err != nil {
-			log.Println("failed to fully resolve issue ID", err)
+			l.Error("failed to fully resolve issue ID", "err", err)
 			mw.pages.Error404(w)
 			return
 		}
 
 		issue, err := db.GetIssue(mw.db, f.RepoAt(), issueId)
 		if err != nil {
-			log.Println("failed to get issues", "err", err)
+			l.Error("failed to get issues", "err", err)
 			mw.pages.Error404(w)
 			return
 		}
@@ -330,9 +337,10 @@ func (mw Middleware) ResolveIssue(next http.Handler) http.Handler {
 func (mw Middleware) GoImport() middlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			l := mw.logger.With("middleware", "GoImport")
 			f, err := mw.repoResolver.Resolve(r)
 			if err != nil {
-				log.Println("failed to fully resolve repo", err)
+				l.Error("failed to fully resolve repo", "err", err)
 				w.WriteHeader(http.StatusNotFound)
 				mw.pages.ErrorKnot404(w)
 				return
