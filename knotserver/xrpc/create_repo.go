@@ -145,6 +145,7 @@ func (h *Xrpc) CreateRepo(w http.ResponseWriter, r *http.Request) {
 
 	repoPath, _ := securejoin.SecureJoin(h.Config.Repo.ScanPath, repoDid)
 	rbacPath := repoDid
+	repoAddedToRBAC := false
 
 	cleanup := func() {
 		if rmErr := os.RemoveAll(repoPath); rmErr != nil {
@@ -153,6 +154,11 @@ func (h *Xrpc) CreateRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cleanupAll := func() {
+		if repoAddedToRBAC {
+			if rmErr := h.Enforcer.RemoveRepo(actorDid.String(), rbac.ThisServer, rbacPath); rmErr != nil {
+				l.Error("failed to clean up repo permissions", "error", rmErr.Error())
+			}
+		}
 		cleanup()
 		if delErr := h.Db.DeleteRepoKey(repoDid); delErr != nil {
 			l.Error("failed to clean up repo key", "error", delErr.Error())
@@ -195,6 +201,29 @@ func (h *Xrpc) CreateRepo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// add perms for this user to access the repo
+	err = h.Enforcer.AddRepo(actorDid.String(), rbac.ThisServer, rbacPath)
+	if err != nil {
+		l.Error("adding repo permissions", "error", err.Error())
+		cleanupAll()
+		writeError(w, xrpcerr.GenericError(err), http.StatusInternalServerError)
+		return
+	}
+	repoAddedToRBAC = true
+
+	if err := hook.SetupRepo(
+		hook.Config(
+			hook.WithScanPath(h.Config.Repo.ScanPath),
+			hook.WithInternalApi(h.Config.Server.InternalListenAddr),
+		),
+		repoPath,
+	); err != nil {
+		l.Error("setting up repo hooks", "error", err.Error())
+		cleanupAll()
+		writeError(w, xrpcerr.GenericError(err), http.StatusInternalServerError)
+		return
+	}
+
 	if prepared != nil {
 		plcCtx, plcCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer plcCancel()
@@ -205,23 +234,6 @@ func (h *Xrpc) CreateRepo(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-
-	// add perms for this user to access the repo
-	err = h.Enforcer.AddRepo(actorDid.String(), rbac.ThisServer, rbacPath)
-	if err != nil {
-		l.Error("adding repo permissions", "error", err.Error())
-		cleanupAll()
-		writeError(w, xrpcerr.GenericError(err), http.StatusInternalServerError)
-		return
-	}
-
-	hook.SetupRepo(
-		hook.Config(
-			hook.WithScanPath(h.Config.Repo.ScanPath),
-			hook.WithInternalApi(h.Config.Server.InternalListenAddr),
-		),
-		repoPath,
-	)
 
 	// HACK: request crawl for this repository
 	// Users won't want to sync entire network from their local knotmirror.
