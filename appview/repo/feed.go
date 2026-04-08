@@ -2,38 +2,69 @@ package repo
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
+	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pagination"
 	"tangled.org/core/orm"
+	"tangled.org/core/types"
 
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/gorilla/feeds"
 )
 
-func (rp *Repo) getRepoFeed(ctx context.Context, repo *models.Repo, ownerSlashRepo string) (*feeds.Feed, error) {
+// which types of items to include in the feed.
+type FeedOpts struct {
+	IncludeIssues  bool
+	IncludePulls   bool
+	IncludeCommits bool
+	IncludeTags    bool
+}
+
+func parseFeedOpts(r *http.Request) FeedOpts {
+	includeParam := r.URL.Query().Get("include")
+
+	// default: include everything
+	if includeParam == "" {
+		return FeedOpts{
+			IncludeIssues:  true,
+			IncludePulls:   true,
+			IncludeCommits: true,
+			IncludeTags:    true,
+		}
+	}
+
+	// parse comma-separated list
+	opts := FeedOpts{}
+	types := strings.SplitSeq(includeParam, ",")
+	for t := range types {
+		switch strings.TrimSpace(strings.ToLower(t)) {
+		case "issues":
+			opts.IncludeIssues = true
+		case "pulls", "prs":
+			opts.IncludePulls = true
+		case "commits":
+			opts.IncludeCommits = true
+		case "tags":
+			opts.IncludeTags = true
+		}
+	}
+
+	return opts
+}
+
+func (rp *Repo) getRepoFeed(ctx context.Context, repo *models.Repo, ownerSlashRepo string, opts FeedOpts) (*feeds.Feed, error) {
 	feedPagePerType := pagination.Page{Limit: 100}
-
-	pulls, err := db.GetPullsPaginated(rp.db, feedPagePerType, orm.FilterEq("repo_at", repo.RepoAt()))
-	if err != nil {
-		return nil, err
-	}
-
-	issues, err := db.GetIssuesPaginated(
-		rp.db,
-		feedPagePerType,
-		orm.FilterEq("repo_at", repo.RepoAt()),
-	)
-	if err != nil {
-		return nil, err
-	}
 
 	feed := &feeds.Feed{
 		Title:   fmt.Sprintf("activity feed for @%s", ownerSlashRepo),
@@ -42,20 +73,62 @@ func (rp *Repo) getRepoFeed(ctx context.Context, repo *models.Repo, ownerSlashRe
 		Updated: time.UnixMilli(0),
 	}
 
-	for _, pull := range pulls {
-		items, err := rp.createPullItems(ctx, pull, repo, ownerSlashRepo)
+	// fetch and add pull requests if requested
+	if opts.IncludePulls {
+		pulls, err := db.GetPullsPaginated(rp.db, feedPagePerType, orm.FilterEq("repo_at", repo.RepoAt()))
 		if err != nil {
 			return nil, err
 		}
-		feed.Items = append(feed.Items, items...)
+
+		for _, pull := range pulls {
+			items, err := rp.createPullItems(ctx, pull, ownerSlashRepo)
+			if err != nil {
+				return nil, err
+			}
+			feed.Items = append(feed.Items, items...)
+		}
 	}
 
-	for _, issue := range issues {
-		item, err := rp.createIssueItem(ctx, issue, repo, ownerSlashRepo)
+	// fetch and add issues if requested
+	if opts.IncludeIssues {
+		issues, err := db.GetIssuesPaginated(
+			rp.db,
+			feedPagePerType,
+			orm.FilterEq("repo_at", repo.RepoAt()),
+		)
 		if err != nil {
 			return nil, err
 		}
-		feed.Items = append(feed.Items, item)
+
+		for _, issue := range issues {
+			item, err := rp.createIssueItem(ctx, issue, ownerSlashRepo)
+			if err != nil {
+				return nil, err
+			}
+			feed.Items = append(feed.Items, item)
+		}
+	}
+
+	// fetch and add commits if requested
+	if opts.IncludeCommits {
+		commitItems, err := rp.createCommitItems(ctx, repo, ownerSlashRepo)
+		if err != nil {
+			// Soft failure: log error and continue with partial feed
+			log.Printf("failed to fetch commits for feed: %v", err)
+		} else {
+			feed.Items = append(feed.Items, commitItems...)
+		}
+	}
+
+	// fetch and add tags if requested
+	if opts.IncludeTags {
+		tagItems, err := rp.createTagItems(ctx, repo, ownerSlashRepo)
+		if err != nil {
+			// Soft failure: log error and continue with partial feed
+			log.Printf("failed to fetch tags for feed: %v", err)
+		} else {
+			feed.Items = append(feed.Items, tagItems...)
+		}
 	}
 
 	slices.SortFunc(feed.Items, func(a, b *feeds.Item) int {
@@ -65,6 +138,10 @@ func (rp *Repo) getRepoFeed(ctx context.Context, repo *models.Repo, ownerSlashRe
 		return 1
 	})
 
+	if len(feed.Items) > 100 {
+		feed.Items = feed.Items[:100]
+	}
+
 	if len(feed.Items) > 0 {
 		feed.Updated = feed.Items[0].Created
 	}
@@ -72,7 +149,7 @@ func (rp *Repo) getRepoFeed(ctx context.Context, repo *models.Repo, ownerSlashRe
 	return feed, nil
 }
 
-func (rp *Repo) createPullItems(ctx context.Context, pull *models.Pull, repo *models.Repo, ownerSlashRepo string) ([]*feeds.Item, error) {
+func (rp *Repo) createPullItems(ctx context.Context, pull *models.Pull, ownerSlashRepo string) ([]*feeds.Item, error) {
 	owner, err := rp.idResolver.ResolveIdent(ctx, pull.OwnerDid)
 	if err != nil {
 		return nil, err
@@ -88,7 +165,7 @@ func (rp *Repo) createPullItems(ctx context.Context, pull *models.Pull, repo *mo
 		Description: description,
 		Link:        &feeds.Link{Href: fmt.Sprintf("%s/%s/pulls/%d", rp.config.Core.BaseUrl(), ownerSlashRepo, pull.PullId)},
 		Created:     pull.Created,
-		Author:      &feeds.Author{Name: fmt.Sprintf("@%s", owner.Handle)},
+		Author:      &feeds.Author{Name: fmt.Sprintf("%s", owner.Handle)},
 	}
 	items = append(items, mainItem)
 
@@ -99,7 +176,7 @@ func (rp *Repo) createPullItems(ctx context.Context, pull *models.Pull, repo *mo
 
 		roundItem := &feeds.Item{
 			Title:       fmt.Sprintf("[PR #%d] %s (round #%d)", pull.PullId, pull.Title, round.RoundNumber),
-			Description: fmt.Sprintf("@%s submitted changes (at round #%d) on PR #%d in @%s", owner.Handle, round.RoundNumber, pull.PullId, ownerSlashRepo),
+			Description: fmt.Sprintf("%s submitted changes (at round #%d) on PR #%d in %s", owner.Handle, round.RoundNumber, pull.PullId, ownerSlashRepo),
 			Link:        &feeds.Link{Href: fmt.Sprintf("%s/%s/pulls/%d/round/%d/", rp.config.Core.BaseUrl(), ownerSlashRepo, pull.PullId, round.RoundNumber)},
 			Created:     round.Created,
 			Author:      &feeds.Author{Name: fmt.Sprintf("@%s", owner.Handle)},
@@ -110,7 +187,7 @@ func (rp *Repo) createPullItems(ctx context.Context, pull *models.Pull, repo *mo
 	return items, nil
 }
 
-func (rp *Repo) createIssueItem(ctx context.Context, issue models.Issue, repo *models.Repo, ownerSlashRepo string) (*feeds.Item, error) {
+func (rp *Repo) createIssueItem(ctx context.Context, issue models.Issue, ownerSlashRepo string) (*feeds.Item, error) {
 	owner, err := rp.idResolver.ResolveIdent(ctx, issue.Did)
 	if err != nil {
 		return nil, err
@@ -123,11 +200,92 @@ func (rp *Repo) createIssueItem(ctx context.Context, issue models.Issue, repo *m
 
 	return &feeds.Item{
 		Title:       fmt.Sprintf("[Issue #%d] %s", issue.IssueId, issue.Title),
-		Description: fmt.Sprintf("@%s %s issue #%d in @%s", owner.Handle, state, issue.IssueId, ownerSlashRepo),
+		Description: fmt.Sprintf("%s %s issue #%d in %s", owner.Handle, state, issue.IssueId, ownerSlashRepo),
 		Link:        &feeds.Link{Href: fmt.Sprintf("%s/%s/issues/%d", rp.config.Core.BaseUrl(), ownerSlashRepo, issue.IssueId)},
 		Created:     issue.Created,
-		Author:      &feeds.Author{Name: fmt.Sprintf("@%s", owner.Handle)},
+		Author:      &feeds.Author{Name: owner.Handle.String()},
 	}, nil
+}
+
+func (rp *Repo) createCommitItems(ctx context.Context, repo *models.Repo, ownerSlashRepo string) ([]*feeds.Item, error) {
+	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+
+	xrpcBytes, err := tangled.GitTempListCommits(ctx, xrpcc, "", 100, "", repo.RepoAt().String())
+	if err != nil {
+		return nil, fmt.Errorf("failed to call XRPC repo.log: %w", err)
+	}
+
+	var xrpcResp types.RepoLogResponse
+	if err := json.Unmarshal(xrpcBytes, &xrpcResp); err != nil {
+		return nil, fmt.Errorf("failed to decode XRPC response: %w", err)
+	}
+
+	var items []*feeds.Item
+	for _, commit := range xrpcResp.Commits {
+		messageLines := strings.SplitN(commit.Message, "\n", 2)
+		firstLine := messageLines[0]
+		if firstLine == "" {
+			firstLine = "(no message)"
+		}
+
+		shortHash := commit.Hash.String()
+		if len(shortHash) > 7 {
+			shortHash = shortHash[:7]
+		}
+
+		item := &feeds.Item{
+			Title:       fmt.Sprintf("[Commit %s] %s", shortHash, firstLine),
+			Description: commit.Message,
+			Link:        &feeds.Link{Href: fmt.Sprintf("%s/%s/commit/%s", rp.config.Core.BaseUrl(), ownerSlashRepo, commit.Hash.String())},
+			Created:     commit.Author.When,
+			Author:      &feeds.Author{Name: commit.Author.Name, Email: commit.Author.Email},
+		}
+		items = append(items, item)
+	}
+
+	return items, nil
+}
+
+func (rp *Repo) createTagItems(ctx context.Context, repo *models.Repo, ownerSlashRepo string) ([]*feeds.Item, error) {
+	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+
+	tagBytes, err := tangled.GitTempListTags(ctx, xrpcc, "", 100, repo.RepoAt().String())
+	if err != nil {
+		return nil, fmt.Errorf("failed to call XRPC repo.tags: %w", err)
+	}
+
+	var tagResp types.RepoTagsResponse
+	if err := json.Unmarshal(tagBytes, &tagResp); err != nil {
+		return nil, fmt.Errorf("failed to decode XRPC response: %w", err)
+	}
+
+	var items []*feeds.Item
+	for _, tag := range tagResp.Tags {
+		var description string
+
+		// only handle annotated tags for now
+		if tag.Tag != nil {
+			if tag.Tag.Message != "" {
+				description = fmt.Sprintf("Tag %s created by %s:\n\n%s", tag.Name, tag.Tag.Tagger.Name, tag.Tag.Message)
+			} else {
+				description = fmt.Sprintf("Tag %s created by %s", tag.Name, tag.Tag.Tagger.Name)
+			}
+
+			item := &feeds.Item{
+				Title:       fmt.Sprintf("[Tag] %s", tag.Name),
+				Description: description,
+				Link:        &feeds.Link{Href: fmt.Sprintf("%s/%s/tags/%s", rp.config.Core.BaseUrl(), ownerSlashRepo, tag.Name)},
+				Created:     tag.Tag.Tagger.When,
+				Author: &feeds.Author{
+					Name:  tag.Tag.Tagger.Name,
+					Email: tag.Tag.Tagger.Email,
+				},
+			}
+			items = append(items, item)
+		}
+	}
+
+	return items, nil
 }
 
 func (rp *Repo) getPullState(pull *models.Pull) string {
@@ -160,7 +318,8 @@ func (rp *Repo) AtomFeed(w http.ResponseWriter, r *http.Request) {
 	}
 	ownerSlashRepo := repoOwnerId.Handle.String() + "/" + f.Name
 
-	feed, err := rp.getRepoFeed(r.Context(), f, ownerSlashRepo)
+	opts := parseFeedOpts(r)
+	feed, err := rp.getRepoFeed(r.Context(), f, ownerSlashRepo, opts)
 	if err != nil {
 		log.Println("failed to get repo feed:", err)
 		rp.pages.Error500(w)
