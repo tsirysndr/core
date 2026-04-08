@@ -9,11 +9,10 @@
   {{ $next := $page.Next.Offset }}
   {{ $lastPage := sub $totalCount (mod $totalCount $page.Limit) }}
 
-  <div class="flex justify-center items-center mt-4 gap-2">
+  <div class="flex justify-center items-center mt-4 gap-5">
     <a
       class="
-        btn flex items-center gap-2 no-underline hover:no-underline 
-        dark:text-white dark:hover:bg-gray-700
+        flex items-center gap-1 no-underline hover:no-underline dark:text-white text-sm
         {{ if le $page.Offset 0 }}
           cursor-not-allowed opacity-50
         {{ end }}
@@ -24,61 +23,48 @@
       {{ end }}
     >
       {{ i "chevron-left" "w-4 h-4" }}
-      previous
+      prev
     </a>
 
     {{ if gt $page.Offset 0 }}
-      <a
-        hx-boost="true"
-        href="{{ $basePath }}?{{ $queryParams }}&offset=0&limit={{ $page.Limit }}"
-      >
+      <a hx-boost="true" href="{{ $basePath }}?{{ $queryParams }}&offset=0&limit={{ $page.Limit }}">
         1
       </a>
     {{ end }}
 
     {{ if gt $prev $page.Limit }}
-      <span>...</span>
+      <span class="text-gray-400 dark:text-gray-500">—</span>
     {{ end }}
 
     {{ if gt $prev 0 }}
-      <a
-        hx-boost="true"
-        href="{{ $basePath }}?{{ $queryParams }}&offset={{ $prev }}&limit={{ $page.Limit }}"
-      >
+      <a hx-boost="true" href="{{ $basePath }}?{{ $queryParams }}&offset={{ $prev }}&limit={{ $page.Limit }}">
         {{ add (div $prev $page.Limit) 1 }}
       </a>
     {{ end }}
 
-    <span class="font-bold">
+    <span class="px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm">
       {{ add (div $page.Offset $page.Limit) 1 }}
     </span>
 
     {{ if lt $next $lastPage }}
-      <a
-        hx-boost="true"
-        href="{{ $basePath }}?{{ $queryParams }}&offset={{ $next }}&limit={{ $page.Limit }}"
-      >
+      <a hx-boost="true" href="{{ $basePath }}?{{ $queryParams }}&offset={{ $next }}&limit={{ $page.Limit }}">
         {{ add (div $next $page.Limit) 1 }}
       </a>
     {{ end }}
 
     {{ if lt $next (sub $totalCount (mul 2 $page.Limit)) }}
-      <span>...</span>
+      <span class="text-gray-400 dark:text-gray-500">—</span>
     {{ end }}
 
     {{ if lt $page.Offset $lastPage }} 
-      <a
-        hx-boost="true"
-        href="{{ $basePath }}?{{ $queryParams }}&offset={{ $lastPage }}&limit={{ $page.Limit }}"
-      >
+      <a hx-boost="true" href="{{ $basePath }}?{{ $queryParams }}&offset={{ $lastPage }}&limit={{ $page.Limit }}">
         {{ add (div $lastPage $page.Limit) 1 }}
       </a>
     {{ end }}
 
     <a
       class="
-        btn flex items-center gap-2 no-underline hover:no-underline 
-        dark:text-white dark:hover:bg-gray-700
+        flex items-center gap-1 no-underline hover:no-underline dark:text-white text-sm
         {{ if lt $next $totalCount | not }}
             cursor-not-allowed opacity-50
         {{ end }}
