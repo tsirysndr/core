@@ -129,6 +129,7 @@ func (t *Tap) processRepo(ctx context.Context, evt *tapc.RecordEventData) error 
 			}
 		}
 
+		t.logger.Debug("tap: upserting repo with knot", "knot", repo.KnotDomain)
 		if err := db.UpsertRepo(ctx, t.db, repo); err != nil {
 			return fmt.Errorf("upserting repo to db: %w", err)
 		}

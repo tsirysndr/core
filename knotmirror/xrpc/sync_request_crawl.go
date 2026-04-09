@@ -83,6 +83,7 @@ func (x *Xrpc) RequestCrawl(w http.ResponseWriter, r *http.Request) {
 			RetryCount: 0,
 		}
 
+		x.logger.Debug("requestCrawl: upserting repo with knot", "knot", repo.KnotDomain)
 		if err := db.UpsertRepo(ctx, x.db, repo); err != nil {
 			l.Error("failed to upsert repo", "err", err)
 			writeErr(w, err)

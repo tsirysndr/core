@@ -70,12 +70,17 @@ func (x *Xrpc) resolveKnot(ctx context.Context, repoAt syntax.ATURI) (*knotInfo,
 
 	record := out.Value.Val.(*tangled.Repo)
 	knotURL := record.Knot
-	if !strings.Contains(knotURL, "://") {
-		scheme := "http"
-		if x.cfg.KnotUseSSL {
-			scheme = "https"
+	if !strings.Contains(record.Knot, "://") {
+		if host, _ := db.GetHost(ctx, x.db, record.Knot); host != nil {
+			knotURL = host.URL()
+		} else {
+			x.logger.Warn("repo is from unknown knot")
+			if x.cfg.KnotUseSSL {
+				knotURL = "https://" + knotURL
+			} else {
+				knotURL = "http://" + knotURL
+			}
 		}
-		knotURL = scheme + "://" + knotURL
 	}
 
 	go func() {
@@ -88,6 +93,7 @@ func (x *Xrpc) resolveKnot(ctx context.Context, repoAt syntax.ATURI) (*knotInfo,
 			KnotDomain: knotURL,
 			State:      models.RepoStatePending,
 		}
+		x.logger.Debug("pending: upserting repo with knot", "knot", pending.KnotDomain)
 		if upsertErr := db.UpsertRepo(bgCtx, x.db, pending); upsertErr != nil {
 			x.logger.Error("failed to upsert repo after proxy resolution", "err", upsertErr)
 		}
