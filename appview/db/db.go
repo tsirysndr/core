@@ -261,7 +261,6 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			did text not null,
 
 			-- data
-			avatar text,
 			description text not null,
 			include_bluesky integer not null default 0,
 			location text,
