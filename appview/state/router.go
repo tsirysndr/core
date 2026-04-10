@@ -181,6 +181,10 @@ func (s *State) StandardRouter(mw *middleware.Middleware) http.Handler {
 		r.Delete("/", s.Follow)
 	})
 
+	r.With(middleware.AuthMiddleware(s.oauth)).Route("/vouch", func(r chi.Router) {
+		r.Post("/", s.Vouch)
+	})
+
 	r.With(middleware.AuthMiddleware(s.oauth)).Route("/star", func(r chi.Router) {
 		r.Post("/", s.Star)
 		r.Delete("/", s.Star)

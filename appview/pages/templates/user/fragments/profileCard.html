@@ -39,7 +39,7 @@
     </div>
   </div>
   <div class="col-span-3 md:col-span-full">
-    <div id="profile-bio" class="text-sm">
+    <div id="profile-bio" class="text-sm space-y-2">
       {{ $profile := .Profile }}
       {{ with .Profile }}
 
@@ -87,7 +87,7 @@
       </div>
       {{ end }}
 
-      <div class="flex mt-2 items-center gap-2">
+      <div class="flex my-2 items-center gap-2">
         {{ if ne .FollowStatus.String "IsSelf" }}
           {{ template "user/fragments/follow" . }}
         {{ else }}
@@ -108,6 +108,18 @@
         </a>
       </div>
 
+      {{ if ne .FollowStatus.String "IsSelf" }}
+        {{ template "user/fragments/vouch" . }}
+
+        {{ if .VouchRelationship }}
+          {{ if .VouchRelationship.IndirectVouches }}
+            <div class="flex flex-col gap-2">
+              {{ template "user/fragments/networkVouches" .VouchRelationship }}
+            </div>
+          {{ end }}
+        {{ end }}
+      {{ end }}
+
     </div>
     <div id="update-profile" class="text-red-400 dark:text-red-500"></div>
   </div>
@@ -115,15 +127,40 @@
 {{ end }}
 
 {{ define "followerFollowing" }}
-{{ $root := index . 0 }}
-{{ $userIdent := index . 1 }}
-{{ with $root }}
-<div class="flex items-center gap-2 my-2 overflow-hidden text-ellipsis whitespace-nowrap max-w-full text-sm">
-  <span class="flex-shrink-0">{{ i "users" "size-4" }}</span>
-  <span id="followers" data-followers-did="{{ .UserDid }}"><a href="/{{ $userIdent }}?tab=followers">{{
-      .Stats.FollowersCount }} followers</a></span>
-  <span class="select-none after:content-['·']"></span>
-  <span id="following"><a href="/{{ $userIdent }}?tab=following">{{ .Stats.FollowingCount }} following</a></span>
-</div>
+  {{ $root := index . 0 }}
+  {{ $userIdent := index . 1 }}
+  {{ with $root }}
+  <div class="flex items-center gap-2 my-2 overflow-hidden text-ellipsis whitespace-nowrap max-w-full text-sm">
+    <span class="flex-shrink-0">{{ i "users" "size-4" }}</span>
+    <span id="followers" data-followers-did="{{ .UserDid }}"><a href="/{{ $userIdent }}?tab=followers">{{
+        .Stats.FollowersCount }} followers</a></span>
+    <span class="select-none after:content-['·']"></span>
+    <span id="following"><a href="/{{ $userIdent }}?tab=following">{{ .Stats.FollowingCount }} following</a></span>
+  </div>
+  {{ end }}
 {{ end }}
+
+
+{{ define "networkVouchItem" }}
+  <div class="flex items-center gap-2 p-2 group/item">
+    <div class="flex-shrink-0 h-fit relative">
+    {{ template "user/fragments/picLink" (list .Did "size-8") }}
+    </div>
+    <div class="flex-1 min-w-0 flex items-center gap-2">
+      <div class="text-sm font-medium flex-shrink-0 text-green-900 dark:text-green-100">
+        {{ resolve .Did }}
+      </div>
+      <div class="flex-1 min-w-0 text-sm text-green-700 dark:text-green-300 truncate">
+        {{ .Reason | description }}
+      </div>
+    </div>
+    <div class="flex-shrink-0 relative min-w-12 text-center">
+      <div class="text-xs text-green-600 dark:text-green-400 group-hover/item:opacity-0 transition-opacity">
+        {{ template "repo/fragments/shortTime" .CreatedAt }}
+      </div>
+      <div class="absolute inset-0 flex items-center gap-1 justify-center opacity-0 group-hover/item:opacity-100 transition-opacity text-xs font-medium text-green-900 dark:text-green-100">
+        view {{ i "arrow-right" "size-3" }}
+      </div>
+    </div>
+  </div>
 {{ end }}

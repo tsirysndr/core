@@ -1,0 +1,25 @@
+{{ define "user/fragments/vouchTooltip" }}
+  {{- $vr := . -}}
+  {{- if not $vr.IsEmpty -}}
+    {{- $networkPart := "" -}}
+    {{- if and (gt $vr.VouchStrength 0) (eq $vr.DenounceStrength 0) -}}
+      {{- $networkPart = printf "%s from your network vouched for this user." (plural $vr.VouchStrength "person" "people") -}}
+    {{- else if and (gt $vr.DenounceStrength 0) (eq $vr.VouchStrength 0) -}}
+      {{- $networkPart = printf "%s from your network denounced this user." (plural $vr.DenounceStrength "person" "people") -}}
+    {{- else if and (eq $vr.DenounceStrength 0) (eq $vr.VouchStrength 0) -}}
+      {{- $networkPart = "" -}}
+    {{- else -}}
+      {{- $networkPart = printf "%s and %s from your network." (plural $vr.VouchStrength "vouch" "vouches") (plural $vr.DenounceStrength "denounce" "") -}}
+    {{- end -}}
+    {{- $direct := $vr.GetDirectVouch -}}
+    {{- if $direct -}}
+      {{- if $direct.IsVouch -}}
+        You vouched for {{ resolve $vr.SubjectDid }} {{ relTimeFmt $direct.CreatedAt }}. {{ $networkPart }}
+      {{- else -}}
+        You denounced {{ resolve $vr.SubjectDid }} {{ relTimeFmt $direct.CreatedAt }}. {{ $networkPart }}
+      {{- end -}}
+    {{- else -}}
+      {{- $networkPart -}}.
+    {{- end -}}
+  {{- end -}}
+{{ end }}
