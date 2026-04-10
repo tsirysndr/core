@@ -386,22 +386,22 @@ func (p *Pull) IsForkBased() bool {
 	return false
 }
 
-func (p *Pull) Participants() []string {
-	participantSet := make(map[string]struct{})
-	participants := []string{}
+func (p *Pull) Participants() []syntax.DID {
+	participantSet := make(map[syntax.DID]struct{})
+	participants := []syntax.DID{}
 
-	addParticipant := func(did string) {
+	addParticipant := func(did syntax.DID) {
 		if _, exists := participantSet[did]; !exists {
 			participantSet[did] = struct{}{}
 			participants = append(participants, did)
 		}
 	}
 
-	addParticipant(p.OwnerDid)
+	addParticipant(syntax.DID(p.OwnerDid))
 
 	for _, s := range p.Submissions {
 		for _, sp := range s.Participants() {
-			addParticipant(sp)
+			addParticipant(syntax.DID(sp))
 		}
 	}
 

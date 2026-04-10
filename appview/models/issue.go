@@ -135,21 +135,21 @@ func (i *Issue) CommentList() []CommentListItem {
 	return listing
 }
 
-func (i *Issue) Participants() []string {
-	participantSet := make(map[string]struct{})
-	participants := []string{}
+func (i *Issue) Participants() []syntax.DID {
+	participantSet := make(map[syntax.DID]struct{})
+	participants := []syntax.DID{}
 
-	addParticipant := func(did string) {
+	addParticipant := func(did syntax.DID) {
 		if _, exists := participantSet[did]; !exists {
 			participantSet[did] = struct{}{}
 			participants = append(participants, did)
 		}
 	}
 
-	addParticipant(i.Did)
+	addParticipant(syntax.DID(i.Did))
 
 	for _, c := range i.Comments {
-		addParticipant(c.Did)
+		addParticipant(syntax.DID(c.Did))
 	}
 
 	return participants

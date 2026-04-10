@@ -127,21 +127,34 @@ func (rp *Issues) RepoSingleIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	vouchRelationships := make(map[syntax.DID]*models.VouchRelationship)
+	if user != nil {
+		participants := issue.Participants()
+		vouchRelationships, err = db.GetVouchRelationshipsBatch(rp.db, syntax.DID(user.Did), participants)
+		if err != nil {
+			l.Error("failed to fetch vouch relationships", "err", err)
+		}
+	}
+
 	defs := make(map[string]*models.LabelDefinition)
 	for _, l := range labelDefs {
 		defs[l.AtUri().String()] = &l
 	}
 
-	rp.pages.RepoSingleIssue(w, pages.RepoSingleIssueParams{
-		LoggedInUser: user,
-		RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
-		Issue:        issue,
-		CommentList:  issue.CommentList(),
-		Backlinks:    backlinks,
-		Reactions:    reactionMap,
-		UserReacted:  userReactions,
-		LabelDefs:    defs,
+	err = rp.pages.RepoSingleIssue(w, pages.RepoSingleIssueParams{
+		LoggedInUser:       user,
+		RepoInfo:           rp.repoResolver.GetRepoInfo(r, user),
+		Issue:              issue,
+		CommentList:        issue.CommentList(),
+		Backlinks:          backlinks,
+		Reactions:          reactionMap,
+		UserReacted:        userReactions,
+		LabelDefs:          defs,
+		VouchRelationships: vouchRelationships,
 	})
+	if err != nil {
+		l.Error("failed to render issue", "err", err)
+	}
 }
 
 func (rp *Issues) EditIssue(w http.ResponseWriter, r *http.Request) {
@@ -978,15 +991,28 @@ func (rp *Issues) RepoIssues(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	vouchRelationships := make(map[syntax.DID]*models.VouchRelationship)
+	if user != nil {
+		dids := make([]syntax.DID, len(issues))
+		for i, u := range issues {
+			dids[i] = syntax.DID(u.Did)
+		}
+		vouchRelationships, err = db.GetVouchRelationshipsBatch(rp.db, syntax.DID(user.Did), dids)
+		if err != nil {
+			l.Error("failed to fetch vouch relationships", "err", err)
+		}
+	}
+
 	rp.pages.RepoIssues(w, pages.RepoIssuesParams{
-		LoggedInUser: rp.oauth.GetMultiAccountUser(r),
-		RepoInfo:     repoInfo,
-		Issues:       issues,
-		IssueCount:   totalIssues,
-		LabelDefs:    defs,
-		FilterState:  filterState,
-		FilterQuery:  query.String(),
-		Page:         page,
+		LoggedInUser:       rp.oauth.GetMultiAccountUser(r),
+		RepoInfo:           repoInfo,
+		Issues:             issues,
+		IssueCount:         totalIssues,
+		LabelDefs:          defs,
+		FilterState:        filterState,
+		FilterQuery:        query.String(),
+		Page:               page,
+		VouchRelationships: vouchRelationships,
 	})
 }
 

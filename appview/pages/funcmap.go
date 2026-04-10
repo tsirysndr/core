@@ -24,6 +24,7 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 	"github.com/dustin/go-humanize"
+	"github.com/dustin/go-humanize/english"
 	"github.com/go-enry/go-enry/v2"
 	"github.com/yuin/goldmark"
 	emoji "github.com/yuin/goldmark-emoji"
@@ -177,6 +178,7 @@ func (p *Pages) funcMap() template.FuncMap {
 			return s
 		},
 		"commaFmt":   humanize.Comma,
+		"plural":     english.Plural,
 		"relTimeFmt": humanize.Time,
 		"shortRelTimeFmt": func(t time.Time) string {
 			return humanize.CustomRelTime(t, time.Now(), "", "", []humanize.RelTimeMagnitude{

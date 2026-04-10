@@ -305,7 +305,7 @@ func (n *databaseNotifier) NewPullComment(ctx context.Context, comment *models.P
 	// - remove those already mentioned
 	recipients := sets.Singleton(syntax.DID(repo.Did))
 	for _, p := range pull.Participants() {
-		recipients.Insert(syntax.DID(p))
+		recipients.Insert(p)
 	}
 	for _, m := range mentions {
 		recipients.Remove(m)
@@ -439,7 +439,7 @@ func (n *databaseNotifier) NewPullState(ctx context.Context, actor syntax.DID, p
 		recipients.Insert(c.SubjectDid)
 	}
 	for _, p := range pull.Participants() {
-		recipients.Insert(syntax.DID(p))
+		recipients.Insert(p)
 	}
 
 	entityType := "pull"

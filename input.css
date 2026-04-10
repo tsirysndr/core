@@ -147,6 +147,15 @@
           disabled:before:bg-green-400 dark:disabled:before:bg-green-600;
         }
 
+        .btn-cancel {
+            @apply btn text-white
+          before:bg-red-600 hover:before:bg-red-700
+          dark:before:bg-red-700 dark:hover:before:bg-red-800
+          before:border before:border-red-700 hover:before:border-red-800
+          focus-visible:before:outline-red-500
+          disabled:before:bg-red-400 dark:disabled:before:bg-red-600;
+        }
+
         .prose {
             overflow-wrap: anywhere;
         }

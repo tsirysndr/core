@@ -65,7 +65,13 @@
 
 {{ define "repoAfter" }}
   <div class="mt-2">
-    {{ template "repo/issues/fragments/issueListing" (dict "Issues" .Issues "RepoPrefix" .RepoInfo.FullName "LabelDefs" .LabelDefs) }}
+    {{ template "repo/issues/fragments/issueListing" 
+        (dict
+          "Issues" .Issues
+          "RepoPrefix" .RepoInfo.FullName
+          "LabelDefs" .LabelDefs
+          "VouchRelationships" .VouchRelationships
+          ) }}
   </div>
   {{if gt .IssueCount .Page.Limit }}
     {{ template "fragments/pagination" (dict

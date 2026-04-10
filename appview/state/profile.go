@@ -43,6 +43,10 @@ func (s *State) Profile(w http.ResponseWriter, r *http.Request) {
 			ServeHTTP(w, r)
 	case "strings":
 		s.stringsPage(w, r)
+	case "vouches":
+		middleware.
+			Paginate(http.HandlerFunc(s.vouchesPage)).
+			ServeHTTP(w, r)
 	default:
 		s.profileOverview(w, r)
 	}
@@ -93,9 +97,12 @@ func (s *State) profile(r *http.Request) (*pages.ProfileCard, error) {
 	loggedInUser := s.oauth.GetMultiAccountUser(r)
 	followStatus := models.IsNotFollowing
 	var loggedInDid string
+	var vouchRelationship *models.VouchRelationship
+
 	if loggedInUser != nil {
 		followStatus = db.GetFollowStatus(s.db, loggedInUser.Did, did)
 		loggedInDid = loggedInUser.Did
+		vouchRelationship, err = db.GetVouchRelationship(s.db, syntax.DID(loggedInUser.Did), syntax.DID(did))
 	}
 
 	showPunchcard := s.shouldShowPunchcard(did, loggedInDid)
@@ -116,10 +123,11 @@ func (s *State) profile(r *http.Request) (*pages.ProfileCard, error) {
 	}
 
 	return &pages.ProfileCard{
-		UserDid:      did,
-		HasProfile:   hasProfile,
-		Profile:      profile,
-		FollowStatus: followStatus,
+		UserDid:           did,
+		HasProfile:        hasProfile,
+		Profile:           profile,
+		FollowStatus:      followStatus,
+		VouchRelationship: vouchRelationship,
 		Stats: pages.ProfileStats{
 			RepoCount:      repoCount,
 			StringCount:    stringCount,
@@ -177,13 +185,16 @@ func (s *State) profileOverview(w http.ResponseWriter, r *http.Request) {
 		l.Error("failed to create timeline", "err", err)
 	}
 
-	s.pages.ProfileOverview(w, pages.ProfileOverviewParams{
+	err = s.pages.ProfileOverview(w, pages.ProfileOverviewParams{
 		LoggedInUser:       s.oauth.GetMultiAccountUser(r),
 		Card:               profile,
 		Repos:              pinnedRepos,
 		CollaboratingRepos: pinnedCollaboratingRepos,
 		ProfileTimeline:    timeline,
 	})
+	if err != nil {
+		l.Error("failed to render template", "err", err)
+	}
 }
 
 func (s *State) shouldShowPunchcard(targetDid, requesterDid string) bool {
@@ -378,6 +389,65 @@ func (s *State) stringsPage(w http.ResponseWriter, r *http.Request) {
 		Strings:      strings,
 		Card:         profile,
 	})
+}
+
+func (s *State) vouchesPage(w http.ResponseWriter, r *http.Request) {
+	l := s.logger.With("handler", "vouchesPage")
+
+	profile, err := s.profile(r)
+	if err != nil {
+		l.Error("failed to build profile card", "err", err)
+		s.pages.Error500(w)
+		return
+	}
+	l = l.With("profileDid", profile.UserDid)
+
+	loggedInUser := s.oauth.GetMultiAccountUser(r)
+	page := pagination.FromContext(r.Context())
+
+	var vouches []models.Vouch
+	if loggedInUser != nil {
+		vouches, err = db.GetNetworkVouchTimeline(s.db, loggedInUser.Did, profile.UserDid, page)
+		if err != nil {
+			l.Error("failed to get vouch timeline", "err", err)
+			s.pages.Error500(w)
+			return
+		}
+	}
+
+	var suggestions []models.VouchSuggestion
+	if loggedInUser != nil && loggedInUser.Did == profile.UserDid {
+		suggestions, err = db.GetVouchSuggestions(s.db, profile.UserDid, 5)
+		if err != nil {
+			l.Error("failed to get vouch suggestions", "err", err)
+		}
+
+		if len(suggestions) > 0 {
+			suggestionDids := make([]syntax.DID, len(suggestions))
+			for i, s := range suggestions {
+				suggestionDids[i] = syntax.DID(s.Did)
+			}
+			relationships, err := db.GetVouchRelationshipsBatch(s.db, syntax.DID(loggedInUser.Did), suggestionDids)
+			if err != nil {
+				l.Error("failed to get vouch relationships for suggestions", "err", err)
+			} else {
+				for i := range suggestions {
+					suggestions[i].VouchRelationship = relationships[suggestions[i].Did]
+				}
+			}
+		}
+	}
+
+	err = s.pages.ProfileVouches(w, pages.ProfileVouchesParams{
+		LoggedInUser: loggedInUser,
+		Vouches:      vouches,
+		Suggestions:  suggestions,
+		Card:         profile,
+		Page:         page,
+	})
+	if err != nil {
+		l.Error("failed to render page", "err", err)
+	}
 }
 
 type FollowsPageParams struct {

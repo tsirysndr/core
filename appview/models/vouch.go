@@ -102,6 +102,49 @@ func (vr *VouchRelationship) GetDirectVouch() *Vouch {
 	return nil
 }
 
+func (vr *VouchRelationship) IsIndirectVouch() bool {
+	if vr.IsDirectVouch() || vr.IsDirectDenounce() {
+		return false
+	}
+	for _, v := range vr.NetworkVouches {
+		if v.Did != vr.ViewerDid && v.Kind == VouchKindVouch {
+			return true
+		}
+	}
+	return false
+}
+
+func (vr *VouchRelationship) IsIndirectDenounce() bool {
+	if vr.IsDirectVouch() || vr.IsDirectDenounce() {
+		return false
+	}
+	for _, v := range vr.NetworkVouches {
+		if v.Did != vr.ViewerDid && v.Kind == VouchKindDenounce {
+			return true
+		}
+	}
+	return false
+}
+
+func (vr *VouchRelationship) IsMixed() bool {
+	if vr.IsDirectVouch() || vr.IsDirectDenounce() {
+		return false
+	}
+	hasVouch := false
+	hasDenounce := false
+	for _, v := range vr.NetworkVouches {
+		if v.Did != vr.ViewerDid {
+			switch v.Kind {
+			case VouchKindVouch:
+				hasVouch = true
+			case VouchKindDenounce:
+				hasDenounce = true
+			}
+		}
+	}
+	return hasVouch && hasDenounce
+}
+
 func (vr *VouchRelationship) VouchStrength() int {
 	count := 0
 	for _, v := range vr.NetworkVouches {

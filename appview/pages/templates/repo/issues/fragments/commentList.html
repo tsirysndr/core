@@ -14,7 +14,9 @@
           "RepoInfo" $root.RepoInfo
           "LoggedInUser" $root.LoggedInUser
           "Issue" $root.Issue
-          "Comment" $comment.Self) }}
+          "Comment" $comment.Self
+          "VouchRelationship" (index $root.VouchRelationships $comment.Self.Did)
+          ) }}
 
   <div class="rounded border border-gray-200 dark:border-gray-700 w-full overflow-hidden shadow-sm bg-gray-50 dark:bg-gray-800/50">
     {{ template "topLevelComment" $params }}
@@ -28,8 +30,9 @@
               "RepoInfo" $root.RepoInfo
               "LoggedInUser" $root.LoggedInUser
               "Issue" $root.Issue
-              "Comment" $reply)
-          }}
+              "Comment" $reply
+              "VouchRelationship" (index $root.VouchRelationships $reply.Did)
+          ) }}
         </div>
       {{ end }}
     </div>
@@ -41,7 +44,7 @@
 {{ define "topLevelComment" }}
 <div class="rounded px-6 py-4 bg-white dark:bg-gray-800 flex gap-2 ">
   <div class="flex-shrink-0">
-    {{ template "user/fragments/picLink" (list .Comment.Did "size-8 mr-1") }}
+    {{ template "user/fragments/picLink" (list .Comment.Did "size-8 mr-1" .VouchRelationship) }}
   </div>
   <div class="flex-1 min-w-0">
     {{ template "repo/issues/fragments/issueCommentHeader" . }}
@@ -53,7 +56,7 @@
 {{ define "replyComment" }}
 <div class="py-4 pr-4 w-full mx-auto overflow-hidden flex gap-2 ">
   <div class="flex-shrink-0">
-    {{ template "user/fragments/picLink" (list .Comment.Did "size-8 mr-1") }}
+    {{ template "user/fragments/picLink" (list .Comment.Did "size-8 mr-1" .VouchRelationship) }}
   </div>
   <div class="flex-1 min-w-0">
     {{ template "repo/issues/fragments/issueCommentHeader" . }}

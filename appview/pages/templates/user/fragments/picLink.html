@@ -2,14 +2,46 @@
   {{ $did := index . 0 }}
   {{ $classes := index . 1 }}
   {{ $handle := resolve $did  }}
-  <a href="/{{ $handle }}" title="{{ $handle }}">
-    <img
-        src="{{ tinyAvatar $did }}"
-        alt=""
-        class="rounded-full border border-gray-300 dark:border-gray-700 {{ $classes }}"
-    />
-  </a>
+  {{ $vr := false }}
+  {{ if ge (len .) 3 }}
+    {{ $vr = index . 2 }}
+  {{ end }}
+  <div class="relative inline-block">
+    <a href="/{{ $handle }}" title="{{ $handle }}">
+      <img
+          src="{{ tinyAvatar $did }}"
+          alt=""
+          class="rounded-full border border-gray-300 dark:border-gray-700 {{ $classes }}"
+      />
+    </a>
+    {{ if $vr }}
+      {{ if ne $did $vr.ViewerDid }}
+        <button
+          type="button"
+          popovertarget="vouch-modal-{{ normalizeForHtmlId $vr.SubjectDid }}"
+          popovertargetaction="toggle"
+          class="absolute -bottom-0.5 -right-0.5 w-1/2 h-1/2 cursor-pointer"
+          title="{{ template "user/fragments/vouchTooltip" $vr }}">
+          {{ if $vr.IsDirectVouch }}
+            {{ template "fragments/icons/shield-direct-vouch" "w-full h-full" }}
+          {{ else if $vr.IsDirectDenounce }}
+            {{ template "fragments/icons/shield-direct-denounce" "w-full h-full" }}
+          {{ else if $vr.IsMixed }}
+            {{ template "fragments/icons/shield-mixed" "w-full h-full" }}
+          {{ else if $vr.IsIndirectVouch }}
+            {{ template "fragments/icons/shield-indirect-vouch" "w-full h-full text-white dark:text-gray-900" }}
+          {{ else if $vr.IsIndirectDenounce }}
+            {{ template "fragments/icons/shield-indirect-denounce" "w-full h-full text-white dark:text-gray-900" }}
+          {{ else }}
+            {{ template "fragments/icons/shield-empty" "w-full h-full" }}
+          {{ end }}
+        </button>
+      {{ end }}
+    {{ end }}
+  </div>
+  {{ if $vr }}
+    {{ if ne $did $vr.ViewerDid }}
+      {{ template "user/fragments/vouchPopover" (dict "VouchRelationship" $vr) }}
+    {{ end }}
+  {{ end }}
 {{ end }}
-
-
-

@@ -300,7 +300,7 @@
     flex gap-2 sticky top-0 z-20">
     <!-- left column: just profile picture -->
     <div class="flex-shrink-0 pt-2">
-      {{ template "user/fragments/picLink" (list $root.Pull.OwnerDid "size-8") }}
+      {{ template "user/fragments/picLink" (list $root.Pull.OwnerDid "size-8" (index $root.VouchRelationships $root.Pull.OwnerDid)) }}
     </div>
     <!-- right column -->
     <div class="flex-1 min-w-0 flex flex-col gap-1">
@@ -592,7 +592,7 @@
     </summary>
     <div>
       {{ range $item.Comments }}
-        {{ template "submissionComment" . }}
+        {{ template "submissionComment" (list . $root) }}
       {{ end }}
     </div>
     {{ if gt $c 0}}
@@ -625,25 +625,27 @@
 {{ end }}
 
 {{ define "submissionComment" }}
-  <div id="comment-{{.ID}}" class="flex gap-2 -ml-4 py-4 w-full mx-auto group/comment">
+  {{ $comment := index . 0 }}
+  {{ $root := index . 1 }}
+  <div id="comment-{{$comment.ID}}" class="flex gap-2 -ml-4 py-4 w-full mx-auto group/comment">
     <!-- left column: profile picture -->
     <div class="flex-shrink-0 h-fit relative">
-      {{ template "user/fragments/picLink" (list .OwnerDid "size-8") }}
+      {{ template "user/fragments/picLink" (list $comment.OwnerDid "size-8" (index $root.VouchRelationships $comment.OwnerDid)) }}
     </div>
     <!-- right column: name and body in two rows -->
     <div class="flex-1 min-w-0">
       <!-- Row 1: Author and timestamp -->
       <div class="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1 group-target/comment:bg-yellow-200/30 group-target/comment:dark:bg-yellow-600/30">
-        {{ $handle := resolve .OwnerDid }}
+        {{ $handle := resolve $comment.OwnerDid }}
         <a class="text-gray-500 dark:text-gray-400 hover:text-gray-500 dark:hover:text-gray-300" href="/{{ $handle }}">{{ $handle }}</a>
         <span class="before:content-['·']"></span>
-        <a class="text-gray-500 dark:text-gray-400 hover:text-gray-500 dark:hover:text-gray-300" href="#comment-{{.ID}}">
-          {{ template "repo/fragments/shortTime" .Created }}
+        <a class="text-gray-500 dark:text-gray-400 hover:text-gray-500 dark:hover:text-gray-300" href="#comment-{{$comment.ID}}">
+          {{ template "repo/fragments/shortTime" $comment.Created }}
         </a>
       </div>
       <!-- Row 2: Body text -->
       <div class="prose dark:prose-invert mt-1">
-        {{ .Body | markdown }}
+        {{ $comment.Body | markdown }}
       </div>
     </div>
   </div>

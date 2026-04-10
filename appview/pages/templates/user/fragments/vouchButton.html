@@ -1,0 +1,30 @@
+{{ define "user/fragments/vouchButton" }}
+{{ $isVouched := false }}
+{{ $isDenounced := false }}
+{{ if .VouchRelationship }}
+  {{ if .VouchRelationship.IsDirectVouch }}
+    {{ $isVouched = true }}
+  {{ else if .VouchRelationship.IsDirectDenounce }}
+    {{ $isDenounced = true }}
+  {{ end }}
+{{ end }}
+
+{{ $userDid := "" }}
+{{ with .VouchRelationship }}
+  {{ $userDid = .SubjectDid }}
+{{ end }}
+<button
+  id="vouch-btn-{{ normalizeForHtmlId $userDid }}"
+  type="button"
+  popovertarget="vouch-modal-{{ normalizeForHtmlId $userDid }}"
+  popovertargetaction="toggle"
+  class="{{ if $isVouched }}btn-create{{else if $isDenounced}}btn-cancel{{else}}btn{{end}} w-full flex gap-2 items-center justify-center">
+  {{ if $isVouched }}
+    {{ i "shield-check" "size-4" }} vouched
+  {{ else if $isDenounced }}
+    {{ i "shield-off" "size-4" }} denounced
+  {{ else }}
+    {{ i "shield-question-mark" "size-4" }} vouch
+  {{ end }}
+</button>
+{{ end }}

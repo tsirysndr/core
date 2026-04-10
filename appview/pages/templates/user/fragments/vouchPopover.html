@@ -1,0 +1,151 @@
+{{ define "user/fragments/vouchPopover" }}
+{{ $isVouched := false }}
+{{ $isDenounced := false }}
+{{ $isUndecided := false }}
+{{ if .VouchRelationship }}
+  {{ if .VouchRelationship.IsDirectVouch }}
+    {{ $isVouched = true }}
+  {{ else if .VouchRelationship.IsDirectDenounce }}
+    {{ $isDenounced = true }}
+  {{ else }}
+    {{ $isUndecided = true }}
+  {{ end }}
+{{ else }}
+  {{ $isUndecided = true }}
+{{ end }}
+
+{{ $userIdent := "" }}
+{{ $userDid := "" }}
+{{ with .VouchRelationship }}
+  {{ $userDid = .SubjectDid }}
+  {{ $userIdent = resolve .SubjectDid }}
+{{ end }}
+<div
+  id="vouch-modal-{{ normalizeForHtmlId $userDid }}"
+  popover
+  class="bg-white w-[95%] md:w-96 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 drop-shadow dark:text-white backdrop:bg-gray-400/50 dark:backdrop:bg-gray-800/50 space-y-2">
+
+  <form
+    hx-post="/vouch"
+    hx-swap="none"
+    hx-on::after-request="if(event.detail.successful) this.reset()"
+    class="flex flex-col gap-6 group">
+
+    <div>
+      <h3 class="text-lg font-semibold">Vouch for {{ $userIdent }}</h3>
+      <p class="text-gray-700 dark:text-gray-300">
+        {{ with .VouchRelationship }}
+          {{ with .GetDirectVouch }}
+              You {{if $isVouched}}vouched{{else}}denounced{{end}} {{ $userIdent }} {{ relTimeFmt .CreatedAt }}.
+              You can change your descision below.
+          {{ else }}
+            Vouching builds a web-of-trust across Tangled. Vouch for users you
+            have had positive interactions with.
+          {{ end }}
+        {{ end }}
+      </p>
+    </div>
+
+    {{ if .VouchRelationship }}
+      {{ if .VouchRelationship.IndirectVouches }}
+      <div>
+        <p class="font-semibold mb-1 text-sm">From your network:</p>
+        {{ template "user/fragments/networkVouches" .VouchRelationship }}
+      </div>
+      {{ end }}
+    {{ end }}
+
+    <input type="hidden" name="subject" value="{{ $userDid }}" />
+
+    {{ $labelClass := "grid grid-cols-[auto_1fr_auto] items-center gap-2 rounded p-2 py- ring-1 ring-gray-200 dark:ring-gray-700 cursor-pointer" }}
+
+    <div class="grid grid-cols-3 gap-2">
+      <input
+        id="vouch-{{ normalizeForHtmlId $userDid }}"
+        type="radio"
+        name="kind"
+        value="vouch"
+        {{ if $isVouched }}checked{{ end }}
+        class="peer/vouch hidden appearance-none" />
+      <input
+        id="denounce-{{ normalizeForHtmlId $userDid }}"
+        type="radio"
+        name="kind"
+        value="denounce"
+        {{ if $isDenounced }}checked{{ end }}
+        class="peer/denounce hidden appearance-none" />
+      <input
+        id="none-{{ normalizeForHtmlId $userDid }}"
+        type="radio"
+        name="kind"
+        value="none"
+        {{ if $isUndecided }}checked{{ end }}
+        class="peer/none hidden appearance-none" />
+
+      <label
+        for="vouch-{{ normalizeForHtmlId $userDid }}"
+        class="
+        {{ $labelClass }}
+        hover:bg-gray-100 peer-checked/vouch:bg-green-200 peer-checked/vouch:text-green-800 peer-checked/vouch:ring-green-400
+        dark:hover:bg-white/5 dark:peer-checked/vouch:bg-green-700 dark:peer-checked/vouch:text-green-200 dark:peer-checked/vouch:ring-green-600">
+        {{ i "shield-check" "size-5" }}
+        <span class="text-sm font-medium">Vouch</span>
+      </label>
+      <label
+        for="denounce-{{ normalizeForHtmlId $userDid }}"
+        class="
+        {{ $labelClass }}
+        hover:bg-gray-100 peer-checked/denounce:bg-red-200 peer-checked/denounce:text-red-800 peer-checked/denounce:ring-red-400
+        dark:hover:bg-white/5 dark:peer-checked/denounce:bg-red-700 dark:peer-checked/denounce:text-red-200 dark:peer-checked/denounce:ring-red-600">
+        {{ i "shield-ban" "size-5" }}
+        <span class="text-sm font-medium">Denounce</span>
+      </label>
+      <label
+        for="none-{{ normalizeForHtmlId $userDid }}"
+        class="
+        {{ $labelClass }}
+        hover:bg-gray-100 peer-checked/none:bg-gray-200 peer-checked/none:text-gray-800 peer-checked/none:ring-gray-400
+        dark:hover:bg-white/5 dark:peer-checked/none:bg-gray-700 dark:peer-checked/none:text-gray-200 dark:peer-checked/none:ring-gray-600">
+        {{ i "shield-off" "size-5" }}
+        <span class="text-sm font-medium">None</span>
+      </label>
+
+      <textarea
+        id="reason-{{ normalizeForHtmlId $userDid }}"
+        name="reason"
+        rows="1"
+        maxlength="300"
+        placeholder="Write a reason..."
+        class="w-full resize-none col-span-3 peer-checked/none:hidden">
+        {{- with .VouchRelationship -}}
+          {{- with .GetDirectVouch -}}
+            {{- with .Reason -}}
+              {{- . -}}
+            {{- end -}}
+          {{- end -}}
+        {{- end -}}
+      </textarea>
+    </div>
+
+    <div class="flex gap-2">
+      <button
+        type="button"
+        popovertarget="vouch-modal-{{ normalizeForHtmlId $userDid }}"
+        popovertargetaction="hide"
+        class="btn flex-1 flex items-center justify-center gap-2">
+        {{ i "x" "size-4" }}
+        cancel
+      </button>
+      <button
+        type="submit"
+        class="btn-create flex-1 flex items-center justify-center gap-2 text-white group">
+        {{ i "check" "size-4 inline group-[.htmx-request]:hidden" }}
+        {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
+        {{ if and .VouchRelationship .VouchRelationship.GetDirectVouch }} update {{ else }} save {{end}}
+      </button>
+    </div>
+  </form>
+
+  <div id="error" class="w-full error"></div>
+</div>
+{{ end }}

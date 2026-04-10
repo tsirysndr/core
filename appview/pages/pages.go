@@ -624,13 +624,14 @@ func (p *Pages) ForkRepo(w io.Writer, params ForkRepoParams) error {
 }
 
 type ProfileCard struct {
-	UserDid      string
-	HasProfile   bool
-	FollowStatus models.FollowStatus
-	Punchcard    *models.Punchcard
-	Profile      *models.Profile
-	Stats        ProfileStats
-	Active       string
+	UserDid           string
+	HasProfile        bool
+	FollowStatus      models.FollowStatus
+	VouchRelationship *models.VouchRelationship
+	Punchcard         *models.Punchcard
+	Profile           *models.Profile
+	Stats             ProfileStats
+	Active            string
 }
 
 type ProfileStats struct {
@@ -647,6 +648,7 @@ func (p *ProfileCard) GetTabs() [][]any {
 		{"repos", "repos", "book-marked", p.Stats.RepoCount},
 		{"starred", "starred", "star", p.Stats.StarredCount},
 		{"strings", "strings", "line-squiggle", p.Stats.StringCount},
+		{"vouches", "vouches", "shield", nil},
 	}
 
 	return tabs
@@ -706,6 +708,20 @@ type ProfileStringsParams struct {
 func (p *Pages) ProfileStrings(w io.Writer, params ProfileStringsParams) error {
 	params.Active = "strings"
 	return p.executeProfile("user/strings", w, params)
+}
+
+type ProfileVouchesParams struct {
+	LoggedInUser *oauth.MultiAccountUser
+	Vouches      []models.Vouch
+	Suggestions  []models.VouchSuggestion
+	Card         *ProfileCard
+	Page         pagination.Page
+	Active       string
+}
+
+func (p *Pages) ProfileVouches(w io.Writer, params ProfileVouchesParams) error {
+	params.Active = "vouches"
+	return p.executeProfile("user/vouches", w, params)
 }
 
 type FollowCard struct {
@@ -1125,15 +1141,16 @@ func (p *Pages) RepoSiteSettings(w io.Writer, params RepoSiteSettingsParams) err
 }
 
 type RepoIssuesParams struct {
-	LoggedInUser *oauth.MultiAccountUser
-	RepoInfo     repoinfo.RepoInfo
-	Active       string
-	Issues       []models.Issue
-	IssueCount   int
-	LabelDefs    map[string]*models.LabelDefinition
-	Page         pagination.Page
-	FilterState  string
-	FilterQuery  string
+	LoggedInUser       *oauth.MultiAccountUser
+	RepoInfo           repoinfo.RepoInfo
+	Active             string
+	Issues             []models.Issue
+	IssueCount         int
+	LabelDefs          map[string]*models.LabelDefinition
+	Page               pagination.Page
+	FilterState        string
+	FilterQuery        string
+	VouchRelationships map[syntax.DID]*models.VouchRelationship
 }
 
 func (p *Pages) RepoIssues(w io.Writer, params RepoIssuesParams) error {
@@ -1150,8 +1167,9 @@ type RepoSingleIssueParams struct {
 	Backlinks    []models.RichReferenceLink
 	LabelDefs    map[string]*models.LabelDefinition
 
-	Reactions   map[models.ReactionKind]models.ReactionDisplayData
-	UserReacted map[models.ReactionKind]bool
+	Reactions          map[models.ReactionKind]models.ReactionDisplayData
+	UserReacted        map[models.ReactionKind]bool
+	VouchRelationships map[syntax.DID]*models.VouchRelationship
 }
 
 func (p *Pages) RepoSingleIssue(w io.Writer, params RepoSingleIssueParams) error {
@@ -1259,17 +1277,18 @@ func (p *Pages) RepoNewPull(w io.Writer, params RepoNewPullParams) error {
 }
 
 type RepoPullsParams struct {
-	LoggedInUser *oauth.MultiAccountUser
-	RepoInfo     repoinfo.RepoInfo
-	Pulls        []*models.Pull
-	Active       string
-	FilterState  string
-	FilterQuery  string
-	Stacks       []models.Stack
-	Pipelines    map[string]models.Pipeline
-	LabelDefs    map[string]*models.LabelDefinition
-	Page         pagination.Page
-	PullCount    int
+	LoggedInUser       *oauth.MultiAccountUser
+	RepoInfo           repoinfo.RepoInfo
+	Pulls              []*models.Pull
+	Active             string
+	FilterState        string
+	FilterQuery        string
+	Stacks             []models.Stack
+	Pipelines          map[string]models.Pipeline
+	LabelDefs          map[string]*models.LabelDefinition
+	Page               pagination.Page
+	PullCount          int
+	VouchRelationships map[syntax.DID]*models.VouchRelationship
 }
 
 func (p *Pages) RepoPulls(w io.Writer, params RepoPullsParams) error {
@@ -1314,7 +1333,8 @@ type RepoSinglePullParams struct {
 	Reactions   map[models.ReactionKind]models.ReactionDisplayData
 	UserReacted map[models.ReactionKind]bool
 
-	LabelDefs map[string]*models.LabelDefinition
+	LabelDefs          map[string]*models.LabelDefinition
+	VouchRelationships map[syntax.DID]*models.VouchRelationship
 }
 
 func (p *Pages) RepoSinglePull(w io.Writer, params RepoSinglePullParams) error {

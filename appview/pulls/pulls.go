@@ -266,6 +266,15 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		defs[l.AtUri().String()] = &l
 	}
 
+	vouchRelationships := make(map[syntax.DID]*models.VouchRelationship)
+	if user != nil {
+		participants := pull.Participants()
+		vouchRelationships, err = db.GetVouchRelationshipsBatch(s.db, syntax.DID(user.Did), participants)
+		if err != nil {
+			l.Error("failed to fetch vouch relationships", "err", err)
+		}
+	}
+
 	patch := pull.Submissions[roundIdInt].CombinedPatch()
 	var diff types.DiffRenderer
 	diff = patchutil.AsNiceDiff(patch, pull.TargetBranch)
@@ -306,7 +315,8 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		Reactions:   reactionMap,
 		UserReacted: userReactions,
 
-		LabelDefs: defs,
+		LabelDefs:          defs,
+		VouchRelationships: vouchRelationships,
 	})
 }
 
@@ -782,17 +792,30 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 		filterState = state.String()
 	}
 
+	vouchRelationships := make(map[syntax.DID]*models.VouchRelationship)
+	if user != nil {
+		dids := make([]syntax.DID, len(pulls))
+		for i, p := range pulls {
+			dids[i] = syntax.DID(p.OwnerDid)
+		}
+		vouchRelationships, err = db.GetVouchRelationshipsBatch(s.db, syntax.DID(user.Did), dids)
+		if err != nil {
+			l.Error("failed to fetch vouch relationships", "err", err)
+		}
+	}
+
 	s.pages.RepoPulls(w, pages.RepoPullsParams{
-		LoggedInUser: s.oauth.GetMultiAccountUser(r),
-		RepoInfo:     repoInfo,
-		Pulls:        pulls,
-		LabelDefs:    defs,
-		FilterState:  filterState,
-		FilterQuery:  query.String(),
-		Stacks:       stacks,
-		Pipelines:    m,
-		Page:         page,
-		PullCount:    totalPulls,
+		LoggedInUser:       s.oauth.GetMultiAccountUser(r),
+		RepoInfo:           repoInfo,
+		Pulls:              pulls,
+		LabelDefs:          defs,
+		FilterState:        filterState,
+		FilterQuery:        query.String(),
+		Stacks:             stacks,
+		Pipelines:          m,
+		Page:               page,
+		PullCount:          totalPulls,
+		VouchRelationships: vouchRelationships,
 	})
 }
 
