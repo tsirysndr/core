@@ -67,6 +67,8 @@ func (i *Ingester) Ingest() processFunc {
 			switch e.Commit.Collection {
 			case tangled.GraphFollowNSID:
 				err = i.ingestFollow(e)
+			case tangled.GraphVouchNSID:
+				err = i.ingestVouch(ctx, e)
 			case tangled.FeedStarNSID:
 				err = i.ingestStar(e)
 			case tangled.PublicKeyNSID:
@@ -200,6 +202,78 @@ func (i *Ingester) ingestFollow(e *jmodels.Event) error {
 
 	if err != nil {
 		return fmt.Errorf("failed to %s follow record: %w", e.Commit.Operation, err)
+	}
+
+	return nil
+}
+
+func (i *Ingester) ingestVouch(ctx context.Context, e *jmodels.Event) error {
+	var err error
+	did := e.Did
+
+	l := i.Logger.With("handler", "ingestVouch")
+	l = l.With("nsid", e.Commit.Collection)
+	l.Info("ingesting vouch")
+
+	switch e.Commit.Operation {
+	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
+		raw := json.RawMessage(e.Commit.Record)
+		record := tangled.GraphVouch{}
+		err = json.Unmarshal(raw, &record)
+		if err != nil {
+			l.Error("invalid record", "err", err)
+			return err
+		}
+
+		// rkey is the subject_did being vouched for/denounced
+		subjectDID := e.Commit.RKey
+
+		_, err = syntax.ParseDID(subjectDID)
+		if err != nil {
+			l.Error("invalid subject_did in rkey", "err", err, "rkey", subjectDID)
+			return fmt.Errorf("invalid subject_did: %w", err)
+		}
+
+		if did == subjectDID {
+			l.Warn("attempted self-vouch", "did", did)
+			return fmt.Errorf("cannot vouch for self")
+		}
+
+		subjectId, err := i.IdResolver.ResolveIdent(ctx, subjectDID)
+		if err != nil {
+			return err
+		}
+
+		if subjectId.Handle.IsInvalidHandle() {
+			return err
+		}
+
+		kind, err := models.ParseVouchKind(record.Kind)
+		if err != nil {
+			l.Error("invalid kind", "kind", kind)
+			return fmt.Errorf("invalid kind: %s", kind)
+		}
+
+		recordCid, err := cid.Parse(e.Commit.CID)
+		if err != nil {
+			l.Error("invalid cid", "err", err, "cid", e.Commit.CID)
+			return fmt.Errorf("invalid cid: %w", err)
+		}
+
+		err = db.AddVouch(i.Db, &models.Vouch{
+			Did:        syntax.DID(did),
+			SubjectDid: subjectId.DID,
+			Cid:        recordCid,
+			Kind:       kind,
+			Reason:     record.Reason,
+		})
+
+	case jmodels.CommitOperationDelete:
+		err = db.DeleteVouchByRkey(i.Db, did, e.Commit.RKey)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to %s vouch record: %w", e.Commit.Operation, err)
 	}
 
 	return nil
