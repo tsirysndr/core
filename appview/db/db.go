@@ -92,6 +92,17 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			primary key (user_did, subject_did),
 			check (user_did <> subject_did)
 		);
+		create table if not exists vouches (
+			did text not null,
+			subject_did text not null,
+			cid text not null,
+			kind text not null default 'vouch',
+			reason text,
+			created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+			primary key (did, subject_did),
+			check (did <> subject_did),
+			check (kind in ('vouch', 'denounce'))
+		);
 		create table if not exists issues (
 			id integer primary key autoincrement,
 			owner_did text not null,
