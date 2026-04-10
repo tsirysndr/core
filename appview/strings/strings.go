@@ -157,7 +157,24 @@ func (s *Strings) contents(w http.ResponseWriter, r *http.Request) {
 		isStarred = db.GetStarStatus(s.Db, user.Did, stringUri)
 	}
 
-	s.Pages.SingleString(w, pages.SingleStringParams{
+	comments, err := db.GetComments(s.Db, orm.FilterEq("subject_uri", string.AtUri()))
+	if err != nil {
+		l.Error("failed to get comments", "err", err)
+	}
+
+	vouchRelationships := make(map[syntax.DID]*models.VouchRelationship)
+	if user != nil {
+		var participants []syntax.DID
+		for _, c := range comments {
+			participants = append(participants, c.Did)
+		}
+		vouchRelationships, err = db.GetVouchRelationshipsBatch(s.Db, syntax.DID(user.Did), participants)
+		if err != nil {
+			l.Error("failed to fetch vouch relationships", "err", err)
+		}
+	}
+
+	err = s.Pages.SingleString(w, pages.SingleStringParams{
 		LoggedInUser: user,
 		RenderToggle: renderToggle,
 		ShowRendered: showRendered,
@@ -166,6 +183,9 @@ func (s *Strings) contents(w http.ResponseWriter, r *http.Request) {
 		IsStarred:    isStarred,
 		StarCount:    starCount,
 		Owner:        id,
+		CommentList:  models.NewCommentList(comments),
+
+		VouchRelationships: vouchRelationships,
 	})
 }
 

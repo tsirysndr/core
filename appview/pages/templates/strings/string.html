@@ -94,4 +94,62 @@
     </div>
     {{ template "fragments/multiline-select" }}
   </section>
+  <div class="flex flex-col gap-4 mt-4">
+    {{
+      template "fragments/comment/commentList"
+      (dict
+        "LoggedInUser"       .LoggedInUser
+        "VouchRelationships" .VouchRelationships
+        "CommentList"        .CommentList)
+    }}
+    {{ template "newComment" . }}
+  </div>
+{{ end }}
+
+{{ define "newComment" }}
+  {{ if .LoggedInUser }}
+    <form
+      hx-post="/comment"
+      hx-trigger="submit, keydown[(ctrlKey || metaKey) && key=='Enter'] from:find textarea"
+      hx-swap="none"
+      hx-disabled-elt="find button[type='submit']"
+      hx-on::after-request="if(event.detail.successful) this.reset()"
+      class="group/form"
+    >
+      <input name="subject-uri" type="hidden" value="{{ .String.AtUri }}">
+      <div class="bg-white dark:bg-gray-800 rounded drop-shadow-sm py-4 px-4 relative w-full">
+        <div class="text-sm pb-2 text-gray-500 dark:text-gray-400">
+          {{ template "user/fragments/picHandleLink" .LoggedInUser.Did }}
+        </div>
+        <textarea
+          name="body"
+          class="w-full p-2 rounded"
+          placeholder="Add to the discussion. Markdown is supported."
+          rows="5"
+          required
+        ></textarea>
+        <div id="comment-error" class="error"></div>
+      </div>
+      <div class="flex gap-2 mt-2">
+        <button
+          id="comment-button"
+          type="submit"
+          class="btn-create p-2 flex items-center gap-2 no-underline hover:no-underline"
+        >
+          {{ i "message-square-plus" "w-4 h-4 inline group-[.htmx-request]/form:hidden" }}
+          {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]/form:inline" }}
+          comment
+        </button>
+      </div>
+    </form>
+  {{ else }}
+    <div class="bg-amber-50 dark:bg-amber-900 border border-amber-500 rounded drop-shadow-sm p-6 relative flex gap-2 items-center">
+      <a href="/signup" class="btn-create py-0 hover:no-underline hover:text-white flex items-center gap-2">
+        sign up
+      </a>
+      <span class="text-gray-500 dark:text-gray-400">or</span>
+      <a href="/login" class="underline">login</a>
+      to add to the discussion
+    </div>
+  {{ end }}
 {{ end }}

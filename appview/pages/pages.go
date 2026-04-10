@@ -1629,6 +1629,9 @@ type SingleStringParams struct {
 	IsStarred        bool
 	StarCount        int
 	Owner            identity.Identity
+	CommentList      []models.CommentListItem
+
+	VouchRelationships map[syntax.DID]*models.VouchRelationship
 }
 
 func (p *Pages) SingleString(w io.Writer, params SingleStringParams) error {
