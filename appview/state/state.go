@@ -705,20 +705,31 @@ func fetchBskyPosts(ctx context.Context, res *idresolver.Resolver, config *confi
 		return
 	}
 
-	client := xrpc.Client{
-		Auth: &xrpc.AuthInfo{
-			AccessJwt: session.AccessJwt,
-			Did:       session.Did,
-		},
-		Host: session.PdsEndpoint,
-	}
-
 	l := log.SubLogger(logger, "bluesky")
 
 	ticker := time.NewTicker(config.Bluesky.UpdateInterval)
 	defer ticker.Stop()
 
 	for {
+		// refresh session if necessary
+		if !session.IsValid() {
+			l.Debug("access token expired, refreshing session")
+			if err := session.RefreshSession(); err != nil {
+				l.Error("failed to refresh session, stopping bluesky updater", "err", err)
+				return
+			}
+			l.Debug("session refreshed")
+		}
+
+		// make client
+		client := xrpc.Client{
+			Auth: &xrpc.AuthInfo{
+				AccessJwt: session.AccessJwt,
+				Did:       session.Did,
+			},
+			Host: session.PdsEndpoint,
+		}
+
 		posts, _, err := bsky.FetchPosts(ctx, &client, 20, "")
 		if err != nil {
 			l.Error("failed to fetch bluesky posts", "err", err)

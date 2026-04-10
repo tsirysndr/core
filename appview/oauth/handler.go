@@ -476,7 +476,7 @@ func CreateAppPasswordSession(res *idresolver.Resolver, appPassword, did string,
 	return &session, nil
 }
 
-func (s *AppPasswordSession) refreshSession() error {
+func (s *AppPasswordSession) RefreshSession() error {
 	refreshURL := s.PdsEndpoint + "/xrpc/com.atproto.server.refreshSession"
 	req, err := http.NewRequestWithContext(context.Background(), "POST", refreshURL, nil)
 	if err != nil {
@@ -520,14 +520,14 @@ func (s *AppPasswordSession) refreshSession() error {
 	return nil
 }
 
-func (s *AppPasswordSession) isValid() bool {
+func (s *AppPasswordSession) IsValid() bool {
 	return time.Now().Before(s.ExpiresAt)
 }
 
 func (s *AppPasswordSession) putRecord(record any, collection string) error {
-	if !s.isValid() {
+	if !s.IsValid() {
 		s.Logger.Debug("access token expired, refreshing session")
-		if err := s.refreshSession(); err != nil {
+		if err := s.RefreshSession(); err != nil {
 			return fmt.Errorf("failed to refresh session: %w", err)
 		}
 		s.Logger.Debug("session refreshed")
