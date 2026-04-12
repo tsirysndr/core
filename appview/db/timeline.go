@@ -151,7 +151,7 @@ func getTimelineStars(e Execer, limit int, loggedInUserDid string, userIsFollowi
 		filters = append(filters, orm.FilterIn("did", userIsFollowing))
 	}
 
-	stars, err := GetRepoStars(e, limit, filters...)
+	stars, err := GetRepoStars(e, pagination.Page{Limit: limit}, filters...)
 	if err != nil {
 		return nil, err
 	}

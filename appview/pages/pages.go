@@ -665,6 +665,8 @@ type ProfileStarredParams struct {
 	LoggedInUser *oauth.MultiAccountUser
 	Repos        []models.Repo
 	Card         *ProfileCard
+	Page         pagination.Page
+	Total        int
 	Active       string
 }
 

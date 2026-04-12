@@ -3,6 +3,15 @@
 {{ define "profileContent" }}
   <div id="all-repos" class="md:col-span-8 order-2 md:order-2">
       {{ block "starredRepos" . }}{{ end }}
+      {{ if gt .Total .Page.Limit }}
+        {{ $handle := resolve .Card.UserDid }}
+        {{ template "fragments/pagination" (dict
+            "Page" .Page
+            "TotalCount" .Total
+            "BasePath" (printf "/%s" $handle)
+            "QueryParams" (queryParams "tab" "starred")
+        ) }}
+      {{ end }}
   </div>
 {{ end }}
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/appview/models"
+	"tangled.org/core/appview/pagination"
 	"tangled.org/core/orm"
 )
 
@@ -165,7 +166,7 @@ func GetStarStatuses(e Execer, userDid string, subjectAts []syntax.ATURI) (map[s
 
 // GetRepoStars return a list of stars each holding target repository.
 // If there isn't known repo with starred at-uri, those stars will be ignored.
-func GetRepoStars(e Execer, limit int, filters ...orm.Filter) ([]models.RepoStar, error) {
+func GetRepoStars(e Execer, page pagination.Page, filters ...orm.Filter) ([]models.RepoStar, error) {
 	var conditions []string
 	var args []any
 	for _, filter := range filters {
@@ -178,9 +179,9 @@ func GetRepoStars(e Execer, limit int, filters ...orm.Filter) ([]models.RepoStar
 		whereClause = " where " + strings.Join(conditions, " and ")
 	}
 
-	limitClause := ""
-	if limit != 0 {
-		limitClause = fmt.Sprintf(" limit %d", limit)
+	pageClause := ""
+	if page.Limit != 0 {
+		pageClause = fmt.Sprintf(" limit %d offset %d", page.Limit, page.Offset)
 	}
 
 	repoQuery := fmt.Sprintf(
@@ -190,7 +191,7 @@ func GetRepoStars(e Execer, limit int, filters ...orm.Filter) ([]models.RepoStar
 		order by created desc
 		%s`,
 		whereClause,
-		limitClause,
+		pageClause,
 	)
 	rows, err := e.Query(repoQuery, args...)
 	if err != nil {

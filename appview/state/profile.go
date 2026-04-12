@@ -37,7 +37,9 @@ func (s *State) Profile(w http.ResponseWriter, r *http.Request) {
 	case "following":
 		s.followingPage(w, r)
 	case "starred":
-		s.starredPage(w, r)
+		middleware.
+			Paginate(http.HandlerFunc(s.starredPage)).
+			ServeHTTP(w, r)
 	case "strings":
 		s.stringsPage(w, r)
 	default:
@@ -320,6 +322,9 @@ func (s *State) reposPage(w http.ResponseWriter, r *http.Request) {
 func (s *State) starredPage(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "starredPage")
 
+	page := pagination.FromContext(r.Context())
+	l = l.With("page", page)
+
 	profile, err := s.profile(r)
 	if err != nil {
 		l.Error("failed to build profile card", "err", err)
@@ -328,7 +333,7 @@ func (s *State) starredPage(w http.ResponseWriter, r *http.Request) {
 	}
 	l = l.With("profileDid", profile.UserDid)
 
-	stars, err := db.GetRepoStars(s.db, 0, orm.FilterEq("did", profile.UserDid))
+	stars, err := db.GetRepoStars(s.db, page, orm.FilterEq("did", profile.UserDid))
 	if err != nil {
 		l.Error("failed to get stars", "err", err)
 		s.pages.Error500(w)
@@ -342,8 +347,13 @@ func (s *State) starredPage(w http.ResponseWriter, r *http.Request) {
 	err = s.pages.ProfileStarred(w, pages.ProfileStarredParams{
 		LoggedInUser: s.oauth.GetMultiAccountUser(r),
 		Repos:        repos,
+		Total:        int(profile.Stats.StarredCount),
 		Card:         profile,
+		Page:         page,
 	})
+	if err != nil {
+		l.Error("failed to render", "err", err)
+	}
 }
 
 func (s *State) stringsPage(w http.ResponseWriter, r *http.Request) {
