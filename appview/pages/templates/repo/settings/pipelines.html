@@ -104,6 +104,7 @@
 
 {{ define "addSecretModal" }}
 <form
+  autocomplete="off"
   hx-put="/{{ $.RepoInfo.FullName }}/settings/secrets"
   hx-indicator="#spinner"
   hx-swap="none"
