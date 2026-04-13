@@ -133,10 +133,10 @@ func (p Pull) AsRecord() tangled.RepoPull {
 	}
 }
 
-func PullFromRecord(did, rkey string, record tangled.RepoPull, blobs []*io.ReadCloser) Pull {
+func PullFromRecord(did, rkey string, record tangled.RepoPull, blobs []*io.ReadCloser) (*Pull, error) {
 	created, err := time.Parse(time.RFC3339, record.CreatedAt)
 	if err != nil {
-		created = time.Now()
+		return nil, fmt.Errorf("invalid createdAt: %w", err)
 	}
 
 	body := ""
@@ -155,9 +155,11 @@ func PullFromRecord(did, rkey string, record tangled.RepoPull, blobs []*io.ReadC
 	var targetBranch string
 	if record.Target != nil {
 		if record.Target.Repo != nil {
-			if uri, err := syntax.ParseATURI(*record.Target.Repo); err == nil {
-				targetRepoAt = uri
+			uri, err := syntax.ParseATURI(*record.Target.Repo)
+			if err != nil {
+				return nil, fmt.Errorf("invalid target.repo aturi: %w", err)
 			}
+			targetRepoAt = uri
 		}
 		targetBranch = record.Target.Branch
 	}
@@ -169,22 +171,28 @@ func PullFromRecord(did, rkey string, record tangled.RepoPull, blobs []*io.ReadC
 		}
 
 		if record.Source.Repo != nil {
-			if uri, err := syntax.ParseATURI(*record.Source.Repo); err == nil {
-				pullSource.RepoAt = &uri
+			uri, err := syntax.ParseATURI(*record.Source.Repo)
+			if err != nil {
+				return nil, fmt.Errorf("invalid source.repo aturi: %w", err)
 			}
+			pullSource.RepoAt = &uri
 		}
 		if record.Source.RepoDid != nil {
-			if did, err := syntax.ParseDID(*record.Source.RepoDid); err != nil {
-				pullSource.RepoDid = &did
+			did, err := syntax.ParseDID(*record.Source.RepoDid)
+			if err != nil {
+				return nil, fmt.Errorf("invalid source.repoDid did: %w", err)
 			}
+			pullSource.RepoDid = &did
 		}
 	}
 
 	var dependentOn *syntax.ATURI
 	if record.DependentOn != nil {
-		if uri, err := syntax.ParseATURI(*record.DependentOn); err == nil {
-			dependentOn = &uri
+		uri, err := syntax.ParseATURI(*record.DependentOn)
+		if err != nil {
+			return nil, fmt.Errorf("invalid dependentOn aturi: %w", err)
 		}
+		dependentOn = &uri
 	}
 
 	var submissions []*PullSubmission
@@ -195,13 +203,12 @@ func PullFromRecord(did, rkey string, record tangled.RepoPull, blobs []*io.ReadC
 		}
 		submission, err := PullSubmissionFromRecord(did, rkey, i, s, blob)
 		if err != nil {
-			submissions = append(submissions, nil)
-		} else {
-			submissions = append(submissions, submission)
+			return nil, fmt.Errorf("invalid pull round at index %d: %w", i, err)
 		}
+		submissions = append(submissions, submission)
 	}
 
-	return Pull{
+	return &Pull{
 		RepoAt:       targetRepoAt,
 		OwnerDid:     did,
 		Rkey:         rkey,
@@ -213,13 +220,13 @@ func PullFromRecord(did, rkey string, record tangled.RepoPull, blobs []*io.ReadC
 		Submissions:  submissions,
 		Created:      created,
 		DependentOn:  dependentOn,
-	}
+	}, nil
 }
 
 func PullSubmissionFromRecord(did, rkey string, roundNumber int, round *tangled.RepoPull_Round, blob *io.ReadCloser) (*PullSubmission, error) {
 	created, err := time.Parse(time.RFC3339, round.CreatedAt)
 	if err != nil {
-		created = time.Now()
+		return nil, fmt.Errorf("invalid createdAt: %w", err)
 	}
 
 	var patch, sourceRev string

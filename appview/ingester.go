@@ -1046,8 +1046,11 @@ func (i *Ingester) ingestPull(ctx context.Context, e *jmodels.Event) error {
 			}
 		}()
 
-		pull := models.PullFromRecord(did, rkey, record, readers)
-		if err := i.Validator.ValidatePull(&pull); err != nil {
+		pull, err := models.PullFromRecord(did, rkey, record, readers)
+		if err != nil {
+			return fmt.Errorf("failed to parse pull from record: %w", err)
+		}
+		if err := i.Validator.ValidatePull(pull); err != nil {
 			return fmt.Errorf("failed to validate pull: %w", err)
 		}
 
@@ -1058,7 +1061,7 @@ func (i *Ingester) ingestPull(ctx context.Context, e *jmodels.Event) error {
 		}
 		defer tx.Rollback()
 
-		err = db.PutPull(tx, &pull)
+		err = db.PutPull(tx, pull)
 		if err != nil {
 			l.Error("failed to create pull", "err", err)
 			return err
