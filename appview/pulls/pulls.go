@@ -1334,24 +1334,14 @@ func (s *Pulls) createPullRequest(
 		return
 	}
 
-	record := tangled.RepoPull{
-		Title:     title,
-		Body:      &body,
-		Target:    repoPullTarget(repo, targetBranch),
-		Source:    recordPullSource,
-		CreatedAt: time.Now().Format(time.RFC3339),
-		Rounds: []*tangled.RepoPull_Round{
-			{
-				CreatedAt: time.Now().Format(time.RFC3339),
-				PatchBlob: blob.Blob,
-			},
-		},
-	}
+	now := time.Now()
+
 	initialSubmission := models.PullSubmission{
 		Patch:     patch,
 		Combined:  combined,
 		SourceRev: sourceRev,
 		Blob:      *blob.Blob,
+		Created:   time.Now(),
 	}
 	pull := &models.Pull{
 		Title:        title,
@@ -1367,6 +1357,20 @@ func (s *Pulls) createPullRequest(
 		},
 		PullSource: pullSource,
 		State:      models.PullOpen,
+		Created:    now,
+	}
+
+	record := tangled.RepoPull{
+		Title:     title,
+		Body:      &body,
+		Target:    repoPullTarget(repo, targetBranch),
+		Source:    recordPullSource,
+		CreatedAt: time.Now().Format(time.RFC3339),
+		Rounds: []*tangled.RepoPull_Round{
+			initialSubmission.AsRecord(),
+		},
+		Mentions: nil,
+		References: nil,
 	}
 
 	_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
@@ -2613,12 +2617,8 @@ func (s *Pulls) newStack(
 
 		mentions, references := s.mentionsResolver.Resolve(ctx, body)
 
-		initialSubmission := models.PullSubmission{
-			Patch:     fp.Raw,
-			SourceRev: fp.SHA,
-			Combined:  fp.Raw,
-			Blob:      *blobs[i],
-		}
+		now := time.Now()
+
 		pull := models.Pull{
 			Title:        title,
 			Body:         body,
@@ -2629,10 +2629,16 @@ func (s *Pulls) newStack(
 			Mentions:     mentions,
 			References:   references,
 			Submissions: []*models.PullSubmission{
-				&initialSubmission,
+				{
+					Patch:     fp.Raw,
+					SourceRev: fp.SHA,
+					Combined:  fp.Raw,
+					Blob:      *blobs[i],
+					Created:   now,
+				},
 			},
 			PullSource: pullSource,
-			Created:    time.Now(),
+			Created:    now,
 			State:      models.PullOpen,
 
 			DependentOn: parentAtUri,
