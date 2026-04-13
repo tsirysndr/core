@@ -90,10 +90,11 @@ func (rp *Repo) Tag(w http.ResponseWriter, r *http.Request) {
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		// if we don't match an existing tag, and the tag we're trying
 		// to match is "latest", resolve to the most recent tag
+		l.Info("failed to call XRPC git.getTag", "xrpcerr", xrpcerr, "err", err, "tag", tag)
 		if tag == "latest" {
 			tagsBytes, err := tangled.GitTempListTags(r.Context(), xrpcc, "", 1, f.RepoAt().String())
 			if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-				l.Error("failed to call XRPC repo.tags for latest", "err", xrpcerr)
+				l.Error("failed to call XRPC git.ListTags for latest", "xrpcerr", xrpcerr, "err", err)
 				rp.pages.Error503(w)
 				return
 			}

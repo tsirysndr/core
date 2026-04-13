@@ -31,7 +31,7 @@ func (rp *Repo) CompareNew(w http.ResponseWriter, r *http.Request) {
 
 	branchBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-		l.Error("failed to call XRPC repo.branches", "err", xrpcerr)
+		l.Error("failed to call XRPC repo.branches", "xrpcerr", xrpcerr, "err", err)
 		rp.pages.Error503(w)
 		return
 	}
@@ -68,7 +68,7 @@ func (rp *Repo) CompareNew(w http.ResponseWriter, r *http.Request) {
 
 	tagBytes, err := tangled.GitTempListTags(r.Context(), xrpcc, "", 0, f.RepoAt().String())
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-		l.Error("failed to call XRPC repo.tags", "err", xrpcerr)
+		l.Error("failed to call XRPC repo.tags", "xrpcerr", xrpcerr, "err", err)
 		rp.pages.Error503(w)
 		return
 	}
@@ -145,7 +145,7 @@ func (rp *Repo) Compare(w http.ResponseWriter, r *http.Request) {
 
 	branchBytes, err := tangled.RepoBranches(r.Context(), xrpcc, "", 0, repoId)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-		l.Error("failed to call XRPC repo.branches", "err", xrpcerr)
+		l.Error("failed to call XRPC repo.branches", "xrpcerr", xrpcerr, "err", err)
 		rp.pages.Error503(w)
 		return
 	}
@@ -159,7 +159,7 @@ func (rp *Repo) Compare(w http.ResponseWriter, r *http.Request) {
 
 	tagBytes, err := tangled.RepoTags(r.Context(), xrpcc, "", 0, repoId)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-		l.Error("failed to call XRPC repo.tags", "err", xrpcerr)
+		l.Error("failed to call XRPC repo.tags", "xrpcerr", xrpcerr, "err", err)
 		rp.pages.Error503(w)
 		return
 	}
@@ -173,7 +173,7 @@ func (rp *Repo) Compare(w http.ResponseWriter, r *http.Request) {
 
 	compareBytes, err := tangled.RepoCompare(r.Context(), xrpcc, repoId, base, head)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-		l.Error("failed to call XRPC repo.compare", "err", xrpcerr)
+		l.Error("failed to call XRPC repo.compare", "xrpcerr", xrpcerr, "err", err)
 		rp.pages.Error503(w)
 		return
 	}

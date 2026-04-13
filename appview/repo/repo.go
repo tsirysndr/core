@@ -879,8 +879,9 @@ func (rp *Repo) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 			Rkey: f.Rkey,
 		},
 	)
-	if err := xrpcclient.HandleXrpcErr(err); err != nil {
-		rp.pages.Notice(w, noticeId, err.Error())
+	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+		l.Error("failed to call XRPC repo.delete", "xrpcerr", xrpcerr, "err", err)
+		rp.pages.Notice(w, noticeId, xrpcerr.Error())
 		return
 	}
 	l.Info("deleted repo from knot")
@@ -985,7 +986,8 @@ func (rp *Repo) SyncRepoFork(w http.ResponseWriter, r *http.Request) {
 				Branch: ref,
 			},
 		)
-		if err := xrpcclient.HandleXrpcErr(err); err != nil {
+		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+			l.Error("failed to call XRPC repo.forkSync", "xrpcerr", xrpcerr, "err", err)
 			rp.pages.Notice(w, "repo", err.Error())
 			return
 		}
@@ -1092,13 +1094,14 @@ func (rp *Repo) ForkRepo(w http.ResponseWriter, r *http.Request) {
 			Name:   forkName,
 			Source: &forkSourceUrl,
 		}
-		createResp, createErr := tangled.RepoCreate(
+		createResp, err := tangled.RepoCreate(
 			r.Context(),
 			client,
 			forkInput,
 		)
-		if err := xrpcclient.HandleXrpcErr(createErr); err != nil {
-			rp.pages.Notice(w, "repo", err.Error())
+		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+			l.Error("failed to call XRPC repo.create", "xrpcerr", xrpcerr, "err", err)
+			rp.pages.Notice(w, "repo", xrpcerr.Error())
 			return
 		}
 

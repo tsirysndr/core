@@ -52,13 +52,9 @@ func (rp *Repo) DeleteBranch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noticeId := "delete-branch-error"
-	fail := func(msg string, err error) {
-		l.Error(msg, "err", err)
-		rp.pages.Notice(w, noticeId, msg)
-	}
 	branch := r.FormValue("branch")
 	if branch == "" {
-		fail("No branch provided.", nil)
+		rp.pages.Notice(w, noticeId, "No branch provided.")
 		return
 	}
 	client, err := rp.oauth.ServiceClient(
@@ -68,7 +64,8 @@ func (rp *Repo) DeleteBranch(w http.ResponseWriter, r *http.Request) {
 		oauth.WithDev(rp.config.Core.Dev),
 	)
 	if err != nil {
-		fail("Failed to connect to knotserver", nil)
+		l.Warn("Failed to connect to knotserver", "err", err)
+		rp.pages.Notice(w, noticeId, "Failed to connect to knotserver")
 		return
 	}
 	err = tangled.RepoDeleteBranch(
@@ -79,8 +76,9 @@ func (rp *Repo) DeleteBranch(w http.ResponseWriter, r *http.Request) {
 			Repo:   f.RepoAt().String(),
 		},
 	)
-	if err := xrpcclient.HandleXrpcErr(err); err != nil {
-		fail(fmt.Sprintf("Failed to delete branch: %s", err), err)
+	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+		l.Error("Faield to delete branch", "xrpcerr", xrpcerr, "err", err)
+		rp.pages.Notice(w, noticeId, fmt.Sprintf("Failed to delete branch: %s", xrpcerr))
 		return
 	}
 	l.Error("deleted branch from knot", "branch", branch, "repo", f.RepoAt())

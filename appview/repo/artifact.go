@@ -312,7 +312,7 @@ func (rp *Repo) resolveTag(ctx context.Context, f *models.Repo, tagParam string)
 	xrpcBytes, err := tangled.GitTempListTags(ctx, xrpcc, "", 0, f.RepoAt().String())
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-			l.Error("failed to call XRPC repo.tags", "err", xrpcerr)
+			l.Error("failed to call XRPC repo.tags", "xrpcerr", xrpcerr, "err", err)
 			return nil, xrpcerr
 		}
 		l.Error("failed to reach knotserver", "err", err)

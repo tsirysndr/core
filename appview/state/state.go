@@ -479,13 +479,13 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 			Name:          repoName,
 			DefaultBranch: &defaultBranch,
 		}
-		createResp, xe := tangled.RepoCreate(
+		createResp, err := tangled.RepoCreate(
 			r.Context(),
 			client,
 			input,
 		)
-		if err := xrpcclient.HandleXrpcErr(xe); err != nil {
-			l.Error("xrpc error", "xe", xe)
+		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+			l.Error("failed to call XRPC repo.create", "xrpcerr", xrpcerr, "err", err)
 			s.pages.Notice(w, "repo", err.Error())
 			return
 		}

@@ -61,7 +61,7 @@ func (rp *Repo) Blob(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := tangled.RepoBlob(r.Context(), xrpcc, filePath, false, ref, f.RepoIdentifier())
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-		l.Error("failed to call XRPC repo.blob", "err", xrpcerr)
+		l.Error("failed to call XRPC repo.blob", "xrpcerr", xrpcerr, "err", err)
 		rp.pages.Error503(w)
 		return
 	}

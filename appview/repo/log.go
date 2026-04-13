@@ -57,7 +57,7 @@ func (rp *Repo) serveRawCommit(w http.ResponseWriter, r *http.Request, format st
 
 	xrpcBytes, err := tangled.RepoDiff(r.Context(), xrpcc, ref, f.RepoIdentifier())
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-		l.Error("failed to call XRPC repo.diff", "err", xrpcerr)
+		l.Error("failed to call XRPC repo.diff", "xrpcerr", xrpcerr, "err", err)
 		rp.pages.Error503(w)
 		return
 	}
@@ -227,7 +227,7 @@ func (rp *Repo) Commit(w http.ResponseWriter, r *http.Request) {
 
 	xrpcBytes, err := tangled.RepoDiff(r.Context(), xrpcc, ref, f.RepoIdentifier())
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-		l.Error("failed to call XRPC repo.diff", "err", xrpcerr)
+		l.Error("failed to call XRPC repo.diff", "xrpcerr", xrpcerr, "err", err)
 		rp.pages.Error503(w)
 		return
 	}

@@ -345,7 +345,7 @@ func (s *Pulls) mergeCheck(r *http.Request, f *models.Repo, pull *models.Pull, s
 	// combine each patch
 	patch := mergeable.CombinedPatch()
 
-	resp, xe := tangled.RepoMergeCheck(
+	resp, err := tangled.RepoMergeCheck(
 		r.Context(),
 		&xrpcc,
 		&tangled.RepoMergeCheck_Input{
@@ -355,10 +355,10 @@ func (s *Pulls) mergeCheck(r *http.Request, f *models.Repo, pull *models.Pull, s
 			Patch:  patch,
 		},
 	)
-	if err := xrpcclient.HandleXrpcErr(xe); err != nil {
-		s.logger.Error("failed to check for mergeability", "err", err, "pull_id", pull.PullId, "target_branch", pull.TargetBranch)
+	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+		s.logger.Error("failed to check for mergeability", "xrpcerr", xrpcerr, "err", err, "pull_id", pull.PullId, "target_branch", pull.TargetBranch)
 		return types.MergeCheckResponse{
-			Error: fmt.Sprintf("failed to check merge status: %s", err.Error()),
+			Error: fmt.Sprintf("failed to check merge status: %s", xrpcerr.Error()),
 		}
 	}
 
@@ -423,6 +423,7 @@ func (s *Pulls) branchDeleteStatus(r *http.Request, repo *models.Repo, pull *mod
 	xrpcc := &indigoxrpc.Client{Host: s.config.KnotMirror.Url}
 	resp, err := tangled.GitTempGetBranch(r.Context(), xrpcc, branch, repo.RepoAt().String())
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+		s.logger.Error("failed to get branch", "xrpcerr", xrpcerr, "err", err)
 		return nil
 	}
 
@@ -448,7 +449,7 @@ func (s *Pulls) resubmitCheck(r *http.Request, repo *models.Repo, pull *models.P
 	branchResp, err := tangled.GitTempGetBranch(r.Context(), xrpcc, pull.PullSource.Branch, sourceRepo.String())
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-			s.logger.Error("failed to call XRPC repo.branches", "err", xrpcerr, "pull_id", pull.PullId, "branch", pull.PullSource.Branch)
+			s.logger.Error("failed to call XRPC repo.branches", "xrpcerr", xrpcerr, "err", err, "pull_id", pull.PullId, "branch", pull.PullSource.Branch)
 			return pages.Unknown
 		}
 		s.logger.Error("failed to reach knotserver", "err", err, "pull_id", pull.PullId)
@@ -934,7 +935,7 @@ func (s *Pulls) NewPull(w http.ResponseWriter, r *http.Request) {
 		xrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
 		if err != nil {
 			if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-				l.Error("failed to call XRPC repo.branches", "err", xrpcerr)
+				l.Error("failed to call XRPC repo.branches", "xrpcerr", xrpcerr, "err", err)
 				s.pages.Error503(w)
 				return
 			}
@@ -1101,7 +1102,7 @@ func (s *Pulls) handleBranchBasedPull(
 	xrpcBytes, err := tangled.RepoCompare(r.Context(), xrpcc, repo.RepoIdentifier(), targetBranch, sourceBranch)
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-			l.Error("failed to call XRPC repo.compare", "err", xrpcerr)
+			l.Error("failed to call XRPC repo.compare", "xrpcerr", xrpcerr, "err", err)
 			s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
 			return
 		}
@@ -1179,8 +1180,9 @@ func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo
 			Repo:      fork.RepoAt().String(),
 		},
 	)
-	if err := xrpcclient.HandleXrpcErr(err); err != nil {
-		s.pages.Notice(w, "pull", err.Error())
+	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+		s.logger.Error("failed to set hidden ref", "xrpcerr", xrpcerr, "err", err)
+		s.pages.Notice(w, "pull", xrpcerr.Error())
 		return
 	}
 
@@ -1211,7 +1213,7 @@ func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo
 	forkXrpcBytes, err := tangled.RepoCompare(r.Context(), forkXrpcc, fork.RepoIdentifier(), hiddenRef, sourceBranch)
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-			l.Error("failed to call XRPC repo.compare for fork", "err", xrpcerr, "hidden_ref", hiddenRef)
+			l.Error("failed to call XRPC repo.compare for fork", "xrpcerr", xrpcerr, "err", err, "hidden_ref", hiddenRef)
 			s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
 			return
 		}
@@ -1665,7 +1667,7 @@ func (s *Pulls) CompareForksBranchesFragment(w http.ResponseWriter, r *http.Requ
 	sourceXrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, repo.RepoAt().String())
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-			l.Error("failed to call XRPC repo.branches for source", "err", xrpcerr)
+			l.Error("failed to call XRPC repo.branches for source", "xrpcerr", xrpcerr, "err", err)
 			s.pages.Error503(w)
 			return
 		}
@@ -1684,7 +1686,7 @@ func (s *Pulls) CompareForksBranchesFragment(w http.ResponseWriter, r *http.Requ
 	targetXrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-			l.Error("failed to call XRPC repo.branches for target", "err", xrpcerr)
+			l.Error("failed to call XRPC repo.branches for target", "xrpcerr", xrpcerr, "err", err)
 			s.pages.Error503(w)
 			return
 		}
@@ -1828,7 +1830,7 @@ func (s *Pulls) resubmitBranch(w http.ResponseWriter, r *http.Request) {
 	xrpcBytes, err := tangled.RepoCompare(r.Context(), xrpcc, f.RepoIdentifier(), pull.TargetBranch, pull.PullSource.Branch)
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-			l.Error("failed to call XRPC repo.compare", "err", xrpcerr, "source_branch", pull.PullSource.Branch)
+			l.Error("failed to call XRPC repo.compare", "xrpcerr", xrpcerr, "err", err, "source_branch", pull.PullSource.Branch)
 			s.pages.Notice(w, "resubmit-error", "Failed to create pull request. Try again later.")
 			return
 		}
@@ -1907,8 +1909,9 @@ func (s *Pulls) resubmitFork(w http.ResponseWriter, r *http.Request) {
 			Repo:      forkRepo.RepoAt().String(),
 		},
 	)
-	if err := xrpcclient.HandleXrpcErr(err); err != nil {
-		s.pages.Notice(w, "resubmit-error", err.Error())
+	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+		s.logger.Error("failed to set hidden ref", "xrpcerr", xrpcerr, "err", err)
+		s.pages.Notice(w, "resubmit-error", xrpcerr.Error())
 		return
 	}
 	if !resp.Success {
@@ -1927,7 +1930,7 @@ func (s *Pulls) resubmitFork(w http.ResponseWriter, r *http.Request) {
 	forkXrpcBytes, err := tangled.RepoCompare(r.Context(), &indigoxrpc.Client{Host: forkHost}, forkRepo.RepoIdentifier(), hiddenRef, pull.PullSource.Branch)
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-			l.Error("failed to call XRPC repo.compare for fork", "err", xrpcerr, "hidden_ref", hiddenRef, "source_branch", pull.PullSource.Branch)
+			l.Error("failed to call XRPC repo.compare for fork", "xrpcerr", xrpcerr, "err", err, "hidden_ref", hiddenRef, "source_branch", pull.PullSource.Branch)
 			s.pages.Notice(w, "resubmit-error", "Failed to create pull request. Try again later.")
 			return
 		}
@@ -2390,8 +2393,9 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = tangled.RepoMerge(r.Context(), client, mergeInput)
-	if err := xrpcclient.HandleXrpcErr(err); err != nil {
-		s.pages.Notice(w, "pull-merge-error", err.Error())
+	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+		s.logger.Error("failed to merge", "xrpcerr", xrpcerr, "err", err)
+		s.pages.Notice(w, "pull-merge-error", xrpcerr.Error())
 		return
 	}
 

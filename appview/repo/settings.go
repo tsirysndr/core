@@ -54,7 +54,7 @@ func (rp *Repo) SetDefaultBranch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	xe := tangled.RepoSetDefaultBranch(
+	err = tangled.RepoSetDefaultBranch(
 		r.Context(),
 		client,
 		&tangled.RepoSetDefaultBranch_Input{
@@ -62,9 +62,9 @@ func (rp *Repo) SetDefaultBranch(w http.ResponseWriter, r *http.Request) {
 			DefaultBranch: branch,
 		},
 	)
-	if err := xrpcclient.HandleXrpcErr(xe); err != nil {
-		l.Error("xrpc failed", "err", xe)
-		rp.pages.Notice(w, noticeId, err.Error())
+	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+		l.Error("failed to call XRPC repo.setDefaultBranch", "xrpcerr", xrpcerr, "err", err)
+		rp.pages.Notice(w, noticeId, xrpcerr.Error())
 		return
 	}
 
@@ -200,7 +200,7 @@ func (rp *Repo) sitesSettings(w http.ResponseWriter, r *http.Request) {
 	repo := fmt.Sprintf("%s/%s", f.Did, f.Name)
 	xrpcBytes, err := tangled.RepoBranches(r.Context(), xrpcc, "", 0, repo)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-		l.Error("failed to call XRPC repo.branches", "err", xrpcerr)
+		l.Error("failed to call XRPC repo.branches", "xrpcerr", xrpcerr, "err", err)
 		rp.pages.Error503(w)
 		return
 	}
@@ -385,7 +385,7 @@ func (rp *Repo) generalSettings(w http.ResponseWriter, r *http.Request) {
 	xrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
 	var result types.RepoBranchesResponse
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-		l.Error("failed to call XRPC repo.branches", "err", xrpcerr)
+		l.Error("failed to call XRPC git.listBranches", "xrpcerr", xrpcerr, "err", err)
 	} else if err := json.Unmarshal(xrpcBytes, &result); err != nil {
 		l.Error("failed to decode XRPC response", "err", err)
 		rp.pages.Error503(w)
