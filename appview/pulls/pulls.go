@@ -1131,11 +1131,8 @@ func (s *Pulls) handleBranchBasedPull(
 	pullSource := &models.PullSource{
 		Branch: sourceBranch,
 	}
-	recordPullSource := &tangled.RepoPull_Source{
-		Branch: sourceBranch,
-	}
 
-	s.createPullRequest(w, r, repo, user, title, body, targetBranch, patch, combined, sourceRev, pullSource, recordPullSource, isStacked)
+	s.createPullRequest(w, r, repo, user, title, body, targetBranch, patch, combined, sourceRev, pullSource, isStacked)
 }
 
 func (s *Pulls) handlePatchBasedPull(w http.ResponseWriter, r *http.Request, repo *models.Repo, user *oauth.MultiAccountUser, title, body, targetBranch, patch string, isStacked bool) {
@@ -1145,7 +1142,7 @@ func (s *Pulls) handlePatchBasedPull(w http.ResponseWriter, r *http.Request, rep
 		return
 	}
 
-	s.createPullRequest(w, r, repo, user, title, body, targetBranch, patch, "", "", nil, nil, isStacked)
+	s.createPullRequest(w, r, repo, user, title, body, targetBranch, patch, "", "", nil, isStacked)
 }
 
 func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo *models.Repo, user *oauth.MultiAccountUser, forkRepo string, title, body, targetBranch, sourceBranch string, isStacked bool) {
@@ -1240,21 +1237,19 @@ func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo
 	}
 
 	forkAtUri := fork.RepoAt()
-	forkAtUriStr := forkAtUri.String()
+	var forkDid *syntax.DID
+	if fork.RepoDid != "" {
+		forkDid = new(syntax.DID)
+		*forkDid = syntax.DID(fork.RepoDid)
+	}
 
 	pullSource := &models.PullSource{
-		Branch: sourceBranch,
-		RepoAt: &forkAtUri,
-	}
-	recordPullSource := &tangled.RepoPull_Source{
-		Branch: sourceBranch,
-		Repo:   &forkAtUriStr,
-	}
-	if fork.RepoDid != "" {
-		recordPullSource.RepoDid = &fork.RepoDid
+		Branch:  sourceBranch,
+		RepoAt:  &forkAtUri,
+		RepoDid: forkDid,
 	}
 
-	s.createPullRequest(w, r, repo, user, title, body, targetBranch, patch, combined, sourceRev, pullSource, recordPullSource, isStacked)
+	s.createPullRequest(w, r, repo, user, title, body, targetBranch, patch, combined, sourceRev, pullSource, isStacked)
 }
 
 func (s *Pulls) createPullRequest(
@@ -1267,7 +1262,6 @@ func (s *Pulls) createPullRequest(
 	combined string,
 	sourceRev string,
 	pullSource *models.PullSource,
-	recordPullSource *tangled.RepoPull_Source,
 	isStacked bool,
 ) {
 	l := s.logger.With("handler", "createPullRequest", "user", user.Active.Did, "target_branch", targetBranch, "is_stacked", isStacked)
@@ -1336,13 +1330,6 @@ func (s *Pulls) createPullRequest(
 
 	now := time.Now()
 
-	initialSubmission := models.PullSubmission{
-		Patch:     patch,
-		Combined:  combined,
-		SourceRev: sourceRev,
-		Blob:      *blob.Blob,
-		Created:   time.Now(),
-	}
 	pull := &models.Pull{
 		Title:        title,
 		Body:         body,
@@ -1353,26 +1340,20 @@ func (s *Pulls) createPullRequest(
 		Mentions:     mentions,
 		References:   references,
 		Submissions: []*models.PullSubmission{
-			&initialSubmission,
+			{
+				Patch:     patch,
+				Combined:  combined,
+				SourceRev: sourceRev,
+				Blob:      *blob.Blob,
+				Created:   now,
+			},
 		},
 		PullSource: pullSource,
 		State:      models.PullOpen,
 		Created:    now,
 	}
 
-	record := tangled.RepoPull{
-		Title:     title,
-		Body:      &body,
-		Target:    repoPullTarget(repo, targetBranch),
-		Source:    recordPullSource,
-		CreatedAt: time.Now().Format(time.RFC3339),
-		Rounds: []*tangled.RepoPull_Round{
-			initialSubmission.AsRecord(),
-		},
-		Mentions: nil,
-		References: nil,
-	}
-
+	record := pull.AsRecord()
 	_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 		Collection: tangled.RepoPullNSID,
 		Repo:       user.Active.Did,
@@ -2663,15 +2644,3 @@ func gz(s string) io.Reader {
 }
 
 func ptrPullState(s models.PullState) *models.PullState { return &s }
-
-func repoPullTarget(repo *models.Repo, branch string) *tangled.RepoPull_Target {
-	s := string(repo.RepoAt())
-	t := &tangled.RepoPull_Target{
-		Branch: branch,
-		Repo:   &s,
-	}
-	if repo.RepoDid != "" {
-		t.RepoDid = &repo.RepoDid
-	}
-	return t
-}

@@ -88,15 +88,6 @@ type Pull struct {
 
 // NOTE: This method does not include patch blob in returned atproto record
 func (p Pull) AsRecord() tangled.RepoPull {
-	var source *tangled.RepoPull_Source
-	if p.PullSource != nil {
-		source = &tangled.RepoPull_Source{}
-		source.Branch = p.PullSource.Branch
-		if p.PullSource.RepoAt != nil {
-			s := p.PullSource.RepoAt.String()
-			source.Repo = &s
-		}
-	}
 	mentions := make([]string, len(p.Mentions))
 	for i, did := range p.Mentions {
 		mentions[i] = string(did)
@@ -123,7 +114,7 @@ func (p Pull) AsRecord() tangled.RepoPull {
 		dependentOn = &x
 	}
 
-	record := tangled.RepoPull{
+	return tangled.RepoPull{
 		Title:      p.Title,
 		Body:       &p.Body,
 		Mentions:   mentions,
@@ -135,10 +126,9 @@ func (p Pull) AsRecord() tangled.RepoPull {
 			Branch:  p.TargetBranch,
 		},
 		Rounds:      rounds,
-		Source:      source,
+		Source:      p.PullSource.AsRecord(),
 		DependentOn: dependentOn,
 	}
-	return record
 }
 
 func PullFromRecord(did, rkey string, record tangled.RepoPull, blobs []*io.ReadCloser) Pull {
@@ -179,6 +169,11 @@ func PullFromRecord(did, rkey string, record tangled.RepoPull, blobs []*io.ReadC
 		if record.Source.Repo != nil {
 			if uri, err := syntax.ParseATURI(*record.Source.Repo); err == nil {
 				pullSource.RepoAt = &uri
+			}
+		}
+		if record.Source.RepoDid != nil {
+			if did, err := syntax.ParseDID(*record.Source.RepoDid); err != nil {
+				pullSource.RepoDid = &did
 			}
 		}
 	}
@@ -255,11 +250,32 @@ func PullSubmissionFromRecord(did, rkey string, roundNumber int, round *tangled.
 }
 
 type PullSource struct {
-	Branch string
-	RepoAt *syntax.ATURI
+	Branch  string
+	RepoAt  *syntax.ATURI
+	RepoDid *syntax.DID
 
 	// optionally populate this for reverse mappings
 	Repo *Repo
+}
+
+func (s *PullSource) AsRecord() *tangled.RepoPull_Source {
+	if s == nil {
+		return nil
+	}
+	var repoAt, repoDid *string
+	if s.RepoAt != nil {
+		repoAt = new(string)
+		*repoAt = s.RepoAt.String()
+	}
+	if s.RepoDid != nil {
+		repoDid = new(string)
+		*repoDid = s.RepoDid.String()
+	}
+	return &tangled.RepoPull_Source{
+		Branch:  s.Branch,
+		Repo:    repoAt,
+		RepoDid: repoDid,
+	}
 }
 
 type PullSubmission struct {
