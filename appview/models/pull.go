@@ -97,11 +97,13 @@ func (p Pull) AsRecord() tangled.RepoPull {
 		references[i] = string(uri)
 	}
 
-	var targetRepoAt, targetRepoDid string
+	var targetRepoAt, targetRepoDid *string
+	targetRepoAt = new(string)
+	*targetRepoAt = p.RepoAt.String()
 	if p.Repo != nil && p.Repo.RepoDid != "" {
-		targetRepoDid = p.Repo.RepoDid
+		targetRepoDid = new(string)
+		*targetRepoDid = p.Repo.RepoDid
 	}
-	targetRepoAt = p.RepoAt.String()
 
 	rounds := make([]*tangled.RepoPull_Round, len(p.Submissions))
 	for i, submission := range p.Submissions {
@@ -121,8 +123,8 @@ func (p Pull) AsRecord() tangled.RepoPull {
 		References: references,
 		CreatedAt:  p.Created.Format(time.RFC3339),
 		Target: &tangled.RepoPull_Target{
-			Repo:    &targetRepoAt,
-			RepoDid: &targetRepoDid,
+			Repo:    targetRepoAt,
+			RepoDid: targetRepoDid,
 			Branch:  p.TargetBranch,
 		},
 		Rounds:      rounds,
