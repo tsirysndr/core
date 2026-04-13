@@ -67,8 +67,6 @@ func (rp *Repo) SetDefaultBranch(w http.ResponseWriter, r *http.Request) {
 		rp.pages.Notice(w, noticeId, xrpcerr.Error())
 		return
 	}
-
-	rp.pages.HxRefresh(w)
 }
 
 func (rp *Repo) Secrets(w http.ResponseWriter, r *http.Request) {
