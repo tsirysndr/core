@@ -211,7 +211,7 @@ func (i *Ingester) ingestPublicKey(e *jmodels.Event) error {
 	l = l.With("nsid", e.Commit.Collection)
 
 	switch e.Commit.Operation {
-	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
+	case jmodels.CommitOperationCreate:
 		l.Debug("processing add of pubkey")
 		raw := json.RawMessage(e.Commit.Record)
 		record := tangled.PublicKey{}
@@ -224,6 +224,19 @@ func (i *Ingester) ingestPublicKey(e *jmodels.Event) error {
 		name := record.Name
 		key := record.Key
 		err = db.AddPublicKey(i.Db, did, name, key, e.Commit.RKey)
+	case jmodels.CommitOperationUpdate:
+		l.Debug("processing update of pubkey")
+		raw := json.RawMessage(e.Commit.Record)
+		record := tangled.PublicKey{}
+		err = json.Unmarshal(raw, &record)
+		if err != nil {
+			l.Error("invalid record", "err", err)
+			return err
+		}
+
+		name := record.Name
+		key := record.Key
+		err = db.UpdatePublicKey(i.Db, did, name, key, e.Commit.RKey)
 	case jmodels.CommitOperationDelete:
 		l.Debug("processing delete of pubkey")
 		err = db.DeletePublicKeyByRkey(i.Db, did, e.Commit.RKey)

@@ -1,8 +1,9 @@
 package db
 
 import (
-	"tangled.org/core/appview/models"
 	"time"
+
+	"tangled.org/core/appview/models"
 )
 
 func AddPublicKey(e Execer, did, name, key, rkey string) error {
@@ -10,6 +11,13 @@ func AddPublicKey(e Execer, did, name, key, rkey string) error {
 		`insert or ignore into public_keys (did, name, key, rkey)
 		 values (?, ?, ?, ?)`,
 		did, name, key, rkey)
+	return err
+}
+
+func UpdatePublicKey(e Execer, did, name, key, rkey string) error {
+	_, err := e.Exec(
+		`update public_keys set name = ? where did = ? and key = ? and rkey = ?`,
+		name, did, key, rkey)
 	return err
 }
 
