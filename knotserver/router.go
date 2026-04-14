@@ -2,10 +2,12 @@ package knotserver
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/idresolver"
@@ -19,6 +21,9 @@ import (
 	"tangled.org/core/xrpc/serviceauth"
 )
 
+//go:embed motd
+var defaultMotd []byte
+
 type Knot struct {
 	c        *config.Config
 	db       *db.DB
@@ -27,6 +32,8 @@ type Knot struct {
 	l        *slog.Logger
 	n        *notifier.Notifier
 	resolver *idresolver.Resolver
+	motd     []byte
+	motdMu   sync.RWMutex
 }
 
 func Setup(ctx context.Context, c *config.Config, db *db.DB, e *rbac.Enforcer, jc *jetstream.JetstreamClient, n *notifier.Notifier) (http.Handler, error) {
@@ -38,6 +45,7 @@ func Setup(ctx context.Context, c *config.Config, db *db.DB, e *rbac.Enforcer, j
 		jc:       jc,
 		n:        n,
 		resolver: idresolver.DefaultResolver(c.Server.PlcUrl),
+		motd:     defaultMotd,
 	}
 
 	err := e.AddKnot(rbac.ThisServer)
@@ -76,7 +84,7 @@ func (h *Knot) Router() http.Handler {
 	r.Use(h.RequestLogger)
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("This is a knot server. More info at https://tangled.sh"))
+		w.Write(h.GetMotdContent())
 	})
 
 	r.Route("/{did}", func(r chi.Router) {
@@ -102,6 +110,20 @@ func (h *Knot) Router() http.Handler {
 	r.Get("/events", h.Events)
 
 	return r
+}
+
+// SetMotdContent sets custom MOTD content, replacing the embedded default.
+func (h *Knot) SetMotdContent(content []byte) {
+	h.motdMu.Lock()
+	defer h.motdMu.Unlock()
+	h.motd = content
+}
+
+// GetMotdContent returns the current MOTD content.
+func (h *Knot) GetMotdContent() []byte {
+	h.motdMu.RLock()
+	defer h.motdMu.RUnlock()
+	return h.motd
 }
 
 func (h *Knot) XrpcRouter() http.Handler {

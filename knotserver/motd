@@ -1,0 +1,13 @@
+
+                              ____    _.-'
+                 _.---..__ .-'____i-+'_.-'
+      .__     .-'_.---.._i'.-'____.--'
+      .__""--: .'__..--"_.' ""    '.'.    __
+         ""-: :.___..--" .---._____i.i--""__
+      ...___: :________.-"""-.______..--""
+      ...____: '.______.-"""-.__.-'
+              '-.___.'
+
+This is a knot server. More info at https://docs.tangled.org/knot-self-hosting-guide.html
+
+Most API routes are under /xrpc/
