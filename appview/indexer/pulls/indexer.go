@@ -30,7 +30,7 @@ const (
 	unicodeNormalizeName = "uicodeNormalize"
 
 	// Bump this when the index mapping changes to trigger a rebuild.
-	pullIndexerVersion = 3
+	pullIndexerVersion = 4
 )
 
 type Indexer struct {
@@ -80,7 +80,7 @@ func generatePullIndexMapping() (mapping.IndexMapping, error) {
 	docMapping.AddFieldMappingsAt("title", textFieldMapping)
 	docMapping.AddFieldMappingsAt("body", textFieldMapping)
 
-	docMapping.AddFieldMappingsAt("repo_at", keywordFieldMapping)
+	docMapping.AddFieldMappingsAt("repo_did", keywordFieldMapping)
 	docMapping.AddFieldMappingsAt("state", keywordFieldMapping)
 	docMapping.AddFieldMappingsAt("author_did", keywordFieldMapping)
 	docMapping.AddFieldMappingsAt("labels", keywordFieldMapping)
@@ -180,7 +180,7 @@ func PopulateIndexer(ctx context.Context, ix *Indexer, e db.Execer) error {
 
 type pullData struct {
 	ID          int64    `json:"id"`
-	RepoAt      string   `json:"repo_at"`
+	RepoDid     string   `json:"repo_did"`
 	PullID      int      `json:"pull_id"`
 	Title       string   `json:"title"`
 	Body        string   `json:"body"`
@@ -195,7 +195,7 @@ type pullData struct {
 func makePullData(pull *models.Pull) *pullData {
 	return &pullData{
 		ID:          int64(pull.ID),
-		RepoAt:      pull.RepoAt.String(),
+		RepoDid:     string(pull.RepoDid),
 		PullID:      pull.PullId,
 		Title:       pull.Title,
 		Body:        pull.Body,
@@ -275,7 +275,7 @@ func (ix *Indexer) Search(ctx context.Context, opts models.PullSearchOptions) (*
 		))
 	}
 
-	musts = append(musts, bleveutil.KeywordFieldQuery("repo_at", opts.RepoAt))
+	musts = append(musts, bleveutil.KeywordFieldQuery("repo_did", opts.RepoDid))
 	if opts.State != nil {
 		musts = append(musts, bleveutil.KeywordFieldQuery("state", opts.State.String()))
 	}

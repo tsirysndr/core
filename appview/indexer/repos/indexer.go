@@ -34,7 +34,7 @@ const (
 	unicodeNormalizeName = "unicodeNormalize"
 
 	// Bump this when the index mapping changes to trigger a rebuild.
-	repoIndexerVersion = 6
+	repoIndexerVersion = 7
 )
 
 type Indexer struct {
@@ -120,7 +120,7 @@ func generateRepoIndexMapping() (mapping.IndexMapping, error) {
 	docMapping.AddFieldMappingsAt("topics_exact", caseInsensitiveKeywordMapping)
 	docMapping.AddFieldMappingsAt("did", keywordFieldMapping)
 	docMapping.AddFieldMappingsAt("knot", keywordFieldMapping)
-	docMapping.AddFieldMappingsAt("repo_at", keywordFieldMapping)
+	docMapping.AddFieldMappingsAt("repo_did", keywordFieldMapping)
 
 	// fork indicator for down-ranking
 	docMapping.AddFieldMappingsAt("is_fork", booleanFieldMapping)
@@ -258,7 +258,7 @@ func PopulateIndexer(ctx context.Context, ix *Indexer, e db.Execer) error {
 
 type repoData struct {
 	ID          int64    `json:"id"`
-	RepoAt      string   `json:"repo_at"`
+	RepoDid     string   `json:"repo_did"`
 	Did         string   `json:"did"`
 	Name        string   `json:"name"`
 	NameTrigram string   `json:"name_trigram"`
@@ -294,7 +294,7 @@ func makeRepoData(repo *models.Repo) *repoData {
 
 	return &repoData{
 		ID:          repo.Id,
-		RepoAt:      repo.RepoAt().String(),
+		RepoDid:     repo.RepoDid,
 		Did:         repo.Did,
 		Name:        repo.Name,
 		NameTrigram: repo.Name,

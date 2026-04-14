@@ -31,7 +31,7 @@ const (
 	unicodeNormalizeName = "uicodeNormalize"
 
 	// Bump this when the index mapping changes to trigger a rebuild.
-	issueIndexerVersion = 3
+	issueIndexerVersion = 4
 )
 
 type Indexer struct {
@@ -85,7 +85,7 @@ func generateIssueIndexMapping() (mapping.IndexMapping, error) {
 	docMapping.AddFieldMappingsAt("title", textFieldMapping)
 	docMapping.AddFieldMappingsAt("body", textFieldMapping)
 
-	docMapping.AddFieldMappingsAt("repo_at", keywordFieldMapping)
+	docMapping.AddFieldMappingsAt("repo_did", keywordFieldMapping)
 	docMapping.AddFieldMappingsAt("is_open", boolFieldMapping)
 	docMapping.AddFieldMappingsAt("author_did", keywordFieldMapping)
 	docMapping.AddFieldMappingsAt("labels", keywordFieldMapping)
@@ -185,7 +185,7 @@ func PopulateIndexer(ctx context.Context, ix *Indexer, e db.Execer) error {
 
 type issueData struct {
 	ID          int64    `json:"id"`
-	RepoAt      string   `json:"repo_at"`
+	RepoDid     string   `json:"repo_did"`
 	IssueID     int      `json:"issue_id"`
 	Title       string   `json:"title"`
 	Body        string   `json:"body"`
@@ -200,7 +200,7 @@ type issueData struct {
 func makeIssueData(issue *models.Issue) *issueData {
 	return &issueData{
 		ID:          issue.Id,
-		RepoAt:      issue.RepoAt.String(),
+		RepoDid:     string(issue.RepoDid),
 		IssueID:     issue.IssueId,
 		Title:       issue.Title,
 		Body:        issue.Body,
@@ -274,7 +274,7 @@ func (ix *Indexer) Search(ctx context.Context, opts models.IssueSearchOptions) (
 		))
 	}
 
-	musts = append(musts, bleveutil.KeywordFieldQuery("repo_at", opts.RepoAt))
+	musts = append(musts, bleveutil.KeywordFieldQuery("repo_did", opts.RepoDid))
 	if opts.IsOpen != nil {
 		musts = append(musts, bleveutil.BoolFieldQuery("is_open", *opts.IsOpen))
 	}

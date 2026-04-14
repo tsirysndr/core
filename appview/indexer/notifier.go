@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
@@ -14,10 +13,10 @@ import (
 
 var _ notify.Notifier = &Indexer{}
 
-func (ix *Indexer) getAndReindexRepo(ctx context.Context, repoAt syntax.ATURI) {
-	l := log.FromContext(ctx).With("notifier", "indexer", "repo_at", repoAt)
+func (ix *Indexer) getAndReindexRepo(ctx context.Context, repoDid syntax.DID) {
+	l := log.FromContext(ctx).With("notifier", "indexer", "repo_did", repoDid)
 
-	repo, err := db.GetRepo(ix.Db, orm.FilterEq("at_uri", repoAt.String()))
+	repo, err := db.GetRepo(ix.Db, orm.FilterEq("repo_did", string(repoDid)))
 	if err != nil {
 		l.Error("failed to get repo for reindexing", "err", err)
 		return
@@ -39,7 +38,7 @@ func (ix *Indexer) NewIssue(ctx context.Context, issue *models.Issue, mentions [
 	}
 
 	l.Debug("reindexing repo after new issue")
-	ix.getAndReindexRepo(ctx, issue.RepoAt)
+	ix.getAndReindexRepo(ctx, issue.RepoDid)
 }
 
 func (ix *Indexer) NewIssueState(ctx context.Context, actor syntax.DID, issue *models.Issue) {
@@ -61,7 +60,7 @@ func (ix *Indexer) DeleteIssue(ctx context.Context, issue *models.Issue) {
 	}
 
 	l.Debug("reindexing repo after issue deletion")
-	ix.getAndReindexRepo(ctx, issue.RepoAt)
+	ix.getAndReindexRepo(ctx, issue.RepoDid)
 }
 
 func (ix *Indexer) NewIssueLabelOp(ctx context.Context, issue *models.Issue) {
@@ -92,7 +91,7 @@ func (ix *Indexer) NewPull(ctx context.Context, pull *models.Pull) {
 	}
 
 	l.Debug("reindexing repo after new pull")
-	ix.getAndReindexRepo(ctx, pull.RepoAt)
+	ix.getAndReindexRepo(ctx, pull.RepoDid)
 }
 
 func (ix *Indexer) NewPullState(ctx context.Context, actor syntax.DID, pull *models.Pull) {
@@ -113,6 +112,15 @@ func (ix *Indexer) NewRepo(ctx context.Context, repo *models.Repo) {
 	}
 }
 
+func (ix *Indexer) RenameRepo(ctx context.Context, actor syntax.DID, oldRepo, newRepo *models.Repo) {
+	l := log.FromContext(ctx).With("notifier", "indexer", "repo", newRepo.RepoIdentifier(), "actor", actor, "old_name", oldRepo.Name, "new_name", newRepo.Name)
+	l.Debug("reindexing repo after rename")
+	err := ix.Repos.Index(ctx, *newRepo)
+	if err != nil {
+		l.Error("failed to reindex repo", "err", err)
+	}
+}
+
 func (ix *Indexer) DeleteRepo(ctx context.Context, repo *models.Repo) {
 	l := log.FromContext(ctx).With("notifier", "indexer", "repo", repo)
 	l.Debug("deleting repo from index")
@@ -125,21 +133,21 @@ func (ix *Indexer) DeleteRepo(ctx context.Context, repo *models.Repo) {
 func (ix *Indexer) NewStar(ctx context.Context, star *models.Star) {
 	l := log.FromContext(ctx).With("notifier", "indexer", "star", star)
 
-	if star.RepoAt.Collection().String() != tangled.RepoNSID {
+	if star.SubjectType != models.StarSubjectRepo {
 		return
 	}
 
 	l.Debug("reindexing repo after new star")
-	ix.getAndReindexRepo(ctx, star.RepoAt)
+	ix.getAndReindexRepo(ctx, syntax.DID(star.Subject))
 }
 
 func (ix *Indexer) DeleteStar(ctx context.Context, star *models.Star) {
 	l := log.FromContext(ctx).With("notifier", "indexer", "star", star)
 
-	if star.RepoAt.Collection().String() != tangled.RepoNSID {
+	if star.SubjectType != models.StarSubjectRepo {
 		return
 	}
 
 	l.Debug("reindexing repo after star deletion")
-	ix.getAndReindexRepo(ctx, star.RepoAt)
+	ix.getAndReindexRepo(ctx, syntax.DID(star.Subject))
 }

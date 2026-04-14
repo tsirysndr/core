@@ -67,17 +67,17 @@ func TestSearchFilters(t *testing.T) {
 	ctx := context.Background()
 
 	err := ix.Index(ctx,
-		models.Issue{Id: 1, RepoAt: "at://did:plc:test/sh.tangled.repo/abc", Title: "Fix login bug", Body: "Users cannot login", Open: true, Did: "did:plc:alice", Labels: makeLabelState("bug")},
-		models.Issue{Id: 2, RepoAt: "at://did:plc:test/sh.tangled.repo/abc", Title: "Add dark mode", Body: "Implement dark theme", Open: true, Did: "did:plc:bob", Labels: makeLabelState("feature")},
-		models.Issue{Id: 3, RepoAt: "at://did:plc:test/sh.tangled.repo/abc", Title: "Fix login timeout", Body: "Login takes too long", Open: false, Did: "did:plc:alice", Labels: makeLabelState("bug")},
+		models.Issue{Id: 1, RepoDid: "did:plc:testrepo", Title: "Fix login bug", Body: "Users cannot login", Open: true, Did: "did:plc:alice", Labels: makeLabelState("bug")},
+		models.Issue{Id: 2, RepoDid: "did:plc:testrepo", Title: "Add dark mode", Body: "Implement dark theme", Open: true, Did: "did:plc:bob", Labels: makeLabelState("feature")},
+		models.Issue{Id: 3, RepoDid: "did:plc:testrepo", Title: "Fix login timeout", Body: "Login takes too long", Open: false, Did: "did:plc:alice", Labels: makeLabelState("bug")},
 	)
 	require.NoError(t, err)
 
 	opts := func() models.IssueSearchOptions {
 		return models.IssueSearchOptions{
-			RepoAt: "at://did:plc:test/sh.tangled.repo/abc",
-			IsOpen: boolPtr(true),
-			Page:   pagination.Page{Limit: 10},
+			RepoDid: "did:plc:testrepo",
+			IsOpen:  boolPtr(true),
+			Page:    pagination.Page{Limit: 10},
 		}
 	}
 
@@ -148,16 +148,16 @@ func TestSearchLabelAND(t *testing.T) {
 	ctx := context.Background()
 
 	err := ix.Index(ctx,
-		models.Issue{Id: 1, RepoAt: "at://did:plc:test/sh.tangled.repo/abc", Title: "Issue 1", Body: "Body", Open: true, Did: "did:plc:alice", Labels: makeLabelState("bug")},
-		models.Issue{Id: 2, RepoAt: "at://did:plc:test/sh.tangled.repo/abc", Title: "Issue 2", Body: "Body", Open: true, Did: "did:plc:bob", Labels: makeLabelState("bug", "urgent")},
+		models.Issue{Id: 1, RepoDid: "did:plc:testrepo", Title: "Issue 1", Body: "Body", Open: true, Did: "did:plc:alice", Labels: makeLabelState("bug")},
+		models.Issue{Id: 2, RepoDid: "did:plc:testrepo", Title: "Issue 2", Body: "Body", Open: true, Did: "did:plc:bob", Labels: makeLabelState("bug", "urgent")},
 	)
 	require.NoError(t, err)
 
 	result, err := ix.Search(ctx, models.IssueSearchOptions{
-		RepoAt: "at://did:plc:test/sh.tangled.repo/abc",
-		IsOpen: boolPtr(true),
-		Labels: []string{"bug", "urgent"},
-		Page:   pagination.Page{Limit: 10},
+		RepoDid: "did:plc:testrepo",
+		IsOpen:  boolPtr(true),
+		Labels:  []string{"bug", "urgent"},
+		Page:    pagination.Page{Limit: 10},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, uint64(1), result.Total)
@@ -171,17 +171,17 @@ func TestSearchNegation(t *testing.T) {
 	ctx := context.Background()
 
 	err := ix.Index(ctx,
-		models.Issue{Id: 1, RepoAt: "at://did:plc:test/sh.tangled.repo/abc", Title: "Fix login bug", Body: "Users cannot login", Open: true, Did: "did:plc:alice", Labels: makeLabelState("bug")},
-		models.Issue{Id: 2, RepoAt: "at://did:plc:test/sh.tangled.repo/abc", Title: "Add dark mode", Body: "Implement dark theme", Open: true, Did: "did:plc:bob", Labels: makeLabelState("feature")},
-		models.Issue{Id: 3, RepoAt: "at://did:plc:test/sh.tangled.repo/abc", Title: "Fix timeout bug", Body: "Timeout on save", Open: true, Did: "did:plc:alice", Labels: makeLabelState("bug", "urgent")},
+		models.Issue{Id: 1, RepoDid: "did:plc:testrepo", Title: "Fix login bug", Body: "Users cannot login", Open: true, Did: "did:plc:alice", Labels: makeLabelState("bug")},
+		models.Issue{Id: 2, RepoDid: "did:plc:testrepo", Title: "Add dark mode", Body: "Implement dark theme", Open: true, Did: "did:plc:bob", Labels: makeLabelState("feature")},
+		models.Issue{Id: 3, RepoDid: "did:plc:testrepo", Title: "Fix timeout bug", Body: "Timeout on save", Open: true, Did: "did:plc:alice", Labels: makeLabelState("bug", "urgent")},
 	)
 	require.NoError(t, err)
 
 	opts := func() models.IssueSearchOptions {
 		return models.IssueSearchOptions{
-			RepoAt: "at://did:plc:test/sh.tangled.repo/abc",
-			IsOpen: boolPtr(true),
-			Page:   pagination.Page{Limit: 10},
+			RepoDid: "did:plc:testrepo",
+			IsOpen:  boolPtr(true),
+			Page:    pagination.Page{Limit: 10},
 		}
 	}
 
@@ -227,9 +227,9 @@ func TestSearchNegatedPhraseParsed(t *testing.T) {
 	ctx := context.Background()
 
 	err := ix.Index(ctx,
-		models.Issue{Id: 1, RepoAt: "at://did:plc:test/sh.tangled.repo/abc", Title: "Fix login bug", Body: "Users cannot login", Open: true, Did: "did:plc:alice"},
-		models.Issue{Id: 2, RepoAt: "at://did:plc:test/sh.tangled.repo/abc", Title: "Add dark mode", Body: "Implement dark theme", Open: true, Did: "did:plc:bob"},
-		models.Issue{Id: 3, RepoAt: "at://did:plc:test/sh.tangled.repo/abc", Title: "Fix timeout bug", Body: "Timeout on save", Open: true, Did: "did:plc:alice"},
+		models.Issue{Id: 1, RepoDid: "did:plc:testrepo", Title: "Fix login bug", Body: "Users cannot login", Open: true, Did: "did:plc:alice"},
+		models.Issue{Id: 2, RepoDid: "did:plc:testrepo", Title: "Add dark mode", Body: "Implement dark theme", Open: true, Did: "did:plc:bob"},
+		models.Issue{Id: 3, RepoDid: "did:plc:testrepo", Title: "Fix timeout bug", Body: "Timeout on save", Open: true, Did: "did:plc:alice"},
 	)
 	require.NoError(t, err)
 
@@ -244,7 +244,7 @@ func TestSearchNegatedPhraseParsed(t *testing.T) {
 	require.Equal(t, []string{"dark theme"}, negatedPhrases)
 
 	result, err := ix.Search(ctx, models.IssueSearchOptions{
-		RepoAt:         "at://did:plc:test/sh.tangled.repo/abc",
+		RepoDid:        "did:plc:testrepo",
 		IsOpen:         boolPtr(true),
 		NegatedPhrases: negatedPhrases,
 		Page:           pagination.Page{Limit: 10},
@@ -261,13 +261,13 @@ func TestSearchNoResults(t *testing.T) {
 	ctx := context.Background()
 
 	err := ix.Index(ctx,
-		models.Issue{Id: 1, RepoAt: "at://did:plc:test/sh.tangled.repo/abc", Title: "Issue", Body: "Body", Open: true, Did: "did:plc:alice"},
+		models.Issue{Id: 1, RepoDid: "did:plc:testrepo", Title: "Issue", Body: "Body", Open: true, Did: "did:plc:alice"},
 	)
 	require.NoError(t, err)
 
 	result, err := ix.Search(ctx, models.IssueSearchOptions{
 		Keywords: []string{"nonexistent"},
-		RepoAt:   "at://did:plc:test/sh.tangled.repo/abc",
+		RepoDid:  "did:plc:testrepo",
 		IsOpen:   boolPtr(true),
 		Page:     pagination.Page{Limit: 10},
 	})
@@ -283,20 +283,20 @@ func TestSearchLabelValues(t *testing.T) {
 	ctx := context.Background()
 
 	err := ix.Index(ctx,
-		models.Issue{Id: 1, RepoAt: "at://did:plc:test/sh.tangled.repo/abc", Title: "High priority bug", Body: "Urgent", Open: true, Did: "did:plc:alice",
+		models.Issue{Id: 1, RepoDid: "did:plc:testrepo", Title: "High priority bug", Body: "Urgent", Open: true, Did: "did:plc:alice",
 			Labels: makeLabelState("bug", "priority=high")},
-		models.Issue{Id: 2, RepoAt: "at://did:plc:test/sh.tangled.repo/abc", Title: "Low priority feature", Body: "Nice to have", Open: true, Did: "did:plc:bob",
+		models.Issue{Id: 2, RepoDid: "did:plc:testrepo", Title: "Low priority feature", Body: "Nice to have", Open: true, Did: "did:plc:bob",
 			Labels: makeLabelState("feature", "priority=low")},
-		models.Issue{Id: 3, RepoAt: "at://did:plc:test/sh.tangled.repo/abc", Title: "High priority feature", Body: "Important", Open: true, Did: "did:plc:alice",
+		models.Issue{Id: 3, RepoDid: "did:plc:testrepo", Title: "High priority feature", Body: "Important", Open: true, Did: "did:plc:alice",
 			Labels: makeLabelState("feature", "priority=high")},
 	)
 	require.NoError(t, err)
 
 	opts := func() models.IssueSearchOptions {
 		return models.IssueSearchOptions{
-			RepoAt: "at://did:plc:test/sh.tangled.repo/abc",
-			IsOpen: boolPtr(true),
-			Page:   pagination.Page{Limit: 10},
+			RepoDid: "did:plc:testrepo",
+			IsOpen:  boolPtr(true),
+			Page:    pagination.Page{Limit: 10},
 		}
 	}
 

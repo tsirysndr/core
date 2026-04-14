@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 	"sync"
 
 	"time"
@@ -27,6 +28,7 @@ import (
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
+	"tangled.org/core/appview/notify"
 	"tangled.org/core/appview/serververify"
 	"tangled.org/core/appview/validator"
 	"tangled.org/core/idresolver"
@@ -42,6 +44,7 @@ type Ingester struct {
 	Config     *config.Config
 	Logger     *slog.Logger
 	Validator  *validator.Validator
+	Notifier   notify.Notifier
 }
 
 type processFunc func(ctx context.Context, e *jmodels.Event) error
@@ -97,6 +100,8 @@ func (i *Ingester) Ingest() processFunc {
 				err = i.ingestLabelDefinition(e)
 			case tangled.LabelOpNSID:
 				err = i.ingestLabelOp(e)
+			case tangled.RepoNSID:
+				err = i.ingestRepo(ctx, e)
 			}
 			l = i.Logger.With("nsid", e.Commit.Collection)
 		}
@@ -114,6 +119,59 @@ func (i *Ingester) Ingest() processFunc {
 	}
 }
 
+func (i *Ingester) resolveRepoRef(ref string) (*models.Repo, error) {
+	if strings.HasPrefix(ref, "did:") {
+		return db.GetRepoByDid(i.Db, ref)
+	}
+	return db.GetRepoByAtUri(i.Db, ref)
+}
+
+func (i *Ingester) resolveOldFormatStar(raw json.RawMessage, star *models.Star, l *slog.Logger) (bool, error) {
+	var legacy struct {
+		Subject    *string `json:"subject"`
+		SubjectDid *string `json:"subjectDid"`
+	}
+	if err := json.Unmarshal(raw, &legacy); err != nil {
+		return false, err
+	}
+
+	switch {
+	case legacy.SubjectDid != nil:
+		repo, err := i.resolveRepoRef(*legacy.SubjectDid)
+		if err != nil {
+			l.Warn("skipping old-format star for unknown repo", "subjectDid", *legacy.SubjectDid)
+			return false, nil
+		}
+		star.SubjectType = models.StarSubjectRepo
+		star.Subject = repo.RepoDid
+		return true, nil
+
+	case legacy.Subject != nil:
+		uri, err := syntax.ParseATURI(*legacy.Subject)
+		if err != nil {
+			return false, fmt.Errorf("invalid old-format star subject: %w", err)
+		}
+		switch uri.Collection().String() {
+		case tangled.RepoNSID:
+			repo, err := db.GetRepoByAtUri(i.Db, uri.String())
+			if err != nil {
+				l.Warn("skipping old-format star for unknown repo", "subject", *legacy.Subject)
+				return false, nil
+			}
+			star.SubjectType = models.StarSubjectRepo
+			star.Subject = repo.RepoDid
+			return true, nil
+		default:
+			star.SubjectType = models.StarSubjectString
+			star.Subject = *legacy.Subject
+			return true, nil
+		}
+
+	default:
+		return false, fmt.Errorf("old-format star has neither subject nor subjectDid")
+	}
+}
+
 func (i *Ingester) ingestStar(ctx context.Context, e *jmodels.Event) error {
 	var err error
 	did := e.Did
@@ -123,15 +181,9 @@ func (i *Ingester) ingestStar(ctx context.Context, e *jmodels.Event) error {
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
-		var subjectUri syntax.ATURI
-
 		raw := json.RawMessage(e.Commit.Record)
 		record := tangled.FeedStar{}
-		err := json.Unmarshal(raw, &record)
-		if err != nil {
-			l.Error("invalid record", "err", err)
-			return err
-		}
+		unmarshalErr := json.Unmarshal(raw, &record)
 
 		star := &models.Star{
 			Did:  did,
@@ -139,29 +191,36 @@ func (i *Ingester) ingestStar(ctx context.Context, e *jmodels.Event) error {
 		}
 
 		switch {
-		case record.SubjectDid != nil:
-			repo, repoErr := db.GetRepo(i.Db, orm.FilterEq("repo_did", *record.SubjectDid))
-			if repoErr == nil {
-				subjectUri = repo.RepoAt()
-				star.RepoAt = subjectUri
+		case unmarshalErr != nil:
+			resolved, resolveErr := i.resolveOldFormatStar(raw, star, l)
+			if resolveErr != nil {
+				l.Error("invalid record", "newFmtErr", unmarshalErr, "oldFmtErr", resolveErr)
+				return unmarshalErr
 			}
-		case record.Subject != nil:
-			subjectUri, err = syntax.ParseATURI(*record.Subject)
-			if err != nil {
-				l.Error("invalid record", "err", err)
-				return err
+			if !resolved {
+				return nil
 			}
-			star.RepoAt = subjectUri
-			repo, repoErr := db.GetRepoByAtUri(i.Db, subjectUri.String())
-			if repoErr == nil && repo.RepoDid != "" {
-				if enqErr := db.EnqueuePdsRecordMigration(ctx, i.Db, "add-repo-did", syntax.DID(did), syntax.NSID(tangled.FeedStarNSID), syntax.RecordKey(e.Commit.RKey)); enqErr != nil {
-					l.Warn("failed to enqueue PDS rewrite for star", "err", enqErr, "did", did, "repoDid", repo.RepoDid)
-				}
+
+		case record.Subject == nil:
+			return fmt.Errorf("star record has nil subject")
+
+		case record.Subject.FeedStar_Repo != nil:
+			repo, repoErr := i.resolveRepoRef(record.Subject.FeedStar_Repo.Did)
+			if repoErr != nil {
+				l.Warn("skipping star for unknown repo", "did", record.Subject.FeedStar_Repo.Did)
+				return nil
 			}
+			star.SubjectType = models.StarSubjectRepo
+			star.Subject = repo.RepoDid
+
+		case record.Subject.FeedStar_String != nil:
+			star.SubjectType = models.StarSubjectString
+			star.Subject = record.Subject.FeedStar_String.Uri
+
 		default:
-			l.Error("star record has neither subject nor subjectDid")
-			return fmt.Errorf("star record has neither subject nor subjectDid")
+			return fmt.Errorf("star record has empty subject union")
 		}
+
 		err = db.AddStar(i.Db, star)
 	case jmodels.CommitOperationDelete:
 		err = db.DeleteStarByRkey(i.Db, did, e.Commit.RKey)
@@ -408,7 +467,7 @@ func (i *Ingester) ingestArtifact(ctx context.Context, e *jmodels.Event) error {
 		artifact := models.Artifact{
 			Did:       did,
 			Rkey:      e.Commit.RKey,
-			RepoAt:    repo.RepoAt(),
+			RepoDid:   syntax.DID(repo.RepoDid),
 			Tag:       plumbing.Hash(record.Tag),
 			CreatedAt: createdAt,
 			BlobCid:   cid.Cid(record.Artifact.Ref),
@@ -977,8 +1036,11 @@ func (i *Ingester) ingestIssue(ctx context.Context, e *jmodels.Event) error {
 
 		issue := models.IssueFromRecord(did, rkey, record)
 
-		if issue.RepoAt == "" {
+		if issue.RepoDid == "" {
 			return fmt.Errorf("issue record has no repo field")
+		}
+		if _, err := syntax.ParseDID(string(issue.RepoDid)); err != nil {
+			return fmt.Errorf("issue record repo field is not a valid DID: %w", err)
 		}
 
 		if err := i.Validator.ValidateIssue(&issue); err != nil {
