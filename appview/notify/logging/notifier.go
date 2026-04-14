@@ -31,6 +31,11 @@ func (l *loggingNotifier) DeleteRepo(ctx context.Context, repo *models.Repo) {
 	l.inner.DeleteRepo(ctx, repo)
 }
 
+func (l *loggingNotifier) RenameRepo(ctx context.Context, actor syntax.DID, oldRepo, newRepo *models.Repo) {
+	ctx = tlog.IntoContext(ctx, tlog.SubLogger(l.logger, "RenameRepo"))
+	l.inner.RenameRepo(ctx, actor, oldRepo, newRepo)
+}
+
 func (l *loggingNotifier) NewStar(ctx context.Context, star *models.Star) {
 	ctx = tlog.IntoContext(ctx, tlog.SubLogger(l.logger, "NewStar"))
 	l.inner.NewStar(ctx, star)

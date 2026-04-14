@@ -10,6 +10,7 @@ import (
 type Notifier interface {
 	NewRepo(ctx context.Context, repo *models.Repo)
 	DeleteRepo(ctx context.Context, repo *models.Repo)
+	RenameRepo(ctx context.Context, actor syntax.DID, oldRepo, newRepo *models.Repo)
 
 	NewStar(ctx context.Context, star *models.Star)
 	DeleteStar(ctx context.Context, star *models.Star)
@@ -47,6 +48,8 @@ var _ Notifier = &BaseNotifier{}
 
 func (m *BaseNotifier) NewRepo(ctx context.Context, repo *models.Repo)    {}
 func (m *BaseNotifier) DeleteRepo(ctx context.Context, repo *models.Repo) {}
+func (m *BaseNotifier) RenameRepo(ctx context.Context, actor syntax.DID, oldRepo, newRepo *models.Repo) {
+}
 
 func (m *BaseNotifier) NewStar(ctx context.Context, star *models.Star)    {}
 func (m *BaseNotifier) DeleteStar(ctx context.Context, star *models.Star) {}

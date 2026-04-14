@@ -5,7 +5,6 @@ import (
 	"slices"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
@@ -40,15 +39,17 @@ func (n *databaseNotifier) DeleteRepo(ctx context.Context, repo *models.Repo) {
 	// no-op for now
 }
 
+func (n *databaseNotifier) RenameRepo(ctx context.Context, actor syntax.DID, oldRepo, newRepo *models.Repo) {
+}
+
 func (n *databaseNotifier) NewStar(ctx context.Context, star *models.Star) {
 	l := log.FromContext(ctx)
 
-	if star.RepoAt.Collection().String() != tangled.RepoNSID {
-		// skip string stars for now
+	if star.SubjectType != models.StarSubjectRepo {
 		return
 	}
-	var err error
-	repo, err := db.GetRepo(n.db, orm.FilterEq("at_uri", string(star.RepoAt)))
+
+	repo, err := db.GetRepo(n.db, orm.FilterEq("repo_did", star.Subject))
 	if err != nil {
 		l.Error("failed to get repos", "err", err)
 		return
@@ -58,7 +59,7 @@ func (n *databaseNotifier) NewStar(ctx context.Context, star *models.Star) {
 	recipients := sets.Singleton(syntax.DID(repo.Did))
 	eventType := models.NotificationTypeRepoStarred
 	entityType := "repo"
-	entityId := star.RepoAt.String()
+	entityId := star.Subject
 	repoId := &repo.Id
 	var issueId *int64
 	var pullId *int64
@@ -83,7 +84,7 @@ func (n *databaseNotifier) DeleteStar(ctx context.Context, star *models.Star) {
 func (n *databaseNotifier) NewIssue(ctx context.Context, issue *models.Issue, mentions []syntax.DID) {
 	l := log.FromContext(ctx)
 
-	collaborators, err := db.GetCollaborators(n.db, orm.FilterEq("repo_at", issue.Repo.RepoAt()))
+	collaborators, err := db.GetCollaborators(n.db, orm.FilterEq("repo_did", string(issue.RepoDid)))
 	if err != nil {
 		l.Error("failed to fetch collaborators", "err", err)
 		return
@@ -240,12 +241,12 @@ func (n *databaseNotifier) DeleteFollow(ctx context.Context, follow *models.Foll
 func (n *databaseNotifier) NewPull(ctx context.Context, pull *models.Pull) {
 	l := log.FromContext(ctx)
 
-	repo, err := db.GetRepo(n.db, orm.FilterEq("at_uri", string(pull.RepoAt)))
+	repo, err := db.GetRepo(n.db, orm.FilterEq("repo_did", string(pull.RepoDid)))
 	if err != nil {
 		l.Error("failed to get repos", "err", err)
 		return
 	}
-	collaborators, err := db.GetCollaborators(n.db, orm.FilterEq("repo_at", repo.RepoAt()))
+	collaborators, err := db.GetCollaborators(n.db, orm.FilterEq("repo_did", string(pull.RepoDid)))
 	if err != nil {
 		l.Error("failed to fetch collaborators", "err", err)
 		return
@@ -285,7 +286,7 @@ func (n *databaseNotifier) NewPullComment(ctx context.Context, comment *models.P
 	l := log.FromContext(ctx)
 
 	pull, err := db.GetPull(n.db,
-		orm.FilterEq("repo_at", syntax.ATURI(comment.RepoAt)),
+		orm.FilterEq("repo_did", comment.RepoDid),
 		orm.FilterEq("pull_id", comment.PullId),
 	)
 	if err != nil {
@@ -293,7 +294,7 @@ func (n *databaseNotifier) NewPullComment(ctx context.Context, comment *models.P
 		return
 	}
 
-	repo, err := db.GetRepo(n.db, orm.FilterEq("at_uri", comment.RepoAt))
+	repo, err := db.GetRepo(n.db, orm.FilterEq("repo_did", comment.RepoDid))
 	if err != nil {
 		l.Error("failed to get repos", "err", err)
 		return
@@ -371,7 +372,7 @@ func (n *databaseNotifier) Clone(ctx context.Context, repo *models.Repo) {
 func (n *databaseNotifier) NewIssueState(ctx context.Context, actor syntax.DID, issue *models.Issue) {
 	l := log.FromContext(ctx)
 
-	collaborators, err := db.GetCollaborators(n.db, orm.FilterEq("repo_at", issue.Repo.RepoAt()))
+	collaborators, err := db.GetCollaborators(n.db, orm.FilterEq("repo_did", string(issue.RepoDid)))
 	if err != nil {
 		l.Error("failed to fetch collaborators", "err", err)
 		return
@@ -419,13 +420,13 @@ func (n *databaseNotifier) NewPullState(ctx context.Context, actor syntax.DID, p
 	l := log.FromContext(ctx)
 
 	// Get repo details
-	repo, err := db.GetRepo(n.db, orm.FilterEq("at_uri", string(pull.RepoAt)))
+	repo, err := db.GetRepo(n.db, orm.FilterEq("repo_did", string(pull.RepoDid)))
 	if err != nil {
 		l.Error("failed to get repos", "err", err)
 		return
 	}
 
-	collaborators, err := db.GetCollaborators(n.db, orm.FilterEq("repo_at", repo.RepoAt()))
+	collaborators, err := db.GetCollaborators(n.db, orm.FilterEq("repo_did", string(pull.RepoDid)))
 	if err != nil {
 		l.Error("failed to fetch collaborators", "err", err)
 		return

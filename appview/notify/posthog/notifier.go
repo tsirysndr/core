@@ -35,11 +35,30 @@ func (n *posthogNotifier) NewRepo(ctx context.Context, repo *models.Repo) {
 	}
 }
 
+func (n *posthogNotifier) RenameRepo(ctx context.Context, actor syntax.DID, oldRepo, newRepo *models.Repo) {
+	err := n.client.Enqueue(posthog.Capture{
+		DistinctId: actor.String(),
+		Event:      "repo_renamed",
+		Properties: posthog.Properties{
+			"repo_at":  newRepo.RepoAt(),
+			"owner":    newRepo.Did,
+			"old_name": oldRepo.Name,
+			"new_name": newRepo.Name,
+		},
+	})
+	if err != nil {
+		log.Println("failed to enqueue posthog event:", err)
+	}
+}
+
 func (n *posthogNotifier) NewStar(ctx context.Context, star *models.Star) {
 	err := n.client.Enqueue(posthog.Capture{
 		DistinctId: star.Did,
 		Event:      "star",
-		Properties: posthog.Properties{"repo_at": star.RepoAt.String()},
+		Properties: posthog.Properties{
+			"subject_type": string(star.SubjectType),
+			"subject":      star.Subject,
+		},
 	})
 	if err != nil {
 		log.Println("failed to enqueue posthog event:", err)
@@ -50,7 +69,10 @@ func (n *posthogNotifier) DeleteStar(ctx context.Context, star *models.Star) {
 	err := n.client.Enqueue(posthog.Capture{
 		DistinctId: star.Did,
 		Event:      "unstar",
-		Properties: posthog.Properties{"repo_at": star.RepoAt.String()},
+		Properties: posthog.Properties{
+			"subject_type": string(star.SubjectType),
+			"subject":      star.Subject,
+		},
 	})
 	if err != nil {
 		log.Println("failed to enqueue posthog event:", err)
@@ -62,7 +84,7 @@ func (n *posthogNotifier) NewIssue(ctx context.Context, issue *models.Issue, men
 		DistinctId: issue.Did,
 		Event:      "new_issue",
 		Properties: posthog.Properties{
-			"repo_at":  issue.RepoAt.String(),
+			"repo_did": string(issue.RepoDid),
 			"issue_id": issue.IssueId,
 			"mentions": mentions,
 		},
@@ -77,8 +99,8 @@ func (n *posthogNotifier) NewPull(ctx context.Context, pull *models.Pull) {
 		DistinctId: pull.OwnerDid,
 		Event:      "new_pull",
 		Properties: posthog.Properties{
-			"repo_at": pull.RepoAt,
-			"pull_id": pull.PullId,
+			"repo_did": string(pull.RepoDid),
+			"pull_id":  pull.PullId,
 		},
 	})
 	if err != nil {
@@ -91,7 +113,7 @@ func (n *posthogNotifier) NewPullComment(ctx context.Context, comment *models.Pu
 		DistinctId: comment.OwnerDid,
 		Event:      "new_pull_comment",
 		Properties: posthog.Properties{
-			"repo_at":  comment.RepoAt,
+			"repo_did": comment.RepoDid,
 			"pull_id":  comment.PullId,
 			"mentions": mentions,
 		},
@@ -106,8 +128,8 @@ func (n *posthogNotifier) NewPullClosed(ctx context.Context, pull *models.Pull) 
 		DistinctId: pull.OwnerDid,
 		Event:      "pull_closed",
 		Properties: posthog.Properties{
-			"repo_at": pull.RepoAt,
-			"pull_id": pull.PullId,
+			"repo_did": string(pull.RepoDid),
+			"pull_id":  pull.PullId,
 		},
 	})
 	if err != nil {
@@ -216,7 +238,7 @@ func (n *posthogNotifier) NewIssueState(ctx context.Context, actor syntax.DID, i
 		DistinctId: issue.Did,
 		Event:      event,
 		Properties: posthog.Properties{
-			"repo_at":  issue.RepoAt.String(),
+			"repo_did": string(issue.RepoDid),
 			"actor":    actor,
 			"issue_id": issue.IssueId,
 		},
@@ -243,9 +265,9 @@ func (n *posthogNotifier) NewPullState(ctx context.Context, actor syntax.DID, pu
 		DistinctId: pull.OwnerDid,
 		Event:      event,
 		Properties: posthog.Properties{
-			"repo_at": pull.RepoAt,
-			"pull_id": pull.PullId,
-			"actor":   actor,
+			"repo_did": string(pull.RepoDid),
+			"pull_id":  pull.PullId,
+			"actor":    actor,
 		},
 	})
 	if err != nil {

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/avast/retry-go/v4"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/google/uuid"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
@@ -41,57 +42,85 @@ func NewNotifier(database *db.DB) *Notifier {
 var _ notify.Notifier = &Notifier{}
 
 func (w *Notifier) Push(ctx context.Context, repo *models.Repo, ref, oldSha, newSha, committerDid string) {
-	webhooks, err := db.GetActiveWebhooksForRepo(w.db, repo.RepoAt())
+	webhooks, err := w.activeWebhooksForEvent(repo.RepoDid, models.WebhookEventPush)
 	if err != nil {
-		w.logger.Error("failed to get webhooks for repo", "repo", repo.RepoAt(), "err", err)
+		w.logger.Error("failed to get webhooks for repo", "repo_did", repo.RepoDid, "err", err)
+		return
+	}
+	if len(webhooks) == 0 {
 		return
 	}
 
-	var pushWebhooks []models.Webhook
+	payload := w.buildPushPayload(repo, ref, oldSha, newSha, committerDid)
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		w.logger.Error("failed to marshal push payload", "repo_did", repo.RepoDid, "err", err)
+		return
+	}
+
+	userAgent := "Tangled-Hook/" + newSha[:7]
 	for _, webhook := range webhooks {
-		if webhook.HasEvent(models.WebhookEventPush) {
-			pushWebhooks = append(pushWebhooks, webhook)
-		}
-	}
-
-	if len(pushWebhooks) == 0 {
-		return
-	}
-
-	payload, err := w.buildPushPayload(repo, ref, oldSha, newSha, committerDid)
-	if err != nil {
-		w.logger.Error("failed to build push payload", "repo", repo.RepoAt(), "err", err)
-		return
-	}
-
-	for _, webhook := range pushWebhooks {
-		go w.sendWebhook(ctx, webhook, string(models.WebhookEventPush), payload)
+		go w.sendWebhook(ctx, webhook, string(models.WebhookEventPush), payload.Repository.FullName, userAgent, payloadBytes)
 	}
 }
 
-func (w *Notifier) buildPushPayload(repo *models.Repo, ref, oldSha, newSha, committerDid string) (*models.WebhookPayload, error) {
-	owner := repo.Did
-
-	pusher := committerDid
-	if committerDid == "" {
-		pusher = owner
+func (w *Notifier) RenameRepo(ctx context.Context, actor syntax.DID, oldRepo, newRepo *models.Repo) {
+	webhooks, err := w.activeWebhooksForEvent(newRepo.RepoDid, models.WebhookEventRepoRenamed)
+	if err != nil {
+		w.logger.Error("failed to get webhooks for repo", "repo_did", newRepo.RepoDid, "err", err)
+		return
+	}
+	if len(webhooks) == 0 {
+		return
 	}
 
+	payload := &models.WebhookRenamePayload{
+		OldName:    oldRepo.Name,
+		NewName:    newRepo.Name,
+		Repository: buildWebhookRepository(newRepo),
+		Sender:     models.WebhookUser{Did: actor.String()},
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		w.logger.Error("failed to marshal rename payload", "repo_did", newRepo.RepoDid, "err", err)
+		return
+	}
+
+	userAgent := "Tangled-Hook/rename"
+	for _, webhook := range webhooks {
+		go w.sendWebhook(ctx, webhook, string(models.WebhookEventRepoRenamed), payload.Repository.FullName, userAgent, payloadBytes)
+	}
+}
+
+func (w *Notifier) activeWebhooksForEvent(repoDid string, event models.WebhookEvent) ([]models.Webhook, error) {
+	webhooks, err := db.GetActiveWebhooksForRepo(w.db, repoDid)
+	if err != nil {
+		return nil, err
+	}
+	var matching []models.Webhook
+	for _, webhook := range webhooks {
+		if webhook.HasEvent(event) {
+			matching = append(matching, webhook)
+		}
+	}
+	return matching, nil
+}
+
+func buildWebhookRepository(repo *models.Repo) models.WebhookRepository {
 	repository := models.WebhookRepository{
 		Name:        repo.Name,
-		FullName:    fmt.Sprintf("%s/%s", repo.Did, repo.Name),
+		FullName:    fmt.Sprintf("%s/%s", repo.Did, repo.Rkey),
 		Description: repo.Description,
 		Fork:        repo.Source != "",
-		HtmlUrl:     fmt.Sprintf("https://%s/%s/%s", repo.Knot, repo.Did, repo.Name),
-		CloneUrl:    fmt.Sprintf("https://%s/%s/%s", repo.Knot, repo.Did, repo.Name),
-		SshUrl:      fmt.Sprintf("ssh://git@%s/%s/%s", repo.Knot, repo.Did, repo.Name),
+		HtmlUrl:     fmt.Sprintf("https://%s/%s/%s", repo.Knot, repo.Did, repo.Rkey),
+		CloneUrl:    fmt.Sprintf("https://%s/%s/%s", repo.Knot, repo.Did, repo.Rkey),
+		SshUrl:      fmt.Sprintf("ssh://git@%s/%s/%s", repo.Knot, repo.Did, repo.Rkey),
 		CreatedAt:   repo.Created.Format(time.RFC3339),
 		UpdatedAt:   repo.Created.Format(time.RFC3339),
 		Owner: models.WebhookUser{
-			Did: owner,
+			Did: repo.Did,
 		},
 	}
-
 	if repo.Website != "" {
 		repository.Website = repo.Website
 	}
@@ -99,28 +128,27 @@ func (w *Notifier) buildPushPayload(repo *models.Repo, ref, oldSha, newSha, comm
 		repository.StarsCount = repo.RepoStats.StarCount
 		repository.OpenIssues = repo.RepoStats.IssueCount.Open
 	}
+	return repository
+}
 
-	payload := &models.WebhookPayload{
+func (w *Notifier) buildPushPayload(repo *models.Repo, ref, oldSha, newSha, committerDid string) *models.WebhookPayload {
+	pusher := committerDid
+	if committerDid == "" {
+		pusher = repo.Did
+	}
+	return &models.WebhookPayload{
 		Ref:        ref,
 		Before:     oldSha,
 		After:      newSha,
-		Repository: repository,
+		Repository: buildWebhookRepository(repo),
 		Pusher: models.WebhookUser{
 			Did: pusher,
 		},
 	}
-
-	return payload, nil
 }
 
-func (w *Notifier) sendWebhook(ctx context.Context, webhook models.Webhook, event string, payload *models.WebhookPayload) {
+func (w *Notifier) sendWebhook(ctx context.Context, webhook models.Webhook, event, repoFullName, userAgent string, payloadBytes []byte) {
 	deliveryId := uuid.New().String()
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		w.logger.Error("failed to marshal webhook payload", "webhook_id", webhook.Id, "err", err)
-		return
-	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", webhook.Url, bytes.NewReader(payloadBytes))
 	if err != nil {
@@ -128,14 +156,12 @@ func (w *Notifier) sendWebhook(ctx context.Context, webhook models.Webhook, even
 		return
 	}
 
-	shortSha := payload.After[:7]
-
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Tangled-Hook/"+shortSha)
+	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("X-Tangled-Event", event)
 	req.Header.Set("X-Tangled-Hook-ID", fmt.Sprintf("%d", webhook.Id))
 	req.Header.Set("X-Tangled-Delivery", deliveryId)
-	req.Header.Set("X-Tangled-Repo", payload.Repository.FullName)
+	req.Header.Set("X-Tangled-Repo", repoFullName)
 
 	if webhook.Secret != "" {
 		signature := w.computeSignature(payloadBytes, webhook.Secret)
