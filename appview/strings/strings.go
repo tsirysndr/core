@@ -149,14 +149,15 @@ func (s *Strings) contents(w http.ResponseWriter, r *http.Request) {
 		showRendered = r.URL.Query().Get("code") != "true"
 	}
 
-	starCount, err := db.GetStarCount(s.Db, string.AtUri())
+	stringUri := string.AtUri().String()
+	starCount, err := db.GetStarCount(s.Db, models.StarSubjectString, stringUri)
 	if err != nil {
 		l.Error("failed to get star count", "err", err)
 	}
 	user := s.OAuth.GetMultiAccountUser(r)
 	isStarred := false
 	if user != nil {
-		isStarred = db.GetStarStatus(s.Db, user.Did, string.AtUri())
+		isStarred = db.GetStarStatus(s.Db, user.Did, stringUri)
 	}
 
 	s.Pages.SingleString(w, pages.SingleStringParams{

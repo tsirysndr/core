@@ -104,7 +104,7 @@ func getPipelineStatuses(
 		d,
 		len(shas),
 		orm.FilterEq("p.repo_owner", repo.Did),
-		orm.FilterEq("p.repo_name", repo.Name),
+		orm.FilterEq("p.repo_name", repo.Rkey),
 		orm.FilterEq("p.knot", repo.Knot),
 		orm.FilterIn("p.sha", shas),
 	)

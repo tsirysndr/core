@@ -22,6 +22,7 @@ import (
 	"tangled.org/core/types"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 )
@@ -195,7 +196,7 @@ func (rp *Repo) sitesSettings(w http.ResponseWriter, r *http.Request) {
 	host := fmt.Sprintf("%s://%s", scheme, f.Knot)
 	xrpcc := &indigoxrpc.Client{Host: host}
 
-	repo := fmt.Sprintf("%s/%s", f.Did, f.Name)
+	repo := fmt.Sprintf("%s/%s", f.Did, f.Rkey)
 	xrpcBytes, err := tangled.RepoBranches(r.Context(), xrpcc, "", 0, repo)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		l.Error("failed to call XRPC repo.branches", "xrpcerr", xrpcerr, "err", err)
@@ -210,7 +211,7 @@ func (rp *Repo) sitesSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	siteConfig, err := db.GetRepoSiteConfig(rp.db, f.RepoAt().String())
+	siteConfig, err := db.GetRepoSiteConfig(rp.db, f.RepoDid)
 	if err != nil {
 		l.Error("failed to get site config", "err", err)
 		rp.pages.Error503(w)
@@ -224,14 +225,14 @@ func (rp *Repo) sitesSettings(w http.ResponseWriter, r *http.Request) {
 		ownerClaim = nil
 	}
 
-	deploys, err := db.GetSiteDeploys(rp.db, f.RepoAt().String(), 20)
+	deploys, err := db.GetSiteDeploys(rp.db, f.RepoDid, 20)
 	if err != nil {
 		l.Error("failed to get site deploys", "err", err)
 		// non-fatal
 		deploys = nil
 	}
 
-	indexSiteTakenBy, err := db.GetIndexRepoAtForDid(rp.db, f.Did, f.RepoAt().String())
+	indexSiteTakenBy, err := db.GetIndexRepoDidForDid(rp.db, f.Did, f.RepoDid)
 	if err != nil {
 		l.Error("failed to get index site owner", "err", err)
 		// non-fatal
@@ -281,7 +282,7 @@ func (rp *Repo) SaveRepoSiteConfig(w http.ResponseWriter, r *http.Request) {
 
 	isIndex := r.FormValue("is_index") == "true"
 
-	if err := db.SetRepoSiteConfig(rp.db, f.RepoAt().String(), branch, dir, isIndex); err != nil {
+	if err := db.SetRepoSiteConfig(rp.db, f.RepoDid, branch, dir, isIndex); err != nil {
 		l.Error("failed to save site config", "err", err)
 		rp.pages.Notice(w, noticeId, "Failed to save site configuration.")
 		return
@@ -297,7 +298,7 @@ func (rp *Repo) SaveRepoSiteConfig(w http.ResponseWriter, r *http.Request) {
 			ctx := context.Background()
 
 			deploy := &models.SiteDeploy{
-				RepoAt:  f.RepoAt().String(),
+				RepoDid: syntax.DID(f.RepoDid),
 				Branch:  branch,
 				Dir:     dir,
 				Trigger: models.SiteDeployTriggerConfigChange,
@@ -317,7 +318,7 @@ func (rp *Repo) SaveRepoSiteConfig(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if deployErr == nil {
-				if err := sites.PutDomainMapping(ctx, rp.cfClient, ownerClaim.Domain, f.Did, f.Name, isIndex); err != nil {
+				if err := sites.PutDomainMapping(ctx, rp.cfClient, ownerClaim.Domain, f.Did, f.Rkey, isIndex); err != nil {
 					l.Error("sites: KV write failed", "domain", ownerClaim.Domain, "err", err)
 				}
 				rp.logger.Info("site deployed to r2", "repo", f.RepoIdentifier(), "is_index", isIndex)
@@ -344,9 +345,9 @@ func (rp *Repo) DeleteRepoSiteConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch the current config before deleting so we know the isIndex flag for
 	// the KV key and the domain mapping to clean up.
-	existingConfig, _ := db.GetRepoSiteConfig(rp.db, f.RepoAt().String())
+	existingConfig, _ := db.GetRepoSiteConfig(rp.db, f.RepoDid)
 
-	if err := db.DeleteRepoSiteConfig(rp.db, f.RepoAt().String()); err != nil {
+	if err := db.DeleteRepoSiteConfig(rp.db, f.RepoDid); err != nil {
 		l.Error("failed to delete site config", "err", err)
 		rp.pages.Notice(w, noticeId, "Failed to remove site configuration.")
 		return
@@ -358,11 +359,11 @@ func (rp *Repo) DeleteRepoSiteConfig(w http.ResponseWriter, r *http.Request) {
 
 		go func() {
 			ctx := context.Background()
-			if err := sites.Delete(ctx, rp.cfClient, f.Did, f.Name); err != nil {
+			if err := sites.Delete(ctx, rp.cfClient, f.Did, f.Rkey); err != nil {
 				l.Error("sites: R2 delete failed", "repo", f.RepoIdentifier(), "err", err)
 			}
 			if ownerClaim != nil {
-				if err := sites.DeleteDomainMapping(ctx, rp.cfClient, ownerClaim.Domain, f.Name); err != nil {
+				if err := sites.DeleteDomainMapping(ctx, rp.cfClient, ownerClaim.Domain, f.Rkey); err != nil {
 					l.Error("sites: KV delete failed", "domain", ownerClaim.Domain, "err", err)
 				}
 			}

@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -234,6 +236,7 @@ func (mw Middleware) ResolveRepo() middlewareFunc {
 			l := mw.logger.With("middleware", "ResolveRepo")
 			repoName := chi.URLParam(req, "repo")
 			repoName = strings.TrimSuffix(repoName, ".git")
+			rkey := strings.ToLower(repoName)
 
 			id, ok := req.Context().Value("resolvedId").(identity.Identity)
 			if !ok {
@@ -245,10 +248,53 @@ func (mw Middleware) ResolveRepo() middlewareFunc {
 			repo, err := db.GetRepo(
 				mw.db,
 				orm.FilterEq("did", id.DID.String()),
-				orm.FilterEq("name", repoName),
+				orm.FilterEq("rkey", rkey),
 			)
 			if err != nil {
-				l.Error("failed to resolve repo", "err", err)
+				if !errors.Is(err, sql.ErrNoRows) {
+					l.Error("failed to resolve repo", "err", err)
+					http.Error(w, "internal server error", http.StatusInternalServerError)
+					return
+				}
+				hint, hintErr := db.LookupRepoRename(mw.db, id.DID.String(), rkey)
+				if hintErr != nil && !errors.Is(hintErr, sql.ErrNoRows) {
+					l.Error("failed to lookup repo rename hint", "err", hintErr)
+				}
+				if hint != nil {
+					parts := strings.SplitN(strings.TrimPrefix(req.URL.Path, "/"), "/", 3)
+					target := "/" + parts[0] + "/" + hint.Rkey
+					if len(parts) == 3 {
+						target += "/" + parts[2]
+					}
+					if req.URL.RawQuery != "" {
+						target += "?" + req.URL.RawQuery
+					}
+					http.Redirect(w, req, target, http.StatusMovedPermanently)
+					return
+				}
+				nameRepos, nameErr := db.GetRepos(
+					mw.db,
+					orm.FilterEq("did", id.DID.String()),
+					orm.FilterEq("name", repoName),
+				)
+				if nameErr == nil && len(nameRepos) == 1 && nameRepos[0].RepoDid != "" {
+					nameRepo := &nameRepos[0]
+					if _, tidErr := syntax.ParseTID(nameRepo.Rkey); tidErr == nil {
+						ctx := context.WithValue(req.Context(), "repo", nameRepo)
+						next.ServeHTTP(w, req.WithContext(ctx))
+						return
+					}
+					parts := strings.SplitN(strings.TrimPrefix(req.URL.Path, "/"), "/", 3)
+					target := "/" + nameRepo.RepoDid
+					if len(parts) == 3 {
+						target += "/" + parts[2]
+					}
+					if req.URL.RawQuery != "" {
+						target += "?" + req.URL.RawQuery
+					}
+					http.Redirect(w, req, target, http.StatusFound)
+					return
+				}
 				w.WriteHeader(http.StatusNotFound)
 				mw.pages.ErrorKnot404(w)
 				return
@@ -281,7 +327,7 @@ func (mw Middleware) ResolvePull() middlewareFunc {
 				return
 			}
 
-			pr, err := db.GetPull(mw.db, orm.FilterEq("repo_at", f.RepoAt()), orm.FilterEq("pull_id", prIdInt))
+			pr, err := db.GetPull(mw.db, orm.FilterEq("repo_did", f.RepoDid), orm.FilterEq("pull_id", prIdInt))
 			if err != nil {
 				l.Error("failed to get pull and comments", "err", err)
 				mw.pages.Error404(w)
@@ -324,7 +370,7 @@ func (mw Middleware) ResolveIssue(next http.Handler) http.Handler {
 			return
 		}
 
-		issue, err := db.GetIssue(mw.db, f.RepoAt(), issueId)
+		issue, err := db.GetIssue(mw.db, f.RepoDid, issueId)
 		if err != nil {
 			l.Error("failed to get issues", "err", err)
 			mw.pages.Error404(w)
@@ -360,7 +406,7 @@ func (mw Middleware) GoImport() middlewareFunc {
 				if r.URL.Query().Get("go-get") == "1" {
 					modulePath := userutil.FlattenDid(fullName)
 					if strings.Contains(modulePath, ":") {
-						modulePath = userutil.FlattenDid(f.Did) + "/" + f.Name
+						modulePath = userutil.FlattenDid(f.Did) + "/" + f.Rkey
 					}
 					html := fmt.Sprintf(
 						`<meta name="go-import" content="tangled.sh/%s git https://tangled.sh/%s"/>

@@ -89,7 +89,7 @@ func (p *Pipelines) Index(w http.ResponseWriter, r *http.Request) {
 	filterKind := r.URL.Query().Get("trigger")
 	filters := []orm.Filter{
 		orm.FilterEq("p.repo_owner", f.Did),
-		orm.FilterEq("p.repo_name", f.Name),
+		orm.FilterEq("p.repo_name", f.Rkey),
 		orm.FilterEq("p.knot", f.Knot),
 	}
 	switch filterKind {
@@ -153,7 +153,7 @@ func (p *Pipelines) Workflow(w http.ResponseWriter, r *http.Request) {
 		p.db,
 		1,
 		orm.FilterEq("p.repo_owner", f.Did),
-		orm.FilterEq("p.repo_name", f.Name),
+		orm.FilterEq("p.repo_name", f.Rkey),
 		orm.FilterEq("p.knot", f.Knot),
 		orm.FilterEq("p.id", pipelineId),
 	)
@@ -220,7 +220,7 @@ func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 		p.db,
 		1,
 		orm.FilterEq("p.repo_owner", f.Did),
-		orm.FilterEq("p.repo_name", f.Name),
+		orm.FilterEq("p.repo_name", f.Rkey),
 		orm.FilterEq("p.knot", f.Knot),
 		orm.FilterEq("p.id", pipelineId),
 	)
@@ -369,7 +369,7 @@ func (p *Pipelines) Cancel(w http.ResponseWriter, r *http.Request) {
 			p.db,
 			1,
 			orm.FilterEq("p.repo_owner", f.Did),
-			orm.FilterEq("p.repo_name", f.Name),
+			orm.FilterEq("p.repo_name", f.Rkey),
 			orm.FilterEq("p.knot", f.Knot),
 			orm.FilterEq("p.id", pipelineId),
 		)

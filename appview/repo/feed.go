@@ -74,7 +74,7 @@ func (rp *Repo) getRepoFeed(ctx context.Context, repo *models.Repo, ownerSlashRe
 
 	// fetch and add pull requests if requested
 	if opts.IncludePulls {
-		pulls, err := db.GetPullsPaginated(rp.db, feedPagePerType, orm.FilterEq("repo_at", repo.RepoAt()))
+		pulls, err := db.GetPullsPaginated(rp.db, feedPagePerType, orm.FilterEq("repo_did", repo.RepoDid))
 		if err != nil {
 			return nil, err
 		}
@@ -93,7 +93,7 @@ func (rp *Repo) getRepoFeed(ctx context.Context, repo *models.Repo, ownerSlashRe
 		issues, err := db.GetIssuesPaginated(
 			rp.db,
 			feedPagePerType,
-			orm.FilterEq("repo_at", repo.RepoAt()),
+			orm.FilterEq("repo_did", repo.RepoDid),
 		)
 		if err != nil {
 			return nil, err
@@ -315,7 +315,7 @@ func (rp *Repo) AtomFeed(w http.ResponseWriter, r *http.Request) {
 		rp.logger.Error("failed to get resolved repo owner id")
 		return
 	}
-	ownerSlashRepo := repoOwnerId.Handle.String() + "/" + f.Name
+	ownerSlashRepo := repoOwnerId.Handle.String() + "/" + f.Rkey
 
 	opts := parseFeedOpts(r)
 	feed, err := rp.getRepoFeed(r.Context(), f, ownerSlashRepo, opts)

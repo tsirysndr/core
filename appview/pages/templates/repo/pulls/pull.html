@@ -412,7 +412,7 @@
           <!-- attempt to resolve $fullRepo: this is possible only on non-deleted forks and branches -->
           {{ $fullRepo := "" }}
           {{ if and $root.Pull.IsForkBased $root.Pull.PullSource.Repo }}
-            {{ $fullRepo = printf "%s/%s" $root.Pull.OwnerDid $root.Pull.PullSource.Repo.Name }}
+            {{ $fullRepo = printf "%s/%s" $root.Pull.OwnerDid $root.Pull.PullSource.Repo.Rkey }}
           {{ else if $root.Pull.IsBranchBased }}
             {{ $fullRepo = $root.RepoInfo.FullName }}
           {{ end }}

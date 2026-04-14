@@ -20,6 +20,7 @@ import (
 	"tangled.org/core/xrpc"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/dustin/go-humanize"
@@ -102,7 +103,7 @@ func (rp *Repo) AttachArtifact(w http.ResponseWriter, r *http.Request) {
 	artifact := models.Artifact{
 		Did:       user.Did,
 		Rkey:      rkey,
-		RepoAt:    f.RepoAt(),
+		RepoDid:   syntax.DID(f.RepoDid),
 		Tag:       tag.Tag.Hash,
 		CreatedAt: createdAt,
 		BlobCid:   cid.Cid(uploadBlobResp.Blob.Ref),
@@ -154,7 +155,7 @@ func (rp *Repo) DownloadArtifact(w http.ResponseWriter, r *http.Request) {
 
 	artifacts, err := db.GetArtifact(
 		rp.db,
-		orm.FilterEq("repo_at", f.RepoAt()),
+		orm.FilterEq("repo_did", f.RepoDid),
 		orm.FilterEq("tag", tag.Tag.Hash[:]),
 		orm.FilterEq("name", filename),
 	)
@@ -235,7 +236,7 @@ func (rp *Repo) DeleteArtifact(w http.ResponseWriter, r *http.Request) {
 
 	artifacts, err := db.GetArtifact(
 		rp.db,
-		orm.FilterEq("repo_at", f.RepoAt()),
+		orm.FilterEq("repo_did", f.RepoDid),
 		orm.FilterEq("tag", tag[:]),
 		orm.FilterEq("name", filename),
 	)
@@ -277,7 +278,7 @@ func (rp *Repo) DeleteArtifact(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	err = db.DeleteArtifact(tx,
-		orm.FilterEq("repo_at", f.RepoAt()),
+		orm.FilterEq("repo_did", f.RepoDid),
 		orm.FilterEq("tag", artifact.Tag[:]),
 		orm.FilterEq("name", filename),
 	)

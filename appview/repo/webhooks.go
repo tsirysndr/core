@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
@@ -24,7 +25,7 @@ func (rp *Repo) Webhooks(w http.ResponseWriter, r *http.Request) {
 
 	user := rp.oauth.GetMultiAccountUser(r)
 
-	webhooks, err := db.GetWebhooksForRepo(rp.db, f.RepoAt())
+	webhooks, err := db.GetWebhooksForRepo(rp.db, f.RepoDid)
 	if err != nil {
 		l.Error("failed to get webhooks", "err", err)
 		rp.pages.Notice(w, "webhooks-error", "Failed to load webhooks")
@@ -82,18 +83,21 @@ func (rp *Repo) AddWebhook(w http.ResponseWriter, r *http.Request) {
 	if r.FormValue("event_push") == "on" {
 		events = append(events, string(models.WebhookEventPush))
 	}
+	if r.FormValue("event_repo_renamed") == "on" {
+		events = append(events, string(models.WebhookEventRepoRenamed))
+	}
 
 	if len(events) == 0 {
-		rp.pages.Notice(w, "webhooks-error", "Push events must be enabled")
+		rp.pages.Notice(w, "webhooks-error", "At least one event must be enabled")
 		return
 	}
 
 	webhook := &models.Webhook{
-		RepoAt: f.RepoAt(),
-		Url:    url,
-		Secret: secret,
-		Active: active,
-		Events: events,
+		RepoDid: syntax.DID(f.RepoDid),
+		Url:     url,
+		Secret:  secret,
+		Active:  active,
+		Events:  events,
 	}
 
 	tx, err := rp.db.Begin()
@@ -146,8 +150,8 @@ func (rp *Repo) UpdateWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify webhook belongs to this repo
-	if webhook.RepoAt != f.RepoAt() {
-		l.Error("webhook does not belong to repo", "webhook_repo", webhook.RepoAt, "current_repo", f.RepoAt())
+	if string(webhook.RepoDid) != f.RepoDid {
+		l.Error("webhook does not belong to repo", "webhook_repo", webhook.RepoDid, "current_repo", f.RepoDid)
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -168,10 +172,12 @@ func (rp *Repo) UpdateWebhook(w http.ResponseWriter, r *http.Request) {
 
 	webhook.Active = r.FormValue("active") == "on"
 
-	// Parse events - only push events are supported for now
 	events := []string{}
 	if r.FormValue("event_push") == "on" {
 		events = append(events, string(models.WebhookEventPush))
+	}
+	if r.FormValue("event_repo_renamed") == "on" {
+		events = append(events, string(models.WebhookEventRepoRenamed))
 	}
 
 	if len(events) > 0 {
@@ -228,8 +234,8 @@ func (rp *Repo) DeleteWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify webhook belongs to this repo
-	if webhook.RepoAt != f.RepoAt() {
-		l.Error("webhook does not belong to repo", "webhook_repo", webhook.RepoAt, "current_repo", f.RepoAt())
+	if string(webhook.RepoDid) != f.RepoDid {
+		l.Error("webhook does not belong to repo", "webhook_repo", webhook.RepoDid, "current_repo", f.RepoDid)
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -284,8 +290,8 @@ func (rp *Repo) ToggleWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify webhook belongs to this repo
-	if webhook.RepoAt != f.RepoAt() {
-		l.Error("webhook does not belong to repo", "webhook_repo", webhook.RepoAt, "current_repo", f.RepoAt())
+	if string(webhook.RepoDid) != f.RepoDid {
+		l.Error("webhook does not belong to repo", "webhook_repo", webhook.RepoDid, "current_repo", f.RepoDid)
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -343,8 +349,8 @@ func (rp *Repo) WebhookDeliveries(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify webhook belongs to this repo
-	if webhook.RepoAt != f.RepoAt() {
-		l.Error("webhook does not belong to repo", "webhook_repo", webhook.RepoAt, "current_repo", f.RepoAt())
+	if string(webhook.RepoDid) != f.RepoDid {
+		l.Error("webhook does not belong to repo", "webhook_repo", webhook.RepoDid, "current_repo", f.RepoDid)
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}

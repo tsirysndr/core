@@ -77,7 +77,7 @@
         {{ range $repos }}
           <div class="flex gap-2 items-center">
             {{ i "book-marked" "size-4" }}
-            <a href="/{{ resolve .Did }}/{{ .Name }}">
+            <a href="/{{ resolve .Did }}/{{ .Rkey }}">
               {{ .Name }}
             </a>
           </div>

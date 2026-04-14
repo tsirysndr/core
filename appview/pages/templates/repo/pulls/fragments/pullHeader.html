@@ -30,7 +30,7 @@
                 {{ $repoPath := .RepoInfo.FullName }}
                   <a href="/{{ $repoPath }}/tree/{{ pathEscape .Pull.PullSource.Branch }}" class="no-underline hover:underline">{{ .Pull.PullSource.Branch }}</a>
                 {{ else if .Pull.PullSource.Repo }}
-                {{ $repoPath := print (resolve .Pull.PullSource.Repo.Did) "/" .Pull.PullSource.Repo.Name }}
+                {{ $repoPath := print (resolve .Pull.PullSource.Repo.Did) "/" .Pull.PullSource.Repo.Rkey }}
                   <a href="/{{ $repoPath }}" class="no-underline hover:underline">{{ $repoPath }}</a>:
                   <a href="/{{ $repoPath }}/tree/{{ pathEscape .Pull.PullSource.Branch }}" class="no-underline hover:underline">{{ .Pull.PullSource.Branch }}</a>
                 {{ else }}

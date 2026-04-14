@@ -885,7 +885,7 @@ func (rp *Issues) RepoIssues(w http.ResponseWriter, r *http.Request) {
 	searchOpts := models.IssueSearchOptions{
 		Keywords:           tf.Keywords,
 		Phrases:            tf.Phrases,
-		RepoAt:             f.RepoAt().String(),
+		RepoDid:            f.RepoDid,
 		IsOpen:             isOpen,
 		AuthorDid:          authorDid,
 		Labels:             labels,
@@ -945,7 +945,7 @@ func (rp *Issues) RepoIssues(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		filters := []orm.Filter{
-			orm.FilterEq("repo_at", f.RepoAt()),
+			orm.FilterEq("repo_did", f.RepoDid),
 		}
 		if isOpen != nil {
 			openInt := 0
@@ -1039,7 +1039,7 @@ func (rp *Issues) NewIssue(w http.ResponseWriter, r *http.Request) {
 		mentions, references := rp.mentionsResolver.Resolve(r.Context(), body)
 
 		issue := &models.Issue{
-			RepoAt:     f.RepoAt(),
+			RepoDid:    syntax.DID(f.RepoDid),
 			Rkey:       tid.TID(),
 			Title:      r.FormValue("title"),
 			Body:       body,

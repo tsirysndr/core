@@ -1,6 +1,7 @@
 {{ define "user/fragments/pullEvent" }}
   {{ $repoOwner := resolve .Repo.Did }}
-  {{ $repoUrl := printf "%s/%s" $repoOwner .Repo.Name }}
+  {{ $repoUrl := printf "%s/%s" $repoOwner .Repo.Rkey }}
+  {{ $repoDisplay := printf "%s/%s" $repoOwner .Repo.Name }}
   <div class="flex items-center gap-2 text-gray-600 dark:text-gray-300 overflow-hidden">
     {{ if .State.IsOpen }}
       <span class="text-green-600 dark:text-green-500 shrink-0">
@@ -19,7 +20,7 @@
     <span class="truncate">
       <a href="/{{ $repoUrl }}/pulls/{{ .PullId }}" class="no-underline hover:underline">{{- .Title -}}</a>
       on
-      <a href="/{{ $repoUrl }}" class="no-underline hover:underline">{{ $repoUrl }}</a>
+      <a href="/{{ $repoUrl }}" class="no-underline hover:underline">{{ $repoDisplay }}</a>
     </span>
   </div>
 {{ end }}

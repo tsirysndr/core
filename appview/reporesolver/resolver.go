@@ -76,27 +76,27 @@ func (rr *RepoResolver) GetRepoInfo(r *http.Request, user *oauth.MultiAccountUse
 	currentDir := extractCurrentDir(r.URL.EscapedPath())
 	ref := chi.URLParam(r, "ref")
 
-	repoAt := repo.RepoAt()
+	repoDid := repo.RepoDid
 	isStarred := false
 	roles := repoinfo.RolesInRepo{}
 	if user != nil {
-		isStarred = db.GetStarStatus(rr.execer, user.Did, repoAt)
+		isStarred = db.GetStarStatus(rr.execer, user.Did, repoDid)
 		roles.Roles = rr.enforcer.GetPermissionsInRepo(user.Did, repo.Knot, repo.RepoIdentifier())
 	}
 
 	stats := repo.RepoStats
 	if stats == nil {
-		starCount, starErr := db.GetStarCount(rr.execer, repoAt)
+		starCount, starErr := db.GetStarCount(rr.execer, models.StarSubjectRepo, repoDid)
 		if starErr != nil {
-			log.Println("failed to get star count for ", repoAt)
+			log.Println("failed to get star count for ", repoDid)
 		}
-		issueCount, err := db.GetIssueCount(rr.execer, repoAt)
+		issueCount, err := db.GetIssueCount(rr.execer, repoDid)
 		if err != nil {
-			log.Println("failed to get issue count for ", repoAt)
+			log.Println("failed to get issue count for ", repoDid)
 		}
-		pullCount, err := db.GetPullCount(rr.execer, repoAt)
+		pullCount, err := db.GetPullCount(rr.execer, repoDid)
 		if err != nil {
-			log.Println("failed to get pull count for ", repoAt)
+			log.Println("failed to get pull count for ", repoDid)
 		}
 		stats = &models.RepoStats{
 			StarCount:  starCount,

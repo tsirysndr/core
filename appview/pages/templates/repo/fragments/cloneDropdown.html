@@ -38,15 +38,15 @@
     {{ template "cloneUrlItem" (
         dict
           "Label" "HTTPS"
-          "HandleUrl" (printf "https://tangled.org/%s/%s" $repoOwnerHandle .RepoInfo.Name)
-          "PermaUrl" (printf "https://tangled.org/%s/%s" .RepoInfo.OwnerDid .RepoInfo.Name)
+          "HandleUrl" (printf "https://tangled.org/%s/%s" $repoOwnerHandle .RepoInfo.Rkey)
+          "PermaUrl" (printf "https://tangled.org/%s" .RepoInfo.RepoDid)
           ) }}
 
     {{ template "cloneUrlItem" (
       dict
         "Label" "SSH"
-        "HandleUrl" (printf "git@%s:%s/%s" (stripPort $knot) $repoOwnerHandle .RepoInfo.Name)
-        "PermaUrl" (printf "git@%s:%s/%s" (stripPort $knot) .RepoInfo.OwnerDid .RepoInfo.Name)
+        "HandleUrl" (printf "git@%s:%s/%s" (stripPort $knot) $repoOwnerHandle .RepoInfo.Rkey)
+        "PermaUrl" (printf "git@%s:%s" (stripPort $knot) .RepoInfo.RepoDid)
         ) }}
 
     <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">

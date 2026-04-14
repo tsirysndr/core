@@ -136,14 +136,17 @@ func ValidateRepoName(name string) error {
 		return fmt.Errorf("Repository name must be 100 characters or fewer")
 	}
 
+	// check for path traversal attempts
 	if strings.Contains(name, "/") || strings.Contains(name, "\\") {
 		return fmt.Errorf("Repository name contains invalid path characters")
 	}
 
+	// check for sequences that could be used for traversal when normalized
 	if strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".") {
 		return fmt.Errorf("Repository name contains invalid path sequence")
 	}
 
+	// then continue with character validation
 	for _, char := range name {
 		if !((char >= 'a' && char <= 'z') ||
 			(char >= 'A' && char <= 'Z') ||
@@ -153,6 +156,7 @@ func ValidateRepoName(name string) error {
 		}
 	}
 
+	// additional check to prevent multiple sequential dots
 	if strings.Contains(name, "..") {
 		return fmt.Errorf("Repository name cannot contain sequential dots")
 	}
@@ -161,6 +165,7 @@ func ValidateRepoName(name string) error {
 		return fmt.Errorf("Repository name %q is reserved", name)
 	}
 
+	// if all checks pass
 	return nil
 }
 

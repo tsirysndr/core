@@ -225,6 +225,10 @@
         <input type="checkbox" name="event_push" value="on" checked />
         <span class="text-sm">Push events</span>
       </div>
+      <div class="flex items-center gap-2">
+        <input type="checkbox" name="event_repo_renamed" value="on" />
+        <span class="text-sm">Repository renamed</span>
+      </div>
       <p class="text-sm text-gray-500 dark:text-gray-400">
         Additional event types (pull requests, issues) will be available in future updates.
       </p>
@@ -294,12 +298,18 @@
     <label class="text-sm font-semibold">Events</label>
     <div class="flex flex-col gap-2 ml-4">
       {{ $hasPush := false }}
+      {{ $hasRepoRenamed := false }}
       {{ range $webhook.Events }}
         {{ if eq . "push" }}{{ $hasPush = true }}{{ end }}
+        {{ if eq . "repository:renamed" }}{{ $hasRepoRenamed = true }}{{ end }}
       {{ end }}
       <div class="flex items-center gap-2">
         <input type="checkbox" name="event_push" value="on" {{ if $hasPush }}checked{{ end }} />
         <span class="text-sm">Push events</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="checkbox" name="event_repo_renamed" value="on" {{ if $hasRepoRenamed }}checked{{ end }} />
+        <span class="text-sm">Repository renamed</span>
       </div>
       <p class="text-sm text-gray-500 dark:text-gray-400">
         Additional event types (pull requests, issues) will be available in future updates.

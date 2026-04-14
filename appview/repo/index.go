@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-git/go-git/v5/plumbing"
 	"tangled.org/core/api/tangled"
@@ -158,7 +159,7 @@ func (rp *Repo) getLanguageInfo(
 	// first attempt to fetch from db
 	langs, err := db.GetRepoLanguages(
 		rp.db,
-		orm.FilterEq("repo_at", repo.RepoAt()),
+		orm.FilterEq("repo_did", repo.RepoDid),
 		orm.FilterEq("ref", currentRef),
 	)
 
@@ -181,7 +182,7 @@ func (rp *Repo) getLanguageInfo(
 
 		for _, lang := range ls.Languages {
 			langs = append(langs, models.RepoLanguage{
-				RepoAt:       repo.RepoAt(),
+				RepoDid:      syntax.DID(repo.RepoDid),
 				Ref:          currentRef,
 				IsDefaultRef: isDefaultRef,
 				Language:     lang.Name,
@@ -196,7 +197,7 @@ func (rp *Repo) getLanguageInfo(
 		defer tx.Rollback()
 
 		// update appview's cache
-		err = db.UpdateRepoLanguages(tx, repo.RepoAt(), currentRef, langs)
+		err = db.UpdateRepoLanguages(tx, syntax.DID(repo.RepoDid), currentRef, langs)
 		if err != nil {
 			// non-fatal
 			l.Error("failed to cache lang results", "err", err)

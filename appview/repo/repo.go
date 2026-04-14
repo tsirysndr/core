@@ -140,7 +140,7 @@ func (rp *Repo) EditSpindle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// optimistic update
-	err = db.UpdateSpindle(rp.db, newRepo.RepoAt().String(), spindlePtr)
+	err = db.UpdateSpindle(rp.db, newRepo.RepoDid, spindlePtr)
 	if err != nil {
 		fail("Failed to update spindle. Try again later.", err)
 		return
@@ -320,7 +320,7 @@ func (rp *Repo) AddLabelDef(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err = db.SubscribeLabel(tx, &models.RepoLabel{
-		RepoAt:  f.RepoAt(),
+		RepoDid: syntax.DID(f.RepoDid),
 		LabelAt: label.AtUri(),
 	}); err != nil {
 		fail("Failed to subscribe to label.", err)
@@ -423,7 +423,7 @@ func (rp *Repo) DeleteLabelDef(w http.ResponseWriter, r *http.Request) {
 
 	err = db.UnsubscribeLabel(
 		tx,
-		orm.FilterEq("repo_at", f.RepoAt()),
+		orm.FilterEq("repo_did", f.RepoDid),
 		orm.FilterEq("label_at", removedAt),
 	)
 	if err != nil {
@@ -515,7 +515,7 @@ func (rp *Repo) SubscribeLabel(w http.ResponseWriter, r *http.Request) {
 
 	for _, l := range labelAts {
 		err = db.SubscribeLabel(tx, &models.RepoLabel{
-			RepoAt:  f.RepoAt(),
+			RepoDid: syntax.DID(f.RepoDid),
 			LabelAt: syntax.ATURI(l),
 		})
 		if err != nil {
@@ -596,7 +596,7 @@ func (rp *Repo) UnsubscribeLabel(w http.ResponseWriter, r *http.Request) {
 
 	err = db.UnsubscribeLabel(
 		rp.db,
-		orm.FilterEq("repo_at", f.RepoAt()),
+		orm.FilterEq("repo_did", f.RepoDid),
 		orm.FilterIn("label_at", labelAts),
 	)
 	if err != nil {
@@ -805,7 +805,7 @@ func (rp *Repo) AddCollaborator(w http.ResponseWriter, r *http.Request) {
 		Did:        syntax.DID(currentUser.Did),
 		Rkey:       rkey,
 		SubjectDid: collaboratorIdent.DID,
-		RepoAt:     f.RepoAt(),
+		RepoDid:    syntax.DID(f.RepoDid),
 		Created:    createdAt,
 	})
 	if err != nil {
@@ -921,7 +921,7 @@ func (rp *Repo) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// remove repo from db
-	err = db.RemoveRepo(tx, f.Did, f.Name)
+	err = db.RemoveRepo(tx, f.Did, f.Rkey)
 	if err != nil {
 		rp.pages.Notice(w, noticeId, "Failed to update appview")
 		return
@@ -1040,7 +1040,7 @@ func (rp *Repo) ForkRepo(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// choose a name for a fork
-		forkName := r.FormValue("repo_name")
+		forkName := strings.ToLower(r.FormValue("repo_name"))
 		if forkName == "" {
 			rp.pages.Notice(w, "repo", "Repository name cannot be empty.")
 			return
@@ -1074,7 +1074,7 @@ func (rp *Repo) ForkRepo(w http.ResponseWriter, r *http.Request) {
 		forkSourceUrl := fmt.Sprintf("%s://%s/%s", uri, f.Knot, f.RepoIdentifier())
 		l = l.With("cloneUrl", forkSourceUrl)
 
-		rkey := tid.TID()
+		rkey := strings.ToLower(forkName)
 
 		// TODO: this could coordinate better with the knot to receive a clone status
 		client, err := rp.oauth.ServiceClient(
@@ -1092,7 +1092,7 @@ func (rp *Repo) ForkRepo(w http.ResponseWriter, r *http.Request) {
 
 		forkInput := &tangled.RepoCreate_Input{
 			Rkey:   rkey,
-			Name:   forkName,
+			Name:   rkey,
 			Source: &forkSourceUrl,
 		}
 		createResp, err := tangled.RepoCreate(
@@ -1123,7 +1123,7 @@ func (rp *Repo) ForkRepo(w http.ResponseWriter, r *http.Request) {
 
 		repo := &models.Repo{
 			Did:         user.Did,
-			Name:        forkName,
+			Name:        rkey,
 			Knot:        targetKnot,
 			Rkey:        rkey,
 			Source:      forkSource,
@@ -1276,15 +1276,15 @@ func (rp *Repo) Stars(w http.ResponseWriter, r *http.Request) {
 		page.Limit = 30
 	}
 
-	starrers, err := db.GetStars(rp.db, f.RepoAt(), page)
+	starrers, err := db.GetStars(rp.db, string(f.RepoDid), page)
 	if err != nil {
-		l.Error("failed to fetch starrers", "err", err, "repoAt", f.RepoAt())
+		l.Error("failed to fetch starrers", "err", err, "repoDid", f.RepoDid)
 		return
 	}
 
-	totalCount, err := db.GetStarCount(rp.db, f.RepoAt())
+	totalCount, err := db.GetStarCount(rp.db, models.StarSubjectRepo, string(f.RepoDid))
 	if err != nil {
-		l.Error("failed to fetch star count", "err", err, "repoAt", f.RepoAt())
+		l.Error("failed to fetch star count", "err", err, "repoDid", f.RepoDid)
 		return
 	}
 
@@ -1320,14 +1320,9 @@ func rollbackRecord(ctx context.Context, aturi string, client *atclient.APIClien
 }
 
 func repoCollaboratorRecord(f *models.Repo, subject string, createdAt time.Time) *tangled.RepoCollaborator {
-	rec := &tangled.RepoCollaborator{
+	return &tangled.RepoCollaborator{
 		Subject:   subject,
 		CreatedAt: createdAt.Format(time.RFC3339),
+		Repo:      f.RepoDid,
 	}
-	s := string(f.RepoAt())
-	rec.Repo = &s
-	if f.RepoDid != "" {
-		rec.RepoDid = &f.RepoDid
-	}
-	return rec
 }

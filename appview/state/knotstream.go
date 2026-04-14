@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"tangled.org/core/appview/cloudflare"
@@ -72,7 +73,7 @@ func resolveRepo(d *db.DB, repoDid *string, ownerDid, repoName string) (*models.
 	if repoDid != nil && *repoDid != "" {
 		return db.GetRepoByDid(d, *repoDid)
 	}
-	repos, err := db.GetRepos(d, orm.FilterEq("did", ownerDid), orm.FilterEq("name", repoName))
+	repos, err := db.GetRepos(d, orm.FilterEq("did", ownerDid), orm.FilterEq("rkey", strings.ToLower(repoName)))
 	if err != nil {
 		return nil, err
 	}
@@ -114,17 +115,11 @@ func ingestRefUpdate(ctx context.Context, d *db.DB, enforcer *rbac.Enforcer, pc 
 		return fmt.Errorf("%s does not belong to %s, something is fishy", record.CommitterDid, source.Key())
 	}
 
-	ownerDid := ""
-	if record.OwnerDid != nil {
-		ownerDid = *record.OwnerDid
-	} else {
-		// handle legacy event
-		if record.RepoDid != nil {
-			ownerDid = *record.RepoDid
-		}
+	if record.Repo == "" {
+		return fmt.Errorf("gitRefUpdate from %s missing repo", source.Key())
 	}
 
-	repo, lookupErr := resolveRepo(d, record.RepoDid, ownerDid, record.RepoName)
+	repo, lookupErr := db.GetRepoByDid(d, record.Repo)
 	if lookupErr != nil {
 		return fmt.Errorf("failed to look up repo: %w", lookupErr)
 	}
@@ -167,17 +162,12 @@ func triggerSitesDeployIfNeeded(ctx context.Context, d *db.DB, cfClient *cloudfl
 	}
 	pushedBranch := ref.Short()
 
-	ownerDid := ""
-	if record.OwnerDid != nil {
-		ownerDid = *record.OwnerDid
-	}
-
-	repo, err := resolveRepo(d, record.RepoDid, ownerDid, record.RepoName)
+	repo, err := db.GetRepoByDid(d, record.Repo)
 	if err != nil {
 		return
 	}
 
-	siteConfig, err := db.GetRepoSiteConfig(d, repo.RepoAt().String())
+	siteConfig, err := db.GetRepoSiteConfig(d, repo.RepoDid)
 	if err != nil || siteConfig == nil {
 		return
 	}
@@ -186,7 +176,7 @@ func triggerSitesDeployIfNeeded(ctx context.Context, d *db.DB, cfClient *cloudfl
 	}
 
 	deploy := &models.SiteDeploy{
-		RepoAt:    repo.RepoAt().String(),
+		RepoDid:   syntax.DID(repo.RepoDid),
 		Branch:    siteConfig.Branch,
 		Dir:       siteConfig.Dir,
 		CommitSHA: record.NewSha,
@@ -249,15 +239,10 @@ func populatePunchcard(d *db.DB, record tangled.GitRefUpdate) error {
 
 func updateRepoLanguages(d *db.DB, record tangled.GitRefUpdate) error {
 	if record.Meta == nil || record.Meta.LangBreakdown == nil || record.Meta.LangBreakdown.Inputs == nil {
-		return fmt.Errorf("empty language data for repo: %v/%s", record.OwnerDid, record.RepoName)
+		return fmt.Errorf("empty language data for repo: %s", record.Repo)
 	}
 
-	ownerDid := ""
-	if record.OwnerDid != nil {
-		ownerDid = *record.OwnerDid
-	}
-
-	r, lookupErr := resolveRepo(d, record.RepoDid, ownerDid, record.RepoName)
+	r, lookupErr := db.GetRepoByDid(d, record.Repo)
 	if lookupErr != nil {
 		return fmt.Errorf("failed to look up repo: %w", lookupErr)
 	}
@@ -275,7 +260,7 @@ func updateRepoLanguages(d *db.DB, record tangled.GitRefUpdate) error {
 		}
 
 		langs = append(langs, models.RepoLanguage{
-			RepoAt:       repo.RepoAt(),
+			RepoDid:      syntax.DID(repo.RepoDid),
 			Ref:          ref.Short(),
 			IsDefaultRef: record.Meta.IsDefaultRef,
 			Language:     l.Lang,
@@ -290,7 +275,7 @@ func updateRepoLanguages(d *db.DB, record tangled.GitRefUpdate) error {
 	defer tx.Rollback()
 
 	// update appview's cache
-	err = db.UpdateRepoLanguages(tx, repo.RepoAt(), ref.Short(), langs)
+	err = db.UpdateRepoLanguages(tx, syntax.DID(repo.RepoDid), ref.Short(), langs)
 	if err != nil {
 		fmt.Printf("failed; %s\n", err)
 		// non-fatal
@@ -398,7 +383,7 @@ func ingestDIDAssign(d *db.DB, enforcer *rbac.Enforcer, source ec.Source, msg ec
 
 	repos, err := db.GetRepos(d,
 		orm.FilterEq("did", record.OwnerDid),
-		orm.FilterEq("name", record.RepoName),
+		orm.FilterEq("rkey", strings.ToLower(record.RepoName)),
 	)
 	if err != nil || len(repos) == 0 {
 		logger.Warn("didAssign for unknown repo, skipping",
@@ -443,7 +428,7 @@ func ingestDIDAssign(d *db.DB, enforcer *rbac.Enforcer, source ec.Source, msg ec
 		return fmt.Errorf("add RBAC policies for %s: %w", record.RepoDid, err)
 	}
 
-	collabs, collabErr := db.GetCollaborators(d, orm.FilterEq("repo_at", repoAtUri))
+	collabs, collabErr := db.GetCollaborators(d, orm.FilterEq("repo_did", record.RepoDid))
 	if collabErr != nil {
 		return fmt.Errorf("get collaborators for RBAC update: %w", collabErr)
 	}

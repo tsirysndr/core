@@ -27,7 +27,7 @@ func (rp *Repo) Opengraph(w http.ResponseWriter, r *http.Request) {
 	var languageStats []types.RepoLanguageDetails
 	langs, err := db.GetRepoLanguages(
 		rp.db,
-		orm.FilterEq("repo_at", f.RepoAt()),
+		orm.FilterEq("repo_did", f.RepoDid),
 		orm.FilterEq("is_default_ref", 1),
 	)
 	if err != nil {

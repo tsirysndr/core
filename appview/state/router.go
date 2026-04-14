@@ -63,7 +63,7 @@ func (s *State) Router() http.Handler {
 					if len(pathParts) > 1 {
 						remaining = "/" + pathParts[1]
 					}
-					rewritten := "/" + repo.Did + "/" + repo.Name + remaining
+					rewritten := "/" + repo.Did + "/" + repo.Rkey + remaining
 					r2 := r.Clone(r.Context())
 					r2.URL.Path = rewritten
 					r2.URL.RawPath = rewritten

@@ -158,7 +158,7 @@ func Deploy(
 		return fmt.Errorf("walking deploy dir: %w", err)
 	}
 
-	if err := cf.SyncFiles(ctx, prefix(f.Did, f.Name), files); err != nil {
+	if err := cf.SyncFiles(ctx, prefix(f.Did, f.Rkey), files); err != nil {
 		return fmt.Errorf("syncing files to R2: %w", err)
 	}
 

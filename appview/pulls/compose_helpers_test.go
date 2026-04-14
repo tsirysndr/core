@@ -181,7 +181,7 @@ func TestSortBranchesByRecency(t *testing.T) {
 }
 
 func TestComposeCanonicalURL(t *testing.T) {
-	repo := repoinfo.RepoInfo{OwnerDid: "did:plc:abc", Name: "demo"}
+	repo := repoinfo.RepoInfo{OwnerDid: "did:plc:abc", Name: "demo", Rkey: "demo"}
 	cases := []struct {
 		name string
 		p    pages.RepoNewPullParams

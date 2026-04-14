@@ -224,8 +224,8 @@ func (s *Settings) releaseSitesDomain(w http.ResponseWriter, r *http.Request) {
 
 			// Delete each repo's R2 objects.
 			for _, sc := range siteConfigs {
-				if err := sites.Delete(ctx, s.CfClient, user.Did, sc.RepoName); err != nil {
-					s.Logger.Error("releaseSitesDomain: R2 delete failed", "did", user.Did, "repo", sc.RepoName, "err", err)
+				if err := sites.Delete(ctx, s.CfClient, user.Did, sc.RepoRkey); err != nil {
+					s.Logger.Error("releaseSitesDomain: R2 delete failed", "did", user.Did, "repo", sc.RepoRkey, "err", err)
 				}
 			}
 

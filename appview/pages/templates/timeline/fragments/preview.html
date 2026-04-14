@@ -121,14 +121,14 @@
         {{ with $source }}
           {{ $sourceDid := resolve .Did }}
           forked
-          <a href="/{{ $sourceDid }}/{{ .Name }}"class="no-underline hover:underline">
+          <a href="/{{ $sourceDid }}/{{ .Rkey }}"class="no-underline hover:underline">
               {{ $sourceDid }}/{{ .Name }}
           </a>
           to
-          <a href="/{{ $userHandle }}/{{ $repo.Name }}" class="no-underline hover:underline">{{ $repo.Name }}</a>
+          <a href="/{{ $userHandle }}/{{ $repo.Rkey }}" class="no-underline hover:underline">{{ $repo.Name }}</a>
         {{ else }}
           created
-          <a href="/{{ $userHandle }}/{{ $repo.Name }}" class="no-underline hover:underline">
+          <a href="/{{ $userHandle }}/{{ $repo.Rkey }}" class="no-underline hover:underline">
             {{ $repo.Name }}
           </a>
         {{ end }}
@@ -159,7 +159,7 @@
           starred
         {{ end }}
         {{ template "user/fragments/pic" (list $repoOwnerHandle "size-6") }}
-        <a href="/{{ $repoOwnerHandle }}/{{ .Repo.Name }}" class="no-underline hover:underline">
+        <a href="/{{ $repoOwnerHandle }}/{{ .Repo.Rkey }}" class="no-underline hover:underline">
           {{ $repoOwnerHandle | truncateAt30 }}/{{ .Repo.Name }}
         </a>
       </div>

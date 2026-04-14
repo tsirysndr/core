@@ -39,7 +39,6 @@ import (
 	tlog "tangled.org/core/log"
 	"tangled.org/core/orm"
 	"tangled.org/core/rbac"
-	"tangled.org/core/tid"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/atclient"
@@ -134,6 +133,7 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 			tangled.RepoArtifactNSID,
 			tangled.RepoIssueCommentNSID,
 			tangled.RepoIssueNSID,
+			tangled.RepoNSID,
 			tangled.RepoPullNSID,
 			tangled.SpindleMemberNSID,
 			tangled.SpindleNSID,
@@ -156,20 +156,6 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 		return nil, fmt.Errorf("failed to backfill default label defs: %w", err)
 	}
 
-	ingester := appview.Ingester{
-		Db:         wrapper,
-		Enforcer:   enforcer,
-		IdResolver: res,
-		Cache:      rdb,
-		Config:     config,
-		Logger:     log.SubLogger(logger, "ingester"),
-		Validator:  validator,
-	}
-	err = jc.StartJetstream(ctx, ingester.Ingest())
-	if err != nil {
-		return nil, fmt.Errorf("failed to start jetstream watcher: %w", err)
-	}
-
 	var notifiers []notify.Notifier
 
 	// Always add the database notifier
@@ -185,6 +171,21 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 
 	notifier := notify.NewMergedNotifier(notifiers)
 	notifier = lognotify.NewLoggingNotifier(notifier, tlog.SubLogger(logger, "notify"))
+
+	ingester := appview.Ingester{
+		Db:         d,
+		Enforcer:   enforcer,
+		IdResolver: res,
+		Cache:      rdb,
+		Config:     config,
+		Logger:     log.SubLogger(logger, "ingester"),
+		Validator:  validator,
+		Notifier:   notifier,
+	}
+	err = jc.StartJetstream(ctx, ingester.Ingest())
+	if err != nil {
+		return nil, fmt.Errorf("failed to start jetstream watcher: %w", err)
+	}
 
 	var cfClient *cloudflare.Client
 	if config.Cloudflare.ApiToken != "" {
@@ -423,42 +424,6 @@ func (s *State) Keys(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func validateRepoName(name string) error {
-	// check for path traversal attempts
-	if name == "." || name == ".." ||
-		strings.Contains(name, "/") || strings.Contains(name, "\\") {
-		return fmt.Errorf("Repository name contains invalid path characters")
-	}
-
-	// check for sequences that could be used for traversal when normalized
-	if strings.Contains(name, "./") || strings.Contains(name, "../") ||
-		strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".") {
-		return fmt.Errorf("Repository name contains invalid path sequence")
-	}
-
-	// then continue with character validation
-	for _, char := range name {
-		if !((char >= 'a' && char <= 'z') ||
-			(char >= 'A' && char <= 'Z') ||
-			(char >= '0' && char <= '9') ||
-			char == '-' || char == '_' || char == '.') {
-			return fmt.Errorf("Repository name can only contain alphanumeric characters, periods, hyphens, and underscores")
-		}
-	}
-
-	// additional check to prevent multiple sequential dots
-	if strings.Contains(name, "..") {
-		return fmt.Errorf("Repository name cannot contain sequential dots")
-	}
-
-	// if all checks pass
-	return nil
-}
-
-func stripGitExt(name string) string {
-	return strings.TrimSuffix(name, ".git")
-}
-
 func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -494,12 +459,13 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := validateRepoName(repoName); err != nil {
+		if err := models.ValidateRepoName(repoName); err != nil {
 			s.pages.Notice(w, "repo", err.Error())
 			return
 		}
-		repoName = stripGitExt(repoName)
-		l = l.With("repoName", repoName)
+		repoName = models.StripGitExt(repoName)
+		rkey := strings.ToLower(repoName)
+		l = l.With("repoName", repoName, "rkey", rkey)
 
 		defaultBranch := r.FormValue("branch")
 		if defaultBranch == "" {
@@ -525,15 +491,13 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 		existingRepo, err := db.GetRepo(
 			s.db,
 			orm.FilterEq("did", user.Did),
-			orm.FilterEq("name", repoName),
+			orm.FilterEq("rkey", rkey),
 		)
 		if err == nil && existingRepo != nil {
 			l.Info("repo exists")
 			s.pages.Notice(w, "repo", fmt.Sprintf("You already have a repository by this name on %s", existingRepo.Knot))
 			return
 		}
-
-		rkey := tid.TID()
 
 		client, err := s.oauth.ServiceClient(
 			r,
@@ -549,7 +513,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 
 		input := &tangled.RepoCreate_Input{
 			Rkey:          rkey,
-			Name:          repoName,
+			Name:          rkey,
 			DefaultBranch: &defaultBranch,
 		}
 		createResp, err := tangled.RepoCreate(
@@ -603,7 +567,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 					if dErr := tangled.RepoDelete(ctx, deleteClient, &tangled.RepoDelete_Input{
 						Did:  user.Did,
-						Name: repoName,
+						Name: rkey,
 						Rkey: rkey,
 					}); dErr != nil {
 						cancel()
@@ -627,7 +591,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		atresp, err := comatproto.RepoPutRecord(r.Context(), atpClient, &comatproto.RepoPutRecord_Input{
+		_, err = comatproto.RepoPutRecord(r.Context(), atpClient, &comatproto.RepoPutRecord_Input{
 			Collection: tangled.RepoNSID,
 			Repo:       user.Did,
 			Rkey:       rkey,
@@ -638,11 +602,15 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			l.Info("PDS write failed", "err", err)
 			cleanupKnot()
-			s.pages.Notice(w, "repo", "Failed to announce repository creation.")
+			if rkeyOccupied(r.Context(), atpClient, user.Did, rkey) {
+				s.pages.Notice(w, "repo", fmt.Sprintf("You already have a repository named %q.", rkey))
+			} else {
+				s.pages.Notice(w, "repo", "Failed to announce repository creation.")
+			}
 			return
 		}
 
-		aturi := atresp.Uri
+		aturi := fmt.Sprintf("at://%s/%s/%s", user.Did, tangled.RepoNSID, rkey)
 		l = l.With("aturi", aturi)
 		l.Info("wrote to PDS")
 
@@ -709,9 +677,16 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 			s.pages.HxLocation(w, fmt.Sprintf("/%s", repoDid))
 		default:
 			handle := s.pages.DisplayHandle(r.Context(), user.Did)
-			s.pages.HxLocation(w, fmt.Sprintf("/%s/%s", handle, repoName))
+			s.pages.HxLocation(w, fmt.Sprintf("/%s/%s", handle, rkey))
 		}
 	}
+}
+
+func rkeyOccupied(ctx context.Context, client *atclient.APIClient, did, rkey string) bool {
+	probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	resp, err := comatproto.RepoGetRecord(probeCtx, client, "", tangled.RepoNSID, did, rkey)
+	return err == nil && resp != nil
 }
 
 // this is used to rollback changes made to the PDS

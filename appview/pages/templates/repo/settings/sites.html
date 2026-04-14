@@ -32,7 +32,7 @@
     {{ else }}
       <div class="flex items-center gap-2 px-3 py-2 rounded border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 text-sm text-green-800 dark:text-green-300">
         {{ i "circle-check" "size-4 shrink-0" }}
-        live at <a class="underline font-mono" href="https://{{ .OwnerClaim.Domain }}/{{ .RepoInfo.Name }}">{{ .OwnerClaim.Domain }}/{{ .RepoInfo.Name }}</a>
+        live at <a class="underline font-mono" href="https://{{ .OwnerClaim.Domain }}/{{ .RepoInfo.Rkey }}">{{ .OwnerClaim.Domain }}/{{ .RepoInfo.Rkey }}</a>
       </div>
     {{ end }}
   {{ else if and .SiteConfig (not .OwnerClaim) }}
@@ -157,9 +157,9 @@
               <span class="font-medium">sub-path site</span>
               <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
                 {{ if .OwnerClaim }}
-                  <code>{{ .OwnerClaim.Domain }}/{{ $.RepoInfo.Name }}</code>
+                  <code>{{ .OwnerClaim.Domain }}/{{ $.RepoInfo.Rkey }}</code>
                 {{ else }}
-                  e.g. <code>you.tngl.page/{{ $.RepoInfo.Name }}</code>
+                  e.g. <code>you.tngl.page/{{ $.RepoInfo.Rkey }}</code>
                 {{ end }}
               </p>
             </div>

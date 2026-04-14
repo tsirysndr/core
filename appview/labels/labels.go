@@ -100,7 +100,7 @@ func (l *Labels) PerformLabelOp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// find all the labels that this repo subscribes to
-	repoLabels, err := db.GetRepoLabels(l.db, orm.FilterEq("repo_at", repoAt))
+	repoLabels, err := db.GetRepoLabels(l.db, orm.FilterEq("repo_did", repo.RepoDid))
 	if err != nil {
 		fail("Failed to get labels for this repository.", err)
 		return

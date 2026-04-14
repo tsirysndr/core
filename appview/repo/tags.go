@@ -40,7 +40,7 @@ func (rp *Repo) Tags(w http.ResponseWriter, r *http.Request) {
 		rp.pages.Error503(w)
 		return
 	}
-	artifacts, err := db.GetArtifact(rp.db, orm.FilterEq("repo_at", f.RepoAt()))
+	artifacts, err := db.GetArtifact(rp.db, orm.FilterEq("repo_did", f.RepoDid))
 	if err != nil {
 		l.Error("failed grab artifacts", "err", err)
 		return
@@ -124,7 +124,7 @@ func (rp *Repo) Tag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filters := []orm.Filter{orm.FilterEq("repo_at", f.RepoAt())}
+	filters := []orm.Filter{orm.FilterEq("repo_did", f.RepoDid)}
 	if result.Tag.Tag != nil {
 		filters = append(filters, orm.FilterEq("tag", result.Tag.Tag.Hash[:]))
 	}
