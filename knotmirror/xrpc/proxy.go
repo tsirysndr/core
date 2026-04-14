@@ -54,7 +54,20 @@ func (x *Xrpc) resolveKnot(ctx context.Context, repoAt syntax.ATURI) (*knotInfo,
 				}
 			}()
 		}
-		return &knotInfo{baseURL: repo.KnotDomain, didSlashRepo: repo.DidSlashRepo()}, nil
+		knotURL := repo.KnotDomain
+		if !strings.Contains(repo.KnotDomain, "://") {
+			if host, _ := db.GetHost(ctx, x.db, repo.KnotDomain); host != nil {
+				knotURL = host.URL()
+			} else {
+				x.logger.Warn("repo is from unknown knot")
+				if x.cfg.KnotUseSSL {
+					knotURL = "https://" + knotURL
+				} else {
+					knotURL = "http://" + knotURL
+				}
+			}
+		}
+		return &knotInfo{baseURL: knotURL, didSlashRepo: repo.DidSlashRepo()}, nil
 	}
 
 	owner, err := x.resolver.ResolveIdent(ctx, repoAt.Authority().String())
