@@ -56,8 +56,11 @@ func (x *Xrpc) ListSecrets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	repo := resp.Value.Val.(*tangled.Repo)
-	didPath, err := securejoin.SecureJoin(ident.DID.String(), repo.Name)
+	if _, ok := resp.Value.Val.(*tangled.Repo); !ok {
+		fail(xrpcerr.RepoNotFoundError)
+		return
+	}
+	didPath, err := securejoin.SecureJoin(ident.DID.String(), repoAt.RecordKey().String())
 	if err != nil {
 		fail(xrpcerr.GenericError(err))
 		return

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"tangled.org/core/api/tangled"
@@ -154,26 +155,27 @@ func (s *Spindle) ingestRepo(ctx context.Context, e *models.Event) error {
 		}
 
 		domain := s.cfg.Server.Hostname
+		rkey := e.Commit.RKey
 
 		// no spindle configured for this repo
 		if record.Spindle == nil {
-			l.Info("no spindle configured", "name", record.Name)
+			l.Info("no spindle configured", "rkey", rkey)
 			return nil
 		}
 
 		// this repo did not want this spindle
 		if *record.Spindle != domain {
-			l.Info("different spindle configured", "name", record.Name, "spindle", *record.Spindle, "domain", domain)
+			l.Info("different spindle configured", "rkey", rkey, "spindle", *record.Spindle, "domain", domain)
 			return nil
 		}
 
 		// add this repo to the watch list
-		if err := s.db.AddRepo(record.Knot, did, record.Name); err != nil {
+		if err := s.db.AddRepo(record.Knot, did, rkey); err != nil {
 			l.Error("failed to add repo", "error", err)
 			return fmt.Errorf("failed to add repo: %w", err)
 		}
 
-		didSlashRepo, err := securejoin.SecureJoin(did, record.Name)
+		didSlashRepo, err := securejoin.SecureJoin(did, rkey)
 		if err != nil {
 			return err
 		}
@@ -228,10 +230,18 @@ func (s *Spindle) ingestCollaborator(ctx context.Context, e *models.Event) error
 		var rbacResource string
 		var ownerDid string
 		switch {
-		case record.Repo != nil:
-			repoAt, parseErr := syntax.ParseATURI(*record.Repo)
+		case strings.HasPrefix(record.Repo, "did:"):
+			resolvedOwner, repoName, lookupErr := s.resolveRepoDid(ctx, e.Did, record.Repo)
+			if lookupErr != nil {
+				return fmt.Errorf("unknown repo DID %s: %w", record.Repo, lookupErr)
+			}
+			ownerDid = resolvedOwner
+			rbacResource, _ = securejoin.SecureJoin(ownerDid, repoName)
+
+		case strings.Contains(record.Repo, "/"):
+			repoAt, parseErr := syntax.ParseATURI(record.Repo)
 			if parseErr != nil {
-				l.Info("rejecting record, invalid repoAt", "repoAt", *record.Repo)
+				l.Info("rejecting record, invalid repoAt", "repoAt", record.Repo)
 				return nil
 			}
 
@@ -249,12 +259,14 @@ func (s *Spindle) ingestCollaborator(ctx context.Context, e *models.Event) error
 				return getErr
 			}
 
-			repo := resp.Value.Val.(*tangled.Repo)
-			rbacResource, _ = securejoin.SecureJoin(owner.DID.String(), repo.Name)
+			if _, ok := resp.Value.Val.(*tangled.Repo); !ok {
+				return fmt.Errorf("record at %s is not a tangled.Repo", repoAt)
+			}
+			rbacResource, _ = securejoin.SecureJoin(owner.DID.String(), repoAt.RecordKey().String())
 			ownerDid = owner.DID.String()
 
 		default:
-			l.Info("rejecting collaborator record without repo at-uri (spindle RBAC keyed by owner/name)")
+			l.Info("rejecting collaborator record with unrecognized repo format", "repo", record.Repo)
 			return nil
 		}
 
@@ -270,6 +282,46 @@ func (s *Spindle) ingestCollaborator(ctx context.Context, e *models.Event) error
 		return nil
 	}
 	return nil
+}
+
+func (s *Spindle) resolveRepoDid(ctx context.Context, ownerDid string, repoDid string) (string, string, error) {
+	owner, resolveErr := s.res.ResolveIdent(ctx, ownerDid)
+	if resolveErr != nil || owner.Handle.IsInvalidHandle() {
+		return "", "", fmt.Errorf("failed to resolve owner %s: %w", ownerDid, resolveErr)
+	}
+
+	xrpcc := xrpc.Client{
+		Host: owner.PDSEndpoint(),
+	}
+
+	cursor := ""
+	for {
+		resp, listErr := comatproto.RepoListRecords(ctx, &xrpcc, tangled.RepoNSID, cursor, 100, ownerDid, false)
+		if listErr != nil {
+			return "", "", fmt.Errorf("failed to list repo records for %s: %w", ownerDid, listErr)
+		}
+
+		for _, r := range resp.Records {
+			if r == nil {
+				continue
+			}
+			repo, ok := r.Value.Val.(*tangled.Repo)
+			if !ok {
+				continue
+			}
+			if repo.RepoDid != nil && *repo.RepoDid == repoDid {
+				rkey := r.Uri[strings.LastIndex(r.Uri, "/")+1:]
+				return ownerDid, rkey, nil
+			}
+		}
+
+		if resp.Cursor == nil || *resp.Cursor == "" {
+			break
+		}
+		cursor = *resp.Cursor
+	}
+
+	return "", "", fmt.Errorf("repo DID %s not found in records for %s", repoDid, ownerDid)
 }
 
 func (s *Spindle) fetchAndAddCollaborators(ctx context.Context, owner *identity.Identity, didSlashRepo string) error {
