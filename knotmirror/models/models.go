@@ -14,6 +14,7 @@ type Repo struct {
 	// content of tangled.Repo
 	Name       string
 	KnotDomain string
+	RepoDid    syntax.DID
 
 	GitRev     syntax.TID // last processed git.refUpdate revision
 	RepoSha    string     // sha256 sum of git refs (to avoid no-op git fetch)
@@ -27,8 +28,8 @@ func (r *Repo) AtUri() syntax.ATURI {
 	return syntax.ATURI(fmt.Sprintf("at://%s/%s/%s", r.Did, tangled.RepoNSID, r.Rkey))
 }
 
-func (r *Repo) DidSlashRepo() string {
-	return fmt.Sprintf("%s/%s", r.Did, r.Name)
+func (r *Repo) RepoIdentifier() string {
+	return r.RepoDid.String()
 }
 
 type RepoState string

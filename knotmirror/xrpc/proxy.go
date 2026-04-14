@@ -13,6 +13,7 @@ import (
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/knotmirror/db"
+	"tangled.org/core/knotmirror/models"
 )
 
 var mirrorToKnotNSID = map[string]string{
@@ -40,8 +41,8 @@ var hopByHopHeaders = map[string]bool{
 }
 
 type knotInfo struct {
-	baseURL      string
-	didSlashRepo string
+	baseURL        string
+	repoIdentifier string
 }
 
 func (x *Xrpc) resolveKnot(ctx context.Context, repoAt syntax.ATURI) (*knotInfo, error) {
@@ -60,7 +61,7 @@ func (x *Xrpc) resolveKnot(ctx context.Context, repoAt syntax.ATURI) (*knotInfo,
 				}
 			}
 		}
-		return &knotInfo{baseURL: knotURL, didSlashRepo: repo.DidSlashRepo()}, nil
+		return &knotInfo{baseURL: knotURL, repoIdentifier: repo.RepoIdentifier()}, nil
 	}
 
 	owner, err := x.resolver.ResolveIdent(ctx, repoAt.Authority().String())
@@ -75,6 +76,9 @@ func (x *Xrpc) resolveKnot(ctx context.Context, repoAt syntax.ATURI) (*knotInfo,
 	}
 
 	record := out.Value.Val.(*tangled.Repo)
+	if record.RepoDid == nil || *record.RepoDid == "" {
+		return nil, fmt.Errorf("repo record has no repo_did")
+	}
 	knotURL := record.Knot
 	if !strings.Contains(record.Knot, "://") {
 		if host, _ := db.GetHost(ctx, x.db, record.Knot); host != nil {
@@ -89,9 +93,27 @@ func (x *Xrpc) resolveKnot(ctx context.Context, repoAt syntax.ATURI) (*knotInfo,
 		}
 	}
 
+	rkey := repoAt.RecordKey().String()
+	repoDid := syntax.DID(*record.RepoDid)
+	go func() {
+		bgCtx := context.Background()
+		pending := &models.Repo{
+			Did:        owner.DID,
+			Rkey:       repoAt.RecordKey(),
+			Cid:        (*syntax.CID)(out.Cid),
+			Name:       rkey,
+			KnotDomain: knotURL,
+			RepoDid:    repoDid,
+			State:      models.RepoStatePending,
+		}
+		if upsertErr := db.UpsertRepo(bgCtx, x.db, pending); upsertErr != nil {
+			x.logger.Error("failed to upsert repo after proxy resolution", "err", upsertErr)
+		}
+	}()
+
 	return &knotInfo{
-		baseURL:      knotURL,
-		didSlashRepo: fmt.Sprintf("%s/%s", owner.DID, record.Name),
+		baseURL:        knotURL,
+		repoIdentifier: repoDid.String(),
 	}, nil
 }
 
@@ -112,7 +134,7 @@ func (x *Xrpc) proxyToKnot(w http.ResponseWriter, r *http.Request, repoAt syntax
 	for k, v := range r.URL.Query() {
 		params[k] = v
 	}
-	params.Set("repo", knot.didSlashRepo)
+	params.Set("repo", knot.repoIdentifier)
 
 	target := fmt.Sprintf("%s/xrpc/%s?%s", knot.baseURL, knotNSID, params.Encode())
 

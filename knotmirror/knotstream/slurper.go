@@ -15,7 +15,6 @@ import (
 	"github.com/bluesky-social/indigo/util/ssrf"
 	"github.com/carlmjohnson/versioninfo"
 	"github.com/gorilla/websocket"
-	"tangled.org/core/api/tangled"
 	"tangled.org/core/knotmirror/config"
 	"tangled.org/core/knotmirror/db"
 	"tangled.org/core/knotmirror/models"
@@ -262,10 +261,15 @@ func (s *KnotSlurper) handleConnection(ctx context.Context, conn *websocket.Conn
 	}
 }
 
+type legacyGitRefUpdate struct {
+	OwnerDid *string `json:"ownerDid,omitempty"`
+	RepoDid  *string `json:"repo,omitempty"`
+}
+
 type LegacyGitEvent struct {
 	Rkey  string
 	Nsid  string
-	Event tangled.GitRefUpdate
+	Event legacyGitRefUpdate
 }
 
 func (s *KnotSlurper) ProcessEvent(ctx context.Context, task *Task) error {
@@ -280,33 +284,36 @@ func (s *KnotSlurper) ProcessEvent(ctx context.Context, task *Task) error {
 	return nil
 }
 
+// lookupRepoForRefUpdate resolves the local repo row for an incoming refUpdate
+// via the stable RepoDid join. Returns (nil, "", nil) when the event has no
+// repoDid (unjoinable) and (nil, key, nil) on a clean miss.
+func (s *KnotSlurper) lookupRepoForRefUpdate(ctx context.Context, evt *LegacyGitEvent) (*models.Repo, string, error) {
+	if evt.Event.RepoDid == nil || *evt.Event.RepoDid == "" {
+		return nil, "", nil
+	}
+	repoDid := syntax.DID(*evt.Event.RepoDid)
+	curr, err := db.GetRepoByRepoDid(ctx, s.db, repoDid)
+	return curr, repoDid.String(), err
+}
+
 func (s *KnotSlurper) ProcessLegacyGitRefUpdate(ctx context.Context, source string, evt *LegacyGitEvent) error {
 	knotstreamEventsReceived.Inc()
 
 	l := s.logger.With("src", source)
 
-	ownerDid := ""
-	if evt.Event.OwnerDid != nil {
-		ownerDid = *evt.Event.OwnerDid
-	} else {
-		// handle legacy event
-		if evt.Event.RepoDid != nil {
-			ownerDid = *evt.Event.RepoDid
-		}
-	}
-	curr, err := db.GetRepoByName(ctx, s.db, syntax.DID(ownerDid), evt.Event.RepoName)
+	curr, lookupKey, err := s.lookupRepoForRefUpdate(ctx, evt)
 	if err != nil {
-		return fmt.Errorf("failed to get repo '%s': %w", ownerDid+"/"+evt.Event.RepoName, err)
+		return fmt.Errorf("failed to get repo '%s': %w", lookupKey, err)
 	}
 	if curr == nil {
-		// if repo doesn't exist in DB, just ignore the event. That repo is unknown.
-		//
-		// Normally did+name is already enough to perform git-fetch as that's
-		// what needed to fetch the repository.
-		// But we want to store that in did/rkey in knot-mirror.
-		// Therefore, we should ignore when the repository is unknown.
-		// Hopefully crawler will sync it later.
-		l.Warn("skipping event from unknown repo", "did/name", ownerDid+"/"+evt.Event.RepoName)
+		if lookupKey == "" {
+			l.Warn("skipping gitRefUpdate: event has no fields to join on",
+				"repo_did", evt.Event.RepoDid)
+		} else {
+			// if repo doesn't exist in DB, just ignore the event. That repo is unknown.
+			// Hopefully crawler/tap will sync it later.
+			l.Warn("skipping event from unknown repo", "key", lookupKey)
+		}
 		knotstreamEventsSkipped.Inc()
 		return nil
 	}
@@ -325,13 +332,8 @@ func (s *KnotSlurper) ProcessLegacyGitRefUpdate(ctx context.Context, source stri
 		return nil
 	}
 
-	// if curr.State == models.RepoStateResyncing {
-	// 	firehoseEventsSkipped.Inc()
-	// 	return fp.events.addToResyncBuffer(ctx, commit)
-	// }
-
 	// can't skip anything, update repo state
-	if err := db.UpdateRepoState(ctx, s.db, curr.Did, curr.Rkey, models.RepoStateDesynchronized); err != nil {
+	if err := db.UpdateRepoState(ctx, s.db, curr.RepoDid, models.RepoStateDesynchronized); err != nil {
 		return err
 	}
 

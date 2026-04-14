@@ -9,6 +9,7 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	"tangled.org/core/knotmirror/db"
 	"tangled.org/core/knotserver/git"
 	"tangled.org/core/types"
 )
@@ -82,14 +83,15 @@ func (x *Xrpc) listBranches(ctx context.Context, repo syntax.ATURI, limit int, c
 }
 
 func (x *Xrpc) makeRepoPath(ctx context.Context, repo syntax.ATURI) (string, error) {
-	id, err := x.resolver.ResolveIdent(ctx, repo.Authority().String())
+	r, err := db.GetRepoByAtUri(ctx, x.db, repo)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("looking up repo: %w", err)
 	}
-
-	return filepath.Join(
-		x.cfg.GitRepoBasePath,
-		id.DID.String(),
-		repo.RecordKey().String(),
-	), nil
+	if r == nil {
+		return "", fmt.Errorf("repo not found: %s", repo)
+	}
+	if r.RepoDid == "" {
+		return "", fmt.Errorf("repo missing repo_did: %s", repo)
+	}
+	return filepath.Join(x.cfg.GitRepoBasePath, r.RepoDid.String()), nil
 }

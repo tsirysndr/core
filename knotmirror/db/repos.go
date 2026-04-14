@@ -11,22 +11,16 @@ import (
 	"tangled.org/core/knotmirror/models"
 )
 
-func AddRepo(ctx context.Context, e *sql.DB, did syntax.DID, rkey syntax.RecordKey, cid syntax.CID, name, knot string) error {
-	if _, err := e.ExecContext(ctx,
-		`insert into repos (did, rkey, cid, name, knot_domain)
-		values ($1, $2, $3, $4, $5)`,
-		did, rkey, cid, name, knot,
-	); err != nil {
-		return fmt.Errorf("inserting repo: %w", err)
-	}
-	return nil
-}
-
 func UpsertRepo(ctx context.Context, e *sql.DB, repo *models.Repo) error {
+	if repo.RepoDid == "" {
+		return fmt.Errorf("upsert repo: repo_did is required")
+	}
 	if _, err := e.ExecContext(ctx,
-		`insert into repos (did, rkey, cid, name, knot_domain, git_rev, repo_sha, state, error_msg, retry_count, retry_after)
-		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		on conflict(did, rkey) do update set
+		`insert into repos (did, rkey, cid, name, knot_domain, repo_did, git_rev, repo_sha, state, error_msg, retry_count, retry_after)
+		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		on conflict(repo_did) do update set
+			did         = excluded.did,
+			rkey        = excluded.rkey,
 			cid         = excluded.cid,
 			name        = excluded.name,
 			knot_domain = excluded.knot_domain,
@@ -36,12 +30,12 @@ func UpsertRepo(ctx context.Context, e *sql.DB, repo *models.Repo) error {
 			error_msg   = excluded.error_msg,
 			retry_count = excluded.retry_count,
 			retry_after = excluded.retry_after`,
-		// where repos.cid != excluded.cid`,
 		repo.Did,
 		repo.Rkey,
 		repo.Cid,
 		repo.Name,
 		repo.KnotDomain,
+		repo.RepoDid,
 		repo.GitRev,
 		repo.RepoSha,
 		repo.State,
@@ -54,13 +48,13 @@ func UpsertRepo(ctx context.Context, e *sql.DB, repo *models.Repo) error {
 	return nil
 }
 
-func UpdateRepoState(ctx context.Context, e *sql.DB, did syntax.DID, rkey syntax.RecordKey, state models.RepoState) error {
+func UpdateRepoState(ctx context.Context, e *sql.DB, repoDid syntax.DID, state models.RepoState) error {
 	if _, err := e.ExecContext(ctx,
 		`update repos
 		set state = $1
-		where did = $2 and rkey = $3`,
+		where repo_did = $2`,
 		state,
-		did, rkey,
+		repoDid,
 	); err != nil {
 		return fmt.Errorf("updating repo: %w", err)
 	}
@@ -78,31 +72,29 @@ func DeleteRepo(ctx context.Context, e *sql.DB, did syntax.DID, rkey syntax.Reco
 	return nil
 }
 
-func GetRepoByName(ctx context.Context, e *sql.DB, did syntax.DID, name string) (*models.Repo, error) {
+const repoColumns = `
+	did,
+	rkey,
+	cid,
+	name,
+	knot_domain,
+	repo_did,
+	git_rev,
+	repo_sha,
+	state,
+	error_msg,
+	retry_count,
+	retry_after`
+
+func scanRepo(row interface{ Scan(...any) error }) (*models.Repo, error) {
 	var repo models.Repo
-	if err := e.QueryRowContext(ctx,
-		`select
-			did,
-			rkey,
-			cid,
-			name,
-			knot_domain,
-			git_rev,
-			repo_sha,
-			state,
-			error_msg,
-			retry_count,
-			retry_after
-		from repos
-		where did = $1 and name = $2`,
-		did,
-		name,
-	).Scan(
+	if err := row.Scan(
 		&repo.Did,
 		&repo.Rkey,
 		&repo.Cid,
 		&repo.Name,
 		&repo.KnotDomain,
+		&repo.RepoDid,
 		&repo.GitRev,
 		&repo.RepoSha,
 		&repo.State,
@@ -110,51 +102,43 @@ func GetRepoByName(ctx context.Context, e *sql.DB, did syntax.DID, name string) 
 		&repo.RetryCount,
 		&repo.RetryAfter,
 	); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("querying repo: %w", err)
+		return nil, err
 	}
 	return &repo, nil
 }
 
-func GetRepoByAtUri(ctx context.Context, e *sql.DB, aturi syntax.ATURI) (*models.Repo, error) {
-	var repo models.Repo
-	if err := e.QueryRowContext(ctx,
-		`select
-			did,
-			rkey,
-			cid,
-			name,
-			knot_domain,
-			git_rev,
-			repo_sha,
-			state,
-			error_msg,
-			retry_count,
-			retry_after
+func GetRepoByRepoDid(ctx context.Context, e *sql.DB, repoDid syntax.DID) (*models.Repo, error) {
+	row := e.QueryRowContext(ctx,
+		`select`+repoColumns+`
 		from repos
-		where at_uri = $1`,
-		aturi,
-	).Scan(
-		&repo.Did,
-		&repo.Rkey,
-		&repo.Cid,
-		&repo.Name,
-		&repo.KnotDomain,
-		&repo.GitRev,
-		&repo.RepoSha,
-		&repo.State,
-		&repo.ErrorMsg,
-		&repo.RetryCount,
-		&repo.RetryAfter,
-	); err != nil {
+		where repo_did = $1`,
+		repoDid,
+	)
+	repo, err := scanRepo(row)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("querying repo: %w", err)
 	}
-	return &repo, nil
+	return repo, nil
+}
+
+func GetRepoByAtUri(ctx context.Context, e *sql.DB, aturi syntax.ATURI) (*models.Repo, error) {
+	row := e.QueryRowContext(ctx,
+		`select`+repoColumns+`
+		from repos
+		where at_uri = $1`,
+		aturi,
+	)
+	repo, err := scanRepo(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("querying repo: %w", err)
+	}
+	return repo, nil
 }
 
 func ListRepos(ctx context.Context, e *sql.DB, page pagination.Page, did, knot, state string) ([]models.Repo, error) {
@@ -188,18 +172,7 @@ func ListRepos(ctx context.Context, e *sql.DB, page pagination.Page, did, knot, 
 	}
 
 	query := `
-		select
-			did,
-			rkey,
-			cid,
-			name,
-			knot_domain,
-			git_rev,
-			repo_sha,
-			state,
-			error_msg,
-			retry_count,
-			retry_after
+		select` + repoColumns + `
 		from repos
 	` + whereClause + pageClause
 	rows, err := e.QueryContext(ctx, query, args...)
@@ -210,23 +183,11 @@ func ListRepos(ctx context.Context, e *sql.DB, page pagination.Page, did, knot, 
 
 	var repos []models.Repo
 	for rows.Next() {
-		var repo models.Repo
-		if err := rows.Scan(
-			&repo.Did,
-			&repo.Rkey,
-			&repo.Cid,
-			&repo.Name,
-			&repo.KnotDomain,
-			&repo.GitRev,
-			&repo.RepoSha,
-			&repo.State,
-			&repo.ErrorMsg,
-			&repo.RetryCount,
-			&repo.RetryAfter,
-		); err != nil {
+		repo, err := scanRepo(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scanning row: %w", err)
 		}
-		repos = append(repos, repo)
+		repos = append(repos, *repo)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("scanning rows: %w ", err)

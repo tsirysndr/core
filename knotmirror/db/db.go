@@ -7,6 +7,7 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"tangled.org/core/log"
 )
 
 func Make(ctx context.Context, dbUrl string, maxConns int) (*sql.DB, error) {
@@ -94,6 +95,10 @@ func Make(ctx context.Context, dbUrl string, maxConns int) (*sql.DB, error) {
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("initializing db schema: %w", err)
+	}
+
+	if err := RunMigrations(ctx, conn, log.FromContext(ctx), Migrations); err != nil {
+		return nil, fmt.Errorf("running migrations: %w", err)
 	}
 
 	return db, nil

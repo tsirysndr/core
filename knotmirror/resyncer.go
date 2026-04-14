@@ -278,7 +278,7 @@ func isRateLimitError(err error) bool {
 
 // checkKnotReachability checks if Knot is reachable and is valid git remote server
 func (r *Resyncer) checkKnotReachability(ctx context.Context, repo *models.Repo) error {
-	repoUrl, err := makeRepoRemoteUrl(repo.KnotDomain, repo.DidSlashRepo(), r.cfg.KnotUseSSL)
+	repoUrl, err := makeRepoRemoteUrl(repo.KnotDomain, repo.RepoIdentifier(), r.cfg.KnotUseSSL)
 	if err != nil {
 		return err
 	}

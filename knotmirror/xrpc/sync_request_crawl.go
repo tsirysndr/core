@@ -71,12 +71,19 @@ func (x *Xrpc) RequestCrawl(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		if record.RepoDid == nil || *record.RepoDid == "" {
+			l.Warn("dropping repo crawl request without repo_did", "did", owner.DID, "rkey", repoAt.RecordKey())
+			writeErr(w, fmt.Errorf("repo record missing repo_did"))
+			return
+		}
+
 		repo := &models.Repo{
 			Did:        owner.DID,
 			Rkey:       repoAt.RecordKey(),
 			Cid:        (*syntax.CID)(out.Cid),
-			Name:       record.Name,
+			Name:       repoAt.RecordKey().String(),
 			KnotDomain: knotUrl,
+			RepoDid:    syntax.DID(*record.RepoDid),
 			State:      models.RepoStatePending,
 			ErrorMsg:   "",
 			RetryAfter: 0,

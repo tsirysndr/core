@@ -11,6 +11,8 @@ import (
 	"github.com/urfave/cli/v3"
 	"tangled.org/core/knotmirror"
 	"tangled.org/core/knotmirror/config"
+	"tangled.org/core/knotmirror/db"
+	"tangled.org/core/knotmirror/migrate"
 	"tangled.org/core/log"
 )
 
@@ -42,6 +44,12 @@ func run(args []string) error {
 			Action: runKnotMirror,
 			Flags:  []cli.Flag{},
 		},
+		{
+			Name:   "migrate-disk",
+			Usage:  "rename mirror dirs from {did}/{rkey} -> {repo_did}; daemon must be stopped",
+			Action: runMigrateDisk,
+			Flags:  []cli.Flag{},
+		},
 	}
 	return app.Run(ctx, args)
 }
@@ -55,4 +63,21 @@ func runKnotMirror(ctx context.Context, cmd *cli.Command) error {
 
 	logger.Debug("config loaded:", "config", cfg)
 	return knotmirror.Run(ctx, cfg)
+}
+
+func runMigrateDisk(ctx context.Context, cmd *cli.Command) error {
+	logger := log.FromContext(ctx)
+	cfg, err := config.Load(ctx)
+	if err != nil {
+		return err
+	}
+	database, err := db.Make(ctx, cfg.DbUrl, 4)
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+
+	stats, err := migrate.RenameDisk(ctx, cfg.GitRepoBasePath, database, logger)
+	logger.Info("migrate-disk complete", "stats", stats.String())
+	return err
 }

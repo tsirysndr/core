@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/knotmirror/config"
 	"tangled.org/core/knotmirror/db"
@@ -104,32 +105,23 @@ func (t *Tap) processRepo(ctx context.Context, evt *tapc.RecordEventData) error 
 			errMsg = "suspending non-public knot"
 		}
 
+		if record.RepoDid == nil || *record.RepoDid == "" {
+			t.logger.Warn("dropping repo record without repo_did", "did", evt.Did, "rkey", evt.Rkey)
+			return nil
+		}
 		repo := &models.Repo{
 			Did:        evt.Did,
 			Rkey:       evt.Rkey,
 			Cid:        evt.CID,
-			Name:       record.Name,
+			Name:       evt.Rkey.String(),
 			KnotDomain: knotUrl,
+			RepoDid:    syntax.DID(*record.RepoDid),
 			State:      status,
 			ErrorMsg:   errMsg,
 			RetryAfter: 0, // clear retry info
 			RetryCount: 0,
 		}
 
-		if evt.Action == tapc.RecordUpdateAction {
-			exist, err := t.gitm.Exist(repo)
-			if err != nil {
-				return fmt.Errorf("checking git repo existence: %w", err)
-			}
-			if exist {
-				// update git repo remote url
-				if err := t.gitm.RemoteSetUrl(ctx, repo); err != nil {
-					return fmt.Errorf("updating git repo remote url: %w", err)
-				}
-			}
-		}
-
-		t.logger.Debug("tap: upserting repo with knot", "knot", repo.KnotDomain)
 		if err := db.UpsertRepo(ctx, t.db, repo); err != nil {
 			return fmt.Errorf("upserting repo to db: %w", err)
 		}

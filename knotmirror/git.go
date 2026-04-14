@@ -19,8 +19,6 @@ import (
 
 type GitMirrorManager interface {
 	Exist(repo *models.Repo) (bool, error)
-	// RemoteSetUrl updates git repository 'origin' remote
-	RemoteSetUrl(ctx context.Context, repo *models.Repo) error
 	// Clone clones the repository as a mirror
 	Clone(ctx context.Context, repo *models.Repo) error
 	// Fetch fetches the repository
@@ -44,33 +42,16 @@ func NewCliGitMirrorManager(repoBasePath string, knotUseSSL bool) *CliGitMirrorM
 var _ GitMirrorManager = new(CliGitMirrorManager)
 
 func (c *CliGitMirrorManager) makeRepoPath(repo *models.Repo) string {
-	return filepath.Join(c.repoBasePath, repo.Did.String(), repo.Rkey.String())
+	return filepath.Join(c.repoBasePath, repo.RepoDid.String())
 }
 
 func (c *CliGitMirrorManager) Exist(repo *models.Repo) (bool, error) {
 	return isDir(c.makeRepoPath(repo))
 }
 
-func (c *CliGitMirrorManager) RemoteSetUrl(ctx context.Context, repo *models.Repo) error {
-	path := c.makeRepoPath(repo)
-	url, err := makeRepoRemoteUrl(repo.KnotDomain, repo.DidSlashRepo(), c.knotUseSSL)
-	if err != nil {
-		return fmt.Errorf("constructing repo remote url: %w", err)
-	}
-	cmd := exec.CommandContext(ctx, "git", "-C", path, "remote", "set-url", "origin", url)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		msg := string(out)
-		return fmt.Errorf("running 'git remote set-url origin %s': %w\n%s", url, err, msg)
-	}
-	return nil
-}
-
 func (c *CliGitMirrorManager) Clone(ctx context.Context, repo *models.Repo) error {
 	path := c.makeRepoPath(repo)
-	url, err := makeRepoRemoteUrl(repo.KnotDomain, repo.DidSlashRepo(), c.knotUseSSL)
+	url, err := makeRepoRemoteUrl(repo.KnotDomain, repo.RepoIdentifier(), c.knotUseSSL)
 	if err != nil {
 		return fmt.Errorf("constructing repo remote url: %w", err)
 	}
@@ -94,12 +75,15 @@ func (c *CliGitMirrorManager) clone(ctx context.Context, path, url string) error
 
 func (c *CliGitMirrorManager) Fetch(ctx context.Context, repo *models.Repo) error {
 	path := c.makeRepoPath(repo)
-	return c.fetch(ctx, path)
+	url, err := makeRepoRemoteUrl(repo.KnotDomain, repo.RepoIdentifier(), c.knotUseSSL)
+	if err != nil {
+		return fmt.Errorf("constructing repo remote url: %w", err)
+	}
+	return c.fetch(ctx, path, url)
 }
 
-func (c *CliGitMirrorManager) fetch(ctx context.Context, path string) error {
-	// TODO: use `repo.Knot` instead of depending on origin
-	cmd := exec.CommandContext(ctx, "git", "-C", path, "fetch", "--prune", "origin")
+func (c *CliGitMirrorManager) fetch(ctx context.Context, path, url string) error {
+	cmd := exec.CommandContext(ctx, "git", "-C", path, "fetch", "--prune", url, "+refs/*:refs/*")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -111,7 +95,7 @@ func (c *CliGitMirrorManager) fetch(ctx context.Context, path string) error {
 
 func (c *CliGitMirrorManager) Sync(ctx context.Context, repo *models.Repo) error {
 	path := c.makeRepoPath(repo)
-	url, err := makeRepoRemoteUrl(repo.KnotDomain, repo.DidSlashRepo(), c.knotUseSSL)
+	url, err := makeRepoRemoteUrl(repo.KnotDomain, repo.RepoIdentifier(), c.knotUseSSL)
 	if err != nil {
 		return fmt.Errorf("constructing repo remote url: %w", err)
 	}
@@ -125,7 +109,7 @@ func (c *CliGitMirrorManager) Sync(ctx context.Context, repo *models.Repo) error
 			return fmt.Errorf("cloning repo: %w", err)
 		}
 	} else {
-		if err := c.fetch(ctx, path); err != nil {
+		if err := c.fetch(ctx, path, url); err != nil {
 			return fmt.Errorf("fetching repo: %w", err)
 		}
 	}
@@ -191,20 +175,16 @@ func NewGoGitMirrorClient(repoBasePath string, knotUseSSL bool) *GoGitMirrorMana
 var _ GitMirrorManager = new(GoGitMirrorManager)
 
 func (c *GoGitMirrorManager) makeRepoPath(repo *models.Repo) string {
-	return filepath.Join(c.repoBasePath, repo.Did.String(), repo.Rkey.String())
+	return filepath.Join(c.repoBasePath, repo.RepoDid.String())
 }
 
 func (c *GoGitMirrorManager) Exist(repo *models.Repo) (bool, error) {
 	return isDir(c.makeRepoPath(repo))
 }
 
-func (c *GoGitMirrorManager) RemoteSetUrl(ctx context.Context, repo *models.Repo) error {
-	panic("unimplemented")
-}
-
 func (c *GoGitMirrorManager) Clone(ctx context.Context, repo *models.Repo) error {
 	path := c.makeRepoPath(repo)
-	url, err := makeRepoRemoteUrl(repo.KnotDomain, repo.DidSlashRepo(), c.knotUseSSL)
+	url, err := makeRepoRemoteUrl(repo.KnotDomain, repo.RepoIdentifier(), c.knotUseSSL)
 	if err != nil {
 		return fmt.Errorf("constructing repo remote url: %w", err)
 	}
@@ -224,7 +204,7 @@ func (c *GoGitMirrorManager) clone(ctx context.Context, path, url string) error 
 
 func (c *GoGitMirrorManager) Fetch(ctx context.Context, repo *models.Repo) error {
 	path := c.makeRepoPath(repo)
-	url, err := makeRepoRemoteUrl(repo.KnotDomain, repo.DidSlashRepo(), c.knotUseSSL)
+	url, err := makeRepoRemoteUrl(repo.KnotDomain, repo.RepoIdentifier(), c.knotUseSSL)
 	if err != nil {
 		return fmt.Errorf("constructing repo remote url: %w", err)
 	}
@@ -250,7 +230,7 @@ func (c *GoGitMirrorManager) fetch(ctx context.Context, path, url string) error 
 
 func (c *GoGitMirrorManager) Sync(ctx context.Context, repo *models.Repo) error {
 	path := c.makeRepoPath(repo)
-	url, err := makeRepoRemoteUrl(repo.KnotDomain, repo.DidSlashRepo(), c.knotUseSSL)
+	url, err := makeRepoRemoteUrl(repo.KnotDomain, repo.RepoIdentifier(), c.knotUseSSL)
 	if err != nil {
 		return fmt.Errorf("constructing repo remote url: %w", err)
 	}
@@ -271,7 +251,7 @@ func (c *GoGitMirrorManager) Sync(ctx context.Context, repo *models.Repo) error 
 	return nil
 }
 
-func makeRepoRemoteUrl(knot, didSlashRepo string, knotUseSSL bool) (string, error) {
+func makeRepoRemoteUrl(knot, repoIdentifier string, knotUseSSL bool) (string, error) {
 	if !strings.Contains(knot, "://") {
 		if knotUseSSL {
 			knot = "https://" + knot
@@ -289,7 +269,7 @@ func makeRepoRemoteUrl(knot, didSlashRepo string, knotUseSSL bool) (string, erro
 		return "", fmt.Errorf("unsupported scheme: %s", u.Scheme)
 	}
 
-	u = u.JoinPath(didSlashRepo)
+	u = u.JoinPath(repoIdentifier)
 	return u.String(), nil
 }
 
