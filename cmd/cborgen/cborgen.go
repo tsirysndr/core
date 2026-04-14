@@ -17,6 +17,8 @@ func main() {
 		tangled.ActorProfile{},
 		tangled.FeedReaction{},
 		tangled.FeedStar{},
+		tangled.FeedStar_Repo{},
+		tangled.FeedStar_String{},
 		tangled.GitRefUpdate{},
 		tangled.GitRefUpdate_CommitCountBreakdown{},
 		tangled.GitRefUpdate_IndividualEmailCommitCount{},

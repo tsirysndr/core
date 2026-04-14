@@ -24,8 +24,8 @@ type Repo struct {
 	Knot string `json:"knot" cborgen:"knot"`
 	// labels: List of labels that this repo subscribes to
 	Labels []string `json:"labels,omitempty" cborgen:"labels,omitempty"`
-	// name: name of the repo
-	Name string `json:"name" cborgen:"name"`
+	// name: Cosmetic name of the repo.
+	Name *string `json:"name,omitempty" cborgen:"name,omitempty"`
 	// repoDid: DID of the repo itself, if assigned
 	RepoDid *string `json:"repoDid,omitempty" cborgen:"repoDid,omitempty"`
 	// source: source of the repo

@@ -5,7 +5,13 @@ package tangled
 // schema: sh.tangled.feed.star
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+
 	"github.com/bluesky-social/indigo/lex/util"
+	cbg "github.com/whyrusleeping/cbor-gen"
 )
 
 const (
@@ -17,8 +23,91 @@ func init() {
 } //
 // RECORDTYPE: FeedStar
 type FeedStar struct {
-	LexiconTypeID string  `json:"$type,const=sh.tangled.feed.star" cborgen:"$type,const=sh.tangled.feed.star"`
-	CreatedAt     string  `json:"createdAt" cborgen:"createdAt"`
-	Subject       *string `json:"subject,omitempty" cborgen:"subject,omitempty"`
-	SubjectDid    *string `json:"subjectDid,omitempty" cborgen:"subjectDid,omitempty"`
+	LexiconTypeID string            `json:"$type,const=sh.tangled.feed.star" cborgen:"$type,const=sh.tangled.feed.star"`
+	CreatedAt     string            `json:"createdAt" cborgen:"createdAt"`
+	Subject       *FeedStar_Subject `json:"subject" cborgen:"subject"`
+}
+
+// FeedStar_Repo is a "repo" in the sh.tangled.feed.star schema.
+//
+// RECORDTYPE: FeedStar_Repo
+type FeedStar_Repo struct {
+	LexiconTypeID string `json:"$type,const=sh.tangled.feed.star#repo" cborgen:"$type,const=sh.tangled.feed.star#repo"`
+	Did           string `json:"did" cborgen:"did"`
+}
+
+// FeedStar_String is a "string" in the sh.tangled.feed.star schema.
+//
+// RECORDTYPE: FeedStar_String
+type FeedStar_String struct {
+	LexiconTypeID string `json:"$type,const=sh.tangled.feed.star#string" cborgen:"$type,const=sh.tangled.feed.star#string"`
+	Uri           string `json:"uri" cborgen:"uri"`
+}
+
+type FeedStar_Subject struct {
+	FeedStar_Repo   *FeedStar_Repo
+	FeedStar_String *FeedStar_String
+}
+
+func (t *FeedStar_Subject) MarshalJSON() ([]byte, error) {
+	if t.FeedStar_Repo != nil {
+		t.FeedStar_Repo.LexiconTypeID = "sh.tangled.feed.star#repo"
+		return json.Marshal(t.FeedStar_Repo)
+	}
+	if t.FeedStar_String != nil {
+		t.FeedStar_String.LexiconTypeID = "sh.tangled.feed.star#string"
+		return json.Marshal(t.FeedStar_String)
+	}
+	return nil, fmt.Errorf("cannot marshal empty enum")
+}
+func (t *FeedStar_Subject) UnmarshalJSON(b []byte) error {
+	typ, err := util.TypeExtract(b)
+	if err != nil {
+		return err
+	}
+
+	switch typ {
+	case "sh.tangled.feed.star#repo":
+		t.FeedStar_Repo = new(FeedStar_Repo)
+		return json.Unmarshal(b, t.FeedStar_Repo)
+	case "sh.tangled.feed.star#string":
+		t.FeedStar_String = new(FeedStar_String)
+		return json.Unmarshal(b, t.FeedStar_String)
+
+	default:
+		return fmt.Errorf("closed enums must have a matching value")
+	}
+}
+
+func (t *FeedStar_Subject) MarshalCBOR(w io.Writer) error {
+
+	if t == nil {
+		_, err := w.Write(cbg.CborNull)
+		return err
+	}
+	if t.FeedStar_Repo != nil {
+		return t.FeedStar_Repo.MarshalCBOR(w)
+	}
+	if t.FeedStar_String != nil {
+		return t.FeedStar_String.MarshalCBOR(w)
+	}
+	return fmt.Errorf("cannot cbor marshal empty enum")
+}
+func (t *FeedStar_Subject) UnmarshalCBOR(r io.Reader) error {
+	typ, b, err := util.CborTypeExtractReader(r)
+	if err != nil {
+		return err
+	}
+
+	switch typ {
+	case "sh.tangled.feed.star#repo":
+		t.FeedStar_Repo = new(FeedStar_Repo)
+		return t.FeedStar_Repo.UnmarshalCBOR(bytes.NewReader(b))
+	case "sh.tangled.feed.star#string":
+		t.FeedStar_String = new(FeedStar_String)
+		return t.FeedStar_String.UnmarshalCBOR(bytes.NewReader(b))
+
+	default:
+		return fmt.Errorf("closed enums must have a matching value")
+	}
 }

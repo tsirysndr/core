@@ -11,6 +11,7 @@
         "type": "object",
         "required": [
           "subject",
+          "repo",
           "createdAt"
         ],
         "properties": {
@@ -20,11 +21,7 @@
           },
           "repo": {
             "type": "string",
-            "description": "repo to add this user to",
-            "format": "at-uri"
-          },
-          "repoDid": {
-            "type": "string",
+            "description": "repo DID to add this user to",
             "format": "did"
           },
           "createdAt": {

@@ -118,9 +118,8 @@ func (x *Xrpc) Merge(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		refUpdate := tangled.GitRefUpdate{
-			RepoDid:      &repoDid,
+			Repo:         repoDid,
 			OwnerDid:     &data.Did,
-			RepoName:     data.Name,
 			Ref:          data.Branch,
 			OldSha:       oldSha.String(),
 			NewSha:       newSha.String(),

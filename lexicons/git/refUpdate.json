@@ -11,7 +11,7 @@
         "required": [
           "ref",
           "committerDid",
-          "repoName",
+          "repo",
           "oldSha",
           "newSha",
           "meta"
@@ -33,14 +33,10 @@
             "description": "did of the owner of the repo",
             "format": "did"
           },
-          "repoDid": {
+          "repo": {
             "type": "string",
             "description": "DID of the repo itself",
             "format": "did"
-          },
-          "repoName": {
-            "type": "string",
-            "description": "name of the repo"
           },
           "oldSha": {
             "type": "string",

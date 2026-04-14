@@ -29,10 +29,8 @@ type GitRefUpdate struct {
 	OwnerDid *string `json:"ownerDid,omitempty" cborgen:"ownerDid,omitempty"`
 	// ref: Ref being updated
 	Ref string `json:"ref" cborgen:"ref"`
-	// repoDid: DID of the repo itself
-	RepoDid *string `json:"repoDid,omitempty" cborgen:"repoDid,omitempty"`
-	// repoName: name of the repo
-	RepoName string `json:"repoName" cborgen:"repoName"`
+	// repo: DID of the repo itself
+	Repo string `json:"repo" cborgen:"repo"`
 }
 
 // GitRefUpdate_CommitCountBreakdown is a "commitCountBreakdown" in the sh.tangled.git.refUpdate schema.

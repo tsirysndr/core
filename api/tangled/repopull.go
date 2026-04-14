@@ -39,14 +39,12 @@ type RepoPull_Round struct {
 
 // RepoPull_Source is a "source" in the sh.tangled.repo.pull schema.
 type RepoPull_Source struct {
-	Branch  string  `json:"branch" cborgen:"branch"`
-	Repo    *string `json:"repo,omitempty" cborgen:"repo,omitempty"`
-	RepoDid *string `json:"repoDid,omitempty" cborgen:"repoDid,omitempty"`
+	Branch string  `json:"branch" cborgen:"branch"`
+	Repo   *string `json:"repo,omitempty" cborgen:"repo,omitempty"`
 }
 
 // RepoPull_Target is a "target" in the sh.tangled.repo.pull schema.
 type RepoPull_Target struct {
-	Branch  string  `json:"branch" cborgen:"branch"`
-	Repo    *string `json:"repo,omitempty" cborgen:"repo,omitempty"`
-	RepoDid *string `json:"repoDid,omitempty" cborgen:"repoDid,omitempty"`
+	Branch string `json:"branch" cborgen:"branch"`
+	Repo   string `json:"repo" cborgen:"repo"`
 }

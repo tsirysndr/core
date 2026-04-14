@@ -6,18 +6,17 @@
   "defs": {
     "main": {
       "type": "record",
-      "key": "tid",
+      "key": "any",
       "record": {
         "type": "object",
         "required": [
-          "name",
           "knot",
           "createdAt"
         ],
         "properties": {
           "name": {
             "type": "string",
-            "description": "name of the repo"
+            "description": "Cosmetic name of the repo."
           },
           "knot": {
             "type": "string",

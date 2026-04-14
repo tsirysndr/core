@@ -19,8 +19,7 @@ func init() {
 type RepoCollaborator struct {
 	LexiconTypeID string `json:"$type,const=sh.tangled.repo.collaborator" cborgen:"$type,const=sh.tangled.repo.collaborator"`
 	CreatedAt     string `json:"createdAt" cborgen:"createdAt"`
-	// repo: repo to add this user to
-	Repo    *string `json:"repo,omitempty" cborgen:"repo,omitempty"`
-	RepoDid *string `json:"repoDid,omitempty" cborgen:"repoDid,omitempty"`
-	Subject string  `json:"subject" cborgen:"subject"`
+	// repo: repo DID to add this user to
+	Repo    string `json:"repo" cborgen:"repo"`
+	Subject string `json:"subject" cborgen:"subject"`
 }
