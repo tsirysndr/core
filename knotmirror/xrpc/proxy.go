@@ -83,22 +83,6 @@ func (x *Xrpc) resolveKnot(ctx context.Context, repoAt syntax.ATURI) (*knotInfo,
 		}
 	}
 
-	go func() {
-		bgCtx := context.Background()
-		pending := &models.Repo{
-			Did:        owner.DID,
-			Rkey:       repoAt.RecordKey(),
-			Cid:        (*syntax.CID)(out.Cid),
-			Name:       record.Name,
-			KnotDomain: knotURL,
-			State:      models.RepoStatePending,
-		}
-		x.logger.Debug("pending: upserting repo with knot", "knot", pending.KnotDomain)
-		if upsertErr := db.UpsertRepo(bgCtx, x.db, pending); upsertErr != nil {
-			x.logger.Error("failed to upsert repo after proxy resolution", "err", upsertErr)
-		}
-	}()
-
 	return &knotInfo{
 		baseURL:      knotURL,
 		didSlashRepo: fmt.Sprintf("%s/%s", owner.DID, record.Name),
