@@ -61,7 +61,7 @@ type Pull struct {
 	PullId int
 
 	// at ids
-	RepoAt   syntax.ATURI
+	RepoDid  syntax.DID
 	OwnerDid string
 	Rkey     string
 
@@ -97,14 +97,6 @@ func (p Pull) AsRecord() tangled.RepoPull {
 		references[i] = string(uri)
 	}
 
-	var targetRepoAt, targetRepoDid *string
-	targetRepoAt = new(string)
-	*targetRepoAt = p.RepoAt.String()
-	if p.Repo != nil && p.Repo.RepoDid != "" {
-		targetRepoDid = new(string)
-		*targetRepoDid = p.Repo.RepoDid
-	}
-
 	rounds := make([]*tangled.RepoPull_Round, len(p.Submissions))
 	for i, submission := range p.Submissions {
 		rounds[i] = submission.AsRecord()
@@ -123,9 +115,8 @@ func (p Pull) AsRecord() tangled.RepoPull {
 		References: references,
 		CreatedAt:  p.Created.Format(time.RFC3339),
 		Target: &tangled.RepoPull_Target{
-			Repo:    targetRepoAt,
-			RepoDid: targetRepoDid,
-			Branch:  p.TargetBranch,
+			Repo:   string(p.RepoDid),
+			Branch: p.TargetBranch,
 		},
 		Rounds:      rounds,
 		Source:      p.PullSource.AsRecord(),
@@ -151,16 +142,14 @@ func PullFromRecord(did, rkey string, record tangled.RepoPull, blobs []*io.ReadC
 		}
 	}
 
-	var targetRepoAt syntax.ATURI
+	var targetRepoDid syntax.DID
 	var targetBranch string
 	if record.Target != nil {
-		if record.Target.Repo != nil {
-			uri, err := syntax.ParseATURI(*record.Target.Repo)
-			if err != nil {
-				return nil, fmt.Errorf("invalid target.repo aturi: %w", err)
-			}
-			targetRepoAt = uri
+		did, err := syntax.ParseDID(record.Target.Repo)
+		if err != nil {
+			return nil, fmt.Errorf("invalid target.repo did: %w", err)
 		}
+		targetRepoDid = did
 		targetBranch = record.Target.Branch
 	}
 
@@ -171,16 +160,9 @@ func PullFromRecord(did, rkey string, record tangled.RepoPull, blobs []*io.ReadC
 		}
 
 		if record.Source.Repo != nil {
-			uri, err := syntax.ParseATURI(*record.Source.Repo)
+			did, err := syntax.ParseDID(*record.Source.Repo)
 			if err != nil {
-				return nil, fmt.Errorf("invalid source.repo aturi: %w", err)
-			}
-			pullSource.RepoAt = &uri
-		}
-		if record.Source.RepoDid != nil {
-			did, err := syntax.ParseDID(*record.Source.RepoDid)
-			if err != nil {
-				return nil, fmt.Errorf("invalid source.repoDid did: %w", err)
+				return nil, fmt.Errorf("invalid source.repo did: %w", err)
 			}
 			pullSource.RepoDid = &did
 		}
@@ -209,7 +191,7 @@ func PullFromRecord(did, rkey string, record tangled.RepoPull, blobs []*io.ReadC
 	}
 
 	return &Pull{
-		RepoAt:       targetRepoAt,
+		RepoDid:      targetRepoDid,
 		OwnerDid:     did,
 		Rkey:         rkey,
 		Title:        record.Title,
@@ -260,7 +242,6 @@ func PullSubmissionFromRecord(did, rkey string, roundNumber int, round *tangled.
 
 type PullSource struct {
 	Branch  string
-	RepoAt  *syntax.ATURI
 	RepoDid *syntax.DID
 
 	// optionally populate this for reverse mappings
@@ -271,19 +252,14 @@ func (s *PullSource) AsRecord() *tangled.RepoPull_Source {
 	if s == nil {
 		return nil
 	}
-	var repoAt, repoDid *string
-	if s.RepoAt != nil {
-		repoAt = new(string)
-		*repoAt = s.RepoAt.String()
-	}
+	var repo *string
 	if s.RepoDid != nil {
-		repoDid = new(string)
-		*repoDid = s.RepoDid.String()
+		r := s.RepoDid.String()
+		repo = &r
 	}
 	return &tangled.RepoPull_Source{
-		Branch:  s.Branch,
-		Repo:    repoAt,
-		RepoDid: repoDid,
+		Branch: s.Branch,
+		Repo:   repo,
 	}
 }
 
@@ -313,7 +289,7 @@ type PullComment struct {
 	SubmissionId int
 
 	// at ids
-	RepoAt    string
+	RepoDid   string
 	OwnerDid  string
 	CommentAt string
 
@@ -366,21 +342,20 @@ func (p *Pull) IsPatchBased() bool {
 
 func (p *Pull) IsBranchBased() bool {
 	if p.PullSource != nil {
-		if p.PullSource.RepoAt != nil {
-			return p.PullSource.RepoAt == &p.RepoAt
-		} else {
-			// no repo specified
-			return true
+		if p.PullSource.RepoDid != nil {
+			return *p.PullSource.RepoDid == p.RepoDid
 		}
+		// no repo specified
+		return true
 	}
 	return false
 }
 
 func (p *Pull) IsForkBased() bool {
 	if p.PullSource != nil {
-		if p.PullSource.RepoAt != nil {
+		if p.PullSource.RepoDid != nil {
 			// make sure repos are different
-			return p.PullSource.RepoAt != &p.RepoAt
+			return *p.PullSource.RepoDid != p.RepoDid
 		}
 	}
 	return false

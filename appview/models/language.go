@@ -1,12 +1,10 @@
 package models
 
-import (
-	"github.com/bluesky-social/indigo/atproto/syntax"
-)
+import "github.com/bluesky-social/indigo/atproto/syntax"
 
 type RepoLanguage struct {
 	Id           int64
-	RepoAt       syntax.ATURI
+	RepoDid      syntax.DID
 	Ref          string
 	IsDefaultRef bool
 	Language     string

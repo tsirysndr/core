@@ -10,12 +10,13 @@ import (
 type WebhookEvent string
 
 const (
-	WebhookEventPush WebhookEvent = "push"
+	WebhookEventPush        WebhookEvent = "push"
+	WebhookEventRepoRenamed WebhookEvent = "repository:renamed"
 )
 
 type Webhook struct {
 	Id        int64
-	RepoAt    syntax.ATURI
+	RepoDid   syntax.DID
 	Url       string
 	Secret    string
 	Active    bool
@@ -71,4 +72,12 @@ type WebhookRepository struct {
 // WebhookUser represents user information in webhook payload
 type WebhookUser struct {
 	Did string `json:"did"`
+}
+
+// WebhookRenamePayload represents the payload for a repository:renamed event
+type WebhookRenamePayload struct {
+	OldName    string            `json:"old_name"`
+	NewName    string            `json:"new_name"`
+	Repository WebhookRepository `json:"repository"`
+	Sender     WebhookUser       `json:"sender"`
 }

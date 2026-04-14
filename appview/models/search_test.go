@@ -16,8 +16,8 @@ func TestIssueSearchOptions_HasSearchFilters(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "non-filter fields only (RepoAt, IsOpen, Page) return false",
-			opts: IssueSearchOptions{RepoAt: "at://did:plc:abc/repo"},
+			name: "non-filter fields only (RepoDid, IsOpen, Page) return false",
+			opts: IssueSearchOptions{RepoDid: "did:plc:abc"},
 			want: false,
 		},
 		{
@@ -93,8 +93,8 @@ func TestPullSearchOptions_HasSearchFilters(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "non-filter fields only (RepoAt, State, Page) return false",
-			opts: PullSearchOptions{RepoAt: "at://did:plc:abc/repo"},
+			name: "non-filter fields only (RepoDid, State, Page) return false",
+			opts: PullSearchOptions{RepoDid: "did:plc:abc"},
 			want: false,
 		},
 		{

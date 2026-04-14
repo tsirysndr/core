@@ -15,7 +15,7 @@ type Artifact struct {
 	Did  string
 	Rkey string
 
-	RepoAt    syntax.ATURI
+	RepoDid   syntax.DID
 	Tag       plumbing.Hash
 	CreatedAt time.Time
 

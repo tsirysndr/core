@@ -13,7 +13,7 @@ type Issue struct {
 	Id         int64
 	Did        string
 	Rkey       string
-	RepoAt     syntax.ATURI
+	RepoDid    syntax.DID
 	IssueId    int
 	Created    time.Time
 	Edited     *time.Time
@@ -44,17 +44,13 @@ func (i *Issue) AsRecord() tangled.RepoIssue {
 	for i, uri := range i.References {
 		references[i] = string(uri)
 	}
-	repoAtStr := i.RepoAt.String()
 	rec := tangled.RepoIssue{
-		Repo:       &repoAtStr,
+		Repo:       string(i.RepoDid),
 		Title:      i.Title,
 		Body:       &i.Body,
 		Mentions:   mentions,
 		References: references,
 		CreatedAt:  i.Created.Format(time.RFC3339),
-	}
-	if i.Repo != nil && i.Repo.RepoDid != "" {
-		rec.RepoDid = &i.Repo.RepoDid
 	}
 	return rec
 }
@@ -166,13 +162,8 @@ func IssueFromRecord(did, rkey string, record tangled.RepoIssue) Issue {
 		body = *record.Body
 	}
 
-	var repoAt syntax.ATURI
-	if record.Repo != nil {
-		repoAt = syntax.ATURI(*record.Repo)
-	}
-
 	return Issue{
-		RepoAt:  repoAt,
+		RepoDid: syntax.DID(record.Repo),
 		Did:     did,
 		Rkey:    rkey,
 		Created: created,

@@ -14,7 +14,7 @@ type Collaborator struct {
 
 	// content
 	SubjectDid syntax.DID
-	RepoAt     syntax.ATURI
+	RepoDid    syntax.DID
 
 	// meta
 	Created time.Time

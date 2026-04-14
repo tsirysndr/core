@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -115,18 +116,6 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			issue_at text,
 			unique(repo_at, issue_id),
 			foreign key (repo_at) references repos(at_uri) on delete cascade
-		);
-		create table if not exists comments (
-			id integer primary key autoincrement,
-			owner_did text not null,
-			issue_id integer not null,
-			repo_at text not null,
-			comment_id integer not null,
-			comment_at text not null,
-			body text not null,
-			created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-			unique(issue_id, comment_id),
-			foreign key (repo_at, issue_id) references issues(repo_at, issue_id) on delete cascade
 		);
 		create table if not exists pulls (
 			-- identifiers
@@ -693,9 +682,7 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		create index if not exists idx_notifications_recipient_read on notifications(recipient_did, read);
 		create index if not exists idx_references_from_at on reference_links(from_at);
 		create index if not exists idx_references_to_at on reference_links(to_at);
-		create index if not exists idx_webhooks_repo_at on webhooks(repo_at);
 		create index if not exists idx_webhook_deliveries_webhook_id on webhook_deliveries(webhook_id);
-		create index if not exists idx_site_deploys_repo_at on site_deploys(repo_at);
 		create index if not exists idx_newsletter_prefs_user_did on newsletter_preferences(user_did);
 	`)
 	if err != nil {
@@ -1544,6 +1531,419 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 
 			drop table pipeline_statuses;
 			alter table pipeline_statuses_new rename to pipeline_statuses;
+		`)
+		return err
+	})
+	conn.ExecContext(ctx, "pragma foreign_keys = on;")
+
+	orm.RunMigration(conn, logger, "add-repo-renames", func(tx *sql.Tx) error {
+		res, err := tx.Exec(`
+			update repos
+			set name = name || '-renamed-' || id || '-' || lower(hex(randomblob(4)))
+			where id in (
+				select id from (
+					select id, row_number() over (
+						partition by did, knot, name
+						order by created desc, id desc
+					) as rn
+					from repos
+				) where rn > 1
+			);
+		`)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			logger.Warn("suffixed legacy duplicate repo names before adding unique index", "rows", n)
+		}
+
+		var remaining int
+		if err := tx.QueryRow(`
+			select count(*) from (
+				select 1 from repos group by did, knot, name having count(*) > 1
+			)
+		`).Scan(&remaining); err != nil {
+			return fmt.Errorf("checking for residual duplicate (did, knot, name) groups: %w", err)
+		}
+		if remaining > 0 {
+			return fmt.Errorf("add-repo-renames: %d duplicate (did, knot, name) groups remain after suffix pass; manual cleanup required before unique index can be created", remaining)
+		}
+
+		_, err = tx.Exec(`
+			create table if not exists repo_renames (
+				owner_did  text not null,
+				old_rkey   text not null,
+				repo_did   text not null,
+				renamed_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				primary key (owner_did, old_rkey)
+			);
+			create unique index if not exists idx_repos_owner_knot_name
+				on repos(did, knot, name);
+		`)
+		return err
+	})
+
+	orm.RunMigration(conn, logger, "repos-canonical-rkey-uniqueness", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			drop index if exists idx_repos_owner_knot_name;
+			create unique index if not exists idx_repos_did_rkey
+				on repos(did, rkey);
+		`)
+		return err
+	})
+
+	orm.RunMigration(conn, logger, "repo-did-references", func(tx *sql.Tx) error {
+		tables := []struct{ table, oldCol, newCol string }{
+			{"issues", "repo_at", "repo_did"},
+			{"pulls", "repo_at", "repo_did"},
+			{"pull_comments", "repo_at", "repo_did"},
+			{"stars", "subject_at", "subject_did"},
+			{"artifacts", "repo_at", "repo_did"},
+			{"webhooks", "repo_at", "repo_did"},
+			{"repo_sites", "repo_at", "repo_did"},
+			{"site_deploys", "repo_at", "repo_did"},
+			{"collaborators", "repo_at", "repo_did"},
+			{"repo_issue_seqs", "repo_at", "repo_did"},
+			{"repo_pull_seqs", "repo_at", "repo_did"},
+			{"repo_languages", "repo_at", "repo_did"},
+			{"repo_labels", "repo_at", "repo_did"},
+		}
+
+		stmts := ""
+		for _, t := range tables {
+			stmts += fmt.Sprintf(
+				`ALTER TABLE %s ADD COLUMN %s TEXT;
+				 UPDATE %s SET %s = (SELECT repos.repo_did FROM repos WHERE repos.at_uri = %s.%s);
+				 CREATE INDEX IF NOT EXISTS idx_%s_%s ON %s(%s);
+				`, t.table, t.newCol, t.table, t.newCol, t.table, t.oldCol, t.table, t.newCol, t.table, t.newCol)
+		}
+
+		stmts += `ALTER TABLE pulls ADD COLUMN source_repo_did TEXT;
+			UPDATE pulls SET source_repo_did = (SELECT repos.repo_did FROM repos WHERE repos.at_uri = pulls.source_repo_at);
+
+			UPDATE profile_pinned_repositories SET pin = (
+				SELECT repos.repo_did FROM repos WHERE repos.at_uri = profile_pinned_repositories.pin
+			) WHERE pin LIKE 'at://%'
+			  AND EXISTS (SELECT 1 FROM repos WHERE repos.at_uri = profile_pinned_repositories.pin AND repos.repo_did IS NOT NULL AND repos.repo_did != '');
+		`
+
+		_, err := tx.Exec(stmts)
+		return err
+	})
+
+	orm.RunMigration(conn, logger, "backfill-pds-rewrites-star-issue-pull-collab", func(tx *sql.Tx) error {
+		type source struct {
+			userDidCol string
+			table      string
+			nsid       string
+			fkCol      string
+		}
+		sources := []source{
+			{"did", "stars", "sh.tangled.feed.star", "subject_at"},
+			{"did", "issues", "sh.tangled.repo.issue", "repo_at"},
+			{"owner_did", "pulls", "sh.tangled.repo.pull", "repo_at"},
+			{"did", "collaborators", "sh.tangled.repo.collaborator", "repo_at"},
+		}
+
+		for _, src := range sources {
+			_, err := tx.Exec(fmt.Sprintf(`
+				INSERT INTO pds_migration (name, did, collection, rkey, status)
+				SELECT 'add-repo-did', t.%s, '%s', t.rkey, 'pending'
+				FROM %s t
+				JOIN repos r ON r.at_uri = t.%s
+				WHERE r.repo_did IS NOT NULL AND r.repo_did != ''
+				ON CONFLICT(name, did, collection, rkey) DO NOTHING
+			`, src.userDidCol, src.nsid, src.table, src.fkCol))
+			if err != nil {
+				return fmt.Errorf("backfill pds rewrites for %s: %w", src.table, err)
+			}
+		}
+
+		return nil
+	})
+
+	orm.RunMigration(conn, logger, "backfill-pds-rewrites-profiles", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			INSERT INTO pds_migration (name, did, collection, rkey, status)
+			SELECT DISTINCT 'add-repo-did', pp.did, 'sh.tangled.actor.profile', 'self', 'pending'
+			FROM profile_pinned_repositories pp
+			JOIN repos r ON r.at_uri = pp.pin
+			WHERE pp.pin LIKE 'at://%'
+			  AND r.repo_did IS NOT NULL AND r.repo_did != ''
+			ON CONFLICT(name, did, collection, rkey) DO NOTHING
+		`)
+		if err != nil {
+			return fmt.Errorf("backfill pds rewrites for profiles: %w", err)
+		}
+		return nil
+	})
+
+	conn.ExecContext(ctx, "pragma foreign_keys = off;")
+	orm.RunMigration(conn, logger, "drop-old-at-uri-columns", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			CREATE TABLE repos_new (
+				id          INTEGER PRIMARY KEY AUTOINCREMENT,
+				did         TEXT NOT NULL,
+				name        TEXT NOT NULL,
+				knot        TEXT NOT NULL,
+				rkey        TEXT NOT NULL,
+				at_uri      TEXT NOT NULL UNIQUE,
+				created     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				description TEXT CHECK (length(description) <= 200),
+				source      TEXT,
+				spindle     TEXT,
+				website     TEXT,
+				topics      TEXT,
+				repo_did    TEXT,
+				UNIQUE(did, rkey)
+			);
+			INSERT INTO repos_new (id, did, name, knot, rkey, at_uri, created, description, source, spindle, website, topics, repo_did)
+			SELECT id, did, name, knot, rkey, at_uri, created, description, source, spindle, website, topics, repo_did
+			FROM repos;
+			DROP TABLE repos;
+			ALTER TABLE repos_new RENAME TO repos;
+			CREATE UNIQUE INDEX idx_repos_repo_did ON repos(repo_did);
+			CREATE UNIQUE INDEX idx_repos_did_rkey ON repos(did, rkey);
+
+			CREATE TABLE issues_new (
+				id        INTEGER PRIMARY KEY AUTOINCREMENT,
+				did       TEXT NOT NULL,
+				rkey      TEXT NOT NULL,
+				at_uri    TEXT GENERATED ALWAYS AS ('at://' || did || '/' || 'sh.tangled.repo.issue' || '/' || rkey) STORED,
+				repo_did  TEXT NOT NULL,
+				issue_id  INTEGER NOT NULL,
+				title     TEXT NOT NULL,
+				body      TEXT NOT NULL,
+				open      INTEGER NOT NULL DEFAULT 1,
+				created   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				edited    TEXT,
+				deleted   TEXT,
+				UNIQUE(did, rkey),
+				UNIQUE(repo_did, issue_id),
+				UNIQUE(at_uri),
+				FOREIGN KEY (repo_did) REFERENCES repos(repo_did) ON DELETE CASCADE
+			);
+			INSERT INTO issues_new (id, did, rkey, repo_did, issue_id, title, body, open, created, edited, deleted)
+			SELECT id, did, rkey, repo_did, issue_id, title, body, open, created, edited, deleted
+			FROM issues WHERE repo_did IS NOT NULL AND repo_did != '';
+			DROP TABLE issues;
+			ALTER TABLE issues_new RENAME TO issues;
+			CREATE INDEX idx_issues_repo_did ON issues(repo_did);
+
+			CREATE TABLE pulls_new (
+				id               INTEGER PRIMARY KEY AUTOINCREMENT,
+				pull_id          INTEGER NOT NULL,
+				at_uri           TEXT GENERATED ALWAYS AS ('at://' || owner_did || '/' || 'sh.tangled.repo.pull' || '/' || rkey) STORED,
+				repo_did         TEXT NOT NULL,
+				owner_did        TEXT NOT NULL,
+				rkey             TEXT NOT NULL,
+				title            TEXT NOT NULL,
+				body             TEXT NOT NULL,
+				target_branch    TEXT NOT NULL,
+				state            INTEGER NOT NULL DEFAULT 0 CHECK (state IN (0, 1, 2, 3)),
+				source_branch    TEXT,
+				source_repo_did  TEXT,
+				change_id        TEXT,
+				dependent_on     TEXT,
+				created          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				UNIQUE(repo_did, pull_id),
+				UNIQUE(at_uri),
+				FOREIGN KEY (repo_did) REFERENCES repos(repo_did) ON DELETE CASCADE
+			);
+			INSERT INTO pulls_new (id, pull_id, repo_did, owner_did, rkey, title, body, target_branch, state, source_branch, source_repo_did, change_id, dependent_on, created)
+			SELECT id, pull_id, repo_did, owner_did, rkey, title, body, target_branch, state, source_branch, source_repo_did, change_id, dependent_on, created
+			FROM pulls WHERE repo_did IS NOT NULL AND repo_did != '';
+			DROP TABLE pulls;
+			ALTER TABLE pulls_new RENAME TO pulls;
+			CREATE INDEX idx_pulls_repo_did ON pulls(repo_did);
+			CREATE INDEX idx_pulls_source_repo_did ON pulls(source_repo_did);
+
+			CREATE TABLE pull_comments_new (
+				id            INTEGER PRIMARY KEY AUTOINCREMENT,
+				pull_id       INTEGER NOT NULL,
+				submission_id INTEGER NOT NULL,
+				repo_did      TEXT NOT NULL,
+				owner_did     TEXT NOT NULL,
+				comment_at    TEXT NOT NULL,
+				body          TEXT NOT NULL,
+				created       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				FOREIGN KEY (repo_did, pull_id) REFERENCES pulls(repo_did, pull_id) ON DELETE CASCADE,
+				FOREIGN KEY (submission_id) REFERENCES pull_submissions(id) ON DELETE CASCADE
+			);
+			INSERT INTO pull_comments_new (id, pull_id, submission_id, repo_did, owner_did, comment_at, body, created)
+			SELECT id, pull_id, submission_id, repo_did, owner_did, comment_at, body, created
+			FROM pull_comments WHERE repo_did IS NOT NULL AND repo_did != '';
+			DROP TABLE pull_comments;
+			ALTER TABLE pull_comments_new RENAME TO pull_comments;
+			CREATE INDEX idx_pull_comments_repo_did ON pull_comments(repo_did);
+
+			CREATE TABLE stars_new (
+				id           INTEGER PRIMARY KEY AUTOINCREMENT,
+				did          TEXT NOT NULL,
+				rkey         TEXT NOT NULL,
+				subject_type TEXT NOT NULL CHECK (subject_type IN ('repo', 'string')),
+				subject      TEXT NOT NULL,
+				created      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				UNIQUE(did, rkey),
+				UNIQUE(did, subject)
+			);
+			INSERT INTO stars_new (id, did, rkey, subject_type, subject, created)
+				SELECT id, did, rkey, 'repo', subject_did, created
+				FROM stars
+				WHERE subject_did IS NOT NULL AND subject_did != '';
+			INSERT OR IGNORE INTO stars_new (id, did, rkey, subject_type, subject, created)
+				SELECT id, did, rkey, 'string', subject_at, created
+				FROM stars
+				WHERE (subject_did IS NULL OR subject_did = '')
+				  AND subject_at LIKE 'at://%/sh.tangled.string/%';
+			DROP TABLE stars;
+			ALTER TABLE stars_new RENAME TO stars;
+			CREATE INDEX idx_stars_subject ON stars(subject);
+			CREATE INDEX idx_stars_subject_type ON stars(subject_type);
+			CREATE INDEX idx_stars_created ON stars(created);
+
+			CREATE TABLE collaborators_new (
+				id          INTEGER PRIMARY KEY AUTOINCREMENT,
+				did         TEXT NOT NULL,
+				rkey        TEXT,
+				subject_did TEXT NOT NULL,
+				repo_did    TEXT NOT NULL,
+				created     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				UNIQUE(did, rkey),
+				FOREIGN KEY (repo_did) REFERENCES repos(repo_did) ON DELETE CASCADE
+			);
+			INSERT INTO collaborators_new (id, did, rkey, subject_did, repo_did, created)
+			SELECT id, did, NULLIF(rkey, ''), subject_did, repo_did, created
+			FROM collaborators WHERE repo_did IS NOT NULL AND repo_did != '';
+			DROP TABLE collaborators;
+			ALTER TABLE collaborators_new RENAME TO collaborators;
+			CREATE INDEX idx_collaborators_repo_did ON collaborators(repo_did);
+
+			CREATE TABLE artifacts_new (
+				id       INTEGER PRIMARY KEY AUTOINCREMENT,
+				did      TEXT NOT NULL,
+				rkey     TEXT NOT NULL,
+				repo_did TEXT NOT NULL,
+				tag      BINARY(20) NOT NULL,
+				created  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				blob_cid TEXT NOT NULL,
+				name     TEXT NOT NULL,
+				size     INTEGER NOT NULL DEFAULT 0,
+				mimetype TEXT NOT NULL DEFAULT '*/*',
+				UNIQUE(did, rkey),
+				UNIQUE(repo_did, tag, name),
+				FOREIGN KEY (repo_did) REFERENCES repos(repo_did) ON DELETE CASCADE
+			);
+			INSERT INTO artifacts_new (id, did, rkey, repo_did, tag, created, blob_cid, name, size, mimetype)
+			SELECT id, did, rkey, repo_did, tag, created, blob_cid, name, size, mimetype
+			FROM artifacts WHERE repo_did IS NOT NULL AND repo_did != '';
+			DROP TABLE artifacts;
+			ALTER TABLE artifacts_new RENAME TO artifacts;
+			CREATE INDEX idx_artifacts_repo_did ON artifacts(repo_did);
+
+			CREATE TABLE webhooks_new (
+				id         INTEGER PRIMARY KEY AUTOINCREMENT,
+				repo_did   TEXT NOT NULL,
+				url        TEXT NOT NULL,
+				secret     TEXT,
+				active     INTEGER NOT NULL DEFAULT 1,
+				events     TEXT NOT NULL,
+				created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				FOREIGN KEY (repo_did) REFERENCES repos(repo_did) ON DELETE CASCADE
+			);
+			INSERT INTO webhooks_new (id, repo_did, url, secret, active, events, created_at, updated_at)
+			SELECT id, repo_did, url, secret, active, events, created_at, updated_at
+			FROM webhooks WHERE repo_did IS NOT NULL AND repo_did != '';
+			DROP TABLE webhooks;
+			ALTER TABLE webhooks_new RENAME TO webhooks;
+			CREATE INDEX idx_webhooks_repo_did ON webhooks(repo_did);
+
+			CREATE TABLE repo_sites_new (
+				id       INTEGER PRIMARY KEY AUTOINCREMENT,
+				repo_did TEXT NOT NULL UNIQUE,
+				branch   TEXT NOT NULL,
+				dir      TEXT NOT NULL DEFAULT '/',
+				is_index INTEGER NOT NULL DEFAULT 0,
+				created  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				updated  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				FOREIGN KEY (repo_did) REFERENCES repos(repo_did) ON DELETE CASCADE
+			);
+			INSERT INTO repo_sites_new (id, repo_did, branch, dir, is_index, created, updated)
+			SELECT id, repo_did, branch, dir, is_index, created, updated
+			FROM repo_sites WHERE repo_did IS NOT NULL AND repo_did != '';
+			DROP TABLE repo_sites;
+			ALTER TABLE repo_sites_new RENAME TO repo_sites;
+
+			CREATE TABLE site_deploys_new (
+				id         INTEGER PRIMARY KEY AUTOINCREMENT,
+				repo_did   TEXT NOT NULL,
+				branch     TEXT NOT NULL,
+				dir        TEXT NOT NULL DEFAULT '/',
+				commit_sha TEXT NOT NULL DEFAULT '',
+				status     TEXT NOT NULL CHECK (status IN ('success', 'failure')),
+				trigger    TEXT NOT NULL CHECK (trigger IN ('config_change', 'push')),
+				error      TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				FOREIGN KEY (repo_did) REFERENCES repos(repo_did) ON DELETE CASCADE
+			);
+			INSERT INTO site_deploys_new (id, repo_did, branch, dir, commit_sha, status, trigger, error, created_at)
+			SELECT id, repo_did, branch, dir, commit_sha, status, trigger, error, created_at
+			FROM site_deploys WHERE repo_did IS NOT NULL AND repo_did != '';
+			DROP TABLE site_deploys;
+			ALTER TABLE site_deploys_new RENAME TO site_deploys;
+			CREATE INDEX idx_site_deploys_repo_did ON site_deploys(repo_did);
+
+			CREATE TABLE repo_issue_seqs_new (
+				repo_did      TEXT PRIMARY KEY,
+				next_issue_id INTEGER NOT NULL DEFAULT 1,
+				FOREIGN KEY (repo_did) REFERENCES repos(repo_did) ON DELETE CASCADE
+			);
+			INSERT INTO repo_issue_seqs_new (repo_did, next_issue_id)
+			SELECT repo_did, next_issue_id
+			FROM repo_issue_seqs WHERE repo_did IS NOT NULL AND repo_did != '';
+			DROP TABLE repo_issue_seqs;
+			ALTER TABLE repo_issue_seqs_new RENAME TO repo_issue_seqs;
+
+			CREATE TABLE repo_pull_seqs_new (
+				repo_did     TEXT PRIMARY KEY,
+				next_pull_id INTEGER NOT NULL DEFAULT 1,
+				FOREIGN KEY (repo_did) REFERENCES repos(repo_did) ON DELETE CASCADE
+			);
+			INSERT INTO repo_pull_seqs_new (repo_did, next_pull_id)
+			SELECT repo_did, next_pull_id
+			FROM repo_pull_seqs WHERE repo_did IS NOT NULL AND repo_did != '';
+			DROP TABLE repo_pull_seqs;
+			ALTER TABLE repo_pull_seqs_new RENAME TO repo_pull_seqs;
+
+			CREATE TABLE repo_languages_new (
+				id             INTEGER PRIMARY KEY AUTOINCREMENT,
+				repo_did       TEXT NOT NULL,
+				ref            TEXT NOT NULL,
+				is_default_ref INTEGER NOT NULL DEFAULT 0,
+				language       TEXT NOT NULL,
+				bytes          INTEGER NOT NULL CHECK (bytes >= 0),
+				UNIQUE(repo_did, ref, language),
+				FOREIGN KEY (repo_did) REFERENCES repos(repo_did) ON DELETE CASCADE
+			);
+			INSERT INTO repo_languages_new (id, repo_did, ref, is_default_ref, language, bytes)
+			SELECT id, repo_did, ref, is_default_ref, language, bytes
+			FROM repo_languages WHERE repo_did IS NOT NULL AND repo_did != '';
+			DROP TABLE repo_languages;
+			ALTER TABLE repo_languages_new RENAME TO repo_languages;
+
+			CREATE TABLE repo_labels_new (
+				id       INTEGER PRIMARY KEY AUTOINCREMENT,
+				repo_did TEXT NOT NULL,
+				label_at TEXT NOT NULL,
+				UNIQUE(repo_did, label_at),
+				FOREIGN KEY (repo_did) REFERENCES repos(repo_did) ON DELETE CASCADE
+			);
+			INSERT INTO repo_labels_new (id, repo_did, label_at)
+			SELECT id, repo_did, label_at
+			FROM repo_labels WHERE repo_did IS NOT NULL AND repo_did != '';
+			DROP TABLE repo_labels;
+			ALTER TABLE repo_labels_new RENAME TO repo_labels;
 		`)
 		return err
 	})

@@ -57,7 +57,7 @@ func (r *Repo) AsRecord() tangled.Repo {
 
 	return tangled.Repo{
 		Knot:        r.Knot,
-		Name:        r.Name,
+		Name:        r.cosmeticName(),
 		Description: description,
 		Website:     website,
 		Topics:      r.Topics,
@@ -69,6 +69,13 @@ func (r *Repo) AsRecord() tangled.Repo {
 	}
 }
 
+func (r *Repo) cosmeticName() *string {
+	if r.Name == "" || r.Name == r.Rkey {
+		return nil
+	}
+	return &r.Name
+}
+
 func (r Repo) RepoAt() syntax.ATURI {
 	return syntax.ATURI(fmt.Sprintf("at://%s/%s/%s", r.Did, tangled.RepoNSID, r.Rkey))
 }
@@ -77,7 +84,7 @@ func (r Repo) RepoIdentifier() string {
 	if r.RepoDid != "" {
 		return r.RepoDid
 	}
-	p, _ := securejoin.SecureJoin(r.Did, r.Name)
+	p, _ := securejoin.SecureJoin(r.Did, r.Rkey)
 	return p
 }
 
@@ -113,8 +120,52 @@ type PullCount struct {
 
 type RepoLabel struct {
 	Id      int64
-	RepoAt  syntax.ATURI
+	RepoDid syntax.DID
 	LabelAt syntax.ATURI
+}
+
+var reservedRepoNames = map[string]struct{}{
+	"self": {},
+}
+
+func ValidateRepoName(name string) error {
+	if len(name) == 0 {
+		return fmt.Errorf("Repository name cannot be empty")
+	}
+	if len(name) > 100 {
+		return fmt.Errorf("Repository name must be 100 characters or fewer")
+	}
+
+	if strings.Contains(name, "/") || strings.Contains(name, "\\") {
+		return fmt.Errorf("Repository name contains invalid path characters")
+	}
+
+	if strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".") {
+		return fmt.Errorf("Repository name contains invalid path sequence")
+	}
+
+	for _, char := range name {
+		if !((char >= 'a' && char <= 'z') ||
+			(char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') ||
+			char == '-' || char == '_' || char == '.') {
+			return fmt.Errorf("Repository name can only contain alphanumeric characters, periods, hyphens, and underscores")
+		}
+	}
+
+	if strings.Contains(name, "..") {
+		return fmt.Errorf("Repository name cannot contain sequential dots")
+	}
+
+	if _, reserved := reservedRepoNames[strings.ToLower(name)]; reserved {
+		return fmt.Errorf("Repository name %q is reserved", name)
+	}
+
+	return nil
+}
+
+func StripGitExt(name string) string {
+	return strings.TrimSuffix(name, ".git")
 }
 
 type RepoGroup struct {

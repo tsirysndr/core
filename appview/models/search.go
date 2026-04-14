@@ -5,7 +5,7 @@ import "tangled.org/core/appview/pagination"
 type IssueSearchOptions struct {
 	Keywords    []string
 	Phrases     []string
-	RepoAt      string
+	RepoDid     string
 	IsOpen      *bool
 	AuthorDid   string
 	Labels      []string
@@ -31,7 +31,7 @@ func (o *IssueSearchOptions) HasSearchFilters() bool {
 type PullSearchOptions struct {
 	Keywords    []string
 	Phrases     []string
-	RepoAt      string
+	RepoDid     string
 	State       *PullState
 	AuthorDid   string
 	Labels      []string

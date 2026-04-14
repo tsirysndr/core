@@ -1,6 +1,10 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"github.com/bluesky-social/indigo/atproto/syntax"
+)
 
 type SiteDeployStatus string
 
@@ -29,7 +33,7 @@ func (t SiteDeployTrigger) Label() string {
 
 type SiteDeploy struct {
 	Id        int64
-	RepoAt    string
+	RepoDid   syntax.DID
 	Branch    string
 	Dir       string
 	CommitSHA string

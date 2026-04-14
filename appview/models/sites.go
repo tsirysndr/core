@@ -1,6 +1,10 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"github.com/bluesky-social/indigo/atproto/syntax"
+)
 
 type DomainClaim struct {
 	ID      int64
@@ -11,8 +15,8 @@ type DomainClaim struct {
 
 type RepoSite struct {
 	ID       int64
-	RepoAt   string
-	RepoName string // populated when joined with repos table
+	RepoDid  syntax.DID
+	RepoRkey string // populated when joined with repos table
 	Branch   string
 	Dir      string
 	IsIndex  bool

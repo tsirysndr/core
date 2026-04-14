@@ -2,15 +2,21 @@ package models
 
 import (
 	"time"
+)
 
-	"github.com/bluesky-social/indigo/atproto/syntax"
+type StarSubjectType string
+
+const (
+	StarSubjectRepo   StarSubjectType = "repo"
+	StarSubjectString StarSubjectType = "string"
 )
 
 type Star struct {
-	Did     string
-	RepoAt  syntax.ATURI
-	Created time.Time
-	Rkey    string
+	Did         string
+	SubjectType StarSubjectType
+	Subject     string
+	Created     time.Time
+	Rkey        string
 }
 
 // RepoStar is used for reverse mapping to repos

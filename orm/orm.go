@@ -3,11 +3,23 @@ package orm
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"reflect"
 	"strings"
+
+	"github.com/mattn/go-sqlite3"
 )
+
+func IsUniqueViolation(err error) bool {
+	var sqlErr sqlite3.Error
+	if !errors.As(err, &sqlErr) {
+		return false
+	}
+	return sqlErr.ExtendedCode == sqlite3.ErrConstraintUnique ||
+		sqlErr.ExtendedCode == sqlite3.ErrConstraintPrimaryKey
+}
 
 type migrationFn = func(*sql.Tx) error
 
