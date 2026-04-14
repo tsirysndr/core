@@ -60,7 +60,7 @@ func findIssueReferences(e Execer, refLinks []models.ReferenceLink) ([]syntax.AT
 			on r.did = inp.owner_did
 				and r.name = inp.name
 		join issues i
-			on i.repo_at = r.at_uri
+			on i.repo_did = r.repo_did
 				and i.issue_id = inp.issue_id
 		left join issue_comments c
 			on inp.comment_id is not null
@@ -131,11 +131,11 @@ func findPullReferences(e Execer, refLinks []models.ReferenceLink) ([]syntax.ATU
 			on r.did = inp.owner_did
 				and r.name = inp.name
 		join pulls p
-			on p.repo_at = r.at_uri
+			on p.repo_did = r.repo_did
 				and p.pull_id = inp.pull_id
 		left join pull_comments c
 			on inp.comment_id is not null
-				and c.repo_at = r.at_uri and c.pull_id = p.pull_id
+				and c.repo_did = p.repo_did and c.pull_id = p.pull_id
 				and c.id = inp.comment_id
 		`,
 		strings.Join(vals, ","),
@@ -319,7 +319,7 @@ func getIssueBacklinks(e Execer, aturis []syntax.ATURI) ([]models.RichReferenceL
 			`select r.did, r.name, i.issue_id, i.title, i.open
 			from issues i
 			join repos r
-				on r.at_uri = i.repo_at
+				on r.repo_did = i.repo_did
 			where (i.did, i.rkey) in (%s)`,
 			strings.Join(vals, ","),
 		),
@@ -357,7 +357,7 @@ func getIssueCommentBacklinks(e Execer, target syntax.ATURI, aturis []syntax.ATU
 			join issues i
 				on i.at_uri = c.issue_at
 			join repos r
-				on r.at_uri = i.repo_at
+				on r.repo_did = i.repo_did
 			where %s and %s`,
 			filter.Condition(),
 			exclude.Condition(),
@@ -401,7 +401,7 @@ func getPullBacklinks(e Execer, aturis []syntax.ATURI) ([]models.RichReferenceLi
 			`select r.did, r.name, p.pull_id, p.title, p.state
 			from pulls p
 			join repos r
-				on r.at_uri = p.repo_at
+				on r.repo_did = p.repo_did
 			where (p.owner_did, p.rkey) in (%s)`,
 			strings.Join(vals, ","),
 		),
@@ -437,9 +437,9 @@ func getPullCommentBacklinks(e Execer, target syntax.ATURI, aturis []syntax.ATUR
 			`select r.did, r.name, p.pull_id, c.id, p.title, p.state
 			from repos r
 			join pulls p
-				on r.at_uri = p.repo_at
+				on r.repo_did = p.repo_did
 			join pull_comments c
-				on r.at_uri = c.repo_at and p.pull_id = c.pull_id
+				on p.repo_did = c.repo_did and p.pull_id = c.pull_id
 			where %s and %s`,
 			filter.Condition(),
 			exclude.Condition(),

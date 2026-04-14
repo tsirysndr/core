@@ -11,7 +11,7 @@ import (
 func AddSiteDeploy(e Execer, deploy *models.SiteDeploy) error {
 	result, err := e.Exec(`
 		insert into site_deploys (
-			repo_at,
+			repo_did,
 			branch,
 			dir,
 			commit_sha,
@@ -20,7 +20,7 @@ func AddSiteDeploy(e Execer, deploy *models.SiteDeploy) error {
 			error
 		) values (?, ?, ?, ?, ?, ?, ?)
 	`,
-		deploy.RepoAt,
+		deploy.RepoDid,
 		deploy.Branch,
 		deploy.Dir,
 		deploy.CommitSHA,
@@ -42,7 +42,7 @@ func AddSiteDeploy(e Execer, deploy *models.SiteDeploy) error {
 }
 
 // GetSiteDeploys returns recent deploy records for a repository, newest first.
-func GetSiteDeploys(e Execer, repoAt string, limit int) ([]models.SiteDeploy, error) {
+func GetSiteDeploys(e Execer, repoDid string, limit int) ([]models.SiteDeploy, error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -50,7 +50,7 @@ func GetSiteDeploys(e Execer, repoAt string, limit int) ([]models.SiteDeploy, er
 	rows, err := e.Query(`
 		select
 			id,
-			repo_at,
+			repo_did,
 			branch,
 			dir,
 			commit_sha,
@@ -59,10 +59,10 @@ func GetSiteDeploys(e Execer, repoAt string, limit int) ([]models.SiteDeploy, er
 			error,
 			created_at
 		from site_deploys
-		where repo_at = ?
+		where repo_did = ?
 		order by created_at desc
 		limit ?
-	`, repoAt, limit)
+	`, repoDid, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query site deploys: %w", err)
 	}
@@ -75,7 +75,7 @@ func GetSiteDeploys(e Execer, repoAt string, limit int) ([]models.SiteDeploy, er
 
 		if err := rows.Scan(
 			&d.Id,
-			&d.RepoAt,
+			&d.RepoDid,
 			&d.Branch,
 			&d.Dir,
 			&d.CommitSHA,

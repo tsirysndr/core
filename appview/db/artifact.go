@@ -16,7 +16,7 @@ func AddArtifact(e Execer, artifact models.Artifact) error {
 		`insert or ignore into artifacts (
 			did,
 			rkey,
-			repo_at,
+			repo_did,
 			tag,
 			created,
 			blob_cid,
@@ -27,7 +27,7 @@ func AddArtifact(e Execer, artifact models.Artifact) error {
 		values (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		artifact.Did,
 		artifact.Rkey,
-		artifact.RepoAt,
+		artifact.RepoDid,
 		artifact.Tag[:],
 		artifact.CreatedAt.Format(time.RFC3339),
 		artifact.BlobCid.String(),
@@ -56,7 +56,7 @@ func GetArtifact(e Execer, filters ...orm.Filter) ([]models.Artifact, error) {
 	query := fmt.Sprintf(`select
 			did,
 			rkey,
-			repo_at,
+			repo_did,
 			tag,
 			created,
 			blob_cid,
@@ -82,7 +82,7 @@ func GetArtifact(e Execer, filters ...orm.Filter) ([]models.Artifact, error) {
 		if err := rows.Scan(
 			&artifact.Did,
 			&artifact.Rkey,
-			&artifact.RepoAt,
+			&artifact.RepoDid,
 			&tag,
 			&createdAt,
 			&blobCid,

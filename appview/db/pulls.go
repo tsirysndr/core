@@ -30,13 +30,13 @@ func comparePullSource(existing, new *models.PullSource) bool {
 	if existing.Branch != new.Branch {
 		return false
 	}
-	if existing.RepoAt == nil && new.RepoAt == nil {
+	if existing.RepoDid == nil && new.RepoDid == nil {
 		return true
 	}
-	if existing.RepoAt == nil || new.RepoAt == nil {
+	if existing.RepoDid == nil || new.RepoDid == nil {
 		return false
 	}
-	return *existing.RepoAt == *new.RepoAt
+	return *existing.RepoDid == *new.RepoDid
 }
 
 func compareSubmissions(existing, new []*models.PullSubmission) bool {
@@ -60,9 +60,9 @@ func compareSubmissions(existing, new []*models.PullSubmission) bool {
 func PutPull(tx *sql.Tx, pull *models.Pull) error {
 	// ensure sequence exists
 	_, err := tx.Exec(`
-		insert or ignore into repo_pull_seqs (repo_at, next_pull_id)
+		insert or ignore into repo_pull_seqs (repo_did, next_pull_id)
 		values (?, 1)
-		`, pull.RepoAt)
+		`, pull.RepoDid)
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func PutPull(tx *sql.Tx, pull *models.Pull) error {
 		if existingPull.Title == pull.Title &&
 			existingPull.Body == pull.Body &&
 			existingPull.TargetBranch == pull.TargetBranch &&
-			existingPull.RepoAt == pull.RepoAt &&
+			existingPull.RepoDid == pull.RepoDid &&
 			dependentOnEqual &&
 			pullSourceEqual &&
 			submissionsEqual {
@@ -119,9 +119,9 @@ func PutPull(tx *sql.Tx, pull *models.Pull) error {
 
 func createNewPull(tx *sql.Tx, pull *models.Pull) error {
 	_, err := tx.Exec(`
-		insert or ignore into repo_pull_seqs (repo_at, next_pull_id)
+		insert or ignore into repo_pull_seqs (repo_did, next_pull_id)
 		values (?, 1)
-		`, pull.RepoAt)
+		`, pull.RepoDid)
 	if err != nil {
 		return err
 	}
@@ -130,9 +130,9 @@ func createNewPull(tx *sql.Tx, pull *models.Pull) error {
 	err = tx.QueryRow(`
 		update repo_pull_seqs
 		set next_pull_id = next_pull_id + 1
-		where repo_at = ?
+		where repo_did = ?
 		returning next_pull_id - 1
-		`, pull.RepoAt).Scan(&nextId)
+		`, pull.RepoDid).Scan(&nextId)
 	if err != nil {
 		return err
 	}
@@ -140,19 +140,19 @@ func createNewPull(tx *sql.Tx, pull *models.Pull) error {
 	pull.PullId = nextId
 	pull.State = models.PullOpen
 
-	var sourceBranch, sourceRepoAt *string
+	var sourceBranch, sourceRepoDid *string
 	if pull.PullSource != nil {
 		sourceBranch = &pull.PullSource.Branch
-		if pull.PullSource.RepoAt != nil {
-			x := pull.PullSource.RepoAt.String()
-			sourceRepoAt = &x
+		if pull.PullSource.RepoDid != nil {
+			x := string(*pull.PullSource.RepoDid)
+			sourceRepoDid = &x
 		}
 	}
 
 	result, err := tx.Exec(
 		`
 		insert into pulls (
-			repo_at,
+			repo_did,
 			owner_did,
 			pull_id,
 			title,
@@ -162,10 +162,10 @@ func createNewPull(tx *sql.Tx, pull *models.Pull) error {
 			state,
 			dependent_on,
 			source_branch,
-			source_repo_at
+			source_repo_did
 		)
 		values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		pull.RepoAt,
+		pull.RepoDid,
 		pull.OwnerDid,
 		pull.PullId,
 		pull.Title,
@@ -175,7 +175,7 @@ func createNewPull(tx *sql.Tx, pull *models.Pull) error {
 		pull.State,
 		pull.DependentOn,
 		sourceBranch,
-		sourceRepoAt,
+		sourceRepoDid,
 	)
 	if err != nil {
 		return err
@@ -224,12 +224,12 @@ func createNewPull(tx *sql.Tx, pull *models.Pull) error {
 }
 
 func updatePull(tx *sql.Tx, pull *models.Pull, existingPull *models.Pull) error {
-	var sourceBranch, sourceRepoAt *string
+	var sourceBranch, sourceRepoDid *string
 	if pull.PullSource != nil {
 		sourceBranch = &pull.PullSource.Branch
-		if pull.PullSource.RepoAt != nil {
-			x := pull.PullSource.RepoAt.String()
-			sourceRepoAt = &x
+		if pull.PullSource.RepoDid != nil {
+			x := string(*pull.PullSource.RepoDid)
+			sourceRepoDid = &x
 		}
 	}
 
@@ -240,9 +240,9 @@ func updatePull(tx *sql.Tx, pull *models.Pull, existingPull *models.Pull) error 
 			target_branch = ?,
 			dependent_on = ?,
 			source_branch = ?,
-			source_repo_at = ?
+			source_repo_did = ?
 		where owner_did = ? and rkey = ?
-	`, pull.Title, pull.Body, pull.TargetBranch, pull.DependentOn, sourceBranch, sourceRepoAt, pull.OwnerDid, pull.Rkey)
+	`, pull.Title, pull.Body, pull.TargetBranch, pull.DependentOn, sourceBranch, sourceRepoDid, pull.OwnerDid, pull.Rkey)
 	if err != nil {
 		return err
 	}
@@ -283,9 +283,9 @@ func updatePull(tx *sql.Tx, pull *models.Pull, existingPull *models.Pull) error 
 	return nil
 }
 
-func NextPullId(e Execer, repoAt syntax.ATURI) (int, error) {
+func NextPullId(e Execer, repoDid string) (int, error) {
 	var pullId int
-	err := e.QueryRow(`select next_pull_id from repo_pull_seqs where repo_at = ?`, repoAt).Scan(&pullId)
+	err := e.QueryRow(`select next_pull_id from repo_pull_seqs where repo_did = ?`, repoDid).Scan(&pullId)
 	return pullId - 1, err
 }
 
@@ -316,7 +316,7 @@ func GetPullsPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 		select
 			id,
 			owner_did,
-			repo_at,
+			repo_did,
 			pull_id,
 			created,
 			title,
@@ -325,7 +325,7 @@ func GetPullsPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 			body,
 			rkey,
 			source_branch,
-			source_repo_at,
+			source_repo_did,
 			dependent_on
 		from
 			pulls
@@ -344,11 +344,11 @@ func GetPullsPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 	for rows.Next() {
 		var pull models.Pull
 		var createdAt string
-		var sourceBranch, sourceRepoAt, dependentOn sql.NullString
+		var sourceBranch, sourceRepoDid, dependentOn sql.NullString
 		err := rows.Scan(
 			&pull.ID,
 			&pull.OwnerDid,
-			&pull.RepoAt,
+			&pull.RepoDid,
 			&pull.PullId,
 			&createdAt,
 			&pull.Title,
@@ -357,7 +357,7 @@ func GetPullsPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 			&pull.Body,
 			&pull.Rkey,
 			&sourceBranch,
-			&sourceRepoAt,
+			&sourceRepoDid,
 			&dependentOn,
 		)
 		if err != nil {
@@ -374,12 +374,12 @@ func GetPullsPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 			pull.PullSource = &models.PullSource{
 				Branch: sourceBranch.String,
 			}
-			if sourceRepoAt.Valid {
-				sourceRepoAtParsed, err := syntax.ParseATURI(sourceRepoAt.String)
+			if sourceRepoDid.Valid {
+				sourceRepoDidParsed, err := syntax.ParseDID(sourceRepoDid.String)
 				if err != nil {
 					return nil, err
 				}
-				pull.PullSource.RepoAt = &sourceRepoAtParsed
+				pull.PullSource.RepoDid = &sourceRepoDidParsed
 			}
 		}
 
@@ -417,32 +417,31 @@ func GetPullsPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 		}
 	}
 
-	// build up reverse mappings: p.Repo and p.PullSource
-	var repoAts []syntax.ATURI
+	// build up reverse mappings: p.Repo and p.PullSource.Repo
+	var repoDids []syntax.DID
 	for _, p := range pulls {
-		repoAts = append(repoAts, p.RepoAt)
-		if p.PullSource != nil && p.PullSource.RepoAt != nil {
-			repoAts = append(repoAts, *p.PullSource.RepoAt)
+		repoDids = append(repoDids, p.RepoDid)
+		if p.PullSource != nil && p.PullSource.RepoDid != nil {
+			repoDids = append(repoDids, *p.PullSource.RepoDid)
 		}
 	}
 
-	repos, err := GetRepos(e, orm.FilterIn("at_uri", repoAts))
+	repos, err := GetRepos(e, orm.FilterIn("repo_did", repoDids))
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("failed to get source repos: %w", err)
+		return nil, fmt.Errorf("failed to get repos: %w", err)
 	}
 
-	repoMap := make(map[syntax.ATURI]*models.Repo)
+	repoMap := make(map[syntax.DID]*models.Repo)
 	for _, r := range repos {
-		repoMap[r.RepoAt()] = &r
+		repoMap[syntax.DID(r.RepoDid)] = &r
 	}
 
 	for _, p := range pulls {
-		if repo, ok := repoMap[p.RepoAt]; ok {
+		if repo, ok := repoMap[p.RepoDid]; ok {
 			p.Repo = repo
 		}
-
-		if p.PullSource != nil && p.PullSource.RepoAt != nil {
-			if sourceRepo, ok := repoMap[*p.PullSource.RepoAt]; ok {
+		if p.PullSource != nil && p.PullSource.RepoDid != nil {
+			if sourceRepo, ok := repoMap[*p.PullSource.RepoDid]; ok {
 				p.PullSource.Repo = sourceRepo
 			}
 		}
@@ -625,7 +624,7 @@ func GetPullComments(e Execer, filters ...orm.Filter) ([]models.PullComment, err
 			id,
 			pull_id,
 			submission_id,
-			repo_at,
+			repo_did,
 			owner_did,
 			comment_at,
 			body,
@@ -651,7 +650,7 @@ func GetPullComments(e Execer, filters ...orm.Filter) ([]models.PullComment, err
 			&comment.ID,
 			&comment.PullId,
 			&comment.SubmissionId,
-			&comment.RepoAt,
+			&comment.RepoDid,
 			&comment.OwnerDid,
 			&comment.CommentAt,
 			&comment.Body,
@@ -705,7 +704,7 @@ func GetPullsByOwnerDid(e Execer, did, timeframe string) ([]models.Pull, error) 
 	rows, err := e.Query(`
 			select
 				p.owner_did,
-				p.repo_at,
+				p.repo_did,
 				p.pull_id,
 				p.created,
 				p.title,
@@ -718,7 +717,7 @@ func GetPullsByOwnerDid(e Execer, did, timeframe string) ([]models.Pull, error) 
 			from
 				pulls p
 			join
-				repos r on p.repo_at = r.at_uri
+				repos r on p.repo_did = r.repo_did
 			where
 				p.owner_did = ? and p.created >= date ('now', ?)
 			order by
@@ -734,7 +733,7 @@ func GetPullsByOwnerDid(e Execer, did, timeframe string) ([]models.Pull, error) 
 		var pullCreatedAt, repoCreatedAt string
 		err := rows.Scan(
 			&pull.OwnerDid,
-			&pull.RepoAt,
+			&pull.RepoDid,
 			&pull.PullId,
 			&pullCreatedAt,
 			&pull.Title,
@@ -774,11 +773,11 @@ func GetPullsByOwnerDid(e Execer, did, timeframe string) ([]models.Pull, error) 
 }
 
 func NewPullComment(tx *sql.Tx, comment *models.PullComment) (int64, error) {
-	query := `insert into pull_comments (owner_did, repo_at, submission_id, comment_at, pull_id, body) values (?, ?, ?, ?, ?, ?)`
+	query := `insert into pull_comments (owner_did, repo_did, submission_id, comment_at, pull_id, body) values (?, ?, ?, ?, ?, ?)`
 	res, err := tx.Exec(
 		query,
 		comment.OwnerDid,
-		comment.RepoAt,
+		comment.RepoDid,
 		comment.SubmissionId,
 		comment.CommentAt,
 		comment.PullId,
@@ -888,7 +887,7 @@ func SetDependentOn(e Execer, dependentOn syntax.ATURI, filters ...orm.Filter) e
 	return err
 }
 
-func GetPullCount(e Execer, repoAt syntax.ATURI) (models.PullCount, error) {
+func GetPullCount(e Execer, repoDid string) (models.PullCount, error) {
 	row := e.QueryRow(`
 		select
 			count(case when state = ? then 1 end) as open_count,
@@ -896,12 +895,12 @@ func GetPullCount(e Execer, repoAt syntax.ATURI) (models.PullCount, error) {
 			count(case when state = ? then 1 end) as closed_count,
 			count(case when state = ? then 1 end) as deleted_count
 		from pulls
-		where repo_at = ?`,
+		where repo_did = ?`,
 		models.PullOpen,
 		models.PullMerged,
 		models.PullClosed,
 		models.PullAbandoned,
-		repoAt,
+		repoDid,
 	)
 
 	var count models.PullCount

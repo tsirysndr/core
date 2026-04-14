@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"sort"
 
-	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pages"
@@ -48,7 +47,7 @@ func (s *State) GoodFirstIssues(w http.ResponseWriter, r *http.Request) {
 
 	repoUris := make([]string, 0, len(repoLabels))
 	for _, rl := range repoLabels {
-		repoUris = append(repoUris, rl.RepoAt.String())
+		repoUris = append(repoUris, string(rl.RepoDid))
 	}
 
 	allIssues, err := db.GetIssuesPaginated(
@@ -56,7 +55,7 @@ func (s *State) GoodFirstIssues(w http.ResponseWriter, r *http.Request) {
 		pagination.Page{
 			Limit: 500,
 		},
-		orm.FilterIn("repo_at", repoUris),
+		orm.FilterIn("repo_did", repoUris),
 		orm.FilterEq("open", 1),
 	)
 	if err != nil {
@@ -72,12 +71,12 @@ func (s *State) GoodFirstIssues(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	repoGroups := make(map[syntax.ATURI]*models.RepoGroup)
+	repoGroups := make(map[string]*models.RepoGroup)
 	for _, issue := range goodFirstIssues {
-		if group, exists := repoGroups[issue.Repo.RepoAt()]; exists {
+		if group, exists := repoGroups[issue.Repo.RepoDid]; exists {
 			group.Issues = append(group.Issues, issue)
 		} else {
-			repoGroups[issue.Repo.RepoAt()] = &models.RepoGroup{
+			repoGroups[issue.Repo.RepoDid] = &models.RepoGroup{
 				Repo:   issue.Repo,
 				Issues: []models.Issue{issue},
 			}

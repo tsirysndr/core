@@ -19,9 +19,9 @@ import (
 func PutIssue(tx *sql.Tx, issue *models.Issue) error {
 	// ensure sequence exists
 	_, err := tx.Exec(`
-		insert or ignore into repo_issue_seqs (repo_at, next_issue_id)
+		insert or ignore into repo_issue_seqs (repo_did, next_issue_id)
 		values (?, 1)
-	`, issue.RepoAt)
+	`, issue.RepoDid)
 	if err != nil {
 		return err
 	}
@@ -57,19 +57,19 @@ func createNewIssue(tx *sql.Tx, issue *models.Issue) error {
 	err := tx.QueryRow(`
 		update repo_issue_seqs
 		set next_issue_id = next_issue_id + 1
-		where repo_at = ?
+		where repo_did = ?
 		returning next_issue_id - 1
-	`, issue.RepoAt).Scan(&newIssueId)
+	`, issue.RepoDid).Scan(&newIssueId)
 	if err != nil {
 		return err
 	}
 
 	// insert new issue
 	row := tx.QueryRow(`
-		insert into issues (repo_at, did, rkey, issue_id, title, body)
+		insert into issues (repo_did, did, rkey, issue_id, title, body)
 		values (?, ?, ?, ?, ?, ?)
 		returning rowid, issue_id
-	`, issue.RepoAt, issue.Did, issue.Rkey, newIssueId, issue.Title, issue.Body)
+	`, issue.RepoDid, issue.Did, issue.Rkey, newIssueId, issue.Title, issue.Body)
 
 	err = row.Scan(&issue.Id, &issue.IssueId)
 	if err != nil {
@@ -132,7 +132,7 @@ func GetIssuesPaginated(e Execer, page pagination.Page, filters ...orm.Filter) (
 				id,
 				did,
 				rkey,
-				repo_at,
+				repo_did,
 				issue_id,
 				title,
 				body,
@@ -166,7 +166,7 @@ func GetIssuesPaginated(e Execer, page pagination.Page, filters ...orm.Filter) (
 			&issue.Id,
 			&issue.Did,
 			&issue.Rkey,
-			&issue.RepoAt,
+			&issue.RepoDid,
 			&issue.IssueId,
 			&issue.Title,
 			&issue.Body,
@@ -201,23 +201,23 @@ func GetIssuesPaginated(e Execer, page pagination.Page, filters ...orm.Filter) (
 	}
 
 	// collect reverse repos
-	repoAts := make([]string, 0, len(issueMap)) // or just []string{}
+	repoDids := make([]string, 0, len(issueMap))
 	for _, issue := range issueMap {
-		repoAts = append(repoAts, string(issue.RepoAt))
+		repoDids = append(repoDids, string(issue.RepoDid))
 	}
 
-	repos, err := GetRepos(e, orm.FilterIn("at_uri", repoAts))
+	repos, err := GetRepos(e, orm.FilterIn("repo_did", repoDids))
 	if err != nil {
 		return nil, fmt.Errorf("failed to build repo mappings: %w", err)
 	}
 
 	repoMap := make(map[string]*models.Repo)
 	for i := range repos {
-		repoMap[string(repos[i].RepoAt())] = &repos[i]
+		repoMap[repos[i].RepoDid] = &repos[i]
 	}
 
 	for issueAt, i := range issueMap {
-		if r, ok := repoMap[string(i.RepoAt)]; ok {
+		if r, ok := repoMap[string(i.RepoDid)]; ok {
 			i.Repo = r
 		} else {
 			// do not show up the issue if the repo is deleted
@@ -274,11 +274,11 @@ func GetIssuesPaginated(e Execer, page pagination.Page, filters ...orm.Filter) (
 	return issues, nil
 }
 
-func GetIssue(e Execer, repoAt syntax.ATURI, issueId int) (*models.Issue, error) {
+func GetIssue(e Execer, repoDid string, issueId int) (*models.Issue, error) {
 	issues, err := GetIssuesPaginated(
 		e,
 		pagination.Page{},
-		orm.FilterEq("repo_at", repoAt),
+		orm.FilterEq("repo_did", repoDid),
 		orm.FilterEq("issue_id", issueId),
 	)
 	if err != nil {
@@ -530,14 +530,14 @@ func ReopenIssues(e Execer, filters ...orm.Filter) error {
 	return err
 }
 
-func GetIssueCount(e Execer, repoAt syntax.ATURI) (models.IssueCount, error) {
+func GetIssueCount(e Execer, repoDid string) (models.IssueCount, error) {
 	row := e.QueryRow(`
 		select
 			count(case when open = 1 then 1 end) as open_count,
 			count(case when open = 0 then 1 end) as closed_count
 		from issues
-		where repo_at = ?`,
-		repoAt,
+		where repo_did = ?`,
+		repoDid,
 	)
 
 	var count models.IssueCount

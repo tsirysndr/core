@@ -24,7 +24,7 @@ func GetRepoLanguages(e Execer, filters ...orm.Filter) ([]models.RepoLanguage, e
 	}
 
 	query := fmt.Sprintf(
-		`select id, repo_at, ref, is_default_ref, language, bytes from repo_languages %s`,
+		`select id, repo_did, ref, is_default_ref, language, bytes from repo_languages %s`,
 		whereClause,
 	)
 	rows, err := e.Query(query, args...)
@@ -40,7 +40,7 @@ func GetRepoLanguages(e Execer, filters ...orm.Filter) ([]models.RepoLanguage, e
 
 		err := rows.Scan(
 			&rl.Id,
-			&rl.RepoAt,
+			&rl.RepoDid,
 			&rl.Ref,
 			&isDefaultRef,
 			&rl.Language,
@@ -65,7 +65,7 @@ func GetRepoLanguages(e Execer, filters ...orm.Filter) ([]models.RepoLanguage, e
 
 func InsertRepoLanguages(e Execer, langs []models.RepoLanguage) error {
 	stmt, err := e.Prepare(
-		"insert or replace into repo_languages (repo_at, ref, is_default_ref, language, bytes) values (?, ?, ?, ?, ?)",
+		"insert or replace into repo_languages (repo_did, ref, is_default_ref, language, bytes) values (?, ?, ?, ?, ?)",
 	)
 	if err != nil {
 		return err
@@ -77,7 +77,7 @@ func InsertRepoLanguages(e Execer, langs []models.RepoLanguage) error {
 			isDefaultRef = 1
 		}
 
-		_, err := stmt.Exec(l.RepoAt, l.Ref, isDefaultRef, l.Language, l.Bytes)
+		_, err := stmt.Exec(l.RepoDid, l.Ref, isDefaultRef, l.Language, l.Bytes)
 		if err != nil {
 			return err
 		}
@@ -105,10 +105,10 @@ func DeleteRepoLanguages(e Execer, filters ...orm.Filter) error {
 	return err
 }
 
-func UpdateRepoLanguages(tx *sql.Tx, repoAt syntax.ATURI, ref string, langs []models.RepoLanguage) error {
+func UpdateRepoLanguages(tx *sql.Tx, repoDid syntax.DID, ref string, langs []models.RepoLanguage) error {
 	err := DeleteRepoLanguages(
 		tx,
-		orm.FilterEq("repo_at", repoAt),
+		orm.FilterEq("repo_did", repoDid),
 		orm.FilterEq("ref", ref),
 	)
 	if err != nil {

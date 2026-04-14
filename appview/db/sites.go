@@ -138,18 +138,18 @@ func ReleaseDomain(e Execer, did, domain string) error {
 }
 
 // GetRepoSiteConfig returns the site configuration for a repo, or nil if not configured.
-func GetRepoSiteConfig(e Execer, repoAt string) (*models.RepoSite, error) {
+func GetRepoSiteConfig(e Execer, repoDid string) (*models.RepoSite, error) {
 	row := e.QueryRow(`
-		select id, repo_at, branch, dir, is_index, created, updated
+		select id, repo_did, branch, dir, is_index, created, updated
 		from repo_sites
-		where repo_at = ?
-	`, repoAt)
+		where repo_did = ?
+	`, repoDid)
 
 	var s models.RepoSite
 	var isIndex int
 	var createdStr, updatedStr string
 
-	err := row.Scan(&s.ID, &s.RepoAt, &s.Branch, &s.Dir, &isIndex, &createdStr, &updatedStr)
+	err := row.Scan(&s.ID, &s.RepoDid, &s.Branch, &s.Dir, &isIndex, &createdStr, &updatedStr)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -173,37 +173,37 @@ func GetRepoSiteConfig(e Execer, repoAt string) (*models.RepoSite, error) {
 }
 
 // SetRepoSiteConfig inserts or replaces the site configuration for a repo.
-func SetRepoSiteConfig(e Execer, repoAt, branch, dir string, isIndex bool) error {
+func SetRepoSiteConfig(e Execer, repoDid, branch, dir string, isIndex bool) error {
 	isIndexInt := 0
 	if isIndex {
 		isIndexInt = 1
 	}
 
 	_, err := e.Exec(`
-		insert into repo_sites (repo_at, branch, dir, is_index, updated)
+		insert into repo_sites (repo_did, branch, dir, is_index, updated)
 		values (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-		on conflict(repo_at) do update set
+		on conflict(repo_did) do update set
 			branch   = excluded.branch,
 			dir      = excluded.dir,
 			is_index = excluded.is_index,
 			updated  = excluded.updated
-	`, repoAt, branch, dir, isIndexInt)
+	`, repoDid, branch, dir, isIndexInt)
 	return err
 }
 
 // DeleteRepoSiteConfig removes the site configuration for a repo.
-func DeleteRepoSiteConfig(e Execer, repoAt string) error {
-	_, err := e.Exec(`delete from repo_sites where repo_at = ?`, repoAt)
+func DeleteRepoSiteConfig(e Execer, repoDid string) error {
+	_, err := e.Exec(`delete from repo_sites where repo_did = ?`, repoDid)
 	return err
 }
 
 // GetRepoSiteConfigsForDid returns all site configurations for repos owned by a DID.
-// RepoName is populated on each returned RepoSite.
+// RepoRkey is populated on each returned RepoSite.
 func GetRepoSiteConfigsForDid(e Execer, did string) ([]*models.RepoSite, error) {
 	rows, err := e.Query(`
-		select rs.id, rs.repo_at, r.name, rs.branch, rs.dir, rs.is_index, rs.created, rs.updated
+		select rs.id, rs.repo_did, r.rkey, rs.branch, rs.dir, rs.is_index, rs.created, rs.updated
 		from repo_sites rs
-		join repos r on r.at_uri = rs.repo_at
+		join repos r on r.repo_did = rs.repo_did
 		where r.did = ?
 	`, did)
 	if err != nil {
@@ -216,7 +216,7 @@ func GetRepoSiteConfigsForDid(e Execer, did string) ([]*models.RepoSite, error) 
 		var s models.RepoSite
 		var isIndex int
 		var createdStr, updatedStr string
-		if err := rows.Scan(&s.ID, &s.RepoAt, &s.RepoName, &s.Branch, &s.Dir, &isIndex, &createdStr, &updatedStr); err != nil {
+		if err := rows.Scan(&s.ID, &s.RepoDid, &s.RepoRkey, &s.Branch, &s.Dir, &isIndex, &createdStr, &updatedStr); err != nil {
 			return nil, err
 		}
 		s.IsIndex = isIndex != 0
@@ -237,34 +237,34 @@ func GetRepoSiteConfigsForDid(e Execer, did string) ([]*models.RepoSite, error) 
 func DeleteRepoSiteConfigsForDid(e Execer, did string) error {
 	_, err := e.Exec(`
 		delete from repo_sites
-		where repo_at in (
-			select at_uri from repos where did = ?
+		where repo_did in (
+			select repo_did from repos where did = ?
 		)
 	`, did)
 	return err
 }
 
-// GetIndexRepoAtForDid returns the repo_at of the repo that currently holds
-// is_index=1 for the given DID, excluding excludeRepoAt (the current repo).
+// GetIndexRepoDidForDid returns the repo_did of the repo that currently holds
+// is_index=1 for the given DID, excluding excludeRepoDid (the current repo).
 // Returns "", nil if no other repo is the index site.
-func GetIndexRepoAtForDid(e Execer, did, excludeRepoAt string) (string, error) {
+func GetIndexRepoDidForDid(e Execer, did, excludeRepoDid string) (string, error) {
 	row := e.QueryRow(`
-		select rs.repo_at
+		select rs.repo_did
 		from repo_sites rs
-		join repos r on r.at_uri = rs.repo_at
+		join repos r on r.repo_did = rs.repo_did
 		where r.did = ?
 		  and rs.is_index = 1
-		  and rs.repo_at != ?
+		  and rs.repo_did != ?
 		limit 1
-	`, did, excludeRepoAt)
+	`, did, excludeRepoDid)
 
-	var repoAt string
-	err := row.Scan(&repoAt)
+	var repoDid string
+	err := row.Scan(&repoDid)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
 	if err != nil {
 		return "", err
 	}
-	return repoAt, nil
+	return repoDid, nil
 }

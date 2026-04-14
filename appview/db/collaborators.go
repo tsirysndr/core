@@ -11,8 +11,8 @@ import (
 
 func AddCollaborator(e Execer, c models.Collaborator) error {
 	_, err := e.Exec(
-		`insert into collaborators (did, rkey, subject_did, repo_at) values (?, ?, ?, ?);`,
-		c.Did, c.Rkey, c.SubjectDid, c.RepoAt,
+		`insert into collaborators (did, rkey, subject_did, repo_did) values (?, ?, ?, ?);`,
+		c.Did, c.Rkey, c.SubjectDid, string(c.RepoDid),
 	)
 	return err
 }
@@ -37,29 +37,29 @@ func DeleteCollaborator(e Execer, filters ...orm.Filter) error {
 }
 
 func CollaboratingIn(e Execer, collaborator string) ([]models.Repo, error) {
-	rows, err := e.Query(`select repo_at from collaborators where subject_did = ?`, collaborator)
+	rows, err := e.Query(`select repo_did from collaborators where subject_did = ?`, collaborator)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var repoAts []string
+	var repoDids []string
 	for rows.Next() {
-		var aturi string
-		err := rows.Scan(&aturi)
+		var repoDid string
+		err := rows.Scan(&repoDid)
 		if err != nil {
 			return nil, err
 		}
-		repoAts = append(repoAts, aturi)
+		repoDids = append(repoDids, repoDid)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if repoAts == nil {
+	if repoDids == nil {
 		return nil, nil
 	}
 
-	return GetRepos(e, orm.FilterIn("at_uri", repoAts))
+	return GetRepos(e, orm.FilterIn("repo_did", repoDids))
 }
 
 func GetCollaborators(e Execer, filters ...orm.Filter) ([]models.Collaborator, error) {
@@ -79,7 +79,7 @@ func GetCollaborators(e Execer, filters ...orm.Filter) ([]models.Collaborator, e
 			did,
 			rkey,
 			subject_did,
-			repo_at,
+			repo_did,
 			created
 		from collaborators %s`,
 		whereClause,
@@ -97,7 +97,7 @@ func GetCollaborators(e Execer, filters ...orm.Filter) ([]models.Collaborator, e
 			&collaborator.Did,
 			&collaborator.Rkey,
 			&collaborator.SubjectDid,
-			&collaborator.RepoAt,
+			&collaborator.RepoDid,
 			&createdAt,
 		); err != nil {
 			return nil, err

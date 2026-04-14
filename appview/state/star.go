@@ -1,6 +1,8 @@
 package state
 
 import (
+	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -11,9 +13,37 @@ import (
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pages"
-	"tangled.org/core/orm"
 	"tangled.org/core/tid"
 )
+
+func resolveStarSubject(d db.Execer, subjectUri syntax.ATURI) (models.StarSubjectType, string, *tangled.FeedStar_Subject, error) {
+	collection := subjectUri.Collection()
+
+	switch collection.String() {
+	case tangled.RepoNSID:
+		repo, err := db.GetRepoByAtUri(d, subjectUri.String())
+		if err != nil {
+			return "", "", nil, err
+		}
+		if repo.RepoDid == "" {
+			return "", "", nil, fmt.Errorf("repo has no DID: %s", subjectUri)
+		}
+		subject := &tangled.FeedStar_Subject{
+			FeedStar_Repo: &tangled.FeedStar_Repo{Did: repo.RepoDid},
+		}
+		return models.StarSubjectRepo, repo.RepoDid, subject, nil
+
+	case tangled.StringNSID:
+		uri := subjectUri.String()
+		subject := &tangled.FeedStar_Subject{
+			FeedStar_String: &tangled.FeedStar_String{Uri: uri},
+		}
+		return models.StarSubjectString, uri, subject, nil
+
+	default:
+		return "", "", nil, fmt.Errorf("unsupported star subject collection: %s", collection)
+	}
+}
 
 func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "Star")
@@ -31,6 +61,12 @@ func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	subjectType, subjectKey, starSubject, err := resolveStarSubject(s.db, subjectUri)
+	if err != nil {
+		log.Println("failed to resolve star subject", err)
+		return
+	}
+
 	client, err := s.oauth.AuthorizedClient(r)
 	if err != nil {
 		l.Error("failed to authorize client", "err", err)
@@ -44,14 +80,9 @@ func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 		createdAt := time.Now().Format(time.RFC3339)
 		rkey := tid.TID()
 
-		subjectStr := subjectUri.String()
 		starRecord := &tangled.FeedStar{
 			CreatedAt: createdAt,
-			Subject:   &subjectStr,
-		}
-		repo, err := db.GetRepo(s.db, orm.FilterEq("at_uri", subjectUri.String()))
-		if err == nil && repo.RepoDid != "" {
-			starRecord.SubjectDid = &repo.RepoDid
+			Subject:   starSubject,
 		}
 
 		resp, err := comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
@@ -67,9 +98,10 @@ func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 		l.Info("created atproto record", "uri", resp.Uri)
 
 		star := &models.Star{
-			Did:    currentUser.Did,
-			RepoAt: subjectUri,
-			Rkey:   rkey,
+			Did:         currentUser.Did,
+			SubjectType: subjectType,
+			Subject:     subjectKey,
+			Rkey:        rkey,
 		}
 
 		err = db.AddStar(s.db, star)
@@ -78,9 +110,9 @@ func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		starCount, err := db.GetStarCount(s.db, subjectUri)
+		starCount, err := db.GetStarCount(s.db, subjectType, subjectKey)
 		if err != nil {
-			l.Error("failed to get star count", "subjectUri", subjectUri, "err", err)
+			l.Error("failed to get star count", "subject", subjectKey, "err", err)
 		}
 
 		s.notifier.NewStar(r.Context(), star)
@@ -95,7 +127,7 @@ func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 		return
 	case http.MethodDelete:
 		// find the record in the db
-		star, err := db.GetStar(s.db, currentUser.Did, subjectUri)
+		star, err := db.GetStar(s.db, currentUser.Did, subjectKey)
 		if err != nil {
 			l.Error("failed to get star relationship", "err", err)
 			return
@@ -118,9 +150,9 @@ func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 			// this is not an issue, the firehose event might have already done this
 		}
 
-		starCount, err := db.GetStarCount(s.db, subjectUri)
+		starCount, err := db.GetStarCount(s.db, subjectType, subjectKey)
 		if err != nil {
-			l.Error("failed to get star count", "subjectUri", subjectUri, "err", err)
+			l.Error("failed to get star count", "subject", subjectKey, "err", err)
 			return
 		}
 
@@ -135,5 +167,4 @@ func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-
 }

@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/orm"
 )
@@ -28,7 +27,7 @@ func GetWebhooks(e Execer, filters ...orm.Filter) ([]models.Webhook, error) {
 	query := fmt.Sprintf(`
 		select
 			id,
-			repo_at,
+			repo_did,
 			url,
 			secret,
 			active,
@@ -55,7 +54,7 @@ func GetWebhooks(e Execer, filters ...orm.Filter) ([]models.Webhook, error) {
 
 		err := rows.Scan(
 			&wh.Id,
-			&wh.RepoAt,
+			&wh.RepoDid,
 			&wh.Url,
 			&secret,
 			&active,
@@ -119,9 +118,9 @@ func AddWebhook(e Execer, webhook *models.Webhook) error {
 	}
 
 	result, err := e.Exec(`
-		insert into webhooks (repo_at, url, secret, active, events)
+		insert into webhooks (repo_did, url, secret, active, events)
 		values (?, ?, ?, ?, ?)
-	`, webhook.RepoAt.String(), webhook.Url, webhook.Secret, active, eventsStr)
+	`, string(webhook.RepoDid), webhook.Url, webhook.Secret, active, eventsStr)
 
 	if err != nil {
 		return fmt.Errorf("failed to insert webhook: %w", err)
@@ -285,14 +284,14 @@ func GetWebhookDeliveries(e Execer, webhookId int64, limit int) ([]models.Webhoo
 }
 
 // GetWebhooksForRepo is a convenience function to get all webhooks for a repository
-func GetWebhooksForRepo(e Execer, repoAt syntax.ATURI) ([]models.Webhook, error) {
-	return GetWebhooks(e, orm.FilterEq("repo_at", repoAt.String()))
+func GetWebhooksForRepo(e Execer, repoDid string) ([]models.Webhook, error) {
+	return GetWebhooks(e, orm.FilterEq("repo_did", repoDid))
 }
 
 // GetActiveWebhooksForRepo returns only active webhooks for a repository
-func GetActiveWebhooksForRepo(e Execer, repoAt syntax.ATURI) ([]models.Webhook, error) {
+func GetActiveWebhooksForRepo(e Execer, repoDid string) ([]models.Webhook, error) {
 	return GetWebhooks(e,
-		orm.FilterEq("repo_at", repoAt.String()),
+		orm.FilterEq("repo_did", repoDid),
 		orm.FilterEq("active", 1),
 	)
 }

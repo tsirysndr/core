@@ -3,7 +3,6 @@ package db
 import (
 	"sort"
 
-	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pagination"
 	"tangled.org/core/orm"
@@ -101,18 +100,18 @@ func fetchStarStatuses(e Execer, loggedInUserDid string, repos []models.Repo) (m
 		return nil, nil
 	}
 
-	var repoAts []syntax.ATURI
+	var repoDids []string
 	for _, r := range repos {
-		repoAts = append(repoAts, r.RepoAt())
+		repoDids = append(repoDids, r.RepoDid)
 	}
 
-	return GetStarStatuses(e, loggedInUserDid, repoAts)
+	return GetStarStatuses(e, loggedInUserDid, repoDids)
 }
 
 func getRepoStarInfo(repo *models.Repo, starStatuses map[string]bool) (bool, int64) {
 	var isStarred bool
 	if starStatuses != nil {
-		isStarred = starStatuses[repo.RepoAt().String()]
+		isStarred = starStatuses[repo.RepoDid]
 	}
 
 	var starCount int64

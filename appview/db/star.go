@@ -1,42 +1,40 @@
 package db
 
 import (
-	"database/sql"
-	"errors"
 	"fmt"
 	"log"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pagination"
 	"tangled.org/core/orm"
 )
 
 func AddStar(e Execer, star *models.Star) error {
-	query := `insert or ignore into stars (did, subject_at, rkey) values (?, ?, ?)`
+	query := `insert or ignore into stars (did, subject_type, subject, rkey) values (?, ?, ?, ?)`
 	_, err := e.Exec(
 		query,
 		star.Did,
-		star.RepoAt.String(),
+		string(star.SubjectType),
+		star.Subject,
 		star.Rkey,
 	)
 	return err
 }
 
 // Get a star record
-func GetStar(e Execer, did string, subjectAt syntax.ATURI) (*models.Star, error) {
+func GetStar(e Execer, did string, subject string) (*models.Star, error) {
 	query := `
-	select did, subject_at, created, rkey
+	select did, subject_type, subject, created, rkey
 	from stars
-	where did = ? and subject_at = ?`
-	row := e.QueryRow(query, did, subjectAt)
+	where did = ? and subject = ?`
+	row := e.QueryRow(query, did, subject)
 
 	var star models.Star
 	var created string
-	err := row.Scan(&star.Did, &star.RepoAt, &created, &star.Rkey)
+	err := row.Scan(&star.Did, &star.SubjectType, &star.Subject, &created, &star.Rkey)
 	if err != nil {
 		return nil, err
 	}
@@ -52,15 +50,15 @@ func GetStar(e Execer, did string, subjectAt syntax.ATURI) (*models.Star, error)
 	return &star, nil
 }
 
-func GetStars(e Execer, subjectAt syntax.ATURI, page pagination.Page) ([]models.Star, error) {
+func GetStars(e Execer, subject string, page pagination.Page) ([]models.Star, error) {
 	query := `
-	select did, subject_at, created, rkey
+	select did, subject_type, subject, created, rkey
 	from stars
-	where subject_at = ?
+	where subject = ?
 	order by created desc
 	limit ? offset ?
     `
-	rows, err := e.Query(query, subjectAt, page.Limit, page.Offset)
+	rows, err := e.Query(query, subject, page.Limit, page.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +68,7 @@ func GetStars(e Execer, subjectAt syntax.ATURI, page pagination.Page) ([]models.
 	for rows.Next() {
 		var star models.Star
 		var created string
-		if err := rows.Scan(&star.Did, &star.RepoAt, &created, &star.Rkey); err != nil {
+		if err := rows.Scan(&star.Did, &star.SubjectType, &star.Subject, &created, &star.Rkey); err != nil {
 			return nil, err
 		}
 
@@ -85,8 +83,8 @@ func GetStars(e Execer, subjectAt syntax.ATURI, page pagination.Page) ([]models.
 }
 
 // Remove a star
-func DeleteStar(e Execer, did string, subjectAt syntax.ATURI) error {
-	_, err := e.Exec(`delete from stars where did = ? and subject_at = ?`, did, subjectAt)
+func DeleteStar(e Execer, did string, subject string) error {
+	_, err := e.Exec(`delete from stars where did = ? and subject = ?`, did, subject)
 	return err
 }
 
@@ -96,36 +94,38 @@ func DeleteStarByRkey(e Execer, did string, rkey string) error {
 	return err
 }
 
-func GetStarCount(e Execer, subjectAt syntax.ATURI) (int, error) {
+func GetStarCount(e Execer, subjectType models.StarSubjectType, subject string) (int, error) {
 	stars := 0
 	err := e.QueryRow(
-		`select count(did) from stars where subject_at = ?`, subjectAt).Scan(&stars)
+		`select count(did) from stars where subject_type = ? and subject = ?`,
+		string(subjectType), subject,
+	).Scan(&stars)
 	if err != nil {
 		return 0, err
 	}
 	return stars, nil
 }
 
-// getStarStatuses returns a map of repo URIs to star status for a given user
+// getStarStatuses returns a map of subjects to star status for a given user
 // This is an internal helper function to avoid N+1 queries
-func getStarStatuses(e Execer, userDid string, repoAts []syntax.ATURI) (map[string]bool, error) {
-	if len(repoAts) == 0 || userDid == "" {
+func getStarStatuses(e Execer, userDid string, subjects []string) (map[string]bool, error) {
+	if len(subjects) == 0 || userDid == "" {
 		return make(map[string]bool), nil
 	}
 
-	placeholders := make([]string, len(repoAts))
-	args := make([]any, len(repoAts)+1)
+	placeholders := make([]string, len(subjects))
+	args := make([]any, len(subjects)+1)
 	args[0] = userDid
 
-	for i, repoAt := range repoAts {
+	for i, subj := range subjects {
 		placeholders[i] = "?"
-		args[i+1] = repoAt.String()
+		args[i+1] = subj
 	}
 
 	query := fmt.Sprintf(`
-		SELECT subject_at
+		SELECT subject
 		FROM stars
-		WHERE did = ? AND subject_at IN (%s)
+		WHERE did = ? AND subject IN (%s)
 	`, strings.Join(placeholders, ","))
 
 	rows, err := e.Query(query, args...)
@@ -135,34 +135,34 @@ func getStarStatuses(e Execer, userDid string, repoAts []syntax.ATURI) (map[stri
 	defer rows.Close()
 
 	result := make(map[string]bool)
-	// Initialize all repos as not starred
-	for _, repoAt := range repoAts {
-		result[repoAt.String()] = false
+	// Initialize all subjects as not starred
+	for _, subj := range subjects {
+		result[subj] = false
 	}
 
-	// Mark starred repos as true
+	// Mark starred subjects as true
 	for rows.Next() {
-		var repoAt string
-		if err := rows.Scan(&repoAt); err != nil {
+		var subj string
+		if err := rows.Scan(&subj); err != nil {
 			return nil, err
 		}
-		result[repoAt] = true
+		result[subj] = true
 	}
 
 	return result, nil
 }
 
-func GetStarStatus(e Execer, userDid string, subjectAt syntax.ATURI) bool {
-	statuses, err := getStarStatuses(e, userDid, []syntax.ATURI{subjectAt})
+func GetStarStatus(e Execer, userDid string, subject string) bool {
+	statuses, err := getStarStatuses(e, userDid, []string{subject})
 	if err != nil {
 		return false
 	}
-	return statuses[subjectAt.String()]
+	return statuses[subject]
 }
 
-// GetStarStatuses returns a map of repo URIs to star status for a given user
-func GetStarStatuses(e Execer, userDid string, subjectAts []syntax.ATURI) (map[string]bool, error) {
-	return getStarStatuses(e, userDid, subjectAts)
+// GetStarStatuses returns a map of subjects to star status for a given user
+func GetStarStatuses(e Execer, userDid string, subjects []string) (map[string]bool, error) {
+	return getStarStatuses(e, userDid, subjects)
 }
 
 // GetRepoStars return a list of stars each holding target repository.
@@ -175,10 +175,9 @@ func GetRepoStars(e Execer, page pagination.Page, filters ...orm.Filter) ([]mode
 		args = append(args, filter.Arg()...)
 	}
 
-	whereClause := ""
-	if conditions != nil {
-		whereClause = " where " + strings.Join(conditions, " and ")
-	}
+	conditions = append(conditions, "subject_type = 'repo'")
+
+	whereClause := " where " + strings.Join(conditions, " and ")
 
 	pageClause := ""
 	if page.Limit != 0 {
@@ -186,7 +185,7 @@ func GetRepoStars(e Execer, page pagination.Page, filters ...orm.Filter) ([]mode
 	}
 
 	repoQuery := fmt.Sprintf(
-		`select did, subject_at, created, rkey
+		`select did, subject_type, subject, created, rkey
 		from stars
 		%s
 		order by created desc
@@ -204,7 +203,7 @@ func GetRepoStars(e Execer, page pagination.Page, filters ...orm.Filter) ([]mode
 	for rows.Next() {
 		var star models.Star
 		var created string
-		err := rows.Scan(&star.Did, &star.RepoAt, &created, &star.Rkey)
+		err := rows.Scan(&star.Did, &star.SubjectType, &star.Subject, &created, &star.Rkey)
 		if err != nil {
 			return nil, err
 		}
@@ -214,8 +213,7 @@ func GetRepoStars(e Execer, page pagination.Page, filters ...orm.Filter) ([]mode
 			star.Created = t
 		}
 
-		repoAt := string(star.RepoAt)
-		starMap[repoAt] = append(starMap[repoAt], star)
+		starMap[star.Subject] = append(starMap[star.Subject], star)
 	}
 
 	// populate *Repo in each star
@@ -230,14 +228,14 @@ func GetRepoStars(e Execer, page pagination.Page, filters ...orm.Filter) ([]mode
 		return nil, nil
 	}
 
-	repos, err := GetRepos(e, orm.FilterIn("at_uri", args))
+	repos, err := GetRepos(e, orm.FilterIn("repo_did", args))
 	if err != nil {
 		return nil, err
 	}
 
 	var repoStars []models.RepoStar
 	for _, r := range repos {
-		if stars, ok := starMap[string(r.RepoAt())]; ok {
+		if stars, ok := starMap[r.RepoDid]; ok {
 			for _, star := range stars {
 				repoStars = append(repoStars, models.RepoStar{
 					Star: star,
@@ -275,9 +273,7 @@ func CountStars(e Execer, filters ...orm.Filter) (int64, error) {
 
 	repoQuery := fmt.Sprintf(`select count(1) from stars %s`, whereClause)
 	var count int64
-	err := e.QueryRow(repoQuery, args...).Scan(&count)
-
-	if !errors.Is(err, sql.ErrNoRows) && err != nil {
+	if err := e.QueryRow(repoQuery, args...).Scan(&count); err != nil {
 		return 0, err
 	}
 
@@ -286,23 +282,25 @@ func CountStars(e Execer, filters ...orm.Filter) (int64, error) {
 
 // GetTopStarredReposLastWeek returns the top 8 most starred repositories from the last week
 func GetTopStarredReposLastWeek(e Execer) ([]models.Repo, error) {
-	// first, get the top repo URIs by star count from the last week
+	// first, get the top repo DIDs by star count from the last week
 	query := `
 		with recent_starred_repos as (
-			select distinct subject_at
+			select distinct subject
 			from stars
 			where created >= datetime('now', '-7 days')
+			  and subject_type = 'repo'
 		),
 		repo_star_counts as (
 			select
-				s.subject_at,
+				s.subject,
 				count(*) as stars_gained_last_week
 			from stars s
-			join recent_starred_repos rsr on s.subject_at = rsr.subject_at
+			join recent_starred_repos rsr on s.subject = rsr.subject
 			where s.created >= datetime('now', '-7 days')
-			group by s.subject_at
+			  and s.subject_type = 'repo'
+			group by s.subject
 		)
-		select rsc.subject_at
+		select rsc.subject
 		from repo_star_counts rsc
 		order by rsc.stars_gained_last_week desc
 		limit 5
@@ -314,26 +312,26 @@ func GetTopStarredReposLastWeek(e Execer) ([]models.Repo, error) {
 	}
 	defer rows.Close()
 
-	var repoUris []string
+	var repoDids []string
 	for rows.Next() {
-		var repoUri string
-		err := rows.Scan(&repoUri)
+		var repoDid string
+		err := rows.Scan(&repoDid)
 		if err != nil {
 			return nil, err
 		}
-		repoUris = append(repoUris, repoUri)
+		repoDids = append(repoDids, repoDid)
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
-	if len(repoUris) == 0 {
+	if len(repoDids) == 0 {
 		return []models.Repo{}, nil
 	}
 
 	// get full repo data
-	repos, err := GetRepos(e, orm.FilterIn("at_uri", repoUris))
+	repos, err := GetRepos(e, orm.FilterIn("repo_did", repoDids))
 	if err != nil {
 		return nil, err
 	}
@@ -341,12 +339,12 @@ func GetTopStarredReposLastWeek(e Execer) ([]models.Repo, error) {
 	// sort repos by the original trending order
 	repoMap := make(map[string]models.Repo)
 	for _, repo := range repos {
-		repoMap[repo.RepoAt().String()] = repo
+		repoMap[repo.RepoDid] = repo
 	}
 
-	orderedRepos := make([]models.Repo, 0, len(repoUris))
-	for _, uri := range repoUris {
-		if repo, exists := repoMap[uri]; exists {
+	orderedRepos := make([]models.Repo, 0, len(repoDids))
+	for _, did := range repoDids {
+		if repo, exists := repoMap[did]; exists {
 			orderedRepos = append(orderedRepos, repo)
 		}
 	}

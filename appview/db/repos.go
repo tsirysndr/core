@@ -66,7 +66,7 @@ func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 	}
 	defer rows.Close()
 
-	repoMap := make(map[syntax.ATURI]*models.Repo)
+	repoMap := make(map[string]*models.Repo)
 	for rows.Next() {
 		var repo models.Repo
 		var createdAt string
@@ -116,7 +116,7 @@ func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 		}
 
 		repo.RepoStats = &models.RepoStats{}
-		repoMap[repo.RepoAt()] = &repo
+		repoMap[repo.RepoDid] = &repo
 	}
 
 	if err = rows.Err(); err != nil {
@@ -133,13 +133,13 @@ func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 	args = make([]any, len(repoMap))
 	i := 0
 	for _, r := range repoMap {
-		args[i] = r.RepoAt()
+		args[i] = r.RepoDid
 		i++
 	}
 
 	// get labels for all repos
 	labelsQuery := fmt.Sprintf(
-		`select repo_at, label_at from repo_labels where repo_at in (%s)`,
+		`select repo_did, label_at from repo_labels where repo_did in (%s)`,
 		inClause,
 	)
 
@@ -150,27 +150,27 @@ func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 	defer rows.Close()
 
 	for rows.Next() {
-		var repoat, labelat string
-		if err := rows.Scan(&repoat, &labelat); err != nil {
+		var repoDid, labelat string
+		if err := rows.Scan(&repoDid, &labelat); err != nil {
 			continue
 		}
-		if r, ok := repoMap[syntax.ATURI(repoat)]; ok {
+		if r, ok := repoMap[repoDid]; ok {
 			r.Labels = append(r.Labels, labelat)
 		}
 	}
 
 	// get primary language for all repos
 	languageQuery := fmt.Sprintf(`
-		select repo_at, language
+		select repo_did, language
 		from (
 			select
-				repo_at, language,
+				repo_did, language,
 				row_number() over (
-					partition by repo_at
+					partition by repo_did
 					order by bytes desc
 				) as rn
 			from repo_languages
-			where repo_at in (%s)
+			where repo_did in (%s)
 				and is_default_ref = 1
 				and language <> ''
 		)
@@ -184,12 +184,12 @@ func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 	defer rows.Close()
 
 	for rows.Next() {
-		var repoat, lang string
-		if err := rows.Scan(&repoat, &lang); err != nil {
+		var repoDid, lang string
+		if err := rows.Scan(&repoDid, &lang); err != nil {
 			log.Println("err", "err", err)
 			continue
 		}
-		if r, ok := repoMap[syntax.ATURI(repoat)]; ok {
+		if r, ok := repoMap[repoDid]; ok {
 			r.RepoStats.Language = lang
 		}
 	}
@@ -199,7 +199,7 @@ func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 
 	// get star counts
 	starCountQuery := fmt.Sprintf(
-		`select subject_at, count(1) from stars where subject_at in (%s) group by subject_at`,
+		`select subject, count(1) from stars where subject_type = 'repo' and subject in (%s) group by subject`,
 		inClause,
 	)
 
@@ -210,13 +210,13 @@ func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 	defer rows.Close()
 
 	for rows.Next() {
-		var repoat string
+		var repoDid string
 		var count int
-		if err := rows.Scan(&repoat, &count); err != nil {
+		if err := rows.Scan(&repoDid, &count); err != nil {
 			log.Println("err", "err", err)
 			continue
 		}
-		if r, ok := repoMap[syntax.ATURI(repoat)]; ok {
+		if r, ok := repoMap[repoDid]; ok {
 			r.RepoStats.StarCount = count
 		}
 	}
@@ -227,12 +227,12 @@ func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 	// get issue counts
 	issueCountQuery := fmt.Sprintf(`
 		select
-			repo_at,
+			repo_did,
 			count(case when open = 1 then 1 end) as open_count,
 			count(case when open = 0 then 1 end) as closed_count
 		from issues
-		where repo_at in (%s)
-		group by repo_at
+		where repo_did in (%s)
+		group by repo_did
 	`, inClause)
 
 	rows, err = e.Query(issueCountQuery, args...)
@@ -242,13 +242,13 @@ func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 	defer rows.Close()
 
 	for rows.Next() {
-		var repoat string
+		var repoDid string
 		var open, closed int
-		if err := rows.Scan(&repoat, &open, &closed); err != nil {
+		if err := rows.Scan(&repoDid, &open, &closed); err != nil {
 			log.Println("err", "err", err)
 			continue
 		}
-		if r, ok := repoMap[syntax.ATURI(repoat)]; ok {
+		if r, ok := repoMap[repoDid]; ok {
 			r.RepoStats.IssueCount.Open = open
 			r.RepoStats.IssueCount.Closed = closed
 		}
@@ -260,14 +260,14 @@ func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 	// get pull counts
 	pullCountQuery := fmt.Sprintf(`
 		select
-			repo_at,
+			repo_did,
 			count(case when state = ? then 1 end) as open_count,
 			count(case when state = ? then 1 end) as merged_count,
 			count(case when state = ? then 1 end) as closed_count,
 			count(case when state = ? then 1 end) as deleted_count
 		from pulls
-		where repo_at in (%s)
-		group by repo_at
+		where repo_did in (%s)
+		group by repo_did
 	`, inClause)
 
 	pullArgs := append([]any{
@@ -284,13 +284,13 @@ func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 	defer rows.Close()
 
 	for rows.Next() {
-		var repoat string
+		var repoDid string
 		var open, merged, closed, deleted int
-		if err := rows.Scan(&repoat, &open, &merged, &closed, &deleted); err != nil {
+		if err := rows.Scan(&repoDid, &open, &merged, &closed, &deleted); err != nil {
 			log.Println("err", "err", err)
 			continue
 		}
-		if r, ok := repoMap[syntax.ATURI(repoat)]; ok {
+		if r, ok := repoMap[repoDid]; ok {
 			r.RepoStats.PullCount.Open = open
 			r.RepoStats.PullCount.Merged = merged
 			r.RepoStats.PullCount.Closed = closed
@@ -406,10 +406,10 @@ func PutRepo(tx *sql.Tx, repo models.Repo) error {
 	}
 	_, err := tx.Exec(
 		`update repos
-		set knot = ?, description = ?, website = ?, topics = ?, repo_did = coalesce(?, repo_did)
+		set name = ?, knot = ?, description = ?, website = ?, topics = ?, repo_did = coalesce(?, repo_did)
 		where did = ? and rkey = ?
 		`,
-		repo.Knot, repo.Description, repo.Website, repo.TopicStr(), repoDid, repo.Did, repo.Rkey,
+		repo.Name, repo.Knot, repo.Description, repo.Website, repo.TopicStr(), repoDid, repo.Did, repo.Rkey,
 	)
 	return err
 }
@@ -437,7 +437,7 @@ func AddRepo(tx *sql.Tx, repo *models.Repo) error {
 
 	for _, dl := range repo.Labels {
 		if err := SubscribeLabel(tx, &models.RepoLabel{
-			RepoAt:  repo.RepoAt(),
+			RepoDid: syntax.DID(repo.RepoDid),
 			LabelAt: syntax.ATURI(dl),
 		}); err != nil {
 			return fmt.Errorf("failed to subscribe to label: %w", err)
@@ -447,22 +447,22 @@ func AddRepo(tx *sql.Tx, repo *models.Repo) error {
 	return nil
 }
 
-func RemoveRepo(e Execer, did, name string) error {
-	_, err := e.Exec(`delete from repos where did = ? and name = ?`, did, name)
+func RemoveRepo(e Execer, did, rkey string) error {
+	_, err := e.Exec(`delete from repos where did = ? and rkey = ?`, did, rkey)
 	return err
 }
 
-func GetRepoSource(e Execer, repoAt syntax.ATURI) (string, error) {
+func GetRepoSource(e Execer, repoDid string) (string, error) {
 	var nullableSource sql.NullString
-	err := e.QueryRow(`select source from repos where at_uri = ?`, repoAt).Scan(&nullableSource)
+	err := e.QueryRow(`select source from repos where repo_did = ?`, repoDid).Scan(&nullableSource)
 	if err != nil {
 		return "", err
 	}
 	return nullableSource.String, nil
 }
 
-func GetRepoSourceRepo(e Execer, repoAt syntax.ATURI) (*models.Repo, error) {
-	source, err := GetRepoSource(e, repoAt)
+func GetRepoSourceRepo(e Execer, repoDid string) (*models.Repo, error) {
+	source, err := GetRepoSource(e, repoDid)
 	if source == "" || errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -481,7 +481,7 @@ func GetForksByDid(e Execer, did string) ([]models.Repo, error) {
 	rows, err := e.Query(
 		`select distinct r.id, r.did, r.name, r.knot, r.rkey, r.description, r.website, r.created, r.source, r.repo_did
 		from repos r
-		left join collaborators c on r.at_uri = c.repo_at
+		left join collaborators c on r.repo_did = c.repo_did
 		where (r.did = ? or c.subject_did = ?)
 			and r.source is not null
 			and r.source != ''
@@ -537,7 +537,7 @@ func GetForksByDid(e Execer, did string) ([]models.Repo, error) {
 	return repos, nil
 }
 
-func GetForkByDid(e Execer, did string, name string) (*models.Repo, error) {
+func GetForkByDid(e Execer, did string, rkey string) (*models.Repo, error) {
 	var repo models.Repo
 	var createdAt string
 	var nullableDescription sql.NullString
@@ -549,8 +549,8 @@ func GetForkByDid(e Execer, did string, name string) (*models.Repo, error) {
 	row := e.QueryRow(
 		`select id, did, name, knot, rkey, description, website, topics, created, source, repo_did
 		from repos
-		where did = ? and name = ? and source is not null and source != ''`,
-		did, name,
+		where did = ? and rkey = ? and source is not null and source != ''`,
+		did, rkey,
 	)
 
 	err := row.Scan(&repo.Id, &repo.Did, &repo.Name, &repo.Knot, &repo.Rkey, &nullableDescription, &nullableWebsite, &nullableTopicStr, &createdAt, &nullableSource, &nullableRepoDid)
@@ -599,20 +599,21 @@ func EnqueuePdsRewritesForRepo(tx *sql.Tx, repoDid, repoAtUri string) error {
 		table      string
 		nsid       syntax.NSID
 		fkCol      string
+		fkVal      string
 	}
 	sources := []record{
-		{"did", "repos", tangled.RepoNSID, "at_uri"},
-		{"did", "issues", tangled.RepoIssueNSID, "repo_at"},
-		{"owner_did", "pulls", tangled.RepoPullNSID, "repo_at"},
-		{"did", "collaborators", tangled.RepoCollaboratorNSID, "repo_at"},
-		{"did", "artifacts", tangled.RepoArchiveNSID, "repo_at"},
-		{"did", "stars", tangled.FeedStarNSID, "subject_at"},
+		{"did", "repos", tangled.RepoNSID, "at_uri", repoAtUri},
+		{"did", "issues", tangled.RepoIssueNSID, "repo_did", repoDid},
+		{"owner_did", "pulls", tangled.RepoPullNSID, "repo_did", repoDid},
+		{"did", "collaborators", tangled.RepoCollaboratorNSID, "repo_did", repoDid},
+		{"did", "artifacts", tangled.RepoArchiveNSID, "repo_did", repoDid},
+		{"did", "stars", tangled.FeedStarNSID, "subject", repoDid},
 	}
 
 	for _, src := range sources {
 		rows, err := tx.Query(
 			fmt.Sprintf(`SELECT %s, rkey FROM %s WHERE %s = ?`, src.userDidCol, src.table, src.fkCol),
-			repoAtUri,
+			src.fkVal,
 		)
 		if err != nil {
 			return fmt.Errorf("query %s for pds rewrites: %w", src.table, err)
@@ -689,22 +690,22 @@ func CascadeRepoDid(tx *sql.Tx, repoAtUri, repoDid string) error {
 	return nil
 }
 
-func UpdateDescription(e Execer, repoAt, newDescription string) error {
+func UpdateDescription(e Execer, repoDid, newDescription string) error {
 	_, err := e.Exec(
-		`update repos set description = ? where at_uri = ?`, newDescription, repoAt)
+		`update repos set description = ? where repo_did = ?`, newDescription, repoDid)
 	return err
 }
 
-func UpdateSpindle(e Execer, repoAt string, spindle *string) error {
+func UpdateSpindle(e Execer, repoDid string, spindle *string) error {
 	_, err := e.Exec(
-		`update repos set spindle = ? where at_uri = ?`, spindle, repoAt)
+		`update repos set spindle = ? where repo_did = ?`, spindle, repoDid)
 	return err
 }
 
 func SubscribeLabel(e Execer, rl *models.RepoLabel) error {
-	query := `insert or ignore into repo_labels (repo_at, label_at) values (?, ?)`
+	query := `insert or ignore into repo_labels (repo_did, label_at) values (?, ?)`
 
-	_, err := e.Exec(query, rl.RepoAt.String(), rl.LabelAt.String())
+	_, err := e.Exec(query, string(rl.RepoDid), rl.LabelAt.String())
 	return err
 }
 
@@ -739,7 +740,7 @@ func GetRepoLabels(e Execer, filters ...orm.Filter) ([]models.RepoLabel, error) 
 		whereClause = " where " + strings.Join(conditions, " and ")
 	}
 
-	query := fmt.Sprintf(`select id, repo_at, label_at from repo_labels %s`, whereClause)
+	query := fmt.Sprintf(`select id, repo_did, label_at from repo_labels %s`, whereClause)
 
 	rows, err := e.Query(query, args...)
 	if err != nil {
@@ -751,7 +752,7 @@ func GetRepoLabels(e Execer, filters ...orm.Filter) ([]models.RepoLabel, error) 
 	for rows.Next() {
 		var label models.RepoLabel
 
-		err := rows.Scan(&label.Id, &label.RepoAt, &label.LabelAt)
+		err := rows.Scan(&label.Id, &label.RepoDid, &label.LabelAt)
 		if err != nil {
 			return nil, err
 		}

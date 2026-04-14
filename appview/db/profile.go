@@ -489,7 +489,7 @@ func GetVanityStat(e Execer, did string, stat models.VanityStatKind) (uint64, er
 		query = `select count(id) from repos where did = ?`
 		args = append(args, did)
 	case models.VanityStatStarCount:
-		query = `select count(id) from stars where subject_at like 'at://' || ? || '%'`
+		query = `select count(s.id) from stars s join repos r on s.subject = r.repo_did where s.subject_type = 'repo' and r.did = ?`
 		args = append(args, did)
 	case models.VanityStatNone:
 		return 0, nil
