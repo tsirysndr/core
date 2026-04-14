@@ -26,9 +26,9 @@ func (h *Knot) resolveRepoPath(r *http.Request) (string, string, error) {
 		return repoPath, repoName, nil
 	}
 
-	repoDid, err := h.db.GetRepoDid(did, name)
-	if err == nil {
-		repoPath, _, _, resolveErr := h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
+	alias, err := h.db.ResolveAlias(did, name)
+	if err == nil && alias != nil {
+		repoPath, _, _, resolveErr := h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, alias.RepoDid)
 		if resolveErr == nil {
 			return repoPath, name, nil
 		}
@@ -44,10 +44,16 @@ func (h *Knot) resolveRepoPath(r *http.Request) (string, string, error) {
 	return repoPath, name, nil
 }
 
+func (h *Knot) repoNotFound(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=UTF-8")
+	w.WriteHeader(http.StatusNotFound)
+	fmt.Fprint(w, "repository not found\n")
+}
+
 func (h *Knot) InfoRefs(w http.ResponseWriter, r *http.Request) {
 	repoPath, name, err := h.resolveRepoPath(r)
 	if err != nil {
-		gitError(w, "repository not found", http.StatusNotFound)
+		h.repoNotFound(w, r)
 		h.l.Error("git: failed to resolve repo path", "handler", "InfoRefs", "error", err)
 		return
 	}
@@ -81,7 +87,7 @@ func (h *Knot) InfoRefs(w http.ResponseWriter, r *http.Request) {
 func (h *Knot) UploadArchive(w http.ResponseWriter, r *http.Request) {
 	repo, _, err := h.resolveRepoPath(r)
 	if err != nil {
-		gitError(w, "repository not found", http.StatusNotFound)
+		h.repoNotFound(w, r)
 		h.l.Error("git: failed to resolve repo path", "handler", "UploadArchive", "error", err)
 		return
 	}
@@ -126,7 +132,7 @@ func (h *Knot) UploadArchive(w http.ResponseWriter, r *http.Request) {
 func (h *Knot) UploadPack(w http.ResponseWriter, r *http.Request) {
 	repo, _, err := h.resolveRepoPath(r)
 	if err != nil {
-		gitError(w, "repository not found", http.StatusNotFound)
+		h.repoNotFound(w, r)
 		h.l.Error("git: failed to resolve repo path", "handler", "UploadPack", "error", err)
 		return
 	}
@@ -173,7 +179,7 @@ func (h *Knot) UploadPack(w http.ResponseWriter, r *http.Request) {
 func (h *Knot) ReceivePack(w http.ResponseWriter, r *http.Request) {
 	_, name, err := h.resolveRepoPath(r)
 	if err != nil {
-		gitError(w, "repository not found", http.StatusNotFound)
+		h.repoNotFound(w, r)
 		h.l.Error("git: failed to resolve repo path", "handler", "ReceivePack", "error", err)
 		return
 	}

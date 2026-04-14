@@ -63,7 +63,7 @@ func (h *Xrpc) CreateRepo(w http.ResponseWriter, r *http.Request) {
 		defaultBranch = *data.DefaultBranch
 	}
 
-	if err := validateRepoName(repoName); err != nil {
+	if err := ValidateRepoName(repoName); err != nil {
 		l.Error("creating repo", "error", err.Error())
 		fail(xrpcerr.GenericError(err))
 		return
@@ -129,8 +129,7 @@ func (h *Xrpc) CreateRepo(w http.ResponseWriter, r *http.Request) {
 		}
 		repoDid = prepared.RepoDid
 
-		atUri := fmt.Sprintf("at://%s/%s/%s", actorDid, tangled.RepoNSID, data.Rkey)
-		if err := h.Db.StoreRepoKey(repoDid, prepared.SigningKeyRaw, actorDid.String(), repoName, atUri); err != nil {
+		if err := h.Db.StoreRepoKey(repoDid, prepared.SigningKeyRaw, actorDid.String(), repoName); err != nil {
 			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 				writeError(w, xrpcerr.GenericError(fmt.Errorf("repository %s already being created", repoName)), http.StatusConflict)
 				return
@@ -188,8 +187,7 @@ func (h *Xrpc) CreateRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if data.RepoDid != nil && strings.HasPrefix(*data.RepoDid, "did:web:") {
-		webAtUri := fmt.Sprintf("at://%s/%s/%s", actorDid, tangled.RepoNSID, data.Rkey)
-		if err := h.Db.StoreRepoDidWeb(repoDid, actorDid.String(), repoName, webAtUri); err != nil {
+		if err := h.Db.StoreRepoDidWeb(repoDid, actorDid.String(), repoName); err != nil {
 			cleanupAll()
 			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 				writeError(w, xrpcerr.GenericError(fmt.Errorf("did:web %s is already in use", repoDid)), http.StatusConflict)
@@ -266,7 +264,11 @@ func (h *Xrpc) requestCrawl(ctx context.Context, input *tangled.SyncRequestCrawl
 	return nil
 }
 
-func validateRepoName(name string) error {
+var reservedRepoNames = map[string]struct{}{
+	"self": {},
+}
+
+func ValidateRepoName(name string) error {
 	// check for path traversal attempts
 	if name == "." || name == ".." ||
 		strings.Contains(name, "/") || strings.Contains(name, "\\") {
@@ -277,6 +279,13 @@ func validateRepoName(name string) error {
 	if strings.Contains(name, "./") || strings.Contains(name, "../") ||
 		strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".") {
 		return fmt.Errorf("Repository name contains invalid path sequence")
+	}
+
+	if len(name) == 0 {
+		return fmt.Errorf("Repository name cannot be empty")
+	}
+	if len(name) > 100 {
+		return fmt.Errorf("Repository name must be 100 characters or fewer")
 	}
 
 	// then continue with character validation
@@ -292,6 +301,10 @@ func validateRepoName(name string) error {
 	// additional check to prevent multiple sequential dots
 	if strings.Contains(name, "..") {
 		return fmt.Errorf("Repository name cannot contain sequential dots")
+	}
+
+	if _, reserved := reservedRepoNames[strings.ToLower(name)]; reserved {
+		return fmt.Errorf("Repository name %q is reserved", name)
 	}
 
 	// if all checks pass

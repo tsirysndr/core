@@ -145,7 +145,7 @@ func migrateOneRepo(
 		l.Warn("could not remove empty owner dir", "path", ownerDir, "error", err)
 	}
 
-	if err := d.EmitDIDAssign(n, repo.ownerDid, repo.repoName, repoDid, ""); err != nil {
+	if err := d.EmitDIDAssign(n, repo.ownerDid, repo.repoName, repoDid); err != nil {
 		l.Error("emitting didAssign event failed (non-fatal)", "error", err)
 	}
 
@@ -170,7 +170,7 @@ func mintAndStoreRepoDID(
 		return "", fmt.Errorf("PLC submission: %w", err)
 	}
 
-	if err := d.StoreRepoKey(prepared.RepoDid, prepared.SigningKeyRaw, repo.ownerDid, repo.repoName, ""); err != nil {
+	if err := d.StoreRepoKey(prepared.RepoDid, prepared.SigningKeyRaw, repo.ownerDid, repo.repoName); err != nil {
 		return "", fmt.Errorf("storing repo key: %w", err)
 	}
 

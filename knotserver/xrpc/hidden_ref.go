@@ -61,8 +61,11 @@ func (x *Xrpc) HiddenRef(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	repo := resp.Value.Val.(*tangled.Repo)
-	repoDid, err := x.Db.GetRepoDid(actorDid.String(), repo.Name)
+	if _, ok := resp.Value.Val.(*tangled.Repo); !ok {
+		fail(xrpcerr.RepoNotFoundError)
+		return
+	}
+	repoDid, err := x.Db.GetRepoDid(actorDid.String(), repoAt.RecordKey().String())
 	if err != nil {
 		fail(xrpcerr.RepoNotFoundError)
 		return

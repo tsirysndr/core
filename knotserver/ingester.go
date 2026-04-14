@@ -18,6 +18,7 @@ import (
 	"tangled.org/core/appview/models"
 	"tangled.org/core/knotserver/db"
 	"tangled.org/core/knotserver/git"
+	knotxrpc "tangled.org/core/knotserver/xrpc"
 	"tangled.org/core/log"
 	"tangled.org/core/rbac"
 	"tangled.org/core/workflow"
@@ -99,27 +100,31 @@ func (h *Knot) validatePullRecord(ctx context.Context, record *tangled.RepoPull)
 		return nil, fmt.Errorf("ignoring pull record: target repo is nil")
 	}
 
+	l := log.FromContext(ctx).With("handler", "validatePullRecord")
+	l = l.With("target_repo", record.Target.Repo)
+	l = l.With("target_branch", record.Target.Branch)
+
 	if record.Source == nil {
 		return nil, fmt.Errorf("ignoring pull record: not a branch-based pull request")
 	}
 
-	if record.Source.Repo != nil || record.Source.RepoDid != nil {
+	if record.Source.Repo != nil {
 		return nil, fmt.Errorf("ignoring pull record: fork based pull")
 	}
 
 	var repoPath, ownerDid, repoName, repoDid string
 	switch {
-	case record.Target.RepoDid != nil && *record.Target.RepoDid != "":
-		repoDid = *record.Target.RepoDid
+	case strings.HasPrefix(record.Target.Repo, "did:"):
+		repoDid = record.Target.Repo
 		var lookupErr error
 		repoPath, ownerDid, repoName, lookupErr = h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
 		if lookupErr != nil {
 			return nil, fmt.Errorf("unknown target repo DID %s: %w", repoDid, lookupErr)
 		}
 
-	case record.Target.Repo != nil:
+	case strings.Contains(record.Target.Repo, "/"):
 		// TODO: get rid of this PDS fetch once all repos have DIDs
-		repoAt, parseErr := syntax.ParseATURI(*record.Target.Repo)
+		repoAt, parseErr := syntax.ParseATURI(record.Target.Repo)
 		if parseErr != nil {
 			return nil, fmt.Errorf("failed to parse ATURI: %w", parseErr)
 		}
@@ -138,14 +143,17 @@ func (h *Knot) validatePullRecord(ctx context.Context, record *tangled.RepoPull)
 			return nil, fmt.Errorf("failed to resolve repo: %w", getErr)
 		}
 
-		repo := resp.Value.Val.(*tangled.Repo)
+		repo, ok := resp.Value.Val.(*tangled.Repo)
+		if !ok {
+			return nil, fmt.Errorf("record at %s is not a tangled.Repo", repoAt)
+		}
 
 		if repo.Knot != h.c.Server.Hostname {
 			return nil, fmt.Errorf("rejected pull record: not this knot, %s != %s", repo.Knot, h.c.Server.Hostname)
 		}
 
 		ownerDid = ident.DID.String()
-		repoName = repo.Name
+		repoName = repoAt.RecordKey().String()
 
 		repoDid, didErr := h.db.GetRepoDid(ownerDid, repoName)
 		if didErr != nil {
@@ -159,7 +167,7 @@ func (h *Knot) validatePullRecord(ctx context.Context, record *tangled.RepoPull)
 		}
 
 	default:
-		return nil, fmt.Errorf("ignoring pull record: target has neither repo nor repoDid")
+		return nil, fmt.Errorf("ignoring pull record: target repo has unrecognized format: %s", record.Target.Repo)
 	}
 
 	gr, err := git.Open(repoPath, record.Source.Branch)
@@ -374,19 +382,19 @@ func (h *Knot) processCollaborator(ctx context.Context, event *jmodels.Event) er
 
 	var rbacResource string
 	switch {
-	case record.RepoDid != nil && *record.RepoDid != "":
-		ownerDid, _, lookupErr := h.db.GetRepoKeyOwner(*record.RepoDid)
+	case strings.HasPrefix(record.Repo, "did:"):
+		ownerDid, _, lookupErr := h.db.GetRepoKeyOwner(record.Repo)
 		if lookupErr != nil {
-			return fmt.Errorf("unknown repo DID %s: %w", *record.RepoDid, lookupErr)
+			return fmt.Errorf("unknown repo DID %s: %w", record.Repo, lookupErr)
 		}
 		if ownerDid != did {
-			return fmt.Errorf("collaborator record author %s does not own repo %s", did, *record.RepoDid)
+			return fmt.Errorf("collaborator record author %s does not own repo %s", did, record.Repo)
 		}
-		rbacResource = *record.RepoDid
+		rbacResource = record.Repo
 
-	case record.Repo != nil:
+	case strings.Contains(record.Repo, "/"):
 		// TODO: get rid of this PDS fetch once all repos have DIDs
-		repoAt, parseErr := syntax.ParseATURI(*record.Repo)
+		repoAt, parseErr := syntax.ParseATURI(record.Repo)
 		if parseErr != nil {
 			return parseErr
 		}
@@ -405,15 +413,18 @@ func (h *Knot) processCollaborator(ctx context.Context, event *jmodels.Event) er
 			return getErr
 		}
 
-		repo := resp.Value.Val.(*tangled.Repo)
-		repoDid, didErr := h.db.GetRepoDid(owner.DID.String(), repo.Name)
+		if _, ok := resp.Value.Val.(*tangled.Repo); !ok {
+			return fmt.Errorf("record at %s is not a tangled.Repo", repoAt)
+		}
+		rkey := repoAt.RecordKey().String()
+		repoDid, didErr := h.db.GetRepoDid(owner.DID.String(), rkey)
 		if didErr != nil {
-			return fmt.Errorf("failed to resolve repo DID for %s/%s: %w", owner.DID.String(), repo.Name, didErr)
+			return fmt.Errorf("failed to resolve repo DID for %s/%s: %w", owner.DID.String(), rkey, didErr)
 		}
 		rbacResource = repoDid
 
 	default:
-		return fmt.Errorf("collaborator record has neither repo nor repoDid")
+		return fmt.Errorf("collaborator record has unrecognized repo format: %s", record.Repo)
 	}
 
 	ok, err := h.e.IsCollaboratorInviteAllowed(did, rbac.ThisServer, rbacResource)
@@ -479,6 +490,70 @@ func (h *Knot) fetchAndAddKeys(ctx context.Context, did string) error {
 	return nil
 }
 
+func (h *Knot) processRepo(ctx context.Context, event *jmodels.Event) error {
+	l := log.FromContext(ctx).With("handler", "processRepo", "did", event.Did, "rkey", event.Commit.RKey)
+
+	rkey := strings.TrimSuffix(strings.TrimSpace(event.Commit.RKey), ".git")
+	if rkey == "" {
+		return nil
+	}
+
+	if event.Commit.Operation == jmodels.CommitOperationDelete {
+		if err := h.db.DeleteRepoAlias(event.Did, rkey); err != nil {
+			l.Warn("failed to delete repo alias", "err", err)
+		}
+		return nil
+	}
+
+	if event.Commit.Operation != jmodels.CommitOperationCreate && event.Commit.Operation != jmodels.CommitOperationUpdate {
+		return nil
+	}
+
+	raw := json.RawMessage(event.Commit.Record)
+	var record tangled.Repo
+	if err := json.Unmarshal(raw, &record); err != nil {
+		return fmt.Errorf("failed to unmarshal repo record: %w", err)
+	}
+
+	if record.Knot != h.c.Server.Hostname {
+		return nil
+	}
+	if record.RepoDid == nil || *record.RepoDid == "" {
+		l.Info("skipping repo event without repoDid")
+		return nil
+	}
+	repoDid := *record.RepoDid
+
+	if err := knotxrpc.ValidateRepoName(rkey); err != nil {
+		l.Warn("skipping repo event with invalid rkey", "repoDid", repoDid, "rkey", rkey, "err", err)
+		return nil
+	}
+
+	ownerDid, _, lookupErr := h.db.GetRepoKeyOwner(repoDid)
+	if lookupErr != nil {
+		l.Info("skipping repo event for unknown repoDid", "repoDid", repoDid)
+		return nil
+	}
+	if ownerDid != event.Did {
+		l.Warn("repo event author does not own repoDid", "repoDid", repoDid, "author", event.Did)
+		return nil
+	}
+
+	alias := db.RepoAlias{
+		OwnerDid: event.Did,
+		Rkey:     rkey,
+		RepoDid:  repoDid,
+		Rev:      event.Commit.Rev,
+	}
+	if err := h.db.UpsertRepoAlias(alias); err != nil {
+		l.Warn("failed to upsert repo alias", "err", err)
+		return nil
+	}
+
+	l.Info("recorded repo alias", "repoDid", repoDid, "rkey", rkey, "rev", event.Commit.Rev)
+	return nil
+}
+
 func (h *Knot) processMessages(ctx context.Context, event *jmodels.Event) error {
 	var err error
 	switch event.Kind {
@@ -490,6 +565,8 @@ func (h *Knot) processMessages(ctx context.Context, event *jmodels.Event) error 
 			err = h.processPublicKey(ctx, event)
 		case tangled.KnotMemberNSID:
 			err = h.processKnotMember(ctx, event)
+		case tangled.RepoNSID:
+			err = h.processRepo(ctx, event)
 		case tangled.RepoPullNSID:
 			err = h.processPull(ctx, event)
 		case tangled.RepoCollaboratorNSID:

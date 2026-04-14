@@ -17,6 +17,75 @@ import (
 	"tangled.org/core/orm"
 )
 
+func RenameRepo(tx *sql.Tx, did, oldRkey, newRkey, newName string) error {
+	newAtURI := fmt.Sprintf("at://%s/sh.tangled.repo/%s", did, newRkey)
+
+	res, err := tx.Exec(
+		`update repos set rkey = ?, name = ?, at_uri = ? where did = ? and rkey = ?`,
+		newRkey, newName, newAtURI, did, oldRkey,
+	)
+	if err != nil {
+		return fmt.Errorf("update repos row: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("no repo row found for did=%s rkey=%s", did, oldRkey)
+	}
+
+	if _, err := tx.Exec(
+		`update pipelines set repo_name = ? where repo_owner = ? and repo_name = ?`,
+		newRkey, did, oldRkey,
+	); err != nil {
+		return fmt.Errorf("rename pipelines.repo_name: %w", err)
+	}
+
+	return nil
+}
+
+func UpdateRepoDisplayName(e Execer, did, rkey, newName string) error {
+	_, err := e.Exec(
+		`update repos set name = ? where did = ? and rkey = ?`,
+		newName, did, rkey,
+	)
+	return err
+}
+
+func RecordRepoRename(e Execer, ownerDid, oldRkey, repoDid string) error {
+	_, err := e.Exec(
+		`insert into repo_renames (owner_did, old_rkey, repo_did)
+		 values (?, ?, ?)
+		 on conflict(owner_did, old_rkey) do update set
+		     repo_did = excluded.repo_did,
+		     renamed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')`,
+		ownerDid, oldRkey, repoDid,
+	)
+	return err
+}
+
+func DeleteRepoRename(e Execer, ownerDid, oldRkey string) error {
+	_, err := e.Exec(
+		`delete from repo_renames where owner_did = ? and old_rkey = ?`,
+		ownerDid, oldRkey,
+	)
+	return err
+}
+
+func LookupRepoRename(e Execer, ownerDid, oldRkey string) (*models.Repo, error) {
+	var repoDid string
+	err := e.QueryRow(
+		`select repo_did from repo_renames where owner_did = ? and old_rkey = ?`,
+		ownerDid, oldRkey,
+	).Scan(&repoDid)
+	if err != nil {
+		return nil, err
+	}
+
+	repo, err := GetRepoByDid(e, repoDid)
+	if err != nil {
+		return nil, err
+	}
+	return repo, nil
+}
+
 func GetRepos(e Execer, filters ...orm.Filter) ([]models.Repo, error) {
 	return GetReposPaginated(e, pagination.Page{}, filters...)
 }

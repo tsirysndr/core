@@ -31,12 +31,11 @@ func (d *DB) InsertEvent(event Event, notifier *notifier.Notifier) error {
 	return err
 }
 
-func (d *DB) EmitDIDAssign(n *notifier.Notifier, ownerDid, repoName, repoDid, oldRepoAt string) error {
+func (d *DB) EmitDIDAssign(n *notifier.Notifier, ownerDid, repoName, repoDid string) error {
 	payload := RepoDIDAssign{
-		OwnerDid:  ownerDid,
-		RepoName:  repoName,
-		RepoDid:   repoDid,
-		OldRepoAt: oldRepoAt,
+		OwnerDid: ownerDid,
+		RepoName: repoName,
+		RepoDid:  repoDid,
 	}
 
 	eventJson, err := json.Marshal(payload)

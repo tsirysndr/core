@@ -499,6 +499,19 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		atpClient, err := s.oauth.AuthorizedClient(r)
+		if err != nil {
+			l.Error("failed to get authorized client", "err", err)
+			s.pages.Notice(w, "repo", "Failed to authorize. Try again later.")
+			return
+		}
+
+		if rkeyOccupied(r.Context(), atpClient, user.Did, rkey) {
+			l.Info("rkey occupied by prior rename alias")
+			s.pages.Notice(w, "repo", fmt.Sprintf("The name %q still has a record on your PDS from a prior rename. Pick a different name, or delete at://%s/%s/%s first.", rkey, user.Did, tangled.RepoNSID, rkey))
+			return
+		}
+
 		client, err := s.oauth.ServiceClient(
 			r,
 			oauth.WithService(domain),
@@ -583,18 +596,10 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 			}()
 		}
 
-		atpClient, err := s.oauth.AuthorizedClient(r)
-		if err != nil {
-			l.Info("PDS write failed", "err", err)
-			cleanupKnot()
-			s.pages.Notice(w, "repo", "Failed to write record to PDS.")
-			return
-		}
-
-		_, err = comatproto.RepoPutRecord(r.Context(), atpClient, &comatproto.RepoPutRecord_Input{
+		_, err = comatproto.RepoCreateRecord(r.Context(), atpClient, &comatproto.RepoCreateRecord_Input{
 			Collection: tangled.RepoNSID,
 			Repo:       user.Did,
-			Rkey:       rkey,
+			Rkey:       &rkey,
 			Record: &lexutil.LexiconTypeDecoder{
 				Val: &record,
 			},

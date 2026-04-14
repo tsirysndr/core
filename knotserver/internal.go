@@ -140,14 +140,16 @@ func (h *InternalHandle) Guard(w http.ResponseWriter, r *http.Request) {
 		} else {
 			legacyPath, joinErr := securejoin.SecureJoin(h.c.Repo.ScanPath, filepath.Join(ownerDid.String(), repoName))
 			if joinErr != nil {
+				w.Header().Set("Content-Type", "text/plain; charset=UTF-8")
 				w.WriteHeader(http.StatusNotFound)
-				fmt.Fprintln(w, "repo not found")
+				fmt.Fprint(w, "repo not found\n")
 				return
 			}
 			if _, statErr := os.Stat(legacyPath); statErr != nil {
+				l.Info("legacy repo path missing, checking rename history", "owner", ownerDid, "name", repoName)
+				w.Header().Set("Content-Type", "text/plain; charset=UTF-8")
 				w.WriteHeader(http.StatusNotFound)
-				l.Error("repo not found on disk (legacy)", "owner", ownerDid, "name", repoName)
-				fmt.Fprintln(w, "repo not found")
+				fmt.Fprint(w, "repo not found\n")
 				return
 			}
 			repoPath = legacyPath
@@ -253,7 +255,7 @@ func (h *InternalHandle) PostReceiveHook(w http.ResponseWriter, r *http.Request)
 	}
 
 	for _, line := range lines {
-		err := h.insertRefUpdate(line, gitUserDid, ownerDid, repoName, repoDid)
+		err := h.insertRefUpdate(line, gitUserDid, ownerDid, repoDid)
 		if err != nil {
 			l.Error("failed to insert op", "err", err, "line", line, "did", gitUserDid, "repo", gitRelativeDir)
 		}
@@ -272,7 +274,7 @@ func (h *InternalHandle) PostReceiveHook(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, resp)
 }
 
-func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, ownerDid, repoName, repoDid string) error {
+func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, ownerDid, repoDid string) error {
 	repoPath, _, _, resolveErr := h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
 	if resolveErr != nil {
 		return fmt.Errorf("failed to resolve repo on disk: %w", resolveErr)
@@ -296,8 +298,7 @@ func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, o
 		Ref:          line.Ref,
 		CommitterDid: gitUserDid,
 		OwnerDid:     &ownerDid,
-		RepoName:     repoName,
-		RepoDid:      &repoDid,
+		Repo:         repoDid,
 		Meta:         &metaRecord,
 	}
 

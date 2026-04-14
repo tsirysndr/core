@@ -23,6 +23,7 @@ import (
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/pagination"
 	"tangled.org/core/appview/reporesolver"
+	"tangled.org/core/appview/sites"
 	"tangled.org/core/appview/validator"
 	xrpcclient "tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/eventconsumer"
@@ -829,6 +830,205 @@ func (rp *Repo) AddCollaborator(w http.ResponseWriter, r *http.Request) {
 	aturi = ""
 
 	rp.pages.HxRefresh(w)
+}
+
+func (rp *Repo) RenameRepo(w http.ResponseWriter, r *http.Request) {
+	l := rp.logger.With("handler", "RenameRepo")
+	noticeId := "rename-repo-error"
+
+	user := rp.oauth.GetMultiAccountUser(r)
+	f, err := rp.repoResolver.Resolve(r)
+	if err != nil {
+		l.Error("failed to get repo and knot", "err", err)
+		rp.pages.Notice(w, noticeId, "Failed to load repository.")
+		return
+	}
+	l = l.With("did", user.Did, "rkey", f.Rkey, "oldName", f.Name)
+
+	if f.RepoDid == "" {
+		rp.pages.Notice(w, noticeId, "This repository's knot has not completed the DID migration; rename is unavailable.")
+		return
+	}
+
+	newName, err := validateRenameInput(f.Name, f.Rkey, r.FormValue("name"))
+	if err != nil {
+		rp.pages.Notice(w, noticeId, err.Error())
+		return
+	}
+	newRkey := strings.ToLower(newName)
+	l = l.With("newName", newName, "newRkey", newRkey)
+
+	atpClient, err := rp.oauth.AuthorizedClient(r)
+	if err != nil {
+		l.Error("failed to get authorized client", "err", err)
+		rp.pages.Notice(w, noticeId, "Failed to authorize. Try again later.")
+		return
+	}
+
+	newRepo := *f
+	newRepo.Name = newName
+	newRepo.Rkey = newRkey
+	newRepo.Created = time.Now()
+	record := newRepo.AsRecord()
+
+	if newRkey == f.Rkey {
+		ex, err := comatproto.RepoGetRecord(r.Context(), atpClient, "", tangled.RepoNSID, f.Did, f.Rkey)
+		if err != nil {
+			l.Error("failed to fetch existing record", "err", err)
+			rp.pages.Notice(w, noticeId, "Failed to read repository record from PDS.")
+			return
+		}
+
+		_, err = comatproto.RepoPutRecord(r.Context(), atpClient, &comatproto.RepoPutRecord_Input{
+			Collection: tangled.RepoNSID,
+			Repo:       f.Did,
+			Rkey:       f.Rkey,
+			SwapRecord: ex.Cid,
+			Record: &lexutil.LexiconTypeDecoder{
+				Val: &record,
+			},
+		})
+		if err != nil {
+			l.Error("failed to update display name on PDS", "err", err)
+			rp.pages.Notice(w, noticeId, "Failed to save display name to PDS.")
+			return
+		}
+		l.Info("updated display name on PDS")
+
+		if err := db.UpdateRepoDisplayName(rp.db, f.Did, f.Rkey, newName); err != nil {
+			l.Error("optimistic display name update failed", "err", err)
+		}
+	} else {
+		ex, getErr := comatproto.RepoGetRecord(r.Context(), atpClient, "", tangled.RepoNSID, f.Did, newRkey)
+		switch {
+		case getErr != nil:
+			_, err = comatproto.RepoCreateRecord(r.Context(), atpClient, &comatproto.RepoCreateRecord_Input{
+				Collection: tangled.RepoNSID,
+				Repo:       f.Did,
+				Rkey:       &newRkey,
+				Record:     &lexutil.LexiconTypeDecoder{Val: &record},
+			})
+			if err != nil {
+				l.Error("failed to write rename to PDS", "err", err)
+				rp.pages.Notice(w, noticeId, "Failed to save renamed repository to PDS.")
+				return
+			}
+			l.Info("wrote rename-create to PDS; old record retained as alias")
+
+		default:
+			existing, ok := ex.Value.Val.(*tangled.Repo)
+			if !ok || existing.RepoDid == nil || *existing.RepoDid != f.RepoDid {
+				rp.pages.Notice(w, noticeId, fmt.Sprintf("You already have a repository named %q.", newRkey))
+				return
+			}
+			_, err = comatproto.RepoPutRecord(r.Context(), atpClient, &comatproto.RepoPutRecord_Input{
+				Collection: tangled.RepoNSID,
+				Repo:       f.Did,
+				Rkey:       newRkey,
+				SwapRecord: ex.Cid,
+				Record:     &lexutil.LexiconTypeDecoder{Val: &record},
+			})
+			if err != nil {
+				l.Error("failed to rewrite rename-back record on PDS", "err", err)
+				rp.pages.Notice(w, noticeId, "Failed to save renamed repository to PDS.")
+				return
+			}
+			l.Info("rewrote rename-back record on PDS over prior alias")
+		}
+
+		tx, err := rp.db.Begin()
+		if err != nil {
+			l.Error("failed to begin rename tx", "err", err)
+			rp.pages.HxLocation(w, fmt.Sprintf("/%s", f.RepoDid))
+			return
+		}
+		defer tx.Rollback()
+
+		if err := db.RenameRepo(tx, f.Did, f.Rkey, newRkey, newName); err != nil {
+			l.Error("optimistic rename failed", "err", err)
+			rp.pages.HxLocation(w, fmt.Sprintf("/%s", f.RepoDid))
+			return
+		}
+		if err := db.RecordRepoRename(tx, f.Did, f.Rkey, f.RepoDid); err != nil {
+			l.Error("failed to record rename history", "err", err)
+		}
+		if err := db.DeleteRepoRename(tx, f.Did, newRkey); err != nil {
+			l.Error("failed to clear stale rename hint", "err", err)
+		}
+		if err := tx.Commit(); err != nil {
+			l.Error("failed to commit rename tx", "err", err)
+			rp.pages.HxLocation(w, fmt.Sprintf("/%s", f.RepoDid))
+			return
+		}
+	}
+
+	oldRepo := *f
+	rp.notifier.RenameRepo(r.Context(), syntax.DID(user.Did), &oldRepo, &newRepo)
+
+	if newRkey != f.Rkey {
+		rp.migrateSiteOnRename(r.Context(), f, newRkey)
+	}
+
+	rp.pages.HxLocation(w, fmt.Sprintf("/%s", f.RepoDid))
+}
+
+func validateRenameInput(currentName, currentRkey, raw string) (string, error) {
+	newName := strings.TrimSpace(raw)
+	if newName == "" {
+		return "", errors.New("Repository name cannot be empty.")
+	}
+	if err := models.ValidateRepoName(newName); err != nil {
+		return "", err
+	}
+	newName = models.StripGitExt(newName)
+	if newName == currentName {
+		if _, tidErr := syntax.ParseTID(currentRkey); tidErr == nil {
+			return newName, nil
+		}
+		return "", errors.New("New name matches the current name.")
+	}
+	return newName, nil
+}
+
+func (rp *Repo) migrateSiteOnRename(ctx context.Context, oldRepo *models.Repo, newRkey string) {
+	l := rp.logger.With("handler", "migrateSiteOnRename", "repo_did", oldRepo.RepoDid)
+
+	siteConfig, err := db.GetRepoSiteConfig(rp.db, oldRepo.RepoDid)
+	if err != nil || siteConfig == nil {
+		return
+	}
+
+	if !rp.cfClient.Enabled() {
+		return
+	}
+
+	ownerClaim, _ := db.GetActiveDomainClaimForDid(rp.db, oldRepo.Did)
+
+	go func() {
+		bgCtx := context.Background()
+		oldRkey := oldRepo.Rkey
+
+		if err := sites.Delete(bgCtx, rp.cfClient, oldRepo.Did, oldRkey); err != nil {
+			l.Error("sites: failed to delete old R2 prefix", "oldRkey", oldRkey, "err", err)
+		}
+
+		newRepo := *oldRepo
+		newRepo.Rkey = newRkey
+		if deployErr := sites.Deploy(bgCtx, rp.cfClient, rp.config, &newRepo, siteConfig.Branch, siteConfig.Dir); deployErr != nil {
+			l.Error("sites: redeploy after rename failed", "err", deployErr)
+		}
+
+		if ownerClaim != nil {
+			if err := sites.DeleteDomainMapping(bgCtx, rp.cfClient, ownerClaim.Domain, oldRkey); err != nil {
+				l.Error("sites: failed to remove old KV mapping", "oldRkey", oldRkey, "err", err)
+			}
+			if err := sites.PutDomainMapping(bgCtx, rp.cfClient, ownerClaim.Domain, oldRepo.Did, newRkey, siteConfig.IsIndex); err != nil {
+				l.Error("sites: failed to write new KV mapping", "newRkey", newRkey, "err", err)
+			}
+		}
+
+		l.Info("sites: migrated on rename", "oldRkey", oldRkey, "newRkey", newRkey)
+	}()
 }
 
 func (rp *Repo) DeleteRepo(w http.ResponseWriter, r *http.Request) {
