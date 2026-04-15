@@ -2370,6 +2370,7 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 		oauth.WithService(f.Knot),
 		oauth.WithLxm(tangled.RepoMergeNSID),
 		oauth.WithDev(s.config.Core.Dev),
+		oauth.WithTimeout(time.Second*20), // merge is quite slow on large repos, like witchsky
 	)
 	if err != nil {
 		l.Error("failed to connect to knot server", "err", err, "knot", f.Knot)
