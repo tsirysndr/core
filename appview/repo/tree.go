@@ -77,7 +77,7 @@ func (rp *Repo) Tree(w http.ResponseWriter, r *http.Request) {
 		result.DotDot = *xrpcResp.Dotdot
 	}
 	if readmeFile != nil {
-		bytes, err := tangled.GitTempGetBlob(r.Context(), xrpcc, path.Join(treePath, readmeFile.Name), ref, f.RepoAt().String())
+		bytes, err := tangled.GitTempGetBlob(r.Context(), xrpcc, path.Join(treePath, readmeFile.Name), ref, f.RepoDid)
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 			l.Error("failed to call XRPC git.getBlob", "xrpcerr", xrpcerr, "err", err)
 			rp.pages.Error503(w)
