@@ -98,6 +98,7 @@
           inherit htmx-src htmx-ws-src lucide-src inter-fonts-src ibm-plex-mono-src actor-typeahead-src mermaid-src;
         };
         appview = self.callPackage ./nix/pkgs/appview.nix {};
+        blog = self.callPackage ./nix/pkgs/blog.nix {};
         docs = self.callPackage ./nix/pkgs/docs.nix {
           inherit inter-fonts-src ibm-plex-mono-src lucide-src;
           inherit (pkgs) pagefind;
@@ -124,6 +125,7 @@
         (packages)
         appview
         appview-static-files
+        blog
         lexgen
         goat
         spindle

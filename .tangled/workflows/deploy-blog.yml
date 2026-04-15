@@ -13,8 +13,17 @@ dependencies:
 steps:
   - name: patch static dir
     command: |
-      mkdir -p appview/pages/static
-      touch appview/pages/static/x
+      mkdir -p appview/pages/static/logos
+
+  - name: build dolly
+    command: |
+      go build -o dolly.out ./cmd/dolly
+
+  - name: generate favicons
+    command: |
+      ./dolly.out -template appview/pages/templates/fragments/dolly/logo.html -output appview/pages/static/logos/dolly.png -size 180x180
+      ./dolly.out -template appview/pages/templates/fragments/dolly/logo.html -output appview/pages/static/logos/dolly.ico -size 48x48
+      ./dolly.out -template appview/pages/templates/fragments/dolly/logo.html -output appview/pages/static/logos/dolly.svg -color currentColor
 
   - name: generate css
     command: |
