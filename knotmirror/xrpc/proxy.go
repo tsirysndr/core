@@ -13,7 +13,6 @@ import (
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/knotmirror/db"
-	"tangled.org/core/knotmirror/models"
 )
 
 var mirrorToKnotNSID = map[string]string{
@@ -47,13 +46,6 @@ type knotInfo struct {
 func (x *Xrpc) resolveKnot(ctx context.Context, repoAt syntax.ATURI) (*knotInfo, error) {
 	repo, err := db.GetRepoByAtUri(ctx, x.db, repoAt)
 	if err == nil && repo != nil {
-		if repo.State != models.RepoStatePending && repo.State != models.RepoStateResyncing {
-			go func() {
-				if err := db.UpdateRepoState(context.Background(), x.db, repo.Did, repo.Rkey, models.RepoStatePending); err != nil {
-					x.logger.Error("failed to mark repo for resync after proxy", "err", err)
-				}
-			}()
-		}
 		knotURL := repo.KnotDomain
 		if !strings.Contains(repo.KnotDomain, "://") {
 			if host, _ := db.GetHost(ctx, x.db, repo.KnotDomain); host != nil {
