@@ -24,7 +24,7 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["ref", "languages"],
+          "required": ["ref", "languages", "total"],
           "properties": {
             "ref": {
               "type": "string",
@@ -37,13 +37,9 @@
                 "ref": "#language"
               }
             },
-            "totalSize": {
+            "total": {
               "type": "integer",
               "description": "Total size of all analyzed files in bytes"
-            },
-            "totalFiles": {
-              "type": "integer",
-              "description": "Total number of files analyzed"
             }
           }
         }
@@ -65,7 +61,7 @@
     },
     "language": {
       "type": "object",
-      "required": ["name", "size", "percentage"],
+      "required": ["name", "size"],
       "properties": {
         "name": {
           "type": "string",
@@ -74,25 +70,6 @@
         "size": {
           "type": "integer",
           "description": "Total size of files in this language (bytes)"
-        },
-        "percentage": {
-          "type": "integer",
-          "description": "Percentage of total codebase (0-100)"
-        },
-        "fileCount": {
-          "type": "integer",
-          "description": "Number of files in this language"
-        },
-        "color": {
-          "type": "string",
-          "description": "Hex color code for this language"
-        },
-        "extensions": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "File extensions associated with this language"
         }
       }
     }

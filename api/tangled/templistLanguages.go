@@ -16,16 +16,8 @@ const (
 
 // GitTempListLanguages_Language is a "language" in the sh.tangled.git.temp.listLanguages schema.
 type GitTempListLanguages_Language struct {
-	// color: Hex color code for this language
-	Color *string `json:"color,omitempty" cborgen:"color,omitempty"`
-	// extensions: File extensions associated with this language
-	Extensions []string `json:"extensions,omitempty" cborgen:"extensions,omitempty"`
-	// fileCount: Number of files in this language
-	FileCount *int64 `json:"fileCount,omitempty" cborgen:"fileCount,omitempty"`
 	// name: Programming language name
 	Name string `json:"name" cborgen:"name"`
-	// percentage: Percentage of total codebase (0-100)
-	Percentage int64 `json:"percentage" cborgen:"percentage"`
 	// size: Total size of files in this language (bytes)
 	Size int64 `json:"size" cborgen:"size"`
 }
@@ -35,10 +27,8 @@ type GitTempListLanguages_Output struct {
 	Languages []*GitTempListLanguages_Language `json:"languages" cborgen:"languages"`
 	// ref: The git reference used
 	Ref string `json:"ref" cborgen:"ref"`
-	// totalFiles: Total number of files analyzed
-	TotalFiles *int64 `json:"totalFiles,omitempty" cborgen:"totalFiles,omitempty"`
-	// totalSize: Total size of all analyzed files in bytes
-	TotalSize *int64 `json:"totalSize,omitempty" cborgen:"totalSize,omitempty"`
+	// total: Total size of all analyzed files in bytes
+	Total int64 `json:"total" cborgen:"total"`
 }
 
 // GitTempListLanguages calls the XRPC method "sh.tangled.git.temp.listLanguages".
