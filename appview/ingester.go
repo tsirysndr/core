@@ -35,7 +35,7 @@ import (
 )
 
 type Ingester struct {
-	Db         db.DbWrapper
+	Db         *db.DB
 	Enforcer   *rbac.Enforcer
 	IdResolver *idresolver.Resolver
 	Cache      *cache.Cache
@@ -270,12 +270,7 @@ func (i *Ingester) ingestVouch(ctx context.Context, e *jmodels.Event) error {
 			evidences = append(evidences, uri)
 		}
 
-		ddb, ok := i.Db.Execer.(*db.DB)
-		if !ok {
-			return fmt.Errorf("failed to ingest vouch record, invalid db cast")
-		}
-
-		tx, txErr := ddb.Begin()
+		tx, txErr := i.Db.Begin()
 		if txErr != nil {
 			return fmt.Errorf("failed to start transaction: %w", txErr)
 		}
@@ -521,12 +516,7 @@ func (i *Ingester) ingestProfile(ctx context.Context, e *jmodels.Event) error {
 			PreferredHandle: preferredHandle,
 		}
 
-		ddb, ok := i.Db.Execer.(*db.DB)
-		if !ok {
-			return fmt.Errorf("failed to index profile record, invalid db cast")
-		}
-
-		tx, err := ddb.Begin()
+		tx, err := i.Db.Begin()
 		if err != nil {
 			return fmt.Errorf("failed to start transaction")
 		}
@@ -593,12 +583,7 @@ func (i *Ingester) ingestSpindleMember(ctx context.Context, e *jmodels.Event) er
 			return err
 		}
 
-		ddb, ok := i.Db.Execer.(*db.DB)
-		if !ok {
-			return fmt.Errorf("invalid db cast")
-		}
-
-		err = db.AddSpindleMember(ddb, models.SpindleMember{
+		err = db.AddSpindleMember(i.Db, models.SpindleMember{
 			Did:      syntax.DID(did),
 			Rkey:     e.Commit.RKey,
 			Instance: record.Instance,
@@ -617,14 +602,9 @@ func (i *Ingester) ingestSpindleMember(ctx context.Context, e *jmodels.Event) er
 	case jmodels.CommitOperationDelete:
 		rkey := e.Commit.RKey
 
-		ddb, ok := i.Db.Execer.(*db.DB)
-		if !ok {
-			return fmt.Errorf("failed to index profile record, invalid db cast")
-		}
-
 		// get record from db first
 		members, err := db.GetSpindleMembers(
-			ddb,
+			i.Db,
 			orm.FilterEq("did", did),
 			orm.FilterEq("rkey", rkey),
 		)
@@ -633,7 +613,7 @@ func (i *Ingester) ingestSpindleMember(ctx context.Context, e *jmodels.Event) er
 		}
 		member := members[0]
 
-		tx, err := ddb.Begin()
+		tx, err := i.Db.Begin()
 		if err != nil {
 			return fmt.Errorf("failed to start txn: %w", err)
 		}
@@ -686,12 +666,7 @@ func (i *Ingester) ingestSpindle(ctx context.Context, e *jmodels.Event) error {
 
 		instance := e.Commit.RKey
 
-		ddb, ok := i.Db.Execer.(*db.DB)
-		if !ok {
-			return fmt.Errorf("failed to index profile record, invalid db cast")
-		}
-
-		err := db.AddSpindle(ddb, models.Spindle{
+		err := db.AddSpindle(i.Db, models.Spindle{
 			Owner:    syntax.DID(did),
 			Instance: instance,
 		})
@@ -710,7 +685,7 @@ func (i *Ingester) ingestSpindle(ctx context.Context, e *jmodels.Event) error {
 			return err
 		}
 
-		_, err = serververify.MarkSpindleVerified(ddb, i.Enforcer, instance, did)
+		_, err = serververify.MarkSpindleVerified(i.Db, i.Enforcer, instance, did)
 		if err != nil {
 			return fmt.Errorf("failed to mark verified: %w", err)
 		}
@@ -720,15 +695,10 @@ func (i *Ingester) ingestSpindle(ctx context.Context, e *jmodels.Event) error {
 	case jmodels.CommitOperationDelete:
 		instance := e.Commit.RKey
 
-		ddb, ok := i.Db.Execer.(*db.DB)
-		if !ok {
-			return fmt.Errorf("failed to index profile record, invalid db cast")
-		}
-
 		// get record from db first
 		spindles, err := db.GetSpindles(
 			ctx,
-			ddb,
+			i.Db,
 			orm.FilterEq("owner", did),
 			orm.FilterEq("instance", instance),
 		)
@@ -737,7 +707,7 @@ func (i *Ingester) ingestSpindle(ctx context.Context, e *jmodels.Event) error {
 		}
 		spindle := spindles[0]
 
-		tx, err := ddb.Begin()
+		tx, err := i.Db.Begin()
 		if err != nil {
 			return err
 		}
@@ -795,11 +765,6 @@ func (i *Ingester) ingestString(e *jmodels.Event) error {
 	l := i.Logger.With("handler", "ingestString", "nsid", e.Commit.Collection, "did", did, "rkey", rkey)
 	l.Info("ingesting record")
 
-	ddb, ok := i.Db.Execer.(*db.DB)
-	if !ok {
-		return fmt.Errorf("failed to index string record, invalid db cast")
-	}
-
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
 		raw := json.RawMessage(e.Commit.Record)
@@ -817,7 +782,7 @@ func (i *Ingester) ingestString(e *jmodels.Event) error {
 			return err
 		}
 
-		if err = db.AddString(ddb, string); err != nil {
+		if err = db.AddString(i.Db, string); err != nil {
 			l.Error("failed to add string", "err", err)
 			return err
 		}
@@ -826,7 +791,7 @@ func (i *Ingester) ingestString(e *jmodels.Event) error {
 
 	case jmodels.CommitOperationDelete:
 		if err := db.DeleteString(
-			ddb,
+			i.Db,
 			orm.FilterEq("did", did),
 			orm.FilterEq("rkey", rkey),
 		); err != nil {
@@ -911,12 +876,7 @@ func (i *Ingester) ingestKnot(e *jmodels.Event) error {
 
 		domain := e.Commit.RKey
 
-		ddb, ok := i.Db.Execer.(*db.DB)
-		if !ok {
-			return fmt.Errorf("failed to index profile record, invalid db cast")
-		}
-
-		err := db.AddKnot(ddb, domain, did)
+		err := db.AddKnot(i.Db, domain, did)
 		if err != nil {
 			l.Error("failed to add knot to db", "err", err, "domain", domain)
 			return err
@@ -934,7 +894,7 @@ func (i *Ingester) ingestKnot(e *jmodels.Event) error {
 			return err
 		}
 
-		err = serververify.MarkKnotVerified(ddb, i.Enforcer, domain, did)
+		err = serververify.MarkKnotVerified(i.Db, i.Enforcer, domain, did)
 		if err != nil {
 			return fmt.Errorf("failed to mark verified: %w", err)
 		}
@@ -944,14 +904,9 @@ func (i *Ingester) ingestKnot(e *jmodels.Event) error {
 	case jmodels.CommitOperationDelete:
 		domain := e.Commit.RKey
 
-		ddb, ok := i.Db.Execer.(*db.DB)
-		if !ok {
-			return fmt.Errorf("failed to index knot record, invalid db cast")
-		}
-
 		// get record from db first
 		registrations, err := db.GetRegistrations(
-			ddb,
+			i.Db,
 			orm.FilterEq("domain", domain),
 			orm.FilterEq("did", did),
 		)
@@ -963,7 +918,7 @@ func (i *Ingester) ingestKnot(e *jmodels.Event) error {
 		}
 		registration := registrations[0]
 
-		tx, err := ddb.Begin()
+		tx, err := i.Db.Begin()
 		if err != nil {
 			return err
 		}
@@ -1010,11 +965,6 @@ func (i *Ingester) ingestIssue(ctx context.Context, e *jmodels.Event) error {
 	l := i.Logger.With("handler", "ingestIssue", "nsid", e.Commit.Collection, "did", did, "rkey", rkey)
 	l.Info("ingesting record")
 
-	ddb, ok := i.Db.Execer.(*db.DB)
-	if !ok {
-		return fmt.Errorf("failed to index issue record, invalid db cast")
-	}
-
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
 		raw := json.RawMessage(e.Commit.Record)
@@ -1044,7 +994,7 @@ func (i *Ingester) ingestIssue(ctx context.Context, e *jmodels.Event) error {
 			}
 		}
 
-		tx, err := ddb.BeginTx(ctx, nil)
+		tx, err := i.Db.BeginTx(ctx, nil)
 		if err != nil {
 			l.Error("failed to begin transaction", "err", err)
 			return err
@@ -1066,7 +1016,7 @@ func (i *Ingester) ingestIssue(ctx context.Context, e *jmodels.Event) error {
 		return nil
 
 	case jmodels.CommitOperationDelete:
-		tx, err := ddb.BeginTx(ctx, nil)
+		tx, err := i.Db.BeginTx(ctx, nil)
 		if err != nil {
 			l.Error("failed to begin transaction", "err", err)
 			return err
@@ -1100,11 +1050,6 @@ func (i *Ingester) ingestPull(ctx context.Context, e *jmodels.Event) error {
 
 	l := i.Logger.With("handler", "ingestPull", "nsid", e.Commit.Collection, "did", did, "rkey", rkey)
 	l.Info("ingesting record")
-
-	ddb, ok := i.Db.Execer.(*db.DB)
-	if !ok {
-		return fmt.Errorf("failed to index pull record, invalid db cast")
-	}
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
@@ -1188,7 +1133,7 @@ func (i *Ingester) ingestPull(ctx context.Context, e *jmodels.Event) error {
 			return fmt.Errorf("failed to validate pull: %w", err)
 		}
 
-		tx, err := ddb.BeginTx(ctx, nil)
+		tx, err := i.Db.BeginTx(ctx, nil)
 		if err != nil {
 			l.Error("failed to begin transaction", "err", err)
 			return err
@@ -1210,7 +1155,7 @@ func (i *Ingester) ingestPull(ctx context.Context, e *jmodels.Event) error {
 		return nil
 
 	case jmodels.CommitOperationDelete:
-		tx, err := ddb.BeginTx(ctx, nil)
+		tx, err := i.Db.BeginTx(ctx, nil)
 		if err != nil {
 			l.Error("failed to begin transaction", "err", err)
 			return err
@@ -1245,11 +1190,6 @@ func (i *Ingester) ingestIssueComment(e *jmodels.Event) error {
 	l := i.Logger.With("handler", "ingestIssueComment", "nsid", e.Commit.Collection, "did", did, "rkey", rkey)
 	l.Info("ingesting record")
 
-	ddb, ok := i.Db.Execer.(*db.DB)
-	if !ok {
-		return fmt.Errorf("failed to index issue comment record, invalid db cast")
-	}
-
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
 		raw := json.RawMessage(e.Commit.Record)
@@ -1268,7 +1208,7 @@ func (i *Ingester) ingestIssueComment(e *jmodels.Event) error {
 			return fmt.Errorf("failed to validate comment: %w", err)
 		}
 
-		tx, err := ddb.Begin()
+		tx, err := i.Db.Begin()
 		if err != nil {
 			return fmt.Errorf("failed to start transaction: %w", err)
 		}
@@ -1283,7 +1223,7 @@ func (i *Ingester) ingestIssueComment(e *jmodels.Event) error {
 
 	case jmodels.CommitOperationDelete:
 		if err := db.DeleteIssueComments(
-			ddb,
+			i.Db,
 			orm.FilterEq("did", did),
 			orm.FilterEq("rkey", rkey),
 		); err != nil {
@@ -1305,11 +1245,6 @@ func (i *Ingester) ingestLabelDefinition(e *jmodels.Event) error {
 	l := i.Logger.With("handler", "ingestLabelDefinition", "nsid", e.Commit.Collection, "did", did, "rkey", rkey)
 	l.Info("ingesting record")
 
-	ddb, ok := i.Db.Execer.(*db.DB)
-	if !ok {
-		return fmt.Errorf("failed to index label definition, invalid db cast")
-	}
-
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
 		raw := json.RawMessage(e.Commit.Record)
@@ -1328,7 +1263,7 @@ func (i *Ingester) ingestLabelDefinition(e *jmodels.Event) error {
 			return fmt.Errorf("failed to validate labeldef: %w", err)
 		}
 
-		_, err = db.AddLabelDefinition(ddb, def)
+		_, err = db.AddLabelDefinition(i.Db, def)
 		if err != nil {
 			return fmt.Errorf("failed to create labeldef: %w", err)
 		}
@@ -1337,7 +1272,7 @@ func (i *Ingester) ingestLabelDefinition(e *jmodels.Event) error {
 
 	case jmodels.CommitOperationDelete:
 		if err := db.DeleteLabelDefinition(
-			ddb,
+			i.Db,
 			orm.FilterEq("did", did),
 			orm.FilterEq("rkey", rkey),
 		); err != nil {
@@ -1359,11 +1294,6 @@ func (i *Ingester) ingestLabelOp(e *jmodels.Event) error {
 	l := i.Logger.With("handler", "ingestLabelOp", "nsid", e.Commit.Collection, "did", did, "rkey", rkey)
 	l.Info("ingesting record")
 
-	ddb, ok := i.Db.Execer.(*db.DB)
-	if !ok {
-		return fmt.Errorf("failed to index label op, invalid db cast")
-	}
-
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate:
 		raw := json.RawMessage(e.Commit.Record)
@@ -1379,7 +1309,7 @@ func (i *Ingester) ingestLabelOp(e *jmodels.Event) error {
 		var repo *models.Repo
 		switch collection {
 		case tangled.RepoIssueNSID:
-			i, err := db.GetIssues(ddb, orm.FilterEq("at_uri", subject))
+			i, err := db.GetIssues(i.Db, orm.FilterEq("at_uri", subject))
 			if err != nil || len(i) != 1 {
 				return fmt.Errorf("failed to find subject: %w || subject count %d", err, len(i))
 			}
@@ -1388,7 +1318,7 @@ func (i *Ingester) ingestLabelOp(e *jmodels.Event) error {
 			return fmt.Errorf("unsupported label subject: %s", collection)
 		}
 
-		actx, err := db.NewLabelApplicationCtx(ddb, orm.FilterIn("at_uri", repo.Labels))
+		actx, err := db.NewLabelApplicationCtx(i.Db, orm.FilterIn("at_uri", repo.Labels))
 		if err != nil {
 			return fmt.Errorf("failed to build label application ctx: %w", err)
 		}
@@ -1405,7 +1335,7 @@ func (i *Ingester) ingestLabelOp(e *jmodels.Event) error {
 			}
 		}
 
-		tx, err := ddb.Begin()
+		tx, err := i.Db.Begin()
 		if err != nil {
 			return err
 		}

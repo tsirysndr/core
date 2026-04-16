@@ -118,7 +118,6 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 
 	mentionsResolver := mentions.New(config, res, d, log.SubLogger(logger, "mentionsResolver"))
 
-	wrapper := db.DbWrapper{Execer: d}
 	jc, err := jetstream.NewJetstreamClient(
 		config.Jetstream.Endpoint,
 		"appview",
@@ -142,7 +141,7 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 		},
 		nil,
 		tlog.SubLogger(logger, "jetstream"),
-		wrapper,
+		d,
 		false,
 
 		// in-memory filter is inapplicable to appview so

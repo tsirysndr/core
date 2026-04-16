@@ -1,10 +1,6 @@
 package db
 
-type DbWrapper struct {
-	Execer
-}
-
-func (db DbWrapper) SaveLastTimeUs(lastTimeUs int64) error {
+func (db *DB) SaveLastTimeUs(lastTimeUs int64) error {
 	_, err := db.Exec(`
 		insert into _jetstream (id, last_time_us)
 		values (1, ?)
@@ -13,7 +9,7 @@ func (db DbWrapper) SaveLastTimeUs(lastTimeUs int64) error {
 	return err
 }
 
-func (db DbWrapper) GetLastTimeUs() (int64, error) {
+func (db *DB) GetLastTimeUs() (int64, error) {
 	var lastTimeUs int64
 	row := db.QueryRow(`select last_time_us from _jetstream where id = 1;`)
 	err := row.Scan(&lastTimeUs)
