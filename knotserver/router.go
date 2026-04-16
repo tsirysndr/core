@@ -36,7 +36,7 @@ type Knot struct {
 	motdMu   sync.RWMutex
 }
 
-func Setup(ctx context.Context, c *config.Config, db *db.DB, e *rbac.Enforcer, jc *jetstream.JetstreamClient, n *notifier.Notifier) (http.Handler, error) {
+func Setup(ctx context.Context, c *config.Config, db *db.DB, e *rbac.Enforcer, jc *jetstream.JetstreamClient, n *notifier.Notifier, resolver *idresolver.Resolver) (http.Handler, error) {
 	h := Knot{
 		c:        c,
 		db:       db,
@@ -44,7 +44,7 @@ func Setup(ctx context.Context, c *config.Config, db *db.DB, e *rbac.Enforcer, j
 		l:        log.FromContext(ctx),
 		jc:       jc,
 		n:        n,
-		resolver: idresolver.DefaultResolver(c.Server.PlcUrl),
+		resolver: resolver,
 		motd:     defaultMotd,
 	}
 

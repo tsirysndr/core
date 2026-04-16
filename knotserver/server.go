@@ -9,6 +9,7 @@ import (
 	"github.com/urfave/cli/v3"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/hook"
+	"tangled.org/core/idresolver"
 	"tangled.org/core/jetstream"
 	"tangled.org/core/knotserver/config"
 	"tangled.org/core/knotserver/db"
@@ -89,14 +90,16 @@ func Run(ctx context.Context, cmd *cli.Command) error {
 
 	notifier := notifier.New()
 
+	resolver := idresolver.DefaultResolver(c.Server.PlcUrl)
+
 	go migrateReposOnStartup(ctx, c, db, e, &notifier, log.SubLogger(logger, "migrate"))
 
-	mux, err := Setup(ctx, c, db, e, jc, &notifier)
+	mux, err := Setup(ctx, c, db, e, jc, &notifier, resolver)
 	if err != nil {
 		return fmt.Errorf("failed to setup server: %w", err)
 	}
 
-	imux := Internal(ctx, c, db, e, &notifier)
+	imux := Internal(ctx, c, db, e, &notifier, resolver)
 
 	logger.Info("starting internal server", "address", c.Server.InternalListenAddr)
 	go http.ListenAndServe(c.Server.InternalListenAddr, imux)

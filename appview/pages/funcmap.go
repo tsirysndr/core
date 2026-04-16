@@ -27,11 +27,13 @@ import (
 	"github.com/go-enry/go-enry/v2"
 	"github.com/yuin/goldmark"
 	emoji "github.com/yuin/goldmark-emoji"
+	"tangled.org/core/appview/cache"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages/markup"
 	"tangled.org/core/crypto"
+	"tangled.org/core/idresolver"
 )
 
 type tab map[string]string
@@ -65,21 +67,10 @@ func (p *Pages) funcMap() template.FuncMap {
 			return mapValue.MapIndex(keyValue).IsValid()
 		},
 		"resolve": func(s string) string {
-			profile, err := db.GetProfile(p.db, s)
-			if err == nil && profile != nil && profile.PreferredHandle != "" {
-				return string(profile.PreferredHandle)
-			}
-
-			identity, err := p.resolver.ResolveIdent(context.Background(), s)
-			if err != nil {
-				return s
-			}
-
-			if identity.Handle.IsInvalidHandle() {
-				return "handle.invalid"
-			}
-
-			return identity.Handle.String()
+			return p.DisplayHandle(context.Background(), s)
+		},
+		"primaryHandle": func(s string) string {
+			return primaryHandle(p.resolver, s)
 		},
 		"resolvePds": func(s string) string {
 			identity, err := p.resolver.ResolveIdent(context.Background(), s)
@@ -512,6 +503,26 @@ func (p *Pages) funcMap() template.FuncMap {
 			}
 		},
 	}
+}
+
+func primaryHandle(r *idresolver.Resolver, s string) string {
+	identity, err := r.ResolveIdent(context.Background(), s)
+	if err != nil || identity.Handle.IsInvalidHandle() {
+		return "handle.invalid"
+	}
+	return identity.Handle.String()
+}
+
+func (p *Pages) DisplayHandle(ctx context.Context, did string) string {
+	if p.db != nil {
+		if h := cache.LookupPreferredHandle(ctx, p.rdb, p.db, did); h != "" {
+			return h
+		}
+	}
+	if id, err := p.resolver.ResolveIdent(ctx, did); err == nil && !id.Handle.IsInvalidHandle() {
+		return id.Handle.String()
+	}
+	return did
 }
 
 func (p *Pages) AvatarUrl(actor, size string) string {

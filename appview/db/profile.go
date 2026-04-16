@@ -354,6 +354,21 @@ func GetProfiles(e Execer, filters ...orm.Filter) (map[string]*models.Profile, e
 	return profileMap, nil
 }
 
+func GetPreferredHandle(e Execer, did string) (syntax.Handle, error) {
+	var h sql.Null[string]
+	err := e.QueryRow(
+		`select preferred_handle from profile where did = ?`,
+		did,
+	).Scan(&h)
+	if err != nil {
+		return "", err
+	}
+	if !h.Valid || h.V == "" {
+		return "", sql.ErrNoRows
+	}
+	return syntax.Handle(h.V), nil
+}
+
 func GetDidByPreferredHandle(e Execer, handle syntax.Handle) (syntax.DID, error) {
 	var did string
 	err := e.QueryRow(

@@ -1,7 +1,6 @@
 package repo
 
 import (
-	"context"
 	"log"
 	"net/http"
 	"sort"
@@ -21,15 +20,9 @@ func (rp *Repo) Opengraph(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var ownerHandle string
-	owner, err := rp.idResolver.ResolveIdent(context.Background(), f.Did)
-	if err != nil {
-		ownerHandle = f.Did
-	} else {
-		ownerHandle = owner.Handle.String()
-	}
+	ownerHandle := rp.pages.DisplayHandle(r.Context(), f.Did)
 
-	avatarUrl := rp.pages.AvatarUrl(ownerHandle, "256")
+	avatarUrl := rp.pages.AvatarUrl(f.Did, "256")
 
 	var languageStats []types.RepoLanguageDetails
 	langs, err := db.GetRepoLanguages(

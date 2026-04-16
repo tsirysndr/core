@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/feeds"
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/appview/cache"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/middleware"
 	"tangled.org/core/appview/models"
@@ -91,11 +92,13 @@ func (s *State) profile(r *http.Request) (*pages.ProfileCard, error) {
 
 	loggedInUser := s.oauth.GetMultiAccountUser(r)
 	followStatus := models.IsNotFollowing
+	var loggedInDid string
 	if loggedInUser != nil {
 		followStatus = db.GetFollowStatus(s.db, loggedInUser.Did, did)
+		loggedInDid = loggedInUser.Did
 	}
 
-	showPunchcard := s.shouldShowPunchcard(did, loggedInUser.Did)
+	showPunchcard := s.shouldShowPunchcard(did, loggedInDid)
 
 	var punchcard *models.Punchcard
 	if showPunchcard {
@@ -745,12 +748,6 @@ func (s *State) UpdateProfilePins(w http.ResponseWriter, r *http.Request) {
 func (s *State) updateProfile(profile *models.Profile, w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "updateProfile")
 	user := s.oauth.GetMultiAccountUser(r)
-	tx, err := s.db.BeginTx(r.Context(), nil)
-	if err != nil {
-		l.Error("failed to start transaction", "err", err)
-		s.pages.Notice(w, "update-profile", "Failed to update profile, try again later.")
-		return
-	}
 
 	client, err := s.oauth.AuthorizedClient(r)
 	if err != nil {
@@ -805,11 +802,32 @@ func (s *State) updateProfile(profile *models.Profile, w http.ResponseWriter, r 
 		return
 	}
 
-	err = db.UpsertProfile(tx, profile)
+	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
+		l.Error("failed to start transaction", "err", err)
+		s.pages.Notice(w, "update-profile", "Failed to update profile, try again later.")
+		return
+	}
+
+	if err := db.UpsertProfile(tx, profile); err != nil {
 		l.Error("failed to update profile in DB", "err", err)
 		s.pages.Notice(w, "update-profile", "Failed to update profile, try again later.")
 		return
+	}
+
+	if s.rdb != nil {
+		ctx := r.Context()
+		pipe := s.rdb.Pipeline()
+		didKey := fmt.Sprintf(cache.PreferredHandleByDid, profile.Did)
+		if profile.PreferredHandle != "" {
+			pipe.Set(ctx, didKey, string(profile.PreferredHandle), cache.PreferredHandleTTL)
+			pipe.Set(ctx, fmt.Sprintf(cache.PreferredHandleByHandle, string(profile.PreferredHandle)), profile.Did, cache.PreferredHandleTTL)
+		} else {
+			pipe.Del(ctx, didKey)
+		}
+		if _, execErr := pipe.Exec(ctx); execErr != nil {
+			l.Warn("failed to update preferred handle cache", "err", execErr)
+		}
 	}
 
 	s.notifier.UpdateProfile(r.Context(), profile)

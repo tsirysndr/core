@@ -2,8 +2,11 @@ package idresolver
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -71,8 +74,39 @@ func RedisResolver(redisUrl, plcUrl string) (*Resolver, error) {
 	}, nil
 }
 
+type handleResolver interface {
+	ResolveHandle(ctx context.Context, h syntax.Handle) (syntax.DID, error)
+}
+
 func (r *Resolver) ResolveHandle(ctx context.Context, handle syntax.Handle) (syntax.DID, error) {
+	if hr, ok := r.directory.(handleResolver); ok {
+		return hr.ResolveHandle(ctx, handle)
+	}
 	return r.base.ResolveHandle(ctx, handle)
+}
+
+func (r *Resolver) ResolveAtIdentifier(ctx context.Context, input string) (*identity.Identity, error) {
+	if did, err := syntax.ParseDID(input); err == nil {
+		return r.directory.LookupDID(ctx, did)
+	}
+	handle, err := syntax.ParseHandle(input)
+	if err != nil {
+		return nil, fmt.Errorf("not a did or handle: %w", err)
+	}
+	handle = handle.Normalize()
+	did, err := r.base.ResolveHandle(ctx, handle)
+	if err != nil {
+		return nil, fmt.Errorf("resolve handle %q: %w", handle, err)
+	}
+	ident, err := r.directory.LookupDID(ctx, did)
+	if err != nil {
+		return nil, fmt.Errorf("lookup did for %q: %w", handle, err)
+	}
+	aka := "at://" + handle.String()
+	if !slices.ContainsFunc(ident.AlsoKnownAs, func(s string) bool { return strings.EqualFold(s, aka) }) {
+		return nil, fmt.Errorf("handle %q not declared in alsoKnownAs for %s", handle, did)
+	}
+	return ident, nil
 }
 
 func (r *Resolver) ResolveIdent(ctx context.Context, arg string) (*identity.Identity, error) {

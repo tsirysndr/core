@@ -13,6 +13,7 @@ import (
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/go-chi/chi/v5"
+	"tangled.org/core/appview/cache"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
@@ -31,10 +32,11 @@ type Middleware struct {
 	repoResolver *reporesolver.RepoResolver
 	idResolver   *idresolver.Resolver
 	pages        *pages.Pages
+	rdb          *cache.Cache
 	logger       *slog.Logger
 }
 
-func New(oauth *oauth.OAuth, db *db.DB, enforcer *rbac.Enforcer, repoResolver *reporesolver.RepoResolver, idResolver *idresolver.Resolver, pages *pages.Pages, logger *slog.Logger) Middleware {
+func New(oauth *oauth.OAuth, db *db.DB, enforcer *rbac.Enforcer, repoResolver *reporesolver.RepoResolver, idResolver *idresolver.Resolver, pages *pages.Pages, rdb *cache.Cache, logger *slog.Logger) Middleware {
 	return Middleware{
 		oauth:        oauth,
 		db:           db,
@@ -42,6 +44,7 @@ func New(oauth *oauth.OAuth, db *db.DB, enforcer *rbac.Enforcer, repoResolver *r
 		repoResolver: repoResolver,
 		idResolver:   idResolver,
 		pages:        pages,
+		rdb:          rdb,
 		logger:       logger,
 	}
 }
@@ -184,19 +187,19 @@ func (mw Middleware) ResolveIdent() middlewareFunc {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			didOrHandle := chi.URLParam(req, "user")
-			didOrHandle = strings.TrimPrefix(didOrHandle, "@")
+			origSeg := chi.URLParam(req, "user")
+			didOrHandle := strings.TrimPrefix(origSeg, "@")
 
 			if slices.Contains(excluded, didOrHandle) {
 				next.ServeHTTP(w, req)
 				return
 			}
 
-			id, err := mw.idResolver.ResolveIdent(req.Context(), didOrHandle)
+			id, err := mw.idResolver.ResolveAtIdentifier(req.Context(), didOrHandle)
 			if err != nil {
 				if h, parseErr := syntax.ParseHandle(didOrHandle); parseErr == nil {
-					if did, lookupErr := db.GetDidByPreferredHandle(mw.db, h); lookupErr == nil {
-						id, err = mw.idResolver.ResolveIdent(req.Context(), string(did))
+					if did := cache.LookupDidByPreferredHandle(req.Context(), mw.rdb, mw.db, h); did != "" {
+						id, err = mw.idResolver.ResolveAtIdentifier(req.Context(), did)
 					}
 				}
 			}
@@ -204,6 +207,18 @@ func (mw Middleware) ResolveIdent() middlewareFunc {
 				mw.logger.Error("failed to resolve did/handle", "didOrHandle", didOrHandle, "err", err)
 				mw.pages.Error404(w)
 				return
+			}
+
+			if req.Method == http.MethodGet && !userutil.IsDid(didOrHandle) {
+				if pref := cache.LookupPreferredHandle(req.Context(), mw.rdb, mw.db, id.DID.String()); pref != "" && didOrHandle != pref {
+					rest := strings.TrimPrefix(req.URL.Path, "/"+origSeg)
+					target := "/" + pref + rest
+					if req.URL.RawQuery != "" {
+						target += "?" + req.URL.RawQuery
+					}
+					http.Redirect(w, req, target, http.StatusFound)
+					return
+				}
 			}
 
 			ctx := context.WithValue(req.Context(), "resolvedId", *id)

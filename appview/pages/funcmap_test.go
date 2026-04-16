@@ -22,7 +22,7 @@ func TestPages_funcMap(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := NewPages(tt.config, tt.res, nil, tt.l)
+			p := NewPages(tt.config, tt.res, nil, nil, tt.l)
 			got := p.funcMap()
 			// TODO: update the condition below to compare got with tt.want.
 			if true {

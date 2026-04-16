@@ -1,7 +1,6 @@
 package pulls
 
 import (
-	"context"
 	"log"
 	"net/http"
 	"time"
@@ -26,15 +25,9 @@ func (s *Pulls) PullOpenGraphSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var ownerHandle string
-	owner, err := s.idResolver.ResolveIdent(context.Background(), f.Did)
-	if err != nil {
-		ownerHandle = f.Did
-	} else {
-		ownerHandle = owner.Handle.String()
-	}
+	ownerHandle := s.pages.DisplayHandle(r.Context(), f.Did)
 
-	avatarUrl := s.pages.AvatarUrl(ownerHandle, "256")
+	avatarUrl := s.pages.AvatarUrl(f.Did, "256")
 
 	var status string
 	if pull.State.IsOpen() {

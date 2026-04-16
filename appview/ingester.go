@@ -23,6 +23,7 @@ import (
 	"github.com/ipfs/go-cid"
 	"golang.org/x/sync/errgroup"
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/appview/cache"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
@@ -37,6 +38,7 @@ type Ingester struct {
 	Db         db.DbWrapper
 	Enforcer   *rbac.Enforcer
 	IdResolver *idresolver.Resolver
+	Cache      *cache.Cache
 	Config     *config.Config
 	Logger     *slog.Logger
 	Validator  *validator.Validator
@@ -434,6 +436,19 @@ func (i *Ingester) ingestProfile(ctx context.Context, e *jmodels.Event) error {
 		}
 
 		err = db.UpsertProfile(tx, &profile)
+		if err == nil && i.Cache != nil {
+			pipe := i.Cache.Pipeline()
+			didKey := fmt.Sprintf(cache.PreferredHandleByDid, did)
+			if preferredHandle != "" {
+				pipe.Set(ctx, didKey, string(preferredHandle), cache.PreferredHandleTTL)
+				pipe.Set(ctx, fmt.Sprintf(cache.PreferredHandleByHandle, string(preferredHandle)), did, cache.PreferredHandleTTL)
+			} else {
+				pipe.Del(ctx, didKey)
+			}
+			if _, execErr := pipe.Exec(ctx); execErr != nil {
+				l.Warn("failed to update preferred handle cache", "err", execErr)
+			}
+		}
 	case jmodels.CommitOperationDelete:
 		err = db.DeleteArtifact(i.Db, orm.FilterEq("did", did), orm.FilterEq("rkey", e.Commit.RKey))
 	}

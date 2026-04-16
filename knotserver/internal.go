@@ -115,17 +115,16 @@ func (h *InternalHandle) Guard(w http.ResponseWriter, r *http.Request) {
 
 	case len(components) == 2:
 		repoOwner := components[0]
-		resolver := idresolver.DefaultResolver(h.c.Server.PlcUrl)
-		repoOwnerIdent, resolveErr := resolver.ResolveIdent(r.Context(), repoOwner)
-		if resolveErr != nil || repoOwnerIdent.Handle.IsInvalidHandle() {
-			l.Error("Error resolving handle", "handle", repoOwner, "err", resolveErr)
+		ownerIdent, resolveErr := h.res.ResolveAtIdentifier(r.Context(), repoOwner)
+		if resolveErr != nil {
+			l.Error("error resolving owner", "owner", repoOwner, "err", resolveErr)
 			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "error resolving handle: invalid handle\n")
+			fmt.Fprintf(w, "error resolving owner: invalid did or handle\n")
 			return
 		}
-		ownerDid := repoOwnerIdent.DID.String()
+		ownerDid := ownerIdent.DID
 		repoName := components[1]
-		repoDid, didErr := h.db.GetRepoDid(ownerDid, repoName)
+		repoDid, didErr := h.db.GetRepoDid(ownerDid.String(), repoName)
 		var repoPath string
 		if didErr == nil {
 			var lookupErr error
@@ -138,7 +137,7 @@ func (h *InternalHandle) Guard(w http.ResponseWriter, r *http.Request) {
 			}
 			rbacResource = repoDid
 		} else {
-			legacyPath, joinErr := securejoin.SecureJoin(h.c.Repo.ScanPath, filepath.Join(ownerDid, repoName))
+			legacyPath, joinErr := securejoin.SecureJoin(h.c.Repo.ScanPath, filepath.Join(ownerDid.String(), repoName))
 			if joinErr != nil {
 				w.WriteHeader(http.StatusNotFound)
 				fmt.Fprintln(w, "repo not found")
@@ -151,7 +150,7 @@ func (h *InternalHandle) Guard(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			repoPath = legacyPath
-			rbacResource = ownerDid + "/" + repoName
+			rbacResource = ownerDid.String() + "/" + repoName
 		}
 		rel, relErr := filepath.Rel(h.c.Repo.ScanPath, repoPath)
 		if relErr != nil {
@@ -476,19 +475,18 @@ func (h *InternalHandle) emitCompareLink(
 	return nil
 }
 
-func Internal(ctx context.Context, c *config.Config, db *db.DB, e *rbac.Enforcer, n *notifier.Notifier) http.Handler {
+func Internal(ctx context.Context, c *config.Config, db *db.DB, e *rbac.Enforcer, n *notifier.Notifier, res *idresolver.Resolver) http.Handler {
 	r := chi.NewRouter()
 	l := log.FromContext(ctx)
 	l = log.SubLogger(l, "internal")
-	res := idresolver.DefaultResolver(c.Server.PlcUrl)
 
 	h := InternalHandle{
-		db,
-		c,
-		e,
-		l,
-		n,
-		res,
+		db:  db,
+		c:   c,
+		e:   e,
+		l:   l,
+		n:   n,
+		res: res,
 	}
 
 	r.Get("/push-allowed", h.PushAllowed)

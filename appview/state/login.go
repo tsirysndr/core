@@ -8,8 +8,6 @@ import (
 	"time"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
-	"github.com/bluesky-social/indigo/atproto/identity"
-	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/bluesky-social/indigo/xrpc"
 	"tangled.org/core/appview/pages"
 )
@@ -59,14 +57,7 @@ func (s *State) Login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		ident, err := s.idResolver.ResolveIdent(r.Context(), handle)
-		if err != nil && errors.Is(err, identity.ErrHandleMismatch) {
-			if h, parseErr := syntax.ParseHandle(handle); parseErr == nil {
-				if did, resolveErr := s.idResolver.ResolveHandle(r.Context(), h); resolveErr == nil {
-					ident, err = s.idResolver.ResolveIdent(r.Context(), did.String())
-				}
-			}
-		}
+		ident, err := s.idResolver.ResolveAtIdentifier(r.Context(), handle)
 		if err != nil {
 			l.Warn("handle resolution failed", "handle", handle, "err", err)
 			s.pages.Notice(w, "login-msg", fmt.Sprintf("Could not resolve handle \"%s\". The account may not exist.", handle))

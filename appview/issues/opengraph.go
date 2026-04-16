@@ -67,15 +67,9 @@ func (rp *Issues) IssueOpenGraphSummary(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	var ownerHandle string
-	owner, err := rp.idResolver.ResolveIdent(context.Background(), f.Did)
-	if err != nil {
-		ownerHandle = f.Did
-	} else {
-		ownerHandle = owner.Handle.String()
-	}
+	ownerHandle := rp.pages.DisplayHandle(r.Context(), f.Did)
 
-	avatarUrl := rp.pages.AvatarUrl(ownerHandle, "256")
+	avatarUrl := rp.pages.AvatarUrl(f.Did, "256")
 
 	status := "closed"
 	if issue.Open {

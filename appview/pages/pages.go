@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/appview/cache"
 	"tangled.org/core/appview/commitverify"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
@@ -45,6 +46,7 @@ type Pages struct {
 	pdsCfg      config.PdsConfig
 	resolver    *idresolver.Resolver
 	db          *db.DB
+	rdb         *cache.Cache
 	dev         bool
 	embedFS     fs.FS
 	templateDir string // Path to templates on disk for dev mode
@@ -52,7 +54,7 @@ type Pages struct {
 	logger      *slog.Logger
 }
 
-func NewPages(config *config.Config, res *idresolver.Resolver, database *db.DB, logger *slog.Logger) *Pages {
+func NewPages(config *config.Config, res *idresolver.Resolver, database *db.DB, rdb *cache.Cache, logger *slog.Logger) *Pages {
 	// initialized with safe defaults, can be overridden per use
 	rctx := &markup.RenderContext{
 		IsDev:      config.Core.Dev,
@@ -72,6 +74,7 @@ func NewPages(config *config.Config, res *idresolver.Resolver, database *db.DB, 
 		rctx:        rctx,
 		resolver:    res,
 		db:          database,
+		rdb:         rdb,
 		templateDir: "appview/pages",
 		logger:      logger,
 	}

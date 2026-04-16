@@ -471,24 +471,31 @@ func (h *Knot) fetchAndAddKeys(ctx context.Context, did string) error {
 }
 
 func (h *Knot) processMessages(ctx context.Context, event *jmodels.Event) error {
-	if event.Kind != jmodels.EventKindCommit {
+	var err error
+	switch event.Kind {
+	case jmodels.EventKindIdentity:
+		err = h.resolver.InvalidateIdent(ctx, event.Did)
+	case jmodels.EventKindCommit:
+		switch event.Commit.Collection {
+		case tangled.PublicKeyNSID:
+			err = h.processPublicKey(ctx, event)
+		case tangled.KnotMemberNSID:
+			err = h.processKnotMember(ctx, event)
+		case tangled.RepoPullNSID:
+			err = h.processPull(ctx, event)
+		case tangled.RepoCollaboratorNSID:
+			err = h.processCollaborator(ctx, event)
+		}
+	default:
 		return nil
 	}
 
-	var err error
-	switch event.Commit.Collection {
-	case tangled.PublicKeyNSID:
-		err = h.processPublicKey(ctx, event)
-	case tangled.KnotMemberNSID:
-		err = h.processKnotMember(ctx, event)
-	case tangled.RepoPullNSID:
-		err = h.processPull(ctx, event)
-	case tangled.RepoCollaboratorNSID:
-		err = h.processCollaborator(ctx, event)
-	}
-
 	if err != nil {
-		h.l.Warn("failed to process event, skipping", "nsid", event.Commit.Collection, "err", err)
+		args := []any{"kind", event.Kind, "err", err}
+		if event.Kind == jmodels.EventKindCommit {
+			args = append(args, "nsid", event.Commit.Collection)
+		}
+		h.l.Warn("failed to process event, skipping", args...)
 	}
 
 	lastTimeUs := event.TimeUS + 1

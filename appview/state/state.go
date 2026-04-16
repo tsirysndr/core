@@ -13,6 +13,7 @@ import (
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview"
 	"tangled.org/core/appview/bsky"
+	"tangled.org/core/appview/cache"
 	"tangled.org/core/appview/cloudflare"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
@@ -57,6 +58,7 @@ type State struct {
 	enforcer         *rbac.Enforcer
 	pages            *pages.Pages
 	idResolver       *idresolver.Resolver
+	rdb              *cache.Cache
 	mentionsResolver *mentions.Resolver
 	posthog          posthog.Client
 	jc               *jetstream.JetstreamClient
@@ -94,19 +96,24 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 		res = idresolver.DefaultResolver(config.Plc.PLCURL)
 	}
 
+	var rdb *cache.Cache
+	if config.Redis.Addr != "" {
+		rdb = cache.New(config.Redis.Addr)
+	}
+
 	posthog, err := posthog.NewWithConfig(config.Posthog.ApiKey, posthog.Config{Endpoint: config.Posthog.Endpoint})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create posthog client: %w", err)
 	}
 
-	pages := pages.NewPages(config, res, d, log.SubLogger(logger, "pages"))
+	pages := pages.NewPages(config, res, d, rdb, log.SubLogger(logger, "pages"))
 	oauth, err := oauth.New(config, posthog, d, enforcer, res, log.SubLogger(logger, "oauth"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to start oauth handler: %w", err)
 	}
 	validator := validator.New(d, res, enforcer)
 
-	repoResolver := reporesolver.New(config, enforcer, d)
+	repoResolver := reporesolver.New(config, enforcer, d, rdb)
 
 	mentionsResolver := mentions.New(config, res, d, log.SubLogger(logger, "mentionsResolver"))
 
@@ -152,6 +159,7 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 		Db:         wrapper,
 		Enforcer:   enforcer,
 		IdResolver: res,
+		Cache:      rdb,
 		Config:     config,
 		Logger:     log.SubLogger(logger, "ingester"),
 		Validator:  validator,
@@ -206,6 +214,7 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 		enforcer:         enforcer,
 		pages:            pages,
 		idResolver:       res,
+		rdb:              rdb,
 		mentionsResolver: mentionsResolver,
 		posthog:          posthog,
 		jc:               jc,
@@ -631,10 +640,12 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 		aturi = ""
 
 		s.notifier.NewRepo(r.Context(), repo)
-		if repoDid != "" {
+		switch {
+		case repoDid != "":
 			s.pages.HxLocation(w, fmt.Sprintf("/%s", repoDid))
-		} else {
-			s.pages.HxLocation(w, fmt.Sprintf("/%s/%s", user.Did, repoName))
+		default:
+			handle := s.pages.DisplayHandle(r.Context(), user.Did)
+			s.pages.HxLocation(w, fmt.Sprintf("/%s/%s", handle, repoName))
 		}
 	}
 }

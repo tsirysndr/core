@@ -10,6 +10,7 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/go-chi/chi/v5"
+	"tangled.org/core/appview/cache"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
@@ -27,10 +28,11 @@ type RepoResolver struct {
 	config   *config.Config
 	enforcer *rbac.Enforcer
 	execer   db.Execer
+	rdb      *cache.Cache
 }
 
-func New(config *config.Config, enforcer *rbac.Enforcer, execer db.Execer) *RepoResolver {
-	return &RepoResolver{config: config, enforcer: enforcer, execer: execer}
+func New(config *config.Config, enforcer *rbac.Enforcer, execer db.Execer, rdb *cache.Cache) *RepoResolver {
+	return &RepoResolver{config: config, enforcer: enforcer, execer: execer, rdb: rdb}
 }
 
 // NOTE: this... should not even be here. the entire package will be removed in future refactor
@@ -116,10 +118,15 @@ func (rr *RepoResolver) GetRepoInfo(r *http.Request, user *oauth.MultiAccountUse
 		}
 	}
 
+	ownerHandle := ownerId.Handle.String()
+	if h := cache.LookupPreferredHandle(r.Context(), rr.rdb, rr.execer, ownerId.DID.String()); h != "" {
+		ownerHandle = h
+	}
+
 	repoInfo := repoinfo.RepoInfo{
 		// this is basically a models.Repo
 		OwnerDid:    ownerId.DID.String(),
-		OwnerHandle: ownerId.Handle.String(),
+		OwnerHandle: ownerHandle,
 		Name:        repo.Name,
 		Rkey:        repo.Rkey,
 		Description: repo.Description,

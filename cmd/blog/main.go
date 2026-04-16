@@ -54,7 +54,7 @@ func main() {
 
 func makePages(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*pages.Pages, error) {
 	resolver := idresolver.DefaultResolver(cfg.Plc.PLCURL)
-	return pages.NewPages(cfg, resolver, nil, logger), nil
+	return pages.NewPages(cfg, resolver, nil, nil, logger), nil
 }
 
 func runBuild(ctx context.Context, logger *slog.Logger) error {
