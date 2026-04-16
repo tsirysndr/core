@@ -29,7 +29,7 @@
 
 {{ define "content" }}
 <div class="max-w-[90ch] mx-auto w-full px-4 py-8">
-  <div class="prose dark:prose-invert w-full max-w-none">
+  <div class="prose dark:prose-invert prose-headings:no-underline [&_h1]:border-none [&_h2]:border-none [&_h1]:pb-0 [&_h2]:pb-0 [&_h2]:text-[1.25em] text-[15px] w-full max-w-none">
 
     <header class="not-prose mb-4">
       {{ $authors := .Post.Meta.Authors }}
