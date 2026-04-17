@@ -29,7 +29,8 @@
     {{ template "features1" . }}
     {{ template "features2" . }}
     {{ template "recentUpdates" . }}
-    {{ template "community" . }}
+    {{ template "newsletter" . }}
+
   </div>
 {{ end }}
 
@@ -503,28 +504,28 @@
   </div>
 {{ end }}
 
-{{ define "community" }}
+{{ define "newsletter" }}
   <div class="w-full px-2 py-16 md:py-24">
     <div class="max-w-2xl mx-auto text-center space-y-6">
-    <h2 class="text-3xl md:text-6xl font-bold text-gray-900 dark:text-gray-100">Join the network</h2>
+    <h2 class="text-3xl md:text-6xl font-bold text-gray-900 dark:text-gray-100">Stay in the loop</h2>
     <p class="text-xl text-gray-600 dark:text-gray-300">
-      You can participate in the Tangled network with an AT account. If you
-      don't know what that is, you can sign up for one below.
+    We've got a newsletter! Punch in your email to stay updated on what we're shipping at Tangled.
     </p>
-    <form class="flex gap-2 items-stretch w-full md:max-w-md mx-auto p-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded shadow-sm" method="get" action="/signup">
-      <input
-        type="email"
-        id="email"
-        name="id"
-        tabindex="4"
-        required
-        placeholder="Enter your email"
-        class="py-2 w-full"
-      />
-      <button class="btn-create flex items-center gap-2 text-base whitespace-nowrap" type="submit">
-        join now
-        {{ i "arrow-right" "size-4" }}
-      </button>
+    <form class="flex gap-2 items-stretch w-full md:max-w-md mx-auto p-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded shadow-sm" hx-post="/newsletter/signup" hx-target="#newsletter-msg" hx-swap="outerHTML">
+      <span id="newsletter-msg" class="flex gap-2 items-stretch flex-1 min-w-0">
+        <input
+          type="email"
+          name="email"
+          tabindex="4"
+          required
+          placeholder="Enter your email"
+          class="py-2 w-full"
+        />
+        <button class="btn-create flex items-center gap-2 text-base whitespace-nowrap" type="submit">
+          subscribe
+          {{ i "arrow-right" "size-4" }}
+        </button>
+      </span>
     </form>
   </div>
 {{ end }}

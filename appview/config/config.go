@@ -63,8 +63,9 @@ type ConsumerConfig struct {
 }
 
 type ResendConfig struct {
-	ApiKey   string `env:"API_KEY"`
-	SentFrom string `env:"SENT_FROM, default=noreply@notifs.tangled.sh"`
+	ApiKey              string `env:"API_KEY"`
+	SentFrom            string `env:"SENT_FROM, default=noreply@notifs.tangled.sh"`
+	NewsletterSegmentId string `env:"NEWSLETTER_SEGMENT_ID"`
 }
 
 type CamoConfig struct {

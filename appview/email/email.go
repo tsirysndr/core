@@ -6,7 +6,7 @@ import (
 	"net/mail"
 	"strings"
 
-	"github.com/resend/resend-go/v2"
+	"github.com/resend/resend-go/v3"
 )
 
 type Email struct {
@@ -29,6 +29,19 @@ func SendEmail(email Email) error {
 	})
 	if err != nil {
 		return fmt.Errorf("error sending email: %w", err)
+	}
+	return nil
+}
+
+// AddNewsletterContact adds an email address to the Resend newsletter segment.
+func AddNewsletterContact(apiKey, segmentID, emailAddr string) error {
+	client := resend.NewClient(apiKey)
+	_, err := client.Contacts.Segments.Add(&resend.AddContactSegmentRequest{
+		SegmentId: segmentID,
+		Email:     emailAddr,
+	})
+	if err != nil {
+		return fmt.Errorf("error adding contact to newsletter segment: %w", err)
 	}
 	return nil
 }

@@ -1,0 +1,16 @@
+{{ define "timeline/fragments/newsletter" }}
+<div id="newsletter-banner" class="mb-4">
+  <form hx-post="/newsletter/signup" hx-target="#newsletter-msg" hx-swap="outerHTML"
+    class="relative flex flex-col gap-2 px-5 py-3 bg-green-50 dark:bg-green-950 border border-green-800/[0.125] dark:border-green-400/20 shadow-sm rounded">
+    <p class="pr-6">We've got a newsletter! Punch in your email to get our updates sent straight to your inbox.</p>
+    <span id="newsletter-msg" class="flex items-center gap-4">
+      <input type="email" name="email" placeholder="your@email.com" required
+        class="flex-1 min-w-0 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded" />
+      <button type="submit" class="btn whitespace-nowrap shrink-0">subscribe</button>
+    </span>
+    <button type="button" onclick="document.getElementById('newsletter-banner').remove(); localStorage.setItem('newsletter-dismissed','1')"
+      class="absolute top-3 right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" aria-label="Dismiss">✕</button>
+  </form>
+</div>
+<script>if(localStorage.getItem('newsletter-dismissed'))document.getElementById('newsletter-banner').remove();</script>
+{{ end }}

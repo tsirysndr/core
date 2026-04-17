@@ -150,6 +150,7 @@ func (s *State) StandardRouter(mw *middleware.Middleware) http.Handler {
 	r.Get("/home", s.Home)
 	r.Get("/timeline", s.Timeline)
 	r.Get("/upgradeBanner", s.UpgradeBanner)
+	r.Post("/newsletter/signup", s.NewsletterSignup)
 
 	// special-case handler for serving tangled.org/core
 	r.Get("/core", s.Core())

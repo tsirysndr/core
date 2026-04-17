@@ -17,6 +17,7 @@ import (
 	"tangled.org/core/appview/cloudflare"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
+	"tangled.org/core/appview/email"
 	"tangled.org/core/appview/indexer"
 	"tangled.org/core/appview/mentions"
 	"tangled.org/core/appview/models"
@@ -324,6 +325,26 @@ func (s *State) UpgradeBanner(w http.ResponseWriter, r *http.Request) {
 		Registrations: regs,
 		Spindles:      spindles,
 	})
+}
+
+func (s *State) NewsletterSignup(w http.ResponseWriter, r *http.Request) {
+	emailAddr := strings.TrimSpace(r.FormValue("email"))
+	if !email.IsValidEmail(emailAddr) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<span id="newsletter-msg" class="text-red-500 text-sm whitespace-nowrap">Invalid email address.</span>`)
+		return
+	}
+
+	if s.config.Resend.ApiKey != "" && s.config.Resend.NewsletterSegmentId != "" {
+		go func() {
+			if err := email.AddNewsletterContact(s.config.Resend.ApiKey, s.config.Resend.NewsletterSegmentId, emailAddr); err != nil {
+				s.logger.Error("failed to add newsletter contact", "error", err)
+			}
+		}()
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprintf(w, `<span id="newsletter-msg" class="text-sm text-green-700 dark:text-green-400 whitespace-nowrap">You&#39;re signed up!</span>`)
 }
 
 func (s *State) Keys(w http.ResponseWriter, r *http.Request) {

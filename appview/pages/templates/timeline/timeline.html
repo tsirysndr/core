@@ -7,8 +7,71 @@
     <meta property="og:description" content="tightly-knit social coding" />
 {{ end }}
 
+{{ define "mainLayout" }}
+<div class="flex-grow">
+    <div class="max-w-screen-xl mx-auto flex flex-col gap-4">
+        <main>{{ block "content" . }}{{ end }}</main>
+    </div>
+</div>
+{{ end }}
+
 {{ define "content" }}
+<div class="lg:hidden">
+    {{ template "timeline/fragments/newsletter" . }}
     {{ template "timeline/fragments/goodfirstissues" . }}
     {{ template "timeline/fragments/trending" . }}
     {{ template "timeline/fragments/timeline" . }}
+</div>
+
+<div class="hidden lg:grid grid-cols-3 gap-x-2 gap-y-6">
+    <div id="gfi-banner" class="col-span-3 max-w-4xl w-full mx-auto">
+        {{ template "timeline/fragments/goodfirstissues" . }}
+    </div>
+    <div id="newsletter-widget-col" class="pl-8 flex-col hidden">
+        {{ template "timeline/fragments/newsletterWidget" . }}
+    </div>
+
+    <div class="col-span-2 flex flex-col">
+        {{ template "timeline/fragments/timeline" . }}
+    </div>
+    <div class="flex flex-col gap-6 pl-8">
+        {{ template "timeline/fragments/trendingSidebar" . }}
+    </div>
+</div>
+
+<script>
+  (function() {
+    var gfi = document.getElementById('gfi-banner');
+    var col = document.getElementById('newsletter-widget-col');
+    if (!gfi || !col) return;
+
+    function showNewsletter() {
+      col.classList.remove('hidden');
+      col.classList.add('flex');
+      gfi.classList.remove('col-span-3', 'max-w-4xl', 'mx-auto');
+      gfi.classList.add('col-span-2');
+    }
+
+    function hideNewsletter() {
+      col.classList.add('hidden');
+      col.classList.remove('flex');
+      gfi.classList.remove('col-span-2');
+      gfi.classList.add('col-span-3', 'max-w-4xl', 'mx-auto');
+    }
+
+    // If the newsletter widget is still in the DOM, switch to two-column
+    if (document.getElementById('newsletter-widget')) {
+      showNewsletter();
+    }
+
+    // Watch for mid-session dismissal
+    var obs = new MutationObserver(function() {
+      if (!document.getElementById('newsletter-widget')) {
+        hideNewsletter();
+        obs.disconnect();
+      }
+    });
+    obs.observe(col, { childList: true, subtree: true });
+  })();
+</script>
 {{ end }}
