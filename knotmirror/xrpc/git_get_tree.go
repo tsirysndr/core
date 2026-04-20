@@ -21,6 +21,7 @@ func (x *Xrpc) GetTree(w http.ResponseWriter, r *http.Request) {
 		ref       = r.URL.Query().Get("ref")  // ref can be empty (git.Open handles this)
 		path      = r.URL.Query().Get("path") // path can be empty (defaults to root)
 	)
+	l := x.logger.With("method", "git.getTree", "repo", repoQuery, "ref", ref)
 
 	repo, err := syntax.ParseATURI(repoQuery)
 	if err != nil || repo.RecordKey() == "" {
@@ -30,7 +31,7 @@ func (x *Xrpc) GetTree(w http.ResponseWriter, r *http.Request) {
 
 	out, err := x.getTree(r.Context(), repo, ref, path)
 	if err != nil {
-		x.logger.Warn("local mirror failed, trying proxy", "repo", repo, "err", err)
+		l.Warn("local mirror failed, trying proxy", "repo", repo, "err", err)
 		if x.proxyToKnot(w, r, repo) {
 			return
 		}
