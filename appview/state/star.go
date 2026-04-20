@@ -137,4 +137,3 @@ func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 	}
 
 }
-
