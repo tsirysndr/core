@@ -12,6 +12,7 @@ out/
 patches
 *.qcow2
 .DS_Store
+._.DS_Store
 .env
 *.rdb
 .envrc
