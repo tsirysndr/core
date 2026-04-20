@@ -103,7 +103,7 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 	searchOpts := models.PullSearchOptions{
 		Keywords:           tf.Keywords,
 		Phrases:            tf.Phrases,
-		RepoAt:             f.RepoAt().String(),
+		RepoDid:            f.RepoDid,
 		State:              state,
 		AuthorDid:          authorDid,
 		Labels:             labels,
@@ -175,7 +175,7 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		filters := []orm.Filter{
-			orm.FilterEq("repo_at", f.RepoAt()),
+			orm.FilterEq("repo_did", f.RepoDid),
 		}
 		if state != nil {
 			filters = append(filters, orm.FilterEq("state", *state))
@@ -195,10 +195,10 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 	for _, p := range pulls {
 		var pullSourceRepo *models.Repo
 		if p.PullSource != nil {
-			if p.PullSource.RepoAt != nil {
-				pullSourceRepo, err = db.GetRepoByAtUri(s.db, p.PullSource.RepoAt.String())
+			if p.PullSource.RepoDid != nil {
+				pullSourceRepo, err = db.GetRepoByDid(s.db, string(*p.PullSource.RepoDid))
 				if err != nil {
-					l.Error("failed to get repo by at uri", "err", err, "repo_at", p.PullSource.RepoAt.String())
+					l.Error("failed to get repo by did", "err", err, "repo_did", p.PullSource.RepoDid.String())
 					continue
 				} else {
 					p.PullSource.Repo = pullSourceRepo
@@ -265,7 +265,7 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 		s.db,
 		len(shas),
 		orm.FilterEq("p.repo_owner", f.Did),
-		orm.FilterEq("p.repo_name", f.Name),
+		orm.FilterEq("p.repo_name", f.Rkey),
 		orm.FilterEq("p.knot", f.Knot),
 		orm.FilterIn("p.sha", shas),
 	)

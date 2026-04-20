@@ -6,13 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
+	"strings"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	jmodels "github.com/bluesky-social/jetstream/pkg/models"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
+	"tangled.org/core/appview/repoverify"
 	"tangled.org/core/orm"
 )
 
@@ -47,7 +50,15 @@ func (i *Ingester) ingestRepoCreate(ctx context.Context, e *jmodels.Event) error
 	}
 	repoDid := *record.RepoDid
 
-	_, err := db.GetRepo(i.Db,
+	proceed, err := i.verifyOwnership(ctx, l, repoDid, e.Did, record.Knot)
+	if err != nil {
+		return err
+	}
+	if !proceed {
+		return nil
+	}
+
+	_, err = db.GetRepo(i.Db,
 		orm.FilterEq("did", e.Did),
 		orm.FilterEq("rkey", e.Commit.RKey),
 	)
@@ -165,6 +176,14 @@ func (i *Ingester) ingestRepoUpdate(ctx context.Context, e *jmodels.Event) error
 		return nil
 	}
 
+	proceed, err := i.verifyOwnership(ctx, l, *record.RepoDid, e.Did, record.Knot)
+	if err != nil {
+		return err
+	}
+	if !proceed {
+		return nil
+	}
+
 	current, err := db.GetRepo(i.Db,
 		orm.FilterEq("did", e.Did),
 		orm.FilterEq("rkey", e.Commit.RKey),
@@ -175,6 +194,14 @@ func (i *Ingester) ingestRepoUpdate(ctx context.Context, e *jmodels.Event) error
 			return nil
 		}
 		return fmt.Errorf("failed to fetch repo for ingest: %w", err)
+	}
+
+	if current.RepoDid != "" && current.RepoDid != *record.RepoDid {
+		l.Warn("rejecting repo update: repoDid is immutable",
+			"currentRepoDid", current.RepoDid,
+			"recordRepoDid", *record.RepoDid,
+		)
+		return nil
 	}
 
 	desired := repoFromRecord(current, &record)
@@ -329,4 +356,37 @@ func derefString(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func (i *Ingester) verifyOwnership(ctx context.Context, l *slog.Logger, repoDid, eventDid, recordKnot string) (bool, error) {
+	if i.Verifier == nil {
+		return false, fmt.Errorf("ingester has no repo ownership verifier configured")
+	}
+	rd, err := repoverify.NewRepoDid(repoDid)
+	if err != nil {
+		l.Warn("rejecting repo event: invalid repoDid on record", "repoDid", repoDid, "err", err)
+		return false, nil
+	}
+	result, err := i.Verifier(ctx, rd)
+	if err != nil {
+		return false, fmt.Errorf("verify repo ownership: %w", err)
+	}
+	if result.OwnerDid.String() != eventDid {
+		l.Warn("rejecting repo event: owner mismatch",
+			"repoDid", repoDid,
+			"claimedOwner", eventDid,
+			"knotOwner", result.OwnerDid.String(),
+			"knot", result.KnotURL.String(),
+		)
+		return false, nil
+	}
+	if !strings.EqualFold(recordKnot, result.KnotURL.Host) {
+		l.Warn("rejecting repo event: record knot does not match DID-doc endpoint",
+			"repoDid", repoDid,
+			"recordKnot", recordKnot,
+			"canonicalKnot", result.KnotURL.Host,
+		)
+		return false, nil
+	}
+	return true, nil
 }

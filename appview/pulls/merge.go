@@ -118,7 +118,7 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 		atUris = append(atUris, p.AtUri())
 		p.State = models.PullMerged
 	}
-	err = db.MergePulls(tx, orm.FilterEq("repo_at", f.RepoAt()), orm.FilterIn("at_uri", atUris))
+	err = db.MergePulls(tx, orm.FilterEq("repo_did", string(f.RepoDid)), orm.FilterIn("at_uri", atUris))
 	if err != nil {
 		l.Error("failed to update pull request status in database", "err", err)
 		s.pages.Notice(w, "pull-merge-error", "Failed to merge pull request. Try again later.")

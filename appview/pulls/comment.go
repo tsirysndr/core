@@ -103,7 +103,7 @@ func (s *Pulls) PullComment(w http.ResponseWriter, r *http.Request) {
 
 		comment := &models.PullComment{
 			OwnerDid:     user.Did,
-			RepoAt:       f.RepoAt().String(),
+			RepoDid:      string(f.RepoDid),
 			PullId:       pull.PullId,
 			Body:         body,
 			CommentAt:    atResp.Uri,

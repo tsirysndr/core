@@ -98,13 +98,13 @@ func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo
 
 	repoString := strings.SplitN(forkRepo, "/", 2)
 	forkOwnerDid := repoString[0]
-	repoName := repoString[1]
-	fork, err := db.GetForkByDid(s.db, forkOwnerDid, repoName)
+	forkRkey := strings.ToLower(repoString[1])
+	fork, err := db.GetForkByDid(s.db, forkOwnerDid, forkRkey)
 	if errors.Is(err, sql.ErrNoRows) {
 		s.pages.Notice(w, "pull", "No such fork.")
 		return
 	} else if err != nil {
-		l.Error("failed to fetch fork", "err", err, "fork_owner_did", forkOwnerDid, "repo_name", repoName)
+		l.Error("failed to fetch fork", "err", err, "fork_owner_did", forkOwnerDid, "fork_rkey", forkRkey)
 		s.pages.Notice(w, "pull", "Failed to fetch fork.")
 		return
 	}
@@ -182,17 +182,10 @@ func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo
 		return
 	}
 
-	forkAtUri := fork.RepoAt()
-	var forkDid *syntax.DID
-	if fork.RepoDid != "" {
-		forkDid = new(syntax.DID)
-		*forkDid = syntax.DID(fork.RepoDid)
-	}
-
+	forkDid := syntax.DID(fork.RepoDid)
 	pullSource := &models.PullSource{
 		Branch:  sourceBranch,
-		RepoAt:  &forkAtUri,
-		RepoDid: forkDid,
+		RepoDid: &forkDid,
 	}
 
 	s.createPullRequest(w, r, repo, userDid, title, body, targetBranch, patch, combined, sourceRev, pullSource, isStacked, stackTitles, stackBodies)
@@ -284,7 +277,7 @@ func (s *Pulls) createPullRequest(
 		Body:         body,
 		TargetBranch: targetBranch,
 		OwnerDid:     userDid.String(),
-		RepoAt:       repo.RepoAt(),
+		RepoDid:      syntax.DID(repo.RepoDid),
 		Rkey:         rkey,
 		Mentions:     mentions,
 		References:   references,
@@ -324,7 +317,7 @@ func (s *Pulls) createPullRequest(
 		s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
 		return
 	}
-	pullId, err := db.NextPullId(tx, repo.RepoAt())
+	pullId, err := db.NextPullId(tx, repo.RepoDid)
 	if err != nil {
 		s.logger.Error("failed to get pull id", "err", err)
 		s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
@@ -502,7 +495,7 @@ func (s *Pulls) newStack(
 			Body:         body,
 			TargetBranch: targetBranch,
 			OwnerDid:     userDid.String(),
-			RepoAt:       repo.RepoAt(),
+			RepoDid:      syntax.DID(repo.RepoDid),
 			Rkey:         rkey,
 			Mentions:     mentions,
 			References:   references,

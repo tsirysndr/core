@@ -149,7 +149,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		s.db,
 		len(shas),
 		orm.FilterEq("p.repo_owner", f.Did),
-		orm.FilterEq("p.repo_name", f.Name),
+		orm.FilterEq("p.repo_name", f.Rkey),
 		orm.FilterEq("p.knot", f.Knot),
 		orm.FilterIn("p.sha", shas),
 	)
@@ -369,15 +369,15 @@ func (s *Pulls) resubmitCheck(r *http.Request, repo *models.Repo, pull *models.P
 		return pages.Unknown
 	}
 
-	var sourceRepo syntax.ATURI
-	if pull.PullSource.RepoAt != nil {
-		sourceRepo = *pull.PullSource.RepoAt
+	var sourceRepoDid string
+	if pull.PullSource.RepoDid != nil {
+		sourceRepoDid = string(*pull.PullSource.RepoDid)
 	} else {
-		sourceRepo = repo.RepoAt()
+		sourceRepoDid = repo.RepoDid
 	}
 
 	xrpcc := &indigoxrpc.Client{Host: s.config.KnotMirror.Url}
-	branchResp, err := tangled.GitTempGetBranch(r.Context(), xrpcc, pull.PullSource.Branch, sourceRepo.String())
+	branchResp, err := tangled.GitTempGetBranch(r.Context(), xrpcc, pull.PullSource.Branch, sourceRepoDid)
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 			s.logger.Error("failed to call XRPC repo.branches", "xrpcerr", xrpcerr, "err", err, "pull_id", pull.PullId, "branch", pull.PullSource.Branch)

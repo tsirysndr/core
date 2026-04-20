@@ -66,7 +66,7 @@ func (s *Pulls) ClosePull(w http.ResponseWriter, r *http.Request) {
 	}
 	err = db.ClosePulls(
 		tx,
-		orm.FilterEq("repo_at", f.RepoAt()),
+		orm.FilterEq("repo_did", string(f.RepoDid)),
 		orm.FilterIn("at_uri", atUris),
 	)
 	if err != nil {
@@ -143,7 +143,7 @@ func (s *Pulls) ReopenPull(w http.ResponseWriter, r *http.Request) {
 	}
 	err = db.ReopenPulls(
 		tx,
-		orm.FilterEq("repo_at", f.RepoAt()),
+		orm.FilterEq("repo_did", string(f.RepoDid)),
 		orm.FilterIn("at_uri", atUris),
 	)
 	if err != nil {

@@ -29,6 +29,7 @@ import (
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
+	"tangled.org/core/appview/repoverify"
 	"tangled.org/core/appview/serververify"
 	"tangled.org/core/appview/validator"
 	"tangled.org/core/idresolver"
@@ -45,6 +46,7 @@ type Ingester struct {
 	Logger     *slog.Logger
 	Validator  *validator.Validator
 	Notifier   notify.Notifier
+	Verifier   repoverify.Verifier
 }
 
 type processFunc func(ctx context.Context, e *jmodels.Event) error
@@ -1047,8 +1049,8 @@ func (i *Ingester) ingestIssue(ctx context.Context, e *jmodels.Event) error {
 			return fmt.Errorf("failed to validate issue: %w", err)
 		}
 
-		if record.Repo != nil {
-			repo, repoErr := db.GetRepoByAtUri(i.Db, *record.Repo)
+		if record.Repo != "" && !strings.HasPrefix(record.Repo, "did:") {
+			repo, repoErr := db.GetRepoByAtUri(i.Db, record.Repo)
 			if repoErr == nil && repo.RepoDid != "" {
 				if enqErr := db.EnqueuePdsRecordMigration(ctx, i.Db, "add-repo-did", syntax.DID(did), syntax.NSID(tangled.RepoIssueNSID), syntax.RecordKey(e.Commit.RKey)); enqErr != nil {
 					l.Warn("failed to enqueue PDS rewrite for issue", "err", enqErr, "did", did, "repoDid", repo.RepoDid)

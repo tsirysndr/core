@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net/url"
 	"path/filepath"
 	"testing"
 
@@ -16,8 +17,36 @@ import (
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
+	"tangled.org/core/appview/repoverify"
 	"tangled.org/core/orm"
 )
+
+func mustKnotURL(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	u, err := repoverify.ParseKnotEndpoint(raw, true)
+	if err != nil {
+		t.Fatalf("ParseKnotEndpoint(%q): %v", raw, err)
+	}
+	return u
+}
+
+func acceptOwner(t *testing.T, e *jmodels.Event) repoverify.Verifier {
+	t.Helper()
+	knot := mustKnotURL(t, "https://knot.example")
+	return func(_ context.Context, repoDid repoverify.RepoDid) (repoverify.Result, error) {
+		return repoverify.Result{
+			RepoDid:  repoDid,
+			OwnerDid: repoverify.OwnerDid(e.Did),
+			KnotURL:  knot,
+		}, nil
+	}
+}
+
+func stubVerifier(result repoverify.Result, err error) repoverify.Verifier {
+	return func(_ context.Context, _ repoverify.RepoDid) (repoverify.Result, error) {
+		return result, err
+	}
+}
 
 type spyNotifier struct {
 	notify.BaseNotifier
@@ -48,6 +77,17 @@ func newTestIngester(t *testing.T) (*Ingester, *spyNotifier) {
 		Notifier: spy,
 	}
 	return ing, spy
+}
+
+func withVerifier(ing *Ingester, v repoverify.Verifier) *Ingester {
+	ing.Verifier = v
+	return ing
+}
+
+func ingestAcceptingOwner(t *testing.T, ing *Ingester, e *jmodels.Event) error {
+	t.Helper()
+	ing.Verifier = acceptOwner(t, e)
+	return ing.ingestRepo(context.Background(), e)
 }
 
 func seedRepoRow(t *testing.T, ing *Ingester, did, knot, name, rkey, repoDid string) *models.Repo {
@@ -126,7 +166,7 @@ func TestIngestRepo_CreateInsertsNewRow(t *testing.T) {
 		RepoDid:     ptr("did:plc:repo1"),
 	})
 
-	if err := ing.ingestRepo(context.Background(), e); err != nil {
+	if err := ingestAcceptingOwner(t, ing, e); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
 	}
 
@@ -155,7 +195,7 @@ func TestIngestRepo_CreateSkipsIfRowExists(t *testing.T) {
 		RepoDid: ptr("did:plc:repo1"),
 	})
 
-	if err := ing.ingestRepo(context.Background(), e); err != nil {
+	if err := ingestAcceptingOwner(t, ing, e); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
 	}
 	if spy.creates != 0 {
@@ -173,7 +213,7 @@ func TestIngestRepo_CreateCascadesRename(t *testing.T) {
 		RepoDid: ptr("did:plc:repo1"),
 	})
 
-	if err := ing.ingestRepo(context.Background(), e); err != nil {
+	if err := ingestAcceptingOwner(t, ing, e); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
 	}
 
@@ -217,7 +257,7 @@ func TestIngestRepo_CreateNoRepoDidSkipped(t *testing.T) {
 		Name: ptr("myrepo"),
 	})
 
-	if err := ing.ingestRepo(context.Background(), e); err != nil {
+	if err := ingestAcceptingOwner(t, ing, e); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
 	}
 	if spy.creates != 0 {
@@ -238,7 +278,7 @@ func TestIngestRepo_UpdateMetadata(t *testing.T) {
 		RepoDid:     ptr("did:plc:repo1"),
 	})
 
-	if err := ing.ingestRepo(context.Background(), e); err != nil {
+	if err := ingestAcceptingOwner(t, ing, e); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
 	}
 
@@ -264,7 +304,7 @@ func TestIngestRepo_UpdateDisplayName(t *testing.T) {
 		RepoDid: ptr("did:plc:repo1"),
 	})
 
-	if err := ing.ingestRepo(context.Background(), e); err != nil {
+	if err := ingestAcceptingOwner(t, ing, e); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
 	}
 
@@ -287,7 +327,7 @@ func TestIngestRepo_UpdateNothingChangedNoOp(t *testing.T) {
 		RepoDid: ptr("did:plc:repo1"),
 	})
 
-	if err := ing.ingestRepo(context.Background(), e); err != nil {
+	if err := ingestAcceptingOwner(t, ing, e); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
 	}
 
@@ -315,7 +355,7 @@ func TestIngestRepo_UnknownRowSkipped(t *testing.T) {
 				e = makeDeleteEvent("did:plc:nobody", "ghost")
 			}
 
-			if err := ing.ingestRepo(context.Background(), e); err != nil {
+			if err := ingestAcceptingOwner(t, ing, e); err != nil {
 				t.Fatalf("ingestRepo: %v", err)
 			}
 		})
@@ -331,7 +371,7 @@ func TestIngestRepo_UpdateNoRepoDidSkipped(t *testing.T) {
 		Name: ptr("bar"),
 	})
 
-	if err := ing.ingestRepo(context.Background(), e); err != nil {
+	if err := ingestAcceptingOwner(t, ing, e); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
 	}
 
@@ -346,7 +386,7 @@ func TestIngestRepo_DeleteRemovesRow(t *testing.T) {
 	seedRepoRow(t, ing, "did:plc:akshay", "knot.example", "foo", "foo", "did:plc:repo1")
 
 	e := makeDeleteEvent("did:plc:akshay", "foo")
-	if err := ing.ingestRepo(context.Background(), e); err != nil {
+	if err := ingestAcceptingOwner(t, ing, e); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
 	}
 
@@ -373,7 +413,7 @@ func TestIngestRepo_MalformedRecord(t *testing.T) {
 		},
 	}
 
-	if err := ing.ingestRepo(context.Background(), e); err == nil {
+	if err := ingestAcceptingOwner(t, ing, e); err == nil {
 		t.Errorf("ingestRepo with malformed record: err = nil, want error")
 	}
 }
@@ -394,12 +434,12 @@ func TestIngestRepo_RenameDeleteSequenceNoTornState(t *testing.T) {
 		Name:    ptr("NewName"),
 		RepoDid: ptr("did:plc:repo1"),
 	})
-	if err := ing.ingestRepo(context.Background(), createEvt); err != nil {
+	if err := ingestAcceptingOwner(t, ing, createEvt); err != nil {
 		t.Fatalf("ingest create: %v", err)
 	}
 
 	deleteEvt := makeDeleteEvent("did:plc:akshay", "oldname")
-	if err := ing.ingestRepo(context.Background(), deleteEvt); err != nil {
+	if err := ingestAcceptingOwner(t, ing, deleteEvt); err != nil {
 		t.Fatalf("ingest delete: %v", err)
 	}
 
@@ -446,12 +486,269 @@ func TestIngestRepo_CreateFallsBackToRkeyForName(t *testing.T) {
 		RepoDid: ptr("did:plc:repo1"),
 	})
 
-	if err := ing.ingestRepo(context.Background(), e); err != nil {
+	if err := ingestAcceptingOwner(t, ing, e); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
 	}
 
 	r := loadRepo(t, ing, "did:plc:akshay", "myrepo")
 	if r.Name != "myrepo" {
 		t.Errorf("name should fall back to rkey: got %q, want %q", r.Name, "myrepo")
+	}
+}
+
+func TestIngestRepo_CreateSquatRejected(t *testing.T) {
+	ing, spy := newTestIngester(t)
+
+	e := makeEvent(t, jmodels.CommitOperationCreate, "did:plc:boltless", "squatrepo", tangled.Repo{
+		Knot:    "knot.example",
+		RepoDid: ptr("did:plc:akshays-repo"),
+	})
+
+	withVerifier(ing, stubVerifier(repoverify.Result{
+		RepoDid:  "did:plc:akshays-repo",
+		OwnerDid: "did:plc:akshay",
+		KnotURL:  mustKnotURL(t, "https://knot.example"),
+	}, nil))
+
+	if err := ing.ingestRepo(context.Background(), e); err != nil {
+		t.Fatalf("ingestRepo: %v", err)
+	}
+
+	if _, err := db.GetRepo(ing.Db,
+		orm.FilterEq("did", "did:plc:boltless"),
+		orm.FilterEq("rkey", "squatrepo"),
+	); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("boltless's squat row should not exist, got err=%v", err)
+	}
+	if spy.creates != 0 {
+		t.Errorf("NewRepo called %d times despite rejection", spy.creates)
+	}
+}
+
+func TestIngestRepo_CreateHijackExistingRepoRejected(t *testing.T) {
+	ing, spy := newTestIngester(t)
+	seedRepoRow(t, ing, "did:plc:akshay", "knot.example", "myrepo", "akshayskey", "did:plc:akshays-repo")
+
+	e := makeEvent(t, jmodels.CommitOperationCreate, "did:plc:boltless", "takeover", tangled.Repo{
+		Knot:    "knot.example",
+		RepoDid: ptr("did:plc:akshays-repo"),
+	})
+
+	withVerifier(ing, stubVerifier(repoverify.Result{
+		RepoDid:  "did:plc:akshays-repo",
+		OwnerDid: "did:plc:akshay",
+		KnotURL:  mustKnotURL(t, "https://knot.example"),
+	}, nil))
+
+	if err := ing.ingestRepo(context.Background(), e); err != nil {
+		t.Fatalf("ingestRepo: %v", err)
+	}
+
+	akshay := loadRepo(t, ing, "did:plc:akshay", "akshayskey")
+	if akshay.Did != "did:plc:akshay" || akshay.Rkey != "akshayskey" {
+		t.Errorf("akshay's row mutated: %+v", akshay)
+	}
+	if spy.renames != 0 {
+		t.Errorf("RenameRepo called %d times despite rejection", spy.renames)
+	}
+}
+
+func TestIngestRepo_CreateRenameIgnoresRkeyDrift(t *testing.T) {
+	ing, spy := newTestIngester(t)
+	seedRepoRow(t, ing, "did:plc:akshay", "knot.example", "oldname", "oldrkey", "did:plc:akshays-repo")
+
+	e := makeEvent(t, jmodels.CommitOperationCreate, "did:plc:akshay", "newrkey", tangled.Repo{
+		Knot:    "knot.example",
+		Name:    ptr("newname"),
+		RepoDid: ptr("did:plc:akshays-repo"),
+	})
+
+	withVerifier(ing, stubVerifier(repoverify.Result{
+		RepoDid:  "did:plc:akshays-repo",
+		OwnerDid: "did:plc:akshay",
+		KnotURL:  mustKnotURL(t, "https://knot.example"),
+	}, nil))
+
+	if err := ing.ingestRepo(context.Background(), e); err != nil {
+		t.Fatalf("ingestRepo: %v", err)
+	}
+
+	r := loadRepo(t, ing, "did:plc:akshay", "newrkey")
+	if r.Name != "newname" {
+		t.Errorf("rename did not apply despite matching owner: name=%q", r.Name)
+	}
+	if spy.renames != 1 {
+		t.Errorf("RenameRepo called %d times, want 1", spy.renames)
+	}
+}
+
+func TestIngestRepo_CreateVerifierTransientErrorPropagates(t *testing.T) {
+	ing, spy := newTestIngester(t)
+
+	e := makeEvent(t, jmodels.CommitOperationCreate, "did:plc:akshay", "myrepo", tangled.Repo{
+		Knot:    "knot.example",
+		RepoDid: ptr("did:plc:akshays-repo"),
+	})
+
+	withVerifier(ing, stubVerifier(repoverify.Result{}, errors.New("knot unreachable")))
+
+	err := ing.ingestRepo(context.Background(), e)
+	if err == nil {
+		t.Fatalf("expected error on transient verifier failure, got nil")
+	}
+	if spy.creates != 0 {
+		t.Errorf("NewRepo called %d times despite verifier error", spy.creates)
+	}
+}
+
+func TestIngestRepo_UpdateRejectsOwnerMismatch(t *testing.T) {
+	ing, _ := newTestIngester(t)
+	seedRepoRow(t, ing, "did:plc:akshay", "knot.example", "myrepo", "akshayskey", "did:plc:akshays-repo")
+
+	e := makeEvent(t, jmodels.CommitOperationUpdate, "did:plc:boltless", "akshayskey", tangled.Repo{
+		Knot:        "knot.example",
+		Description: ptr("boltless hijacks metadata"),
+		RepoDid:     ptr("did:plc:akshays-repo"),
+	})
+
+	withVerifier(ing, stubVerifier(repoverify.Result{
+		RepoDid:  "did:plc:akshays-repo",
+		OwnerDid: "did:plc:akshay",
+		KnotURL:  mustKnotURL(t, "https://knot.example"),
+	}, nil))
+
+	if err := ing.ingestRepo(context.Background(), e); err != nil {
+		t.Fatalf("ingestRepo: %v", err)
+	}
+
+	akshay := loadRepo(t, ing, "did:plc:akshay", "akshayskey")
+	if akshay.Description == "boltless hijacks metadata" {
+		t.Errorf("update by non-owner applied: %+v", akshay)
+	}
+}
+
+func TestIngestRepo_CreateInvalidRepoDidRejected(t *testing.T) {
+	ing, spy := newTestIngester(t)
+
+	e := makeEvent(t, jmodels.CommitOperationCreate, "did:plc:akshay", "myrepo", tangled.Repo{
+		Knot:    "knot.example",
+		RepoDid: ptr("did:plc:"),
+	})
+
+	verifierCalled := false
+	withVerifier(ing, func(_ context.Context, _ repoverify.RepoDid) (repoverify.Result, error) {
+		verifierCalled = true
+		return repoverify.Result{}, nil
+	})
+
+	if err := ing.ingestRepo(context.Background(), e); err != nil {
+		t.Fatalf("ingestRepo: %v", err)
+	}
+	if verifierCalled {
+		t.Errorf("verifier was called with an invalid repoDid")
+	}
+	if spy.creates != 0 {
+		t.Errorf("NewRepo called %d times despite invalid repoDid", spy.creates)
+	}
+}
+
+func TestIngestRepo_NilVerifierFailsClosed(t *testing.T) {
+	ing, spy := newTestIngester(t)
+
+	e := makeEvent(t, jmodels.CommitOperationCreate, "did:plc:akshay", "myrepo", tangled.Repo{
+		Knot:    "knot.example",
+		RepoDid: ptr("did:plc:akshays-repo"),
+	})
+
+	err := ing.ingestRepo(context.Background(), e)
+	if err == nil {
+		t.Fatalf("expected error when Verifier is nil, got nil")
+	}
+	if spy.creates != 0 {
+		t.Errorf("NewRepo called %d times despite nil verifier", spy.creates)
+	}
+}
+
+func TestIngestRepo_CreateRejectsKnotMismatch(t *testing.T) {
+	ing, spy := newTestIngester(t)
+
+	e := makeEvent(t, jmodels.CommitOperationCreate, "did:plc:akshay", "myrepo", tangled.Repo{
+		Knot:    "evil.example",
+		RepoDid: ptr("did:plc:akshays-repo"),
+	})
+
+	withVerifier(ing, stubVerifier(repoverify.Result{
+		RepoDid:  "did:plc:akshays-repo",
+		OwnerDid: "did:plc:akshay",
+		KnotURL:  mustKnotURL(t, "https://knot.example"),
+	}, nil))
+
+	if err := ing.ingestRepo(context.Background(), e); err != nil {
+		t.Fatalf("ingestRepo: %v", err)
+	}
+	if _, err := db.GetRepo(ing.Db,
+		orm.FilterEq("did", "did:plc:akshay"),
+		orm.FilterEq("rkey", "myrepo"),
+	); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("row should not be created for spoofed knot, err=%v", err)
+	}
+	if spy.creates != 0 {
+		t.Errorf("NewRepo called %d times despite knot mismatch", spy.creates)
+	}
+}
+
+func TestIngestRepo_UpdateRejectsKnotMismatch(t *testing.T) {
+	ing, _ := newTestIngester(t)
+	seedRepoRow(t, ing, "did:plc:akshay", "knot.example", "myrepo", "akshayskey", "did:plc:akshays-repo")
+
+	e := makeEvent(t, jmodels.CommitOperationUpdate, "did:plc:akshay", "akshayskey", tangled.Repo{
+		Knot:        "evil.example",
+		Description: ptr("redirected clone target"),
+		RepoDid:     ptr("did:plc:akshays-repo"),
+	})
+
+	withVerifier(ing, stubVerifier(repoverify.Result{
+		RepoDid:  "did:plc:akshays-repo",
+		OwnerDid: "did:plc:akshay",
+		KnotURL:  mustKnotURL(t, "https://knot.example"),
+	}, nil))
+
+	if err := ing.ingestRepo(context.Background(), e); err != nil {
+		t.Fatalf("ingestRepo: %v", err)
+	}
+	akshay := loadRepo(t, ing, "did:plc:akshay", "akshayskey")
+	if akshay.Description == "redirected clone target" {
+		t.Errorf("update with spoofed knot applied: %+v", akshay)
+	}
+	if akshay.Knot != "knot.example" {
+		t.Errorf("row knot mutated to %q, want knot.example", akshay.Knot)
+	}
+}
+
+func TestIngestRepo_UpdateRejectsRepoDidMutation(t *testing.T) {
+	ing, _ := newTestIngester(t)
+	seedRepoRow(t, ing, "did:plc:akshay", "knot.example", "myrepo", "akshayskey", "did:plc:akshays-repo")
+
+	e := makeEvent(t, jmodels.CommitOperationUpdate, "did:plc:akshay", "akshayskey", tangled.Repo{
+		Knot:        "knot.example",
+		Description: ptr("sneaky repoDid swap"),
+		RepoDid:     ptr("did:plc:other-repo"),
+	})
+
+	withVerifier(ing, stubVerifier(repoverify.Result{
+		RepoDid:  "did:plc:other-repo",
+		OwnerDid: "did:plc:akshay",
+		KnotURL:  mustKnotURL(t, "https://knot.example"),
+	}, nil))
+
+	if err := ing.ingestRepo(context.Background(), e); err != nil {
+		t.Fatalf("ingestRepo: %v", err)
+	}
+	akshay := loadRepo(t, ing, "did:plc:akshay", "akshayskey")
+	if akshay.RepoDid != "did:plc:akshays-repo" {
+		t.Errorf("repoDid mutated to %q, want did:plc:akshays-repo", akshay.RepoDid)
+	}
+	if akshay.Description == "sneaky repoDid swap" {
+		t.Errorf("metadata from repoDid-mutating update applied: %+v", akshay)
 	}
 }

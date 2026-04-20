@@ -29,6 +29,7 @@ import (
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/reporesolver"
+	"tangled.org/core/appview/repoverify"
 	"tangled.org/core/appview/validator"
 	xrpcclient "tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/consts"
@@ -181,6 +182,7 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 		Logger:     log.SubLogger(logger, "ingester"),
 		Validator:  validator,
 		Notifier:   notifier,
+		Verifier:   repoverify.New(res, config.Core.Dev),
 	}
 	err = jc.StartJetstream(ctx, ingester.Ingest())
 	if err != nil {

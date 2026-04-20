@@ -185,9 +185,9 @@ func (s *Pulls) resubmitFork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	forkRepo, err := db.GetRepoByAtUri(s.db, pull.PullSource.RepoAt.String())
+	forkRepo, err := db.GetRepoByDid(s.db, string(*pull.PullSource.RepoDid))
 	if err != nil {
-		l.Error("failed to get source repo", "err", err, "repo_at", pull.PullSource.RepoAt.String())
+		l.Error("failed to get source repo", "err", err, "repo_did", pull.PullSource.RepoDid.String())
 		s.pages.Notice(w, "resubmit-error", "Failed to create pull request. Try again later.")
 		return
 	}
@@ -480,7 +480,7 @@ func (s *Pulls) resubmitStackedPullHelper(
 			continue
 		}
 
-		err := db.AbandonPulls(tx, orm.FilterEq("repo_at", p.RepoAt), orm.FilterEq("at_uri", p.AtUri()))
+		err := db.AbandonPulls(tx, orm.FilterEq("repo_did", string(p.RepoDid)), orm.FilterEq("at_uri", p.AtUri()))
 		if err != nil {
 			l.Error("failed to delete pull", "err", err, "pull_id", p.PullId)
 			s.pages.Notice(w, "pull-resubmit-error", "Failed to resubmit pull request. Try again later.")
