@@ -407,6 +407,11 @@ type TimelineParams struct {
 	Repos        []models.Repo
 	GfiLabel     *models.LabelDefinition
 	BlueskyPosts []models.BskyPost
+	// ShowNewsletter controls whether the newsletter widget/CTA is rendered.
+	// For logged-in users it reflects their newsletter_preferences row; for
+	// anonymous visitors it is always true (dismissal falls back to
+	// localStorage on the client).
+	ShowNewsletter bool
 }
 
 func (p *Pages) Timeline(w io.Writer, params TimelineParams) error {

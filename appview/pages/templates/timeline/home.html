@@ -29,8 +29,7 @@
     {{ template "features1" . }}
     {{ template "features2" . }}
     {{ template "recentUpdates" . }}
-    {{ template "newsletter" . }}
-
+    {{ if .ShowNewsletter }}{{ template "newsletter" . }}{{ end }}
   </div>
 {{ end }}
 

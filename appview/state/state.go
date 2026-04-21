@@ -347,6 +347,15 @@ func (s *State) NewsletterSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// For logged-in users, persist the signup locally so the widget stays
+	// hidden across devices. The DB row is the render-time source of truth;
+	// Resend still owns the mailing list itself.
+	if user := s.oauth.GetMultiAccountUser(r); user != nil {
+		if err := db.UpsertNewsletterPref(s.db, user.Did, db.NewsletterStatusSubscribed, emailAddr); err != nil {
+			s.logger.Error("failed to persist newsletter preference", "did", user.Did, "err", err)
+		}
+	}
+
 	if s.config.Resend.ApiKey != "" && s.config.Resend.NewsletterSegmentId != "" {
 		go func() {
 			if err := email.AddNewsletterContact(s.config.Resend.ApiKey, s.config.Resend.NewsletterSegmentId, emailAddr); err != nil {
@@ -356,6 +365,22 @@ func (s *State) NewsletterSignup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.pages.NewsletterResponse(w, pages.NewsletterResponseParams{Id: target})
+}
+
+// NewsletterDismiss records that a logged-in user has dismissed the newsletter
+// widget so it stays hidden across their devices. Anonymous callers get a 204
+// with no DB write — localStorage handles the per-browser fallback.
+func (s *State) NewsletterDismiss(w http.ResponseWriter, r *http.Request) {
+	user := s.oauth.GetMultiAccountUser(r)
+	if user == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	if err := db.UpsertNewsletterPref(s.db, user.Did, db.NewsletterStatusDismissed, ""); err != nil {
+		s.logger.Error("failed to persist newsletter dismissal", "did", user.Did, "err", err)
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *State) Keys(w http.ResponseWriter, r *http.Request) {

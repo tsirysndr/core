@@ -1409,6 +1409,21 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "add-newsletter-preferences", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			create table if not exists newsletter_preferences (
+				id         integer primary key autoincrement,
+				user_did   text not null unique,
+				status     text not null check (status in ('subscribed', 'dismissed')),
+				email      text,
+				updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+			);
+			create index if not exists idx_newsletter_prefs_user_did
+				on newsletter_preferences(user_did);
+		`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,

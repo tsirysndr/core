@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"tangled.org/core/appview/db"
+	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/orm"
 )
@@ -27,9 +28,10 @@ func (s *State) Home(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.pages.Home(w, pages.TimelineParams{
-		LoggedInUser: user,
-		Timeline:     timeline,
-		BlueskyPosts: blueskyPosts,
+		LoggedInUser:   user,
+		Timeline:       timeline,
+		BlueskyPosts:   blueskyPosts,
+		ShowNewsletter: s.showNewsletter(user),
 	})
 }
 func (s *State) HomeOrTimeline(w http.ResponseWriter, r *http.Request) {
@@ -69,9 +71,26 @@ func (s *State) Timeline(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.pages.Timeline(w, pages.TimelineParams{
-		LoggedInUser: user,
-		Timeline:     timeline,
-		Repos:        repos,
-		GfiLabel:     gfiLabel,
+		LoggedInUser:   user,
+		Timeline:       timeline,
+		Repos:          repos,
+		GfiLabel:       gfiLabel,
+		ShowNewsletter: s.showNewsletter(user),
 	})
+}
+
+// showNewsletter decides whether the newsletter widget/CTA should render.
+// Anonymous visitors always see it (they can dismiss via localStorage);
+// logged-in users whose newsletter_preferences row exists (either
+// subscribed or dismissed) do not.
+func (s *State) showNewsletter(user *oauth.MultiAccountUser) bool {
+	if user == nil {
+		return true
+	}
+	pref, err := db.GetNewsletterPref(s.db, user.Did)
+	if err != nil {
+		s.logger.Error("failed to read newsletter preference", "did", user.Did, "err", err)
+		return true
+	}
+	return pref == nil
 }

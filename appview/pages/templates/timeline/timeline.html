@@ -26,19 +26,22 @@
       row 1: [ gfi-banner  (col-span-2) ] [ newsletter (col 3) ]
       row 2: [ timeline    (col-span-2) ] [ trendingSidebar (col 3) ]
 
-  If the newsletter is dismissed, the gfi-banner widens to col-span-3
-  (see the small init script at the bottom of this block).
+  When the newsletter is hidden (server-side via .ShowNewsletter, or
+  client-side via the dismiss button + localStorage), the gfi-banner
+  widens to col-span-3.
 */}}
 <div id="timeline-grid"
      class="flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:gap-x-2 lg:gap-y-6">
 
+    {{ if .ShowNewsletter }}
     <div id="newsletter-col"
          class="order-1 lg:order-none lg:col-start-3 lg:row-start-1 lg:pl-8">
         {{ template "timeline/fragments/newsletterWidget" . }}
     </div>
+    {{ end }}
 
     <div id="gfi-banner"
-         class="order-2 lg:order-none lg:col-span-2 lg:row-start-1">
+         class="order-2 lg:order-none lg:row-start-1 {{ if .ShowNewsletter }}lg:col-span-2{{ else }}lg:col-span-3 lg:max-w-4xl lg:mx-auto{{ end }}">
         {{ template "timeline/fragments/goodfirstissues" . }}
     </div>
 
@@ -55,6 +58,7 @@
     </div>
 </div>
 
+{{ if .ShowNewsletter }}
 <script>
   (function() {
     var DISMISS_KEY = 'newsletter-dismissed';
@@ -68,15 +72,30 @@
       gfi.classList.add('lg:col-span-3', 'lg:max-w-4xl', 'lg:mx-auto');
     }
 
-    function dismiss() {
+    // hide removes the widget from the DOM without persisting anything.
+    // Used when this browser's localStorage says we already dismissed in a
+    // past session — the server has already told us .ShowNewsletter is true
+    // (no DB row), so we deliberately do NOT re-POST /newsletter/dismiss
+    // here: that would clobber a 'subscribed' row created from another
+    // device after this localStorage entry was set.
+    function hide() {
       newsletterCol.remove();
       widenGfi();
+    }
+
+    // dismiss is the user-initiated path. Persists both locally and (for
+    // logged-in users) server-side so the widget stays hidden on all their
+    // devices.
+    function dismiss() {
+      hide();
       try { localStorage.setItem(DISMISS_KEY, '1'); } catch (e) {}
+      fetch('/newsletter/dismiss', { method: 'POST', credentials: 'same-origin' })
+        .catch(function () { /* localStorage is the fallback */ });
     }
 
     try {
       if (localStorage.getItem(DISMISS_KEY) === '1') {
-        dismiss();
+        hide();
         return;
       }
     } catch (e) { /* storage disabled; keep widget visible */ }
@@ -86,4 +105,5 @@
     });
   })();
 </script>
+{{ end }}
 {{ end }}
