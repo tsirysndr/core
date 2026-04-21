@@ -86,6 +86,17 @@ describe("issue cards", () => {
     const validated = issueCardSchema.parse(data);
     await renderAndSave(h(IssueCard, validated), "issue-card-long-title.png");
   });
+
+  test("renders issue with long author handle (reactions hidden)", async () => {
+    const data = createIssueData(avatarDataUri, {
+      authorHandle: "extremely-long-handle.example.com",
+    });
+    const validated = issueCardSchema.parse(data);
+    await renderAndSave(
+      h(IssueCard, validated),
+      "issue-card-long-handle.png",
+    );
+  });
 });
 
 describe("pull request cards", () => {
@@ -132,6 +143,17 @@ describe("pull request cards", () => {
     await renderAndSave(
       h(PullRequestCard, validated),
       "pull-request-card-long-title.png",
+    );
+  });
+
+  test("renders pull request with long author handle (reactions hidden)", async () => {
+    const data = createPullRequestData(avatarDataUri, {
+      authorHandle: "extremely-long-handle.example.com",
+    });
+    const validated = pullRequestCardSchema.parse(data);
+    await renderAndSave(
+      h(PullRequestCard, validated),
+      "pull-request-card-long-handle.png",
     );
   });
 });

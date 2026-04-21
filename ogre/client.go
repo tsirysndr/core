@@ -47,24 +47,28 @@ type RepositoryCardPayload struct {
 }
 
 type IssueCardPayload struct {
-	Type          string      `json:"type"`
-	RepoName      string      `json:"repoName"`
-	OwnerHandle   string      `json:"ownerHandle"`
-	AvatarUrl     string      `json:"avatarUrl"`
-	Title         string      `json:"title"`
-	IssueNumber   int         `json:"issueNumber"`
-	Status        string      `json:"status"`
-	Labels        []LabelData `json:"labels"`
-	CommentCount  int         `json:"commentCount"`
-	ReactionCount int         `json:"reactionCount"`
-	CreatedAt     string      `json:"createdAt"`
+	Type            string      `json:"type"`
+	RepoName        string      `json:"repoName"`
+	OwnerHandle     string      `json:"ownerHandle"`
+	AuthorHandle    string      `json:"authorHandle"`
+	AvatarUrl       string      `json:"avatarUrl"`
+	AuthorAvatarUrl string      `json:"authorAvatarUrl"`
+	Title           string      `json:"title"`
+	IssueNumber     int         `json:"issueNumber"`
+	Status          string      `json:"status"`
+	Labels          []LabelData `json:"labels"`
+	CommentCount    int         `json:"commentCount"`
+	ReactionCount   int         `json:"reactionCount"`
+	CreatedAt       string      `json:"createdAt"`
 }
 
 type PullRequestCardPayload struct {
 	Type              string `json:"type"`
 	RepoName          string `json:"repoName"`
 	OwnerHandle       string `json:"ownerHandle"`
+	AuthorHandle      string `json:"authorHandle"`
 	AvatarUrl         string `json:"avatarUrl"`
+	AuthorAvatarUrl   string `json:"authorAvatarUrl"`
 	Title             string `json:"title"`
 	PullRequestNumber int    `json:"pullRequestNumber"`
 	Status            string `json:"status"`

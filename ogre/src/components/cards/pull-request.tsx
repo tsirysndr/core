@@ -127,6 +127,8 @@ export function PullRequestCard(data: PullRequestCardData) {
         }}>
         <FooterStats
           createdAt={data.createdAt}
+          authorHandle={data.authorHandle}
+          authorAvatarUrl={data.authorAvatarUrl}
           reactionCount={data.reactionCount}
           commentCount={data.commentCount}
         />

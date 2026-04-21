@@ -26,8 +26,10 @@ func (s *Pulls) PullOpenGraphSummary(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ownerHandle := s.pages.DisplayHandle(r.Context(), f.Did)
+	authorHandle := s.pages.DisplayHandle(r.Context(), pull.OwnerDid)
 
 	avatarUrl := s.pages.AvatarUrl(f.Did, "256")
+	authorAvatarUrl := s.pages.AvatarUrl(pull.OwnerDid, "256")
 
 	var status string
 	if pull.State.IsOpen() {
@@ -60,7 +62,9 @@ func (s *Pulls) PullOpenGraphSummary(w http.ResponseWriter, r *http.Request) {
 		Type:              "pullRequest",
 		RepoName:          f.Name,
 		OwnerHandle:       ownerHandle,
+		AuthorHandle:      authorHandle,
 		AvatarUrl:         avatarUrl,
+		AuthorAvatarUrl:   authorAvatarUrl,
 		Title:             pull.Title,
 		PullRequestNumber: pull.PullId,
 		Status:            status,

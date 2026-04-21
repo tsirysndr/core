@@ -68,8 +68,10 @@ func (rp *Issues) IssueOpenGraphSummary(w http.ResponseWriter, r *http.Request) 
 	}
 
 	ownerHandle := rp.pages.DisplayHandle(r.Context(), f.Did)
+	authorHandle := rp.pages.DisplayHandle(r.Context(), issue.Did)
 
 	avatarUrl := rp.pages.AvatarUrl(f.Did, "256")
+	authorAvatarUrl := rp.pages.AvatarUrl(issue.Did, "256")
 
 	status := "closed"
 	if issue.Open {
@@ -81,17 +83,19 @@ func (rp *Issues) IssueOpenGraphSummary(w http.ResponseWriter, r *http.Request) 
 	reactionCount, _ := db.GetReactionCount(rp.db, issue.AtUri())
 
 	payload := ogre.IssueCardPayload{
-		Type:          "issue",
-		RepoName:      f.Name,
-		OwnerHandle:   ownerHandle,
-		AvatarUrl:     avatarUrl,
-		Title:         issue.Title,
-		IssueNumber:   issue.IssueId,
-		Status:        status,
-		Labels:        labels,
-		CommentCount:  commentCount,
-		ReactionCount: reactionCount,
-		CreatedAt:     issue.Created.Format(time.RFC3339),
+		Type:            "issue",
+		RepoName:        f.Name,
+		OwnerHandle:     ownerHandle,
+		AuthorHandle:    authorHandle,
+		AvatarUrl:       avatarUrl,
+		AuthorAvatarUrl: authorAvatarUrl,
+		Title:           issue.Title,
+		IssueNumber:     issue.IssueId,
+		Status:          status,
+		Labels:          labels,
+		CommentCount:    commentCount,
+		ReactionCount:   reactionCount,
+		CreatedAt:       issue.Created.Format(time.RFC3339),
 	}
 
 	imageBytes, err := rp.ogreClient.RenderIssueCard(r.Context(), payload)
