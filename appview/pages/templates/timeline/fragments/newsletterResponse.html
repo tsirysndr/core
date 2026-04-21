@@ -1,0 +1,16 @@
+{{/*
+  Response fragment swapped into place by htmx after a /newsletter/signup
+  submission. Returns a <span> whose id matches the form's hx-target so the
+  swap is clean and no hard-coded id leaks into Go.
+
+  Params:
+    Id    string - matches the Id used in newsletterForm (e.g. "widget", "home")
+    Error string - if non-empty, renders the error variant
+*/}}
+{{ define "timeline/fragments/newsletterResponse" }}
+  {{ if .Error }}
+    <span id="newsletter-msg-{{ .Id }}" class="text-red-500 text-sm whitespace-nowrap">{{ .Error }}</span>
+  {{ else }}
+    <span id="newsletter-msg-{{ .Id }}" class="text-sm text-green-700 dark:text-green-400 whitespace-nowrap">You&#39;re signed up!</span>
+  {{ end }}
+{{ end }}

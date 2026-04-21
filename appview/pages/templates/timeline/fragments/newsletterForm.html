@@ -1,0 +1,55 @@
+{{/*
+  Shared newsletter signup form. Variants style the form differently, but the
+  POST target, response-target id and request plumbing stay identical.
+
+  Params (dict):
+    Id      string  - unique id suffix (e.g. "widget", "home"); used to build
+                      the response span's id so multiple signup forms can
+                      coexist on one page without colliding.
+    Variant string  - "card" (compact sidebar card) | "hero" (large CTA)
+*/}}
+{{ define "timeline/fragments/newsletterForm" }}
+  {{ $id := .Id }}
+  {{ $variant := .Variant }}
+  {{ if eq $variant "hero" }}
+    <form
+      class="flex gap-2 items-stretch w-full md:max-w-md mx-auto p-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded shadow-sm"
+      hx-post="/newsletter/signup"
+      hx-target="#newsletter-msg-{{ $id }}"
+      hx-swap="outerHTML"
+      hx-vals='{"target":"{{ $id }}"}'>
+      <span id="newsletter-msg-{{ $id }}" class="flex gap-2 items-stretch flex-1 min-w-0">
+        <input
+          type="email"
+          name="email"
+          tabindex="4"
+          required
+          placeholder="Enter your email"
+          class="py-2 w-full" />
+        <button class="btn-create flex items-center gap-2 text-base whitespace-nowrap" type="submit">
+          subscribe
+          {{ i "arrow-right" "size-4" }}
+        </button>
+      </span>
+    </form>
+  {{ else }}
+    <form
+      hx-post="/newsletter/signup"
+      hx-target="#newsletter-msg-{{ $id }}"
+      hx-swap="outerHTML"
+      hx-vals='{"target":"{{ $id }}"}'>
+      <span id="newsletter-msg-{{ $id }}" class="flex items-center gap-2">
+        <input
+          type="email"
+          name="email"
+          placeholder="your@email.com"
+          required
+          class="flex-1 min-w-0 text-sm" />
+        <button type="submit" class="btn whitespace-nowrap h-12 px-4 pb-0 gap-2">
+          {{ i "mail-plus" "size-4 inline" }}
+          subscribe
+        </button>
+      </span>
+    </form>
+  {{ end }}
+{{ end }}

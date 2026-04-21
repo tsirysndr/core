@@ -61,7 +61,6 @@
             {{ template "fragments/posthog" . }}
         </head>
         <body class="min-h-screen flex flex-col gap-4 bg-slate-100 dark:bg-gray-900 dark:text-white transition-colors duration-200 {{ block "bodyClasses" . }} {{ end }}">
-
           {{ block "topbarLayout" . }}
             <header class="w-full col-span-full md:col-span-1 md:col-start-2 drop-shadow-sm dark:text-white bg-white dark:bg-gray-800" style="z-index: 20;">
 

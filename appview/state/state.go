@@ -328,10 +328,22 @@ func (s *State) UpgradeBanner(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *State) NewsletterSignup(w http.ResponseWriter, r *http.Request) {
+	// target is echoed back from the form via hx-vals so the response span's
+	// id matches the form's hx-target. Fallback keeps the handler useful if
+	// a caller forgets to send it.
+	target := strings.TrimSpace(r.FormValue("target"))
+	if target == "" {
+		target = "home"
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+
 	emailAddr := strings.TrimSpace(r.FormValue("email"))
 	if !email.IsValidEmail(emailAddr) {
-		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, `<span id="newsletter-msg" class="text-red-500 text-sm whitespace-nowrap">Invalid email address.</span>`)
+		s.pages.NewsletterResponse(w, pages.NewsletterResponseParams{
+			Id:    target,
+			Error: "Invalid email address.",
+		})
 		return
 	}
 
@@ -343,8 +355,7 @@ func (s *State) NewsletterSignup(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 
-	w.Header().Set("Content-Type", "text/html")
-	fmt.Fprintf(w, `<span id="newsletter-msg" class="text-sm text-green-700 dark:text-green-400 whitespace-nowrap">You&#39;re signed up!</span>`)
+	s.pages.NewsletterResponse(w, pages.NewsletterResponseParams{Id: target})
 }
 
 func (s *State) Keys(w http.ResponseWriter, r *http.Request) {

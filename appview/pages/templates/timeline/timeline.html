@@ -16,62 +16,74 @@
 {{ end }}
 
 {{ define "content" }}
-<div class="lg:hidden">
-    {{ template "timeline/fragments/newsletter" . }}
-    {{ template "timeline/fragments/goodfirstissues" . }}
-    {{ template "timeline/fragments/trending" . }}
-    {{ template "timeline/fragments/timeline" . }}
-</div>
+{{/*
+  Single responsive grid. Every fragment is rendered once, with CSS alone
+  handling the mobile → desktop reflow. Only trending has two variants
+  (horizontal scroll for mobile, vertical sidebar for desktop); both are
+  present in the DOM and toggled via utility classes.
 
-<div class="hidden lg:grid grid-cols-3 gap-x-2 gap-y-6">
-    <div id="gfi-banner" class="col-span-3 max-w-4xl w-full mx-auto">
-        {{ template "timeline/fragments/goodfirstissues" . }}
-    </div>
-    <div id="newsletter-widget-col" class="pl-8 flex-col hidden">
+  Desktop grid (lg+):
+      row 1: [ gfi-banner  (col-span-2) ] [ newsletter (col 3) ]
+      row 2: [ timeline    (col-span-2) ] [ trendingSidebar (col 3) ]
+
+  If the newsletter is dismissed, the gfi-banner widens to col-span-3
+  (see the small init script at the bottom of this block).
+*/}}
+<div id="timeline-grid"
+     class="flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:gap-x-2 lg:gap-y-6">
+
+    <div id="newsletter-col"
+         class="order-1 lg:order-none lg:col-start-3 lg:row-start-1 lg:pl-8">
         {{ template "timeline/fragments/newsletterWidget" . }}
     </div>
 
-    <div class="col-span-2 flex flex-col">
+    <div id="gfi-banner"
+         class="order-2 lg:order-none lg:col-span-2 lg:row-start-1">
+        {{ template "timeline/fragments/goodfirstissues" . }}
+    </div>
+
+    <div class="order-4 lg:order-none lg:col-span-2 lg:row-start-2">
         {{ template "timeline/fragments/timeline" . }}
     </div>
-    <div class="flex flex-col gap-6 pl-8">
+
+    <div class="order-3 lg:hidden">
+        {{ template "timeline/fragments/trending" . }}
+    </div>
+
+    <div class="hidden lg:flex lg:flex-col gap-6 lg:pl-8 lg:col-start-3 lg:row-start-2">
         {{ template "timeline/fragments/trendingSidebar" . }}
     </div>
 </div>
 
 <script>
   (function() {
+    var DISMISS_KEY = 'newsletter-dismissed';
+    var newsletterCol = document.getElementById('newsletter-col');
     var gfi = document.getElementById('gfi-banner');
-    var col = document.getElementById('newsletter-widget-col');
-    if (!gfi || !col) return;
+    if (!newsletterCol) return;
 
-    function showNewsletter() {
-      col.classList.remove('hidden');
-      col.classList.add('flex');
-      gfi.classList.remove('col-span-3', 'max-w-4xl', 'mx-auto');
-      gfi.classList.add('col-span-2');
+    function widenGfi() {
+      if (!gfi) return;
+      gfi.classList.remove('lg:col-span-2');
+      gfi.classList.add('lg:col-span-3', 'lg:max-w-4xl', 'lg:mx-auto');
     }
 
-    function hideNewsletter() {
-      col.classList.add('hidden');
-      col.classList.remove('flex');
-      gfi.classList.remove('col-span-2');
-      gfi.classList.add('col-span-3', 'max-w-4xl', 'mx-auto');
+    function dismiss() {
+      newsletterCol.remove();
+      widenGfi();
+      try { localStorage.setItem(DISMISS_KEY, '1'); } catch (e) {}
     }
 
-    // If the newsletter widget is still in the DOM, switch to two-column
-    if (document.getElementById('newsletter-widget')) {
-      showNewsletter();
-    }
-
-    // Watch for mid-session dismissal
-    var obs = new MutationObserver(function() {
-      if (!document.getElementById('newsletter-widget')) {
-        hideNewsletter();
-        obs.disconnect();
+    try {
+      if (localStorage.getItem(DISMISS_KEY) === '1') {
+        dismiss();
+        return;
       }
+    } catch (e) { /* storage disabled; keep widget visible */ }
+
+    newsletterCol.addEventListener('click', function(e) {
+      if (e.target.closest('[data-newsletter-dismiss]')) dismiss();
     });
-    obs.observe(col, { childList: true, subtree: true });
   })();
 </script>
 {{ end }}

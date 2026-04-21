@@ -523,6 +523,18 @@ func (p *Pages) UpgradeBanner(w io.Writer, params UpgradeBannerParams) error {
 	return p.executePlain("banner", w, params)
 }
 
+type NewsletterResponseParams struct {
+	// Id identifies the calling form instance; the response span's id will
+	// be "newsletter-msg-<Id>" so it round-trips with the form's hx-target.
+	Id string
+	// Error, when non-empty, switches the template to the error variant.
+	Error string
+}
+
+func (p *Pages) NewsletterResponse(w io.Writer, params NewsletterResponseParams) error {
+	return p.executePlain("timeline/fragments/newsletterResponse", w, params)
+}
+
 type KnotsParams struct {
 	LoggedInUser  *oauth.MultiAccountUser
 	Registrations []models.Registration
