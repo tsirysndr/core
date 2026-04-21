@@ -1512,6 +1512,8 @@ type RepoStarsParams struct {
 	RepoInfo     repoinfo.RepoInfo
 	Active       string
 	Starrers     []models.Star
+	Page         pagination.Page
+	TotalCount   int
 }
 
 func (p *Pages) RepoStars(w io.Writer, params RepoStarsParams) error {

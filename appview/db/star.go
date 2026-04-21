@@ -52,14 +52,15 @@ func GetStar(e Execer, did string, subjectAt syntax.ATURI) (*models.Star, error)
 	return &star, nil
 }
 
-func GetStars(e Execer, subjectAt syntax.ATURI) ([]models.Star, error) {
+func GetStars(e Execer, subjectAt syntax.ATURI, page pagination.Page) ([]models.Star, error) {
 	query := `
 	select did, subject_at, created, rkey
 	from stars
 	where subject_at = ?
 	order by created desc
+	limit ? offset ?
     `
-	rows, err := e.Query(query, subjectAt)
+	rows, err := e.Query(query, subjectAt, page.Limit, page.Offset)
 	if err != nil {
 		return nil, err
 	}

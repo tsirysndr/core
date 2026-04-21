@@ -21,6 +21,7 @@ import (
 	"tangled.org/core/appview/notify"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
+	"tangled.org/core/appview/pagination"
 	"tangled.org/core/appview/reporesolver"
 	"tangled.org/core/appview/validator"
 	xrpcclient "tangled.org/core/appview/xrpcclient"
@@ -1270,9 +1271,20 @@ func (rp *Repo) Stars(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	starrers, err := db.GetStars(rp.db, f.RepoAt())
+	page := pagination.FromContext(r.Context())
+	if page.Limit > 30 || page.Limit <= 0 {
+		page.Limit = 30
+	}
+
+	starrers, err := db.GetStars(rp.db, f.RepoAt(), page)
 	if err != nil {
 		l.Error("failed to fetch starrers", "err", err, "repoAt", f.RepoAt())
+		return
+	}
+
+	totalCount, err := db.GetStarCount(rp.db, f.RepoAt())
+	if err != nil {
+		l.Error("failed to fetch star count", "err", err, "repoAt", f.RepoAt())
 		return
 	}
 
@@ -1280,6 +1292,8 @@ func (rp *Repo) Stars(w http.ResponseWriter, r *http.Request) {
 		LoggedInUser: user,
 		RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
 		Starrers:     starrers,
+		Page:         page,
+		TotalCount:   totalCount,
 	})
 }
 
