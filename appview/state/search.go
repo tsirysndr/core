@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/posthog/posthog-go"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pages"
@@ -121,6 +122,26 @@ func (s *State) Search(w http.ResponseWriter, r *http.Request) {
 		"filterQuery", query.String(),
 		"sortParam", sortParam,
 	)
+
+	if !s.config.Core.Dev && query.String() != "" {
+		distinctId := s.oauth.GetDid(r)
+		if distinctId == "" {
+			distinctId = "anonymous"
+		}
+		go func() {
+			if err := s.posthog.Enqueue(posthog.Capture{
+				DistinctId: distinctId,
+				Event:      "search",
+				Properties: posthog.Properties{
+					"query":        query.String(),
+					"result_count": resultCount,
+					"method":       method,
+				},
+			}); err != nil {
+				l.Error("failed to enqueue posthog event", "err", err)
+			}
+		}()
+	}
 
 	err = s.pages.SearchRepos(w, pages.SearchReposParams{
 		LoggedInUser: s.oauth.GetMultiAccountUser(r),
