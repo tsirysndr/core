@@ -181,6 +181,10 @@ func (h *Knot) fetchLatestSubmission(ctx context.Context, did, rkey string, reco
 		return nil, fmt.Errorf("failed to resolve PR owner handle: %w", err)
 	}
 
+	if len(record.Rounds) == 0 {
+		return nil, fmt.Errorf("failed to fetch latest submission, no rounds in record")
+	}
+
 	roundNumber := len(record.Rounds) - 1
 	round := record.Rounds[roundNumber]
 
