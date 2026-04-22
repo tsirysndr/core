@@ -37,6 +37,8 @@ type Resyncer struct {
 
 	knotBackoff   map[string]time.Time
 	knotBackoffMu sync.RWMutex
+
+	httpClient *http.Client
 }
 
 func NewResyncer(l *slog.Logger, db *sql.DB, gitm GitMirrorManager, cfg *config.Config) *Resyncer {
@@ -53,6 +55,8 @@ func NewResyncer(l *slog.Logger, db *sql.DB, gitm GitMirrorManager, cfg *config.
 		parallelism:         cfg.ResyncParallelism,
 
 		knotBackoff: make(map[string]time.Time),
+
+		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -283,9 +287,6 @@ func (r *Resyncer) checkKnotReachability(ctx context.Context, repo *models.Repo)
 
 	r.logger.Debug("checking knot reachability", "url", repoUrl)
 
-	client := http.Client{
-		Timeout: 30 * time.Second,
-	}
 	req, err := http.NewRequestWithContext(ctx, "GET", repoUrl, nil)
 	if err != nil {
 		return err
@@ -293,7 +294,7 @@ func (r *Resyncer) checkKnotReachability(ctx context.Context, repo *models.Repo)
 	req.Header.Set("User-Agent", "git/2.x")
 	req.Header.Set("Accept", "*/*")
 
-	resp, err := client.Do(req)
+	resp, err := r.httpClient.Do(req)
 	if err != nil {
 		var uerr *url.Error
 		if errors.As(err, &uerr) {
