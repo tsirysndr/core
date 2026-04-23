@@ -116,7 +116,7 @@ export function PullRequestCard(data: PullRequestCardData) {
             additions={data.additions}
             deletions={data.deletions}
           />
-          <RoundsPill value={data.rounds} label="rounds" />
+          <RoundsPill value={data.rounds} label={data.rounds <= 1 ? `round` : `rounds`} />
         </Row>
       </Col>
 
