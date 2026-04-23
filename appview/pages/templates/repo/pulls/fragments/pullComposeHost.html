@@ -1,0 +1,74 @@
+{{ define "repo/pulls/fragments/pullComposeHost" }}
+    <div id="pr-compose-host" class="flex flex-col">
+        {{ if .PrefillError }}
+            <div class="mb-4 p-3 border border-red-200 dark:border-red-800 rounded bg-red-50 dark:bg-red-900/30 text-sm text-red-800 dark:text-red-200 flex items-center gap-2">
+                {{ i "triangle-alert" "w-4 h-4 flex-shrink-0" }}
+                <span>{{ .PrefillError }}</span>
+            </div>
+        {{ end }}
+
+        {{ $hasCommits := and .Comparison .Comparison.FormatPatch }}
+        {{ $hasDiff := false }}
+        {{ if .Diff }}{{ if .Diff.Diff }}{{ $hasDiff = true }}{{ end }}{{ end }}
+        {{ $showDetails := and (or $hasCommits $hasDiff) (not .IsStacked) }}
+
+        <form
+            hx-post="/{{ .RepoInfo.FullName }}/pulls/new"
+            hx-trigger="submit, keydown[(ctrlKey || metaKey) && key=='Enter'] from:(#patch,#title,#body)"
+            hx-indicator="#create-pull-spinner"
+            hx-swap="none"
+            class="flex flex-col gap-6"
+        >
+            <section class="relative flex flex-col gap-3">
+                <div class="absolute left-3 -translate-x-1/2 top-3 -bottom-6 w-px bg-gray-200 dark:bg-gray-700"></div>
+                <div class="flex items-center gap-4 relative">
+                    <div class="flex-shrink-0 relative z-10">
+                        {{ template "pullComposeSectionNumber" 1 }}
+                    </div>
+                    <h3 class="uppercase text-sm tracking-wide font-bold my-0 dark:text-white">source</h3>
+                </div>
+                <div class="ml-10 flex flex-col gap-3">
+                    {{ template "repo/pulls/fragments/pullStepSource" . }}
+                </div>
+            </section>
+
+            <section class="relative flex flex-col gap-3">
+                {{ if $showDetails }}
+                    <div class="absolute left-3 -translate-x-1/2 -top-6 -bottom-6 w-px bg-gray-200 dark:bg-gray-700"></div>
+                {{ else }}
+                    <div class="absolute left-3 -translate-x-1/2 -top-6 -bottom-12 w-px bg-gray-200 dark:bg-gray-700 [mask-image:linear-gradient(to_bottom,black_calc(100%-1.5rem),transparent)]"></div>
+                {{ end }}
+                <div class="flex items-center gap-4 relative">
+                    <div class="flex-shrink-0 relative z-10">
+                        {{ template "pullComposeSectionNumber" 2 }}
+                    </div>
+                    <h3 class="uppercase text-sm tracking-wide font-bold my-0 dark:text-white">review</h3>
+                </div>
+                <div class="ml-10 flex flex-col gap-3">
+                    {{ template "repo/pulls/fragments/pullStepReview" . }}
+                </div>
+            </section>
+
+            {{ if $showDetails }}
+                <section class="relative flex flex-col gap-3">
+                    <div class="absolute left-3 -translate-x-1/2 -top-6 -bottom-12 w-px bg-gray-200 dark:bg-gray-700 [mask-image:linear-gradient(to_bottom,black_calc(100%-1.5rem),transparent)]"></div>
+                    <div class="flex items-center gap-4 relative">
+                        <div class="flex-shrink-0 relative z-10">
+                            {{ template "pullComposeSectionNumber" 3 }}
+                        </div>
+                        <h3 class="uppercase text-sm tracking-wide font-bold my-0 dark:text-white">details</h3>
+                    </div>
+                    <div class="ml-10 flex flex-col gap-3">
+                        {{ template "repo/pulls/fragments/pullStepDetails" . }}
+                    </div>
+                </section>
+            {{ end }}
+        </form>
+
+        <div id="pull" class="error dark:text-red-300 mt-4 ml-10"></div>
+    </div>
+{{ end }}
+
+{{ define "pullComposeSectionNumber" }}
+    <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300 text-xs font-bold">{{ . }}</span>
+{{ end }}

@@ -8,7 +8,10 @@ import (
 )
 
 type DiffOpts struct {
-	Split bool `json:"split"`
+	Split      bool   `json:"split"`
+	RefreshUrl string `json:"refresh_url,omitempty"`
+	Target     string `json:"target,omitempty"`
+	Field      string `json:"field,omitempty"`
 }
 
 func (d DiffOpts) Encode() string {

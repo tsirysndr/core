@@ -1,0 +1,9 @@
+{{ define "fragments/markdownPreview" }}
+    {{ if . }}
+        <div class="prose dark:prose-invert max-w-none">
+            {{ . | markdown }}
+        </div>
+    {{ else }}
+        <div class="text-gray-400 dark:text-gray-500 italic">Nothing to preview.</div>
+    {{ end }}
+{{ end }}

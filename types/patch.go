@@ -18,3 +18,11 @@ func (f FormatPatch) ChangeId() (string, error) {
 	}
 	return "", fmt.Errorf("no change-id found")
 }
+
+func (f FormatPatch) ChangeIdOrEmpty() string {
+	id, err := f.ChangeId()
+	if err != nil {
+		return ""
+	}
+	return id
+}

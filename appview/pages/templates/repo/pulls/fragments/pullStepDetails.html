@@ -1,0 +1,146 @@
+{{ define "repo/pulls/fragments/pullStepDetails" }}
+    {{ $hasSidePanel := and .LabelDefs .RepoInfo.Roles.IsPushAllowed }}
+    {{ $previewUrl := printf "/%s/pulls/new/preview" .RepoInfo.FullName }}
+    {{ $labelCtx := dict "Defs" .LabelDefs "State" .LabelState "RepoInfo" .RepoInfo "Subject" "" "LoggedInUser" .LoggedInUser }}
+
+    <section class="flex flex-col md:flex-row gap-6">
+        <div class="flex-1 min-w-0 flex flex-col gap-4">
+            {{ template "pullStepDetailsSingle" (dict "Root" . "PreviewUrl" $previewUrl) }}
+            {{ template "pullSubmitRow" . }}
+        </div>
+
+        {{ if $hasSidePanel }}
+            <aside class="w-full md:w-72 md:flex-shrink-0 flex flex-col gap-6">
+                {{ template "editBasicLabels" $labelCtx }}
+                {{ template "editKvLabels" $labelCtx }}
+            </aside>
+        {{ end }}
+    </section>
+
+    {{ template "markdownEditorScript" }}
+{{ end }}
+
+{{ define "pullStepDetailsSingle" }}
+    {{ $root := .Root }}
+    {{ $previewUrl := .PreviewUrl }}
+    <div class="flex flex-col gap-1">
+        <label for="title" class="text-xs uppercase tracking-wide text-gray-800 dark:text-gray-200">title</label>
+        <input
+            type="text"
+            name="title"
+            id="title"
+            value="{{ $root.Title }}"
+            class="w-full dark:bg-gray-700 dark:text-white dark:border-gray-600"
+            placeholder="One-line summary of your change."
+        />
+    </div>
+
+    {{ template "markdownEditor" (dict
+        "Id" "pull-body"
+        "Name" "body"
+        "Value" $root.Body
+        "Rows" 6
+        "Placeholder" "Describe your change. Markdown is supported."
+        "PreviewUrl" $previewUrl
+    ) }}
+{{ end }}
+
+{{ define "markdownEditor" }}
+    {{ $id := .Id }}
+    {{ $name := .Name }}
+    {{ $value := .Value }}
+    {{ $rows := .Rows }}
+    {{ $placeholder := .Placeholder }}
+    {{ $previewUrl := .PreviewUrl }}
+    <div class="flex flex-col gap-2" data-md-editor="{{ $id }}">
+        {{ $tabClasses := "group flex items-center gap-2 px-3 py-1 text-sm whitespace-nowrap rounded hover:no-underline data-[active=true]:bg-white data-[active=true]:dark:bg-gray-800 data-[active=true]:shadow-sm data-[active=true]:cursor-default data-[active=false]:hover:text-gray-900 data-[active=false]:dark:hover:text-white" }}
+        <div class="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-gray-900 rounded-md text-gray-600 dark:text-gray-300 self-start">
+            <button type="button" data-md-mode="write"
+                data-active="true"
+                class="{{ $tabClasses }}">
+                {{ i "pencil" "w-3.5 h-3.5 inline group-[.htmx-request]:hidden" }}
+                Write
+            </button>
+            <button type="button" data-md-mode="preview"
+                data-active="false"
+                hx-post="{{ $previewUrl }}"
+                hx-vals='js:{body: document.querySelector("[data-md-editor=\"{{ $id }}\"] textarea").value}'
+                hx-params="body"
+                hx-target="[data-md-editor='{{ $id }}'] [data-md-preview]"
+                hx-swap="innerHTML"
+                hx-indicator="this"
+                class="{{ $tabClasses }}">
+                {{ i "eye" "w-3.5 h-3.5 inline group-[.htmx-request]:hidden" }}
+                {{ i "loader-circle" "w-3.5 h-3.5 animate-spin hidden group-[.htmx-request]:inline" }}
+                Preview
+            </button>
+        </div>
+        <div data-md-panel="write">
+            <textarea
+                id="{{ $id }}"
+                name="{{ $name }}"
+                rows="{{ $rows }}"
+                class="w-full resize-y dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                placeholder="{{ $placeholder }}"
+            >{{ $value }}</textarea>
+        </div>
+        <div data-md-panel="preview" class="hidden">
+            <div data-md-preview class="min-h-[6rem] p-3 border border-gray-200 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-900/30">
+                <span class="text-gray-400 dark:text-gray-500 italic">Loading preview...</span>
+            </div>
+        </div>
+    </div>
+{{ end }}
+
+{{ define "pullSubmitRow" }}
+    <div class="flex items-center justify-end gap-4 mt-auto">
+        {{ if and .MergeCheck .MergeCheck.IsConflicted }}
+            <div class="flex items-center gap-2 text-sm">
+                <span class="inline-flex items-center gap-1 text-red-600 dark:text-red-400">
+                    {{ i "x" "w-4 h-4" }}
+                    Can't automatically merge
+                </span>
+                <span class="text-gray-500 dark:text-gray-400">You can still create the pull request</span>
+            </div>
+        {{ else if and .MergeCheck .MergeCheck.Error }}
+            <div class="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+                {{ i "triangle-alert" "w-4 h-4" }}
+                Merge check failed
+            </div>
+        {{ end }}
+
+        <button
+            type="submit"
+            class="btn-create flex items-center gap-2"
+            hx-indicator="#create-pull-spinner"
+        >
+            {{ i "git-pull-request-create" "w-4 h-4" }}
+            Create pull request
+            <span id="create-pull-spinner" class="group">
+                {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+            </span>
+        </button>
+    </div>
+{{ end }}
+
+{{ define "markdownEditorScript" }}
+    <script>
+    (() => {
+        if (window.__mdEditorWired) return;
+        window.__mdEditorWired = true;
+        document.body.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-md-mode]');
+            if (!btn) return;
+            const editor = btn.closest('[data-md-editor]');
+            if (!editor) return;
+            const mode = btn.dataset.mdMode;
+            editor.querySelectorAll('[data-md-panel]').forEach(p => {
+                p.classList.toggle('hidden', p.dataset.mdPanel !== mode);
+            });
+            editor.querySelectorAll('[data-md-mode]').forEach(b => {
+                b.dataset.active = (b === btn) ? 'true' : 'false';
+            });
+        });
+    })();
+    </script>
+{{ end }}

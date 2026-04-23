@@ -1278,21 +1278,51 @@ func (p *Pages) IssueCommentBodyFragment(w io.Writer, params IssueCommentBodyPar
 	return p.executePlain("repo/issues/fragments/issueCommentBody", w, params)
 }
 
+type StackedDiff struct {
+	Diff *types.NiceDiff
+	Opts types.DiffOpts
+}
+
 type RepoNewPullParams struct {
-	LoggedInUser *oauth.MultiAccountUser
-	RepoInfo     repoinfo.RepoInfo
-	Branches     []types.Branch
-	Strategy     string
-	SourceBranch string
-	TargetBranch string
-	Title        string
-	Body         string
-	Active       string
+	LoggedInUser     *oauth.MultiAccountUser
+	RepoInfo         repoinfo.RepoInfo
+	Branches         []types.Branch
+	SourceBranches   []types.Branch
+	ForkBranches     []types.Branch
+	Forks            []models.Repo
+	Source           Source
+	SourceBranch     string
+	TargetBranch     string
+	Fork             string
+	Patch            string
+	Title            string
+	Body             string
+	IsStacked        bool
+	Comparison       *types.RepoFormatPatchResponse
+	Diff             *types.NiceDiff
+	DiffOpts         types.DiffOpts
+	StackedDiffs     []StackedDiff
+	MergeCheck       *types.MergeCheckResponse
+	StackTitles      map[string]string
+	StackBodies      map[string]string
+	PrefillError     string
+	Active           string
+	LabelDefs        map[string]*models.LabelDefinition
+	LabelState       models.LabelState
+	StackLabelStates map[string]models.LabelState
 }
 
 func (p *Pages) RepoNewPull(w io.Writer, params RepoNewPullParams) error {
 	params.Active = "pulls"
 	return p.executeRepo("repo/pulls/new", w, params)
+}
+
+func (p *Pages) PullComposeHostFragment(w io.Writer, params RepoNewPullParams) error {
+	return p.executePlain("repo/pulls/fragments/pullComposeHost", w, params)
+}
+
+func (p *Pages) MarkdownPreviewFragment(w io.Writer, body string) error {
+	return p.executePlain("fragments/markdownPreview", w, body)
 }
 
 type RepoPullsParams struct {
@@ -1389,44 +1419,6 @@ type RepoPullInterdiffParams struct {
 // this name is a mouthful
 func (p *Pages) RepoPullInterdiffPage(w io.Writer, params RepoPullInterdiffParams) error {
 	return p.execute("repo/pulls/interdiff", w, params)
-}
-
-type PullPatchUploadParams struct {
-	RepoInfo repoinfo.RepoInfo
-}
-
-func (p *Pages) PullPatchUploadFragment(w io.Writer, params PullPatchUploadParams) error {
-	return p.executePlain("repo/pulls/fragments/pullPatchUpload", w, params)
-}
-
-type PullCompareBranchesParams struct {
-	RepoInfo     repoinfo.RepoInfo
-	Branches     []types.Branch
-	SourceBranch string
-}
-
-func (p *Pages) PullCompareBranchesFragment(w io.Writer, params PullCompareBranchesParams) error {
-	return p.executePlain("repo/pulls/fragments/pullCompareBranches", w, params)
-}
-
-type PullCompareForkParams struct {
-	RepoInfo repoinfo.RepoInfo
-	Forks    []models.Repo
-	Selected string
-}
-
-func (p *Pages) PullCompareForkFragment(w io.Writer, params PullCompareForkParams) error {
-	return p.executePlain("repo/pulls/fragments/pullCompareForks", w, params)
-}
-
-type PullCompareForkBranchesParams struct {
-	RepoInfo       repoinfo.RepoInfo
-	SourceBranches []types.Branch
-	TargetBranches []types.Branch
-}
-
-func (p *Pages) PullCompareForkBranchesFragment(w io.Writer, params PullCompareForkBranchesParams) error {
-	return p.executePlain("repo/pulls/fragments/pullCompareForksBranches", w, params)
 }
 
 type PullResubmitParams struct {

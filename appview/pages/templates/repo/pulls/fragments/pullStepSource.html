@@ -1,0 +1,156 @@
+{{ define "repo/pulls/fragments/pullStepSource" }}
+    <section class="flex flex-col gap-3">
+        <input type="hidden" name="source" value="{{ .Source }}">
+
+        {{ template "pullSourceTabs" . }}
+
+        {{ if eq .Source "patch" }}
+            <div class="flex flex-col gap-1">
+                {{ template "repo/fragments/labelSectionHeaderText" "Merge into" }}
+                {{ template "pullTargetBranchSelect" . }}
+            </div>
+            {{ template "repo/pulls/fragments/pullPatchUpload" . }}
+        {{ else }}
+            <div class="flex flex-col md:flex-row md:flex-wrap gap-3">
+                <div class="flex flex-col gap-1">
+                    {{ template "repo/fragments/labelSectionHeaderText" "Merge into" }}
+                    {{ template "pullTargetBranchSelect" . }}
+                </div>
+                <div id="patch-strategy" class="flex flex-col gap-1">
+                    {{ template "repo/fragments/labelSectionHeaderText" "Pull from" }}
+                    {{ if eq .Source "fork" }}
+                        {{ template "repo/pulls/fragments/pullCompareForks" . }}
+                    {{ else }}
+                        {{ template "repo/pulls/fragments/pullCompareBranches" . }}
+                    {{ end }}
+                </div>
+            </div>
+        {{ end }}
+
+        <div id="patch-error" class="error dark:text-red-300 empty:hidden"></div>
+
+        {{ if ne .Source "patch" }}
+            <div class="flex items-center gap-2">
+                <input type="checkbox" id="mode-stack" name="mode" value="stack" autocomplete="off" {{ if .IsStacked }}checked{{ end }}
+                    hx-post="/{{ .RepoInfo.FullName }}/pulls/new/refresh"
+                    hx-include="closest form"
+                    hx-target="#pr-compose-host"
+                    hx-swap="outerHTML"
+                    hx-trigger="change"
+                    hx-indicator="this"
+                    class="peer">
+                <label for="mode-stack" class="my-0 py-0 normal-case font-normal dark:text-white">
+                    Submit as stacked PRs
+                </label>
+                <a
+                    href="https://blog.tangled.org/stacking"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="What are stacked PRs?"
+                    class="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white peer-[.htmx-request]:hidden"
+                >
+                    {{ i "circle-question-mark" "size-4" }}
+                </a>
+                {{ i "loader-circle" "size-4 animate-spin hidden peer-[.htmx-request]:inline text-gray-500 dark:text-gray-400" }}
+            </div>
+        {{ end }}
+    </section>
+{{ end }}
+
+{{ define "pullTargetBranchSelect" }}
+    <div class="flex flex-wrap gap-2 items-center">
+        <select
+            id="targetBranch"
+            name="targetBranch"
+            required
+            hx-post="/{{ .RepoInfo.FullName }}/pulls/new/refresh"
+            hx-include="closest form"
+            hx-target="#pr-compose-host"
+            hx-swap="outerHTML"
+            hx-trigger="change"
+            hx-indicator="this"
+            class="peer p-1 border border-gray-200 bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600"
+        >
+            <option disabled {{ if not .TargetBranch }}selected{{ end }}>Target branch</option>
+            {{ $disableSource := and (eq .Source "branch") $.SourceBranch }}
+            {{ range .Branches }}
+                {{ $preset := false }}
+                {{ if $.TargetBranch }}
+                    {{ $preset = eq .Reference.Name $.TargetBranch }}
+                {{ else }}
+                    {{ $preset = .IsDefault }}
+                {{ end }}
+                {{ $isSource := and $disableSource (eq .Reference.Name $.SourceBranch) }}
+                <option value="{{ .Reference.Name }}" class="py-1"
+                    {{ if $preset }}selected{{ end }}
+                    {{ if $isSource }}disabled{{ end }}>
+                    {{ .Reference.Name }}
+                    {{ if $isSource }}(source){{ end }}
+                </option>
+            {{ end }}
+        </select>
+        {{ i "loader-circle" "size-4 animate-spin hidden peer-[.htmx-request]:inline text-gray-500 dark:text-gray-400" }}
+    </div>
+{{ end }}
+
+{{ define "pullSourceTabs" }}
+    {{ $active := "bg-white dark:bg-gray-800 shadow-sm cursor-default" }}
+    {{ $inactive := "bg-transparent hover:bg-white/50 dark:hover:bg-gray-800/50" }}
+    {{ $shared := "group flex-1 p-3 text-left hover:no-underline flex flex-col gap-1 rounded border-0" }}
+    {{ $titleCls := "font-medium text-sm dark:text-white flex items-center gap-2" }}
+    {{ $descCls := "text-xs text-gray-500 dark:text-gray-400" }}
+    {{ $fullName := .RepoInfo.FullName }}
+    <div class="flex gap-1 p-1 rounded-md bg-slate-100 dark:bg-gray-900"
+         hx-on::before-request="const t=event.target.closest('button'); if(!t||t.classList.contains('shadow-sm'))return event.preventDefault();">
+        {{ if .RepoInfo.Roles.IsPushAllowed }}
+            <button
+                type="button"
+                class="{{ $shared }} {{ if eq .Source "branch" }}{{ $active }}{{ else }}{{ $inactive }}{{ end }}"
+                hx-post="/{{ $fullName }}/pulls/new/refresh"
+                hx-vals='{"source": "branch"}'
+                hx-include="closest form"
+                hx-target="#pr-compose-host"
+                hx-swap="outerHTML"
+                hx-indicator="this"
+            >
+                <span class="{{ $titleCls }}">
+                    Compare branches
+                    {{ i "loader-circle" "size-3 animate-spin hidden group-[.htmx-request]:inline" }}
+                </span>
+                <span class="{{ $descCls }}">Select a source branch</span>
+            </button>
+        {{ end }}
+        <button
+            type="button"
+            class="{{ $shared }} {{ if eq .Source "fork" }}{{ $active }}{{ else }}{{ $inactive }}{{ end }}"
+            hx-post="/{{ $fullName }}/pulls/new/refresh"
+            hx-vals='{"source": "fork"}'
+            hx-include="closest form"
+            hx-target="#pr-compose-host"
+            hx-swap="outerHTML"
+            hx-indicator="this"
+        >
+            <span class="{{ $titleCls }}">
+                Compare forks
+                {{ i "loader-circle" "size-3 animate-spin hidden group-[.htmx-request]:inline" }}
+            </span>
+            <span class="{{ $descCls }}">Select a fork and branch as the source</span>
+        </button>
+        <button
+            type="button"
+            class="{{ $shared }} {{ if eq .Source "patch" }}{{ $active }}{{ else }}{{ $inactive }}{{ end }}"
+            hx-post="/{{ $fullName }}/pulls/new/refresh"
+            hx-vals='{"source": "patch"}'
+            hx-include="closest form"
+            hx-target="#pr-compose-host"
+            hx-swap="outerHTML"
+            hx-indicator="this"
+        >
+            <span class="{{ $titleCls }}">
+                Paste patch
+                {{ i "loader-circle" "size-3 animate-spin hidden group-[.htmx-request]:inline" }}
+            </span>
+            <span class="{{ $descCls }}">Paste a <code class="font-mono">git diff</code> or <code class="font-mono">git format-patch</code></span>
+        </button>
+    </div>
+{{ end }}
