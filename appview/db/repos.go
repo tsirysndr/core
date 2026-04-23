@@ -207,167 +207,181 @@ func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 	}
 
 	// get labels for all repos
-	labelsQuery := fmt.Sprintf(
-		`select repo_did, label_at from repo_labels where repo_did in (%s)`,
-		inClause,
-	)
+	{
+		labelsQuery := fmt.Sprintf(
+			`select repo_did, label_at from repo_labels where repo_did in (%s)`,
+			inClause,
+		)
 
-	rows, err = e.Query(labelsQuery, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var repoDid, labelat string
-		if err := rows.Scan(&repoDid, &labelat); err != nil {
-			continue
+		rows, err = e.Query(labelsQuery, args...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute repo_labels query: %w", err)
 		}
-		if r, ok := repoMap[repoDid]; ok {
-			r.Labels = append(r.Labels, labelat)
+		defer rows.Close()
+
+		for rows.Next() {
+			var repoDid, labelat string
+			if err := rows.Scan(&repoDid, &labelat); err != nil {
+				log.Println("err", err)
+				continue
+			}
+			if r, ok := repoMap[repoDid]; ok {
+				r.Labels = append(r.Labels, labelat)
+			}
+		}
+		if err = rows.Err(); err != nil {
+			return nil, fmt.Errorf("failed to execute repo_labels query: %w", err)
 		}
 	}
 
 	// get primary language for all repos
-	languageQuery := fmt.Sprintf(`
-		select repo_did, language
-		from (
-			select
-				repo_did, language,
-				row_number() over (
-					partition by repo_did
-					order by bytes desc
-				) as rn
-			from repo_languages
-			where repo_did in (%s)
-				and is_default_ref = 1
-				and language <> ''
-		)
-		where rn = 1
-	`, inClause)
+	{
+		languageQuery := fmt.Sprintf(`
+			select repo_did, language
+			from (
+				select
+					repo_did, language,
+					row_number() over (
+						partition by repo_did
+						order by bytes desc
+					) as rn
+				from repo_languages
+				where repo_did in (%s)
+					and is_default_ref = 1
+					and language <> ''
+			)
+			where rn = 1
+		`, inClause)
 
-	rows, err = e.Query(languageQuery, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute lang query: %w", err)
-	}
-	defer rows.Close()
+		rows, err = e.Query(languageQuery, args...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute lang query: %w", err)
+		}
+		defer rows.Close()
 
-	for rows.Next() {
-		var repoDid, lang string
-		if err := rows.Scan(&repoDid, &lang); err != nil {
-			log.Println("err", "err", err)
-			continue
+		for rows.Next() {
+			var repoDid, lang string
+			if err := rows.Scan(&repoDid, &lang); err != nil {
+				log.Println("err", err)
+				continue
+			}
+			if r, ok := repoMap[repoDid]; ok {
+				r.RepoStats.Language = lang
+			}
 		}
-		if r, ok := repoMap[repoDid]; ok {
-			r.RepoStats.Language = lang
+		if err = rows.Err(); err != nil {
+			return nil, fmt.Errorf("failed to execute lang query: %w", err)
 		}
-	}
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to execute lang query: %w", err)
 	}
 
 	// get star counts
-	starCountQuery := fmt.Sprintf(
-		`select subject, count(1) from stars where subject_type = 'repo' and subject in (%s) group by subject`,
-		inClause,
-	)
+	{
+		starCountQuery := fmt.Sprintf(
+			`select subject, count(1) from stars where subject_type = 'repo' and subject in (%s) group by subject`,
+			inClause,
+		)
 
-	rows, err = e.Query(starCountQuery, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute star-count query: %w", err)
-	}
-	defer rows.Close()
+		rows, err = e.Query(starCountQuery, args...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute star-count query: %w", err)
+		}
+		defer rows.Close()
 
-	for rows.Next() {
-		var repoDid string
-		var count int
-		if err := rows.Scan(&repoDid, &count); err != nil {
-			log.Println("err", "err", err)
-			continue
+		for rows.Next() {
+			var repoDid string
+			var count int
+			if err := rows.Scan(&repoDid, &count); err != nil {
+				log.Println("err", "err", err)
+				continue
+			}
+			if r, ok := repoMap[repoDid]; ok {
+				r.RepoStats.StarCount = count
+			}
 		}
-		if r, ok := repoMap[repoDid]; ok {
-			r.RepoStats.StarCount = count
+		if err = rows.Err(); err != nil {
+			return nil, fmt.Errorf("failed to execute star-count query: %w", err)
 		}
-	}
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to execute star-count query: %w", err)
 	}
 
 	// get issue counts
-	issueCountQuery := fmt.Sprintf(`
-		select
-			repo_did,
-			count(case when open = 1 then 1 end) as open_count,
-			count(case when open = 0 then 1 end) as closed_count
-		from issues
-		where repo_did in (%s)
-		group by repo_did
-	`, inClause)
+	{
+		issueCountQuery := fmt.Sprintf(`
+			select
+				repo_did,
+				count(case when open = 1 then 1 end) as open_count,
+				count(case when open = 0 then 1 end) as closed_count
+			from issues
+			where repo_did in (%s)
+			group by repo_did
+		`, inClause)
 
-	rows, err = e.Query(issueCountQuery, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute issue-count query: %w", err)
-	}
-	defer rows.Close()
+		rows, err = e.Query(issueCountQuery, args...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute issue-count query: %w", err)
+		}
+		defer rows.Close()
 
-	for rows.Next() {
-		var repoDid string
-		var open, closed int
-		if err := rows.Scan(&repoDid, &open, &closed); err != nil {
-			log.Println("err", "err", err)
-			continue
+		for rows.Next() {
+			var repoDid string
+			var open, closed int
+			if err := rows.Scan(&repoDid, &open, &closed); err != nil {
+				log.Println("err", err)
+				continue
+			}
+			if r, ok := repoMap[repoDid]; ok {
+				r.RepoStats.IssueCount.Open = open
+				r.RepoStats.IssueCount.Closed = closed
+			}
 		}
-		if r, ok := repoMap[repoDid]; ok {
-			r.RepoStats.IssueCount.Open = open
-			r.RepoStats.IssueCount.Closed = closed
+		if err = rows.Err(); err != nil {
+			return nil, fmt.Errorf("failed to execute issue-count query: %w", err)
 		}
-	}
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to execute issue-count query: %w", err)
 	}
 
 	// get pull counts
-	pullCountQuery := fmt.Sprintf(`
-		select
-			repo_did,
-			count(case when state = ? then 1 end) as open_count,
-			count(case when state = ? then 1 end) as merged_count,
-			count(case when state = ? then 1 end) as closed_count,
-			count(case when state = ? then 1 end) as deleted_count
-		from pulls
-		where repo_did in (%s)
-		group by repo_did
-	`, inClause)
+	{
+		pullCountQuery := fmt.Sprintf(`
+			select
+				repo_did,
+				count(case when state = ? then 1 end) as open_count,
+				count(case when state = ? then 1 end) as merged_count,
+				count(case when state = ? then 1 end) as closed_count,
+				count(case when state = ? then 1 end) as deleted_count
+			from pulls
+			where repo_did in (%s)
+			group by repo_did
+		`, inClause)
 
-	pullArgs := append([]any{
-		models.PullOpen,
-		models.PullMerged,
-		models.PullClosed,
-		models.PullAbandoned,
-	}, args...)
+		pullArgs := append([]any{
+			models.PullOpen,
+			models.PullMerged,
+			models.PullClosed,
+			models.PullAbandoned,
+		}, args...)
 
-	rows, err = e.Query(pullCountQuery, pullArgs...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute pulls-count query: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var repoDid string
-		var open, merged, closed, deleted int
-		if err := rows.Scan(&repoDid, &open, &merged, &closed, &deleted); err != nil {
-			log.Println("err", "err", err)
-			continue
+		rows, err = e.Query(pullCountQuery, pullArgs...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute pulls-count query: %w", err)
 		}
-		if r, ok := repoMap[repoDid]; ok {
-			r.RepoStats.PullCount.Open = open
-			r.RepoStats.PullCount.Merged = merged
-			r.RepoStats.PullCount.Closed = closed
-			r.RepoStats.PullCount.Deleted = deleted
+		defer rows.Close()
+
+		for rows.Next() {
+			var repoDid string
+			var open, merged, closed, deleted int
+			if err := rows.Scan(&repoDid, &open, &merged, &closed, &deleted); err != nil {
+				log.Println("err", "err", err)
+				continue
+			}
+			if r, ok := repoMap[repoDid]; ok {
+				r.RepoStats.PullCount.Open = open
+				r.RepoStats.PullCount.Merged = merged
+				r.RepoStats.PullCount.Closed = closed
+				r.RepoStats.PullCount.Deleted = deleted
+			}
 		}
-	}
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to execute pulls-count query: %w", err)
+		if err = rows.Err(); err != nil {
+			return nil, fmt.Errorf("failed to execute pulls-count query: %w", err)
+		}
 	}
 
 	// get forks — only query repos with a non-empty repo_did, since source
