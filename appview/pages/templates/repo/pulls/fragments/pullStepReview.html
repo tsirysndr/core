@@ -1,0 +1,518 @@
+{{ define "repo/pulls/fragments/pullStepReview" }}
+    <section class="flex flex-col gap-3">
+        {{ if not .Comparison }}
+            <div class="p-4 border border-gray-200 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-800/30 text-sm text-gray-600 dark:text-gray-400">
+                {{ if eq .Source "patch" }}
+                    Paste a patch above to see a comparison.
+                {{ else }}
+                    Pick a source and target above to see a comparison.
+                {{ end }}
+            </div>
+        {{ else }}
+            {{ $commits := .Comparison.FormatPatch }}
+            {{ if $commits }}
+                <div class="flex flex-col gap-2">
+                    <div class="flex items-center justify-between gap-3 min-w-0 text-sm text-gray-500 dark:text-gray-400">
+                        {{ if .IsStacked }}
+                            <span class="inline-flex items-center gap-2 flex-shrink-0 text-gray-900 dark:text-gray-100">
+                                {{ i "chevrons-down-up" "w-4 h-4" }}
+                                <span>Stack</span>
+                                <span class="text-gray-500 dark:text-gray-400">{{ len $commits }} pull request{{ if ne (len $commits) 1 }}s{{ end }}</span>
+                            </span>
+                        {{ else }}
+                            <span class="flex-shrink-0">{{ len $commits }} commit{{ if ne (len $commits) 1 }}s{{ end }}</span>
+                        {{ end }}
+                        {{ if and .SourceBranch .TargetBranch }}
+                            <span class="inline-flex items-center gap-2 font-mono text-gray-600 dark:text-gray-300 truncate">
+                                <span>{{ .TargetBranch }}</span>
+                                {{ i "arrow-left-right" "w-4 h-4 flex-shrink-0" }}
+                                <span>{{ .SourceBranch }}</span>
+                            </span>
+                        {{ end }}
+                    </div>
+                    {{ if .IsStacked }}
+                        {{ template "pullReviewStackedCommits" . }}
+                    {{ else }}
+                        {{ template "pullReviewFlatCommits" . }}
+                    {{ end }}
+                </div>
+            {{ else if ne .Source "patch" }}
+                <div class="p-4 border border-gray-200 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-800/30 text-sm text-gray-600 dark:text-gray-400">
+                    {{ if and .SourceBranch .TargetBranch (eq .SourceBranch .TargetBranch) }}
+                        Source and target are the same branch, nothing to merge.
+                    {{ else }}
+                        No commits between target and source. Make sure your source branch has commits not on the target.
+                    {{ end }}
+                </div>
+            {{ end }}
+
+            {{ if and .Diff (not .IsStacked) }}
+                {{ template "pullComposeFlatDiff" (list .Diff .DiffOpts) }}
+            {{ end }}
+
+            {{ if and .IsStacked $commits }}
+                {{ template "pullSubmitRow" . }}
+                {{ template "pullStackApplyAllScript" }}
+            {{ end }}
+        {{ end }}
+    </section>
+{{ end }}
+
+{{ define "pullStackApplyAllScript" }}
+    <script>
+    (() => {
+        const checkbox = document.getElementById('stack-apply-all');
+        if (!checkbox || checkbox.dataset.applyAllWired === '1') return;
+        checkbox.dataset.applyAllWired = '1';
+
+        const update = () => {
+            const panels = document.querySelectorAll('[data-stack-labels]');
+            panels.forEach((panel, idx) => {
+                if (idx === 0) return;
+                panel.classList.toggle('hidden', checkbox.checked);
+            });
+        };
+        checkbox.addEventListener('change', update);
+        update();
+    })();
+    </script>
+{{ end }}
+
+{{ define "pullReviewFlatCommits" }}
+    {{ $commits := .Comparison.FormatPatch }}
+    <ul class="flex flex-col gap-2">
+        {{ range $commits }}
+            <li class="border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-800 px-3 py-2 flex items-center gap-3">
+                <span class="text-gray-700 dark:text-gray-300 flex-shrink-0">
+                    {{ i "git-pull-request-create" "w-4 h-4" }}
+                </span>
+                <span class="flex-1 min-w-0 truncate text-sm dark:text-gray-200">{{ .Title }}</span>
+                {{ template "pullReviewCommitTimestamp" (dict "Patch" .) }}
+                <span class="-my-2 self-stretch w-px bg-gray-200 dark:bg-gray-700"></span>
+                {{ template "pullReviewCommitActions" (dict "Patch" . "RepoInfo" $.RepoInfo) }}
+            </li>
+        {{ end }}
+    </ul>
+{{ end }}
+
+{{ define "pullReviewStackedCommits" }}
+    {{ $root := . }}
+    {{ $commits := .Comparison.FormatPatch }}
+    {{ $previewUrl := printf "/%s/pulls/new/preview" .RepoInfo.FullName }}
+    {{ $hasSidePanel := and $root.LabelDefs $root.RepoInfo.Roles.IsPushAllowed }}
+    <ul class="flex flex-col gap-2">
+        {{ range $idx, $p := $commits }}
+            {{ $cid := $p.ChangeIdOrEmpty }}
+            {{ $titleOverride := index $root.StackTitles $cid }}
+            {{ $bodyOverride := index $root.StackBodies $cid }}
+            {{ $displayTitle := $p.Title }}
+            {{ if $titleOverride }}{{ $displayTitle = $titleOverride }}{{ end }}
+            {{ $bodyValue := $p.Body }}
+            {{ if $bodyOverride }}{{ $bodyValue = $bodyOverride }}{{ end }}
+            {{ $perDiff := "" }}
+            {{ $perOpts := dict }}
+            {{ if lt $idx (len $root.StackedDiffs) }}
+                {{ $sd := index $root.StackedDiffs $idx }}
+                {{ $perDiff = $sd.Diff }}
+                {{ $perOpts = $sd.Opts }}
+            {{ end }}
+            <li>
+                <details class="group/stacked border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-800">
+                    <summary class="p-3 cursor-pointer flex items-center gap-3 list-none">
+                        <span class="text-gray-700 dark:text-gray-300 flex-shrink-0">
+                            {{ i "chevron-right" "w-4 h-4 group-open/stacked:hidden inline" }}
+                            {{ i "chevron-down" "w-4 h-4 hidden group-open/stacked:inline" }}
+                        </span>
+                        <span class="-my-3 self-stretch w-px bg-gray-200 dark:bg-gray-700"></span>
+                        <span class="text-gray-700 dark:text-gray-300 flex-shrink-0">
+                            {{ i "git-pull-request-create" "w-4 h-4" }}
+                        </span>
+                        <span class="flex-1 min-w-0 truncate text-sm dark:text-gray-200">{{ $displayTitle }}</span>
+                        {{ template "pullReviewCommitTimestamp" (dict "Patch" $p) }}
+                        <span class="-my-3 self-stretch w-px bg-gray-200 dark:bg-gray-700"></span>
+                        {{ template "pullReviewCommitActions" (dict "Patch" $p "RepoInfo" $root.RepoInfo) }}
+                    </summary>
+                    {{ if $cid }}
+                        <div class="px-3 pb-3 pt-1 flex flex-col gap-3 border-t border-gray-100 dark:border-gray-700">
+                            {{ $titleName := printf "stackTitle[%s]" $cid }}
+                            {{ $bodyName := printf "stackBody[%s]" $cid }}
+                            <div class="flex flex-col md:flex-row gap-6">
+                                <div class="flex-1 min-w-0 flex flex-col gap-3">
+                                    <div class="flex flex-col gap-1">
+                                        <label class="text-xs uppercase tracking-wide text-gray-800 dark:text-gray-200">title</label>
+                                        <input
+                                            type="text"
+                                            name="{{ $titleName }}"
+                                            value="{{ $displayTitle }}"
+                                            class="w-full dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                                            placeholder="{{ $p.Title }}"
+                                        />
+                                    </div>
+                                    {{ template "markdownEditor" (dict
+                                        "Id" (printf "stack-body-%s" $cid)
+                                        "Name" $bodyName
+                                        "Value" $bodyValue
+                                        "Rows" 4
+                                        "Placeholder" "Describe this pull request. Markdown is supported."
+                                        "LabelText" "description"
+                                        "PreviewUrl" $previewUrl
+                                    ) }}
+                                </div>
+                                {{ if $hasSidePanel }}
+                                    <aside data-stack-labels="{{ $cid }}" class="w-full md:w-72 md:flex-shrink-0 flex flex-col gap-4">
+                                        {{ $labelState := $root.LabelState }}
+                                        {{ if $root.StackLabelStates }}
+                                            {{ $perCid := index $root.StackLabelStates $cid }}
+                                            {{ if $perCid }}{{ $labelState = $perCid }}{{ end }}
+                                        {{ end }}
+                                        {{ $labelCtx := dict "Defs" $root.LabelDefs "State" $labelState "RepoInfo" $root.RepoInfo "Subject" "" "LoggedInUser" $root.LoggedInUser "Prefix" (printf "stackLabel[%s]" $cid) }}
+                                        {{ template "editBasicLabels" $labelCtx }}
+                                        {{ template "editKvLabels" $labelCtx }}
+                                        {{ if eq $idx 0 }}
+                                            <label class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 self-start">
+                                                <input type="checkbox" id="stack-apply-all" name="applyLabelsToAll" autocomplete="off" />
+                                                Apply labels and assignees to all PRs in stack
+                                            </label>
+                                        {{ end }}
+                                    </aside>
+                                {{ end }}
+                            </div>
+                            {{ if $perDiff }}
+                                <hr class="border-gray-200 dark:border-gray-700 my-1" />
+                                <div id="stack-diff-{{ $cid }}">
+                                    <input type="hidden" name="stackSplit[{{ $cid }}]" value="{{ if $perOpts.Split }}split{{ else }}unified{{ end }}" />
+                                    {{ template "pullStackedDiffArea" (dict "Diff" $perDiff "DiffOpts" $perOpts "Cid" $cid) }}
+                                </div>
+                            {{ end }}
+                        </div>
+                    {{ else }}
+                        <div class="px-3 pb-3 pt-1 text-sm text-yellow-700 dark:text-yellow-300 border-t border-gray-100 dark:border-gray-700">
+                            This commit has no <span class="font-mono">Change-Id</span> header and can't be stacked. Set one on the commit and re-push.
+                        </div>
+                    {{ end }}
+                </details>
+            </li>
+        {{ end }}
+    </ul>
+{{ end }}
+
+{{ define "pullReviewCommitTimestamp" }}
+    {{ $p := .Patch }}
+    {{ if or (not $p.AuthorDate.IsZero) $p.SHA }}
+        <span class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
+            {{ if not $p.AuthorDate.IsZero }}
+                {{ template "repo/fragments/shortTimeAgo" $p.AuthorDate }}
+            {{ end }}
+            {{ if $p.SHA }}
+                <span class="font-mono bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded">{{ slice $p.SHA 0 8 }}</span>
+            {{ end }}
+        </span>
+    {{ end }}
+{{ end }}
+
+{{ define "pullReviewCommitActions" }}
+    {{ $p := .Patch }}
+    {{ $repoInfo := .RepoInfo }}
+    {{ if $p.SHA }}
+        <span class="flex items-center gap-1 text-gray-700 dark:text-gray-300 flex-shrink-0">
+            <button type="button"
+                class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                title="Copy SHA"
+                onclick="event.preventDefault(); event.stopPropagation(); navigator.clipboard.writeText('{{ $p.SHA }}'); this.innerHTML=`{{ i "copy-check" "w-4 h-4" }}`; setTimeout(() => this.innerHTML=`{{ i "copy" "w-4 h-4" }}`, 1500)">
+                {{ i "copy" "w-4 h-4" }}
+            </button>
+            <a href="/{{ $repoInfo.FullName }}/tree/{{ $p.SHA }}"
+               onclick="event.stopPropagation()"
+               class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+               title="Browse repository at this commit">
+                {{ i "folder-code" "w-4 h-4" }}
+            </a>
+        </span>
+    {{ end }}
+{{ end }}
+
+{{ define "pullStackedDiffArea" }}
+    {{ $diff := .Diff }}
+    {{ $opts := .DiffOpts }}
+    {{ $cid := .Cid }}
+    {{ $togId := printf "stack-%s-filesToggle" $cid }}
+    {{ $colId := printf "stack-%s-collapseToggle" $cid }}
+    {{ $filesId := printf "stack-%s-files" $cid }}
+    {{ $diffAreaId := printf "stack-%s-diff-area" $cid }}
+    {{ $filePrefix := printf "stack-%s-file-" $cid }}
+    {{ $stat := $diff.Stats }}
+    {{ $count := len $diff.ChangedFiles }}
+
+    <style>
+        #{{ $togId }}:checked ~ * label[for="{{ $togId }}"] .show-text { display: none; }
+        #{{ $togId }}:checked ~ * label[for="{{ $togId }}"] .hide-text { display: inline; }
+        #{{ $togId }}:not(:checked) ~ * label[for="{{ $togId }}"] .hide-text { display: none; }
+        #{{ $togId }}:checked ~ * div#{{ $filesId }} { width: fit-content; max-width: 15vw; }
+        #{{ $togId }}:not(:checked) ~ * div#{{ $filesId }} { width: 0; display: none; margin-right: 0; }
+    </style>
+
+    <input type="checkbox" id="{{ $togId }}" class="hidden"/>
+
+    <div id="{{ $diffAreaId }}">
+        <div class="bg-slate-100 dark:bg-gray-900 flex items-center gap-2 h-12 p-2 rounded-t-md border border-b-0 border-gray-200 dark:border-gray-700">
+            <label title="Toggle filetree panel" for="{{ $togId }}" class="hidden md:inline-flex items-center justify-center rounded cursor-pointer text-normal font-normal normal-case">
+                <span class="show-text">{{ i "panel-left-open" "size-4" }}</span>
+                <span class="hide-text">{{ i "panel-left-close" "size-4" }}</span>
+            </label>
+
+            {{ template "repo/fragments/diffStatPill" $stat }}
+            <span class="text-xs text-gray-600 dark:text-gray-400 hidden md:inline-flex">{{ $count }} changed file{{ if ne $count 1 }}s{{ end }}</span>
+
+            <div class="flex-grow"></div>
+
+            <label title="Expand/Collapse diffs" for="{{ $colId }}" class="btn font-normal normal-case p-2">
+                <input type="checkbox" id="{{ $colId }}" class="peer/collapse hidden"/>
+                <span class="peer-checked/collapse:hidden inline-flex items-center gap-2">
+                    {{ i "fold-vertical" "w-4 h-4" }}
+                    <span class="hidden md:inline">Expand all</span>
+                </span>
+                <span class="peer-checked/collapse:inline-flex hidden flex items-center gap-2">
+                    {{ i "unfold-vertical" "w-4 h-4" }}
+                    <span class="hidden md:inline">Collapse all</span>
+                </span>
+            </label>
+
+            {{ template "repo/fragments/diffOpts" $opts }}
+        </div>
+
+        <div class="flex border border-gray-200 dark:border-gray-700 rounded-b-md">
+            <div id="{{ $filesId }}" class="hidden md:block overflow-hidden max-h-[60vh] overflow-y-auto border-r border-gray-200 dark:border-gray-700">
+                <section class="overflow-x-auto text-sm px-3 py-2 w-full mx-auto">
+                    {{ template "repo/fragments/fileTreePrefixed" (dict "Tree" $diff.FileTree "Prefix" $filePrefix) }}
+                </section>
+            </div>
+
+            <div class="flex-1 min-w-0 p-2">
+                <div class="flex flex-col gap-2">
+                    {{ if eq $count 0 }}
+                        <div class="text-center text-gray-500 dark:text-gray-400 py-8">
+                            <p>No differences found.</p>
+                        </div>
+                    {{ else if le $count 5 }}
+                        {{ range $idx, $file := $diff.ChangedFiles }}
+                            {{ template "stackedDiffFile" (dict "Idx" $idx "File" $file "IsSplit" $opts.Split "Prefix" $filePrefix) }}
+                        {{ end }}
+                    {{ else }}
+                        {{ range $idx, $file := slice $diff.ChangedFiles 0 5 }}
+                            {{ template "stackedDiffFile" (dict "Idx" $idx "File" $file "IsSplit" $opts.Split "Prefix" $filePrefix) }}
+                        {{ end }}
+                        {{ $remaining := sub $count 5 }}
+                        <details class="group/showmore">
+                            <summary class="cursor-pointer text-sm text-gray-700 dark:text-gray-300 py-2 px-1 flex items-center gap-2 select-none hover:text-gray-900 dark:hover:text-gray-100 list-none">
+                                <span class="group-open/showmore:hidden inline-flex items-center gap-2">
+                                    {{ i "chevron-right" "w-4 h-4" }}
+                                    Show {{ $remaining }} more file{{ if ne $remaining 1 }}s{{ end }}
+                                </span>
+                                <span class="hidden group-open/showmore:inline-flex items-center gap-2">
+                                    {{ i "chevron-down" "w-4 h-4" }}
+                                    Hide {{ $remaining }} file{{ if ne $remaining 1 }}s{{ end }}
+                                </span>
+                            </summary>
+                            <div class="flex flex-col gap-2 mt-2">
+                                {{ range $idx, $file := slice $diff.ChangedFiles 5 }}
+                                    {{ template "stackedDiffFile" (dict "Idx" (add $idx 5) "File" $file "IsSplit" $opts.Split "Prefix" $filePrefix) }}
+                                {{ end }}
+                            </div>
+                        </details>
+                    {{ end }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (() => {
+            const cb = document.getElementById('{{ $colId }}');
+            const area = document.getElementById('{{ $diffAreaId }}');
+            if (!cb || !area) return;
+            const all = () => area.querySelectorAll('details[id^="{{ $filePrefix }}"]');
+            cb.addEventListener('change', () => {
+                all().forEach(d => { d.open = cb.checked; });
+            });
+            area.addEventListener('toggle', (e) => {
+                if (!e.target.matches('details[id^="{{ $filePrefix }}"]')) return;
+                const dets = Array.from(all());
+                const allOpen = dets.every(d => d.open);
+                const allClosed = dets.every(d => !d.open);
+                if (allOpen) cb.checked = true;
+                else if (allClosed) cb.checked = false;
+            }, true);
+        })();
+    </script>
+{{ end }}
+
+{{ define "stackedDiffFile" }}
+    {{ $idx := .Idx }}
+    {{ $file := .File }}
+    {{ $isSplit := .IsSplit }}
+    {{ $prefix := .Prefix }}
+    {{ $isGenerated := false }}
+    {{ $isDeleted := false }}
+    {{ with $file }}
+        {{ $n := .Names }}
+        {{ $isDeleted = and (eq $n.New "") (ne $n.Old "") }}
+        {{ if $n.New }}
+            {{ $isGenerated = isGenerated $n.New }}
+        {{ else if $n.Old }}
+            {{ $isGenerated = isGenerated $n.Old }}
+        {{ end }}
+        <details id="{{ $prefix }}{{ .Id }}" class="group border border-gray-200 dark:border-gray-700 w-full mx-auto rounded bg-white dark:bg-gray-800 drop-shadow-sm" tabindex="{{ add $idx 1 }}">
+            <summary class="list-none cursor-pointer group-open:border-b border-gray-200 dark:border-gray-700">
+                <div class="rounded cursor-pointer bg-white dark:bg-gray-800 flex justify-between">
+                    <div class="p-2 flex gap-2 items-center overflow-x-auto">
+                        <span class="group-open:hidden inline">{{ i "chevron-right" "w-4 h-4" }}</span>
+                        <span class="hidden group-open:inline">{{ i "chevron-down" "w-4 h-4" }}</span>
+                        {{ template "repo/fragments/diffStatPill" .Stats }}
+                        <div class="flex gap-2 items-center overflow-x-auto">
+                            {{ if and $n.New $n.Old (ne $n.New $n.Old)}}
+                                {{ $n.Old }} {{ i "arrow-right" "w-4 h-4" }} {{ $n.New }}
+                            {{ else if $n.New }}
+                                {{ $n.New }}
+                            {{ else }}
+                                {{ $n.Old }}
+                            {{ end }}
+                            {{ if $isDeleted }}
+                                <span class="text-gray-400 dark:text-gray-500" title="Deleted files are collapsed by default">
+                                    {{ i "circle-question-mark" "size-4" }}
+                                </span>
+                            {{ else if $isGenerated }}
+                                <span class="text-gray-400 dark:text-gray-500" title="Generated files are collapsed by default">
+                                    {{ i "circle-question-mark" "size-4" }}
+                                </span>
+                            {{ end }}
+                        </div>
+                    </div>
+                </div>
+            </summary>
+
+            <div class="transition-all duration-700 ease-in-out">
+                {{ $reason := .CanRender }}
+                {{ if $reason }}
+                    <p class="text-center text-gray-400 dark:text-gray-500 p-4">{{ $reason }}</p>
+                {{ else }}
+                    {{ if $isSplit }}
+                        {{- template "repo/fragments/splitDiff" .Split -}}
+                    {{ else }}
+                        {{- template "repo/fragments/unifiedDiff" . -}}
+                    {{ end }}
+                {{- end -}}
+            </div>
+        </details>
+    {{ end }}
+{{ end }}
+
+{{ define "pullComposeFlatDiff" }}
+    {{ $diff := index . 0 }}
+    {{ $opts := index . 1 }}
+    {{ $files := $diff.ChangedFiles }}
+    {{ $isSplit := $opts.Split }}
+    {{ $count := len $files }}
+    {{ $stat := $diff.Stats }}
+
+    <style>
+        #composeFilesToggle:checked ~ * label[for="composeFilesToggle"] .show-text { display: none; }
+        #composeFilesToggle:checked ~ * label[for="composeFilesToggle"] .hide-text { display: inline; }
+        #composeFilesToggle:not(:checked) ~ * label[for="composeFilesToggle"] .hide-text { display: none; }
+        #composeFilesToggle:checked ~ * div#composeFiles { width: fit-content; max-width: 15vw; }
+        #composeFilesToggle:not(:checked) ~ * div#composeFiles { width: 0; display: none; margin-right: 0; }
+    </style>
+
+    <input type="checkbox" id="composeFilesToggle" class="hidden"/>
+
+    <div id="diff-area">
+        <div class="bg-slate-100 dark:bg-gray-900 flex items-center gap-2 h-12 p-2 rounded-t-md border border-b-0 border-gray-200 dark:border-gray-700">
+            <label title="Toggle filetree panel" for="composeFilesToggle" class="hidden md:inline-flex items-center justify-center rounded cursor-pointer text-normal font-normal normal-case">
+                <span class="show-text">{{ i "panel-left-open" "size-4" }}</span>
+                <span class="hide-text">{{ i "panel-left-close" "size-4" }}</span>
+            </label>
+
+            {{ template "repo/fragments/diffStatPill" $stat }}
+            <span class="text-xs text-gray-600 dark:text-gray-400 hidden md:inline-flex">{{ $count }} changed file{{ if ne $count 1 }}s{{ end }}</span>
+
+            <div class="flex-grow"></div>
+
+            <label title="Expand/Collapse diffs" for="composeCollapseToggle" class="btn font-normal normal-case p-2">
+                <input type="checkbox" id="composeCollapseToggle" class="peer/collapse hidden"/>
+                <span class="peer-checked/collapse:hidden inline-flex items-center gap-2">
+                    {{ i "fold-vertical" "w-4 h-4" }}
+                    <span class="hidden md:inline">Expand all</span>
+                </span>
+                <span class="peer-checked/collapse:inline-flex hidden flex items-center gap-2">
+                    {{ i "unfold-vertical" "w-4 h-4" }}
+                    <span class="hidden md:inline">Collapse all</span>
+                </span>
+            </label>
+
+            {{ template "repo/fragments/diffOpts" $opts }}
+        </div>
+
+        <div class="flex border border-gray-200 dark:border-gray-700 rounded-b-md">
+            <div id="composeFiles" class="hidden md:block overflow-hidden max-h-[60vh] overflow-y-auto border-r border-gray-200 dark:border-gray-700">
+                <section class="overflow-x-auto text-sm px-3 py-2 w-full mx-auto">
+                    {{ template "repo/fragments/fileTree" $diff.FileTree }}
+                </section>
+            </div>
+
+            <div class="flex-1 min-w-0 p-2">
+                <div class="flex flex-col gap-2">
+                    {{ if eq $count 0 }}
+                        <div class="text-center text-gray-500 dark:text-gray-400 py-8">
+                            <p>No differences found.</p>
+                        </div>
+                    {{ else if le $count 5 }}
+                        {{ range $idx, $file := $files }}
+                            {{ template "diffFile" (list $idx $file $isSplit true) }}
+                        {{ end }}
+                    {{ else }}
+                        {{ range $idx, $file := slice $files 0 5 }}
+                            {{ template "diffFile" (list $idx $file $isSplit true) }}
+                        {{ end }}
+                        {{ $remaining := sub $count 5 }}
+                        <details class="group/showmore">
+                            <summary class="cursor-pointer text-sm text-gray-700 dark:text-gray-300 py-2 px-1 flex items-center gap-2 select-none hover:text-gray-900 dark:hover:text-gray-100 list-none">
+                                <span class="group-open/showmore:hidden inline-flex items-center gap-2">
+                                    {{ i "chevron-right" "w-4 h-4" }}
+                                    Show {{ $remaining }} more file{{ if ne $remaining 1 }}s{{ end }}
+                                </span>
+                                <span class="hidden group-open/showmore:inline-flex items-center gap-2">
+                                    {{ i "chevron-down" "w-4 h-4" }}
+                                    Hide {{ $remaining }} file{{ if ne $remaining 1 }}s{{ end }}
+                                </span>
+                            </summary>
+                            <div class="flex flex-col gap-2 mt-2">
+                                {{ range $idx, $file := slice $files 5 }}
+                                    {{ template "diffFile" (list (add $idx 5) $file $isSplit true) }}
+                                {{ end }}
+                            </div>
+                        </details>
+                    {{ end }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (() => {
+            const checkbox = document.getElementById('composeCollapseToggle');
+            const diffArea = document.getElementById('diff-area');
+            if (!checkbox || !diffArea) return;
+            const all = () => diffArea.querySelectorAll('details[id^="file-"]');
+            checkbox.addEventListener('change', () => {
+                all().forEach(d => { d.open = checkbox.checked; });
+            });
+            diffArea.addEventListener('toggle', (e) => {
+                if (!e.target.matches('details[id^="file-"]')) return;
+                const dets = Array.from(all());
+                const allOpen = dets.every(d => d.open);
+                const allClosed = dets.every(d => !d.open);
+                if (allOpen) checkbox.checked = true;
+                else if (allClosed) checkbox.checked = false;
+            }, true);
+        })();
+    </script>
+{{ end }}
