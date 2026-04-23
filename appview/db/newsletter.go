@@ -47,10 +47,7 @@ func GetNewsletterPref(e Execer, did string) (*NewsletterPref, error) {
 	if email.Valid {
 		pref.Email = email.String
 	}
-	// Best-effort: the column's default format is ISO-8601, but older rows
-	// (or manual inserts) might use other layouts. A parse failure is not
-	// fatal — the zero time is acceptable for a UI gating check.
-	if t, perr := time.Parse("2006-01-02T15:04:05Z", updatedAt); perr == nil {
+	if t, perr := time.Parse(time.RFC3339, updatedAt); perr == nil {
 		pref.UpdatedAt = t
 	}
 

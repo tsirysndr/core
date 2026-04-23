@@ -1,13 +1,3 @@
-{{/*
-  Shared newsletter signup form. Variants style the form differently, but the
-  POST target, response-target id and request plumbing stay identical.
-
-  Params (dict):
-    Id      string  - unique id suffix (e.g. "widget", "home"); used to build
-                      the response span's id so multiple signup forms can
-                      coexist on one page without colliding.
-    Variant string  - "card" (compact sidebar card) | "hero" (large CTA)
-*/}}
 {{ define "timeline/fragments/newsletterForm" }}
   {{ $id := .Id }}
   {{ $variant := .Variant }}
@@ -38,14 +28,14 @@
       hx-target="#newsletter-msg-{{ $id }}"
       hx-swap="outerHTML"
       hx-vals='{"target":"{{ $id }}"}'>
-      <span id="newsletter-msg-{{ $id }}" class="flex items-center gap-2">
+      <span id="newsletter-msg-{{ $id }}" class="flex items-stretch gap-2">
         <input
           type="email"
           name="email"
           placeholder="your@email.com"
           required
-          class="flex-1 min-w-0 text-sm" />
-        <button type="submit" class="btn whitespace-nowrap h-12 px-4 pb-0 gap-2">
+          class="flex-1 min-w-0 text-sm py-2" />
+        <button type="submit" class="btn whitespace-nowrap px-4 pb-0 gap-2">
           {{ i "mail-plus" "size-4 inline" }}
           subscribe
         </button>

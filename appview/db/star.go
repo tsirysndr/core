@@ -304,7 +304,7 @@ func GetTopStarredReposLastWeek(e Execer) ([]models.Repo, error) {
 		select rsc.subject_at
 		from repo_star_counts rsc
 		order by rsc.stars_gained_last_week desc
-		limit 8
+		limit 5
 	`
 
 	rows, err := e.Query(query)

@@ -9,51 +9,25 @@
 
 {{ define "mainLayout" }}
 <div class="flex-grow">
-    <div class="max-w-screen-xl mx-auto flex flex-col gap-4">
+    <div class="max-w-screen-lg mx-auto flex flex-col gap-4">
         <main>{{ block "content" . }}{{ end }}</main>
     </div>
 </div>
 {{ end }}
 
 {{ define "content" }}
-{{/*
-  Single responsive grid. Every fragment is rendered once, with CSS alone
-  handling the mobile → desktop reflow. Only trending has two variants
-  (horizontal scroll for mobile, vertical sidebar for desktop); both are
-  present in the DOM and toggled via utility classes.
+<div id="timeline-grid" class="flex flex-col gap-4 lg:grid lg:grid-cols-3">
 
-  Desktop grid (lg+):
-      row 1: [ gfi-banner  (col-span-2) ] [ newsletter (col 3) ]
-      row 2: [ timeline    (col-span-2) ] [ trendingSidebar (col 3) ]
-
-  When the newsletter is hidden (server-side via .ShowNewsletter, or
-  client-side via the dismiss button + localStorage), the gfi-banner
-  widens to col-span-3.
-*/}}
-<div id="timeline-grid"
-     class="flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:gap-x-2 lg:gap-y-6">
-
-    {{ if .ShowNewsletter }}
-    <div id="newsletter-col"
-         class="order-1 lg:order-none lg:col-start-3 lg:row-start-1 lg:pl-8">
-        {{ template "timeline/fragments/newsletterWidget" . }}
-    </div>
-    {{ end }}
-
-    <div id="gfi-banner"
-         class="order-2 lg:order-none lg:row-start-1 {{ if .ShowNewsletter }}lg:col-span-2{{ else }}lg:col-span-3 lg:max-w-4xl lg:mx-auto{{ end }}">
-        {{ template "timeline/fragments/goodfirstissues" . }}
-    </div>
-
-    <div class="order-4 lg:order-none lg:col-span-2 lg:row-start-2">
+    <div class="order-2 lg:order-none lg:col-span-2 lg:row-start-1">
         {{ template "timeline/fragments/timeline" . }}
     </div>
 
-    <div class="order-3 lg:hidden">
-        {{ template "timeline/fragments/trending" . }}
-    </div>
-
-    <div class="hidden lg:flex lg:flex-col gap-6 lg:pl-8 lg:col-start-3 lg:row-start-2">
+    <div class="order-1 lg:order-none flex flex-col gap-6 lg:col-start-3 lg:row-start-1">
+        {{ if .ShowNewsletter }}
+        <div id="newsletter-col" class="order-first lg:order-last">
+            {{ template "timeline/fragments/newsletterWidget" . }}
+        </div>
+        {{ end }}
         {{ template "timeline/fragments/trendingSidebar" . }}
     </div>
 </div>
@@ -63,14 +37,7 @@
   (function() {
     var DISMISS_KEY = 'newsletter-dismissed';
     var newsletterCol = document.getElementById('newsletter-col');
-    var gfi = document.getElementById('gfi-banner');
     if (!newsletterCol) return;
-
-    function widenGfi() {
-      if (!gfi) return;
-      gfi.classList.remove('lg:col-span-2');
-      gfi.classList.add('lg:col-span-3', 'lg:max-w-4xl', 'lg:mx-auto');
-    }
 
     // hide removes the widget from the DOM without persisting anything.
     // Used when this browser's localStorage says we already dismissed in a
@@ -80,7 +47,6 @@
     // device after this localStorage entry was set.
     function hide() {
       newsletterCol.remove();
-      widenGfi();
     }
 
     // dismiss is the user-initiated path. Persists both locally and (for

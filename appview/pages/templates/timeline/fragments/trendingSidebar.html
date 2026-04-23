@@ -1,13 +1,13 @@
 {{ define "timeline/fragments/trendingSidebar" }}
-<div class="py-4">
+<div class="pt-4">
     <h3 class="text-xl font-bold dark:text-white flex items-center gap-2 pb-4">
         Trending
         {{ i "trending-up" "size-4 flex-shrink-0" }}
     </h3>
     {{ if .Repos }}
-    <div class="flex flex-col gap-4">
+    <div class="flex gap-4 overflow-x-auto scrollbar-hide items-stretch lg:flex-col lg:overflow-x-visible">
         {{ range $index, $repo := .Repos }}
-            <div class="border border-gray-200 dark:border-gray-700 rounded-sm">
+            <div class="flex-none w-96 border border-gray-200 dark:border-gray-700 rounded-sm lg:flex-none lg:w-auto">
                 {{ template "user/fragments/repoCard" (list $ $repo true) }}
             </div>
         {{ end }}

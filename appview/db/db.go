@@ -652,6 +652,14 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			hide_others integer default 0
 		);
 
+		create table if not exists newsletter_preferences (
+			id         integer primary key autoincrement,
+			user_did   text not null unique,
+			status     text not null check (status in ('subscribed', 'dismissed')),
+			email      text,
+			updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+		);
+
 		-- indexes for better performance
 		create index if not exists idx_notifications_recipient_created on notifications(recipient_did, created desc);
 		create index if not exists idx_notifications_recipient_read on notifications(recipient_did, read);
@@ -660,6 +668,7 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		create index if not exists idx_webhooks_repo_at on webhooks(repo_at);
 		create index if not exists idx_webhook_deliveries_webhook_id on webhook_deliveries(webhook_id);
 		create index if not exists idx_site_deploys_repo_at on site_deploys(repo_at);
+		create index if not exists idx_newsletter_prefs_user_did on newsletter_preferences(user_did);
 	`)
 	if err != nil {
 		return nil, err
@@ -1406,21 +1415,6 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			alter table pulls drop column stack_id;
 		`)
 
-		return err
-	})
-
-	orm.RunMigration(conn, logger, "add-newsletter-preferences", func(tx *sql.Tx) error {
-		_, err := tx.Exec(`
-			create table if not exists newsletter_preferences (
-				id         integer primary key autoincrement,
-				user_did   text not null unique,
-				status     text not null check (status in ('subscribed', 'dismissed')),
-				email      text,
-				updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-			);
-			create index if not exists idx_newsletter_prefs_user_did
-				on newsletter_preferences(user_did);
-		`)
 		return err
 	})
 

@@ -362,6 +362,13 @@ func (s *State) NewsletterSignup(w http.ResponseWriter, r *http.Request) {
 				s.logger.Error("failed to add newsletter contact", "error", err)
 			}
 		}()
+	} else {
+		s.logger.Error(
+			"failed to add newsletter contact, missing resend config",
+			"isKeyPresent", s.config.Resend.ApiKey != "",
+			"isSegmentIdPresent", s.config.Resend.NewsletterSegmentId != "",
+			"emailAddr", emailAddr,
+		)
 	}
 
 	s.pages.NewsletterResponse(w, pages.NewsletterResponseParams{Id: target})
