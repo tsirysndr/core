@@ -20,42 +20,56 @@
   {{ $defs := .Defs }}
   {{ $subject := .Subject }}
   {{ $state := .State }}
+  {{ $prefix := .Prefix }}
   {{ $labelStyle := "flex items-center gap-2 rounded py-1 px-2 border border-gray-200 dark:border-gray-700 text-sm bg-white dark:bg-gray-800 text-black dark:text-white" }}
-  <div>
-    {{ template "repo/fragments/labelSectionHeaderText" "Labels" }}
+  {{ $hasNullDefs := false }}
+  {{ range $k, $d := $defs }}
+    {{ if $d.ValueType.IsNull }}{{ $hasNullDefs = true }}{{ end }}
+  {{ end }}
+  {{ if or $hasNullDefs (not $defs) }}
+    <div>
+      {{ template "repo/fragments/labelSectionHeaderText" "Labels" }}
 
-    <div class="flex gap-1 items-center flex-wrap">
-      {{ range $k, $d := $defs }}
-        {{ $isChecked := $state.ContainsLabel $k }}
-        {{ if $d.ValueType.IsNull }}
-          {{ $fieldName := $d.AtUri }}
-          <label class="{{$labelStyle}}">
-            <input type="checkbox" id="{{ $fieldName }}" name="{{ $fieldName }}" value="null" {{if $isChecked}}checked{{end}}>
-            {{ template "labels/fragments/labelDef" $d }}
-          </label>
+      <div class="flex flex-col gap-1 items-start">
+        {{ range $k, $d := $defs }}
+          {{ $isChecked := $state.ContainsLabel $k }}
+          {{ if $d.ValueType.IsNull }}
+            {{ $fieldName := $d.AtUri.String }}
+            {{ if $prefix }}{{ $fieldName = printf "%s[%s]" $prefix $d.AtUri }}{{ end }}
+            <label class="{{$labelStyle}}">
+              <input type="checkbox" name="{{ $fieldName }}" value="null" {{if $isChecked}}checked{{end}}>
+              {{ template "labels/fragments/labelDef" $d }}
+            </label>
+          {{ end }}
+        {{ else }}
+          <p class="text-gray-500 dark:text-gray-400 text-sm py-1">
+            No labels defined yet. You can choose default labels or define custom
+            labels in <a class="underline" href="/{{ $.RepoInfo.FullName }}/settings">settings</a>.
+          </p>
         {{ end }}
-      {{ else }}
-        <p class="text-gray-500 dark:text-gray-400 text-sm py-1">
-          No labels defined yet. You can choose default labels or define custom
-          labels in <a class="underline" href="/{{ $.RepoInfo.FullName }}/settings">settings</a>.
-        </p>
-      {{ end }}
+      </div>
     </div>
-  </div>
+  {{ end }}
 {{ end }}
 
 {{ define "editKvLabels" }}
   {{ $defs := .Defs }}
   {{ $subject := .Subject }}
   {{ $state := .State }}
+  {{ $prefix := .Prefix }}
+  {{ $groupSuffix := "" }}
+  {{ if $prefix }}{{ $groupSuffix = printf "-%s" $prefix }}{{ end }}
   {{ $labelStyle := "font-normal normal-case flex items-center gap-2 p-0" }}
 
   {{ range $k, $d := $defs }}
     {{ if (not $d.ValueType.IsNull) }}
-      {{ $fieldName := $d.AtUri }}
+      {{ $fieldName := $d.AtUri.String }}
+      {{ if $prefix }}{{ $fieldName = printf "%s[%s]" $prefix $d.AtUri }}{{ end }}
       {{ $valset := $state.GetValSet $k }}
-      <div id="label-{{$d.Id}}" class="flex flex-col gap-1">
-        {{ template "repo/fragments/labelSectionHeaderText" $d.Name }}
+      <div id="label-{{$d.Id}}{{ $groupSuffix }}" class="flex flex-col gap-1">
+        {{ if not $d.ValueType.IsBool }}
+          {{ template "repo/fragments/labelSectionHeaderText" $d.Name }}
+        {{ end }}
           {{ if (and $d.Multiple $d.ValueType.IsEnum) }}
             <!-- checkbox -->
             {{ range $variant := $d.ValueType.Enum }}
@@ -67,11 +81,14 @@
           {{ else if $d.Multiple }}
             <!-- dynamically growing input fields -->
             {{ range $v, $s := $valset }}
-              {{ template "multipleInputField" (dict "def" $d "value" $v "key" $k) }}
+              {{ template "multipleInputField" (dict "def" $d "value" $v "key" $k "prefix" $prefix) }}
             {{ else }}
-              {{ template "multipleInputField" (dict "def" $d "value" "" "key" $k) }}
+              {{ template "multipleInputField" (dict "def" $d "value" "" "key" $k "prefix" $prefix) }}
             {{ end }}
-            {{ template "addFieldButton" $d }}
+            {{ template "addFieldButton" (dict "def" $d "prefix" $prefix "groupSuffix" $groupSuffix) }}
+            {{ if and $.LoggedInUser $d.ValueType.IsString $d.ValueType.IsDidFormat }}
+              {{ template "assignToMeButton" (dict "def" $d "user" $.LoggedInUser "groupSuffix" $groupSuffix) }}
+            {{ end }}
           {{ else if $d.ValueType.IsEnum }}
             <!-- radio buttons -->
             {{ $isUsed := $state.ContainsLabel $k }}
@@ -88,9 +105,9 @@
           {{ else }}
             <!-- single input field based on value type -->
             {{ range $v, $s := $valset }}
-              {{ template "valueTypeInput" (dict "def" $d "value" $v "key" $k) }}
+              {{ template "valueTypeInput" (dict "def" $d "value" $v "key" $k "prefix" $prefix) }}
             {{ else }}
-              {{ template "valueTypeInput" (dict "def" $d "value" "" "key" $k) }}
+              {{ template "valueTypeInput" (dict "def" $d "value" "" "key" $k "prefix" $prefix) }}
             {{ end }}
           {{ end }}
       </div>
@@ -100,16 +117,49 @@
 
 {{ define "multipleInputField" }}
   <div class="flex gap-1 items-stretch">
-    {{ template "valueTypeInput" . }}
+    <div class="flex-1 min-w-0">
+      {{ template "valueTypeInput" . }}
+    </div>
     {{ template "removeFieldButton" }}
   </div>
 {{ end }}
 
+{{ define "assignToMeButton" }}
+  {{ $def := .def }}
+  {{ $user := .user }}
+  {{ $groupSuffix := .groupSuffix }}
+  {{ $handle := trimPrefix (resolve $user.Did) "@" }}
+  <button type="button"
+    data-assign-to-me="{{ $def.Id }}{{ $groupSuffix }}"
+    data-handle="{{ $handle }}"
+    onclick="(() => {
+      const group = document.getElementById('label-' + this.dataset.assignToMe);
+      const handle = this.dataset.handle;
+      const inputs = group.querySelectorAll('input[type=text]');
+      const empty = Array.from(inputs).find(i => !i.value.trim());
+      if (empty) { empty.value = handle; return; }
+      if (Array.from(inputs).some(i => i.value.trim() === handle)) return;
+      const tpl = document.getElementById('tpl-' + this.dataset.assignToMe);
+      if (!tpl) return;
+      const addBtn = tpl.nextElementSibling;
+      addBtn.insertAdjacentHTML('beforebegin', tpl.innerHTML);
+      const newInput = addBtn.previousElementSibling.querySelector('input[type=text]');
+      if (newInput) newInput.value = handle;
+    })()"
+    class="text-xs text-gray-500 dark:text-gray-400 hover:underline self-end inline-flex items-center gap-1">
+    {{ i "user-round-plus" "size-3.5" }}
+    assign to me
+  </button>
+{{ end }}
+
 {{ define "addFieldButton" }}
-  <div style="display:none" id="tpl-{{ .Id }}">
-    {{ template "multipleInputField" (dict "def" . "value" "" "key" .AtUri.String) }}
+  {{ $def := .def }}
+  {{ $prefix := .prefix }}
+  {{ $groupSuffix := .groupSuffix }}
+  <div style="display:none" id="tpl-{{ $def.Id }}{{ $groupSuffix }}">
+    {{ template "multipleInputField" (dict "def" $def "value" "" "key" $def.AtUri.String "prefix" $prefix) }}
   </div>
-  <button type="button" onClick="this.insertAdjacentHTML('beforebegin', document.getElementById('tpl-{{ .Id }}').innerHTML)" class="w-full btn flex items-center gap-2">
+  <button type="button" onClick="this.insertAdjacentHTML('beforebegin', document.getElementById('tpl-{{ $def.Id }}{{ $groupSuffix }}').innerHTML)" class="w-full btn flex items-center gap-2">
     {{ i "plus" "size-4" }} add
   </button>
 {{ end }}
@@ -139,35 +189,31 @@
 
 {{ define "boolTypeInput" }}
   {{ $def := .def }}
-  {{ $fieldName := $def.AtUri }}
+  {{ $prefix := .prefix }}
+  {{ $fieldName := $def.AtUri.String }}
+  {{ if $prefix }}{{ $fieldName = printf "%s[%s]" $prefix $def.AtUri }}{{ end }}
   {{ $value := .value }}
-  {{ $labelStyle = "font-normal normal-case flex items-center gap-2" }}
-  <div class="flex flex-col gap-1">
-    <label class="{{$labelStyle}}">
-      <input type="radio" name="{{ $fieldName }}" value="true" {{ if not $value }}checked{{ end }}>
-      None
-    </label>
-    <label class="{{$labelStyle}}">
-      <input type="radio" name="{{ $fieldName }}" value="true" {{ if not $value }}checked{{ end }}>
-      None
-    </label>
-    <label class="{{$labelStyle}}">
-      <input type="radio" name="{{ $fieldName }}" value="true" {{ if not $value }}checked{{ end }}>
-      None
-    </label>
-  </div>
+  {{ $isOn := eq $value "true" }}
+  <label class="font-normal normal-case flex items-center gap-2">
+    <input type="checkbox" name="{{ $fieldName }}" value="true" {{ if $isOn }}checked{{ end }}>
+    {{ $def.Name }}
+  </label>
 {{ end }}
 
 {{ define "intTypeInput" }}
   {{ $def := .def }}
-  {{ $fieldName := $def.AtUri }}
+  {{ $prefix := .prefix }}
+  {{ $fieldName := $def.AtUri.String }}
+  {{ if $prefix }}{{ $fieldName = printf "%s[%s]" $prefix $def.AtUri }}{{ end }}
   {{ $value := .value }}
   <input class="p-1 w-full" type="number" name="{{$fieldName}}" value="{{$value}}">
 {{ end }}
 
 {{ define "stringTypeInput" }}
   {{ $def := .def }}
-  {{ $fieldName := $def.AtUri }}
+  {{ $prefix := .prefix }}
+  {{ $fieldName := $def.AtUri.String }}
+  {{ if $prefix }}{{ $fieldName = printf "%s[%s]" $prefix $def.AtUri }}{{ end }}
   {{ $valueType := $def.ValueType }}
   {{ $value := .value }}
 
@@ -192,7 +238,9 @@
 
 {{ define "nullTypeInput" }}
   {{ $def := .def }}
-  {{ $fieldName := $def.AtUri }}
+  {{ $prefix := .prefix }}
+  {{ $fieldName := $def.AtUri.String }}
+  {{ if $prefix }}{{ $fieldName = printf "%s[%s]" $prefix $def.AtUri }}{{ end }}
   <input class="p-1" type="hidden" name="{{$fieldName}}" value="null">
 {{ end }}
 

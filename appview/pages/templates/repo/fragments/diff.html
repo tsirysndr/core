@@ -101,10 +101,11 @@
 {{ define "diffLayout" }}
   {{ $diff := index . 0 }}
   {{ $opts := index . 1 }}
+  {{ $padBottom := gt (len .) 2 }}
 
   <div class="flex col-span-full flex-grow">
     <!-- left panel -->
-    <div id="files" class="w-0 hidden md:block overflow-hidden sticky top-12 max-h-screen overflow-y-auto pb-12">
+    <div id="files" class="w-0 hidden md:block overflow-hidden sticky top-12 max-h-screen overflow-y-auto {{ if $padBottom }}pb-12{{ end }}">
       <section class="overflow-x-auto text-sm px-6 py-2 border border-gray-200 dark:border-gray-700 w-full mx-auto min-h-full rounded bg-white dark:bg-gray-800 drop-shadow-sm">
         {{ template "repo/fragments/fileTree" $diff.FileTree }}
       </section>
@@ -113,7 +114,7 @@
     {{ template "resize-grip" (list "resize-files" "files" "before") }}
 
     <!-- main content -->
-    <div id="diff-files" class="flex-1 min-w-0 sticky top-12 pb-12">
+    <div id="diff-files" class="flex-1 min-w-0 sticky top-12 {{ if $padBottom }}pb-12{{ end }}">
       {{ template "diffFiles" (list $diff $opts) }}
     </div>
 
@@ -142,6 +143,8 @@
   {{ $idx := index . 0 }}
   {{ $file := index . 1 }}
   {{ $isSplit := index . 2 }}
+  {{ $collapsed := false }}
+  {{ if gt (len .) 3 }}{{ $collapsed = index . 3 }}{{ end }}
   {{ $isGenerated := false }}
   {{ $isDeleted := false }}
   {{ with $file }}
@@ -152,7 +155,7 @@
     {{ else if $n.Old }}
       {{ $isGenerated = isGenerated $n.Old }}
     {{ end }}
-    <details {{ if and (not $isGenerated) (not $isDeleted) }}open{{ end }} id="file-{{ .Id }}" class="group border border-gray-200 dark:border-gray-700 w-full mx-auto rounded bg-white dark:bg-gray-800 drop-shadow-sm" tabindex="{{ add $idx 1 }}">
+    <details {{ if and (not $isGenerated) (not $isDeleted) (not $collapsed) }}open{{ end }} id="file-{{ .Id }}" class="group border border-gray-200 dark:border-gray-700 w-full mx-auto rounded bg-white dark:bg-gray-800 drop-shadow-sm" tabindex="{{ add $idx 1 }}">
       <summary class="list-none cursor-pointer sticky top-12 group-open:border-b border-gray-200 dark:border-gray-700">
         <div id="diff-file-header" class="rounded cursor-pointer bg-white dark:bg-gray-800 flex justify-between">
           <div id="left-side-items" class="p-2 flex gap-2 items-center overflow-x-auto">
@@ -214,7 +217,7 @@
 {{ end }}
 
 {{ define "filesCheckbox" }}
-  <input type="checkbox" id="filesToggle" class="peer/files hidden" checked/>
+  <input type="checkbox" id="filesToggle" class="peer/files hidden" {{ if gt (len .) 2 }}checked{{ end }}/>
 {{ end }}
 
 {{ define "filesToggle" }}

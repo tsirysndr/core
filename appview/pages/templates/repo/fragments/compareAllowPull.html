@@ -9,7 +9,7 @@
             discussed.
         </p>
 
-        {{ $newPullUrl := printf "/%s/pulls/new?strategy=branch&targetBranch=%s&sourceBranch=%s" .RepoInfo.FullName .Base .Head }}
+        {{ $newPullUrl := printf "/%s/pulls/new?source=branch&sourceBranch=%s&targetBranch=%s" .RepoInfo.FullName (urlquery .Head) (urlquery .Base) }}
 
 
         <div class="flex justify-start items-center gap-2 mt-2">

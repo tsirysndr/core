@@ -1,4 +1,16 @@
 {{ define "repo/fragments/fileTree" }}
+  {{ template "fileTreeImpl" (dict "Node" . "Prefix" "file-") }}
+{{ end }}
+
+{{ define "repo/fragments/fileTreePrefixed" }}
+  {{ $prefix := .Prefix }}
+  {{ if eq $prefix "" }}{{ $prefix = "file-" }}{{ end }}
+  {{ template "fileTreeImpl" (dict "Node" .Tree "Prefix" $prefix) }}
+{{ end }}
+
+{{ define "fileTreeImpl" }}
+  {{ $n := .Node }}
+  {{ $prefix := .Prefix }}
   {{/* tailwind safelist:
     group/level-1 group/level-2 group/level-3 group/level-4 group/level-5 group/level-6
     group/level-7 group/level-8 group/level-9 group/level-10 group/level-11 group/level-12
@@ -7,29 +19,29 @@
     group-open/level-1:block group-open/level-2:block group-open/level-3:block group-open/level-4:block group-open/level-5:block group-open/level-6:block
     group-open/level-7:block group-open/level-8:block group-open/level-9:block group-open/level-10:block group-open/level-11:block group-open/level-12:block
     */}}
-  {{ if and .Name .IsDirectory }}
-    <details open class="group/level-{{ .Level }}">
+  {{ if and $n.Name $n.IsDirectory }}
+    <details open class="group/level-{{ $n.Level }}">
       <summary class="cursor-pointer list-none pt-1">
         <span class="tree-directory inline-flex items-center gap-2">
-          {{ i "folder" (printf "flex-shrink-0 size-4 group-open/level-%d:hidden" .Level)}}
-          {{ i "folder-open" (printf "flex-shrink-0 size-4 hidden group-open/level-%d:block" .Level)}}
-          <span class="filename truncate text-black dark:text-white">{{ .Name }}</span>
+          {{ i "folder" (printf "flex-shrink-0 size-4 group-open/level-%d:hidden" $n.Level)}}
+          {{ i "folder-open" (printf "flex-shrink-0 size-4 hidden group-open/level-%d:block" $n.Level)}}
+          <span class="filename truncate text-black dark:text-white">{{ $n.Name }}</span>
         </span>
       </summary>
       <div class="ml-1 pl-2 border-l border-gray-200 dark:border-gray-700">
-        {{ range $child := .Children }}
-          {{ template "repo/fragments/fileTree" $child }}
+        {{ range $child := $n.Children }}
+          {{ template "fileTreeImpl" (dict "Node" $child "Prefix" $prefix) }}
         {{ end }}
       </div>
     </details>
-  {{ else if .Name }}
+  {{ else if $n.Name }}
     <div class="tree-file flex items-center gap-2 pt-1">
       {{ i "file" "flex-shrink-0 size-4" }}
-      <a href="#file-{{ .Path }}" data-path="{{ .Path }}" class="filetree-link filename truncate text-black dark:text-white no-underline hover:underline">{{ .Name }}</a>
+      <a href="#{{ $prefix }}{{ $n.Path }}" data-path="{{ $n.Path }}" class="filetree-link filename truncate text-black dark:text-white no-underline hover:underline">{{ $n.Name }}</a>
     </div>
   {{ else }}
-    {{ range $child := .Children }}
-      {{ template "repo/fragments/fileTree" $child }}
+    {{ range $child := $n.Children }}
+      {{ template "fileTreeImpl" (dict "Node" $child "Prefix" $prefix) }}
     {{ end }}
   {{ end }}
 {{ end }}
