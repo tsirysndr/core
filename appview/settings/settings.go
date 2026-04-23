@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"log"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -262,7 +261,7 @@ func (s *Settings) profileSettings(w http.ResponseWriter, r *http.Request) {
 
 	punchcardPreferences, err := db.GetPunchcardPreference(s.Db, user.Did)
 	if err != nil {
-		log.Printf("failed to get users punchcard preferences: %s", err)
+		s.Logger.Error("failed to get punchcard preferences", "err", err)
 	}
 
 	isTnglSh, err := s.isTnglShUser(r.Context(), syntax.DID(user.Did))
@@ -751,7 +750,7 @@ func (s *Settings) elevateForHandle(w http.ResponseWriter, r *http.Request) {
 		"/settings/profile?handle=1",
 	)
 	if err != nil {
-		log.Printf("failed to start elevated auth flow: %s", err)
+		s.Logger.Error("failed to start elevated auth flow", "err", err)
 		http.Redirect(w, r, "/settings/profile", http.StatusSeeOther)
 		return
 	}
@@ -791,7 +790,7 @@ func (s *Settings) updateHandle(w http.ResponseWriter, r *http.Request) {
 
 	client, err := s.OAuth.AuthorizedClient(r)
 	if err != nil {
-		log.Printf("failed to get authorized client: %s", err)
+		s.Logger.Error("failed to get authorized client", "err", err)
 		s.Pages.Notice(w, "handle-error", "Failed to authorize. Try logging in again.")
 		return
 	}
@@ -808,7 +807,7 @@ func (s *Settings) updateHandle(w http.ResponseWriter, r *http.Request) {
 				"/settings/profile?handle=1",
 			)
 			if elevErr != nil {
-				log.Printf("failed to start elevated auth flow: %s", elevErr)
+				s.Logger.Error("failed to start elevated auth flow", "err", elevErr)
 				s.Pages.Notice(w, "handle-error", "Failed to start re-authorization. Try again later.")
 				return
 			}
@@ -817,7 +816,7 @@ func (s *Settings) updateHandle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("failed to update handle: %s", err)
+		s.Logger.Error("failed to update handle", "err", err)
 		msg := err.Error()
 		var apiErr *atclient.APIError
 		if errors.As(err, &apiErr) && apiErr.Message != "" {
