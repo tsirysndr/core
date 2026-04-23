@@ -12,11 +12,9 @@ func (s *Pulls) Router(mw *middleware.Middleware) http.Handler {
 	r.With(middleware.Paginate).Get("/", s.RepoPulls)
 	r.With(middleware.AuthMiddleware(s.oauth)).Route("/new", func(r chi.Router) {
 		r.Get("/", s.NewPull)
-		r.Get("/patch-upload", s.PatchUploadFragment)
-		r.Post("/validate-patch", s.ValidatePatch)
-		r.Get("/compare-branches", s.CompareBranchesFragment)
-		r.Get("/compare-forks", s.CompareForksFragment)
-		r.Get("/fork-branches", s.CompareForksBranchesFragment)
+		r.Get("/refresh", s.RefreshCompose)
+		r.Post("/refresh", s.RefreshCompose)
+		r.Post("/preview", s.MarkdownPreview)
 		r.Post("/", s.NewPull)
 	})
 

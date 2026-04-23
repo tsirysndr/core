@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -257,9 +258,9 @@ func (h *InternalHandle) PostReceiveHook(w http.ResponseWriter, r *http.Request)
 			l.Error("failed to insert op", "err", err, "line", line, "did", gitUserDid, "repo", gitRelativeDir)
 		}
 
-		err = h.emitCompareLink(&resp.Messages, line, ownerDid, repoName, repoDid)
+		err = h.emitPullRequestLink(&resp.Messages, line, ownerDid, repoName, repoDid)
 		if err != nil {
-			l.Error("failed to reply with compare link", "err", err, "line", line, "did", gitUserDid, "repo", gitRelativeDir)
+			l.Error("failed to reply with pull request link", "err", err, "line", line, "did", gitUserDid, "repo", gitRelativeDir)
 		}
 
 		err = h.triggerPipeline(&resp.Messages, line, gitUserDid, ownerDid, repoName, repoDid, pushOptions)
@@ -415,31 +416,31 @@ func (h *InternalHandle) triggerPipeline(
 	return h.db.InsertEvent(event, h.n)
 }
 
-func (h *InternalHandle) emitCompareLink(
+func (h *InternalHandle) emitPullRequestLink(
 	clientMsgs *[]string,
 	line git.PostReceiveLine,
 	ownerDid string,
 	repoName string,
 	repoDid string,
 ) error {
-	// this is a second push to a branch, don't reply with the link again
-	if !line.OldSha.IsZero() {
+	if line.NewSha.IsZero() {
 		return nil
 	}
 
 	// the ref was not updated to a new hash, don't reply with the link
 	//
 	// NOTE: do we need this?
-	if line.NewSha.String() == line.OldSha.String() {
+	if line.NewSha == line.OldSha {
 		return nil
 	}
 
 	pushedRef := plumbing.ReferenceName(line.Ref)
+	if !pushedRef.IsBranch() {
+		return nil
+	}
 
-	userIdent, err := h.res.ResolveIdent(context.Background(), ownerDid)
-	user := ownerDid
-	if err == nil {
-		user = userIdent.Handle.String()
+	if !line.OldSha.IsZero() {
+		return nil
 	}
 
 	repoPath, _, _, resolveErr := h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
@@ -457,20 +458,34 @@ func (h *InternalHandle) emitCompareLink(
 		return err
 	}
 
+	pushedBranch := pushedRef.Short()
+
 	// pushing to default branch
-	if pushedRef == plumbing.NewBranchReferenceName(defaultBranch) {
+	if pushedBranch == defaultBranch {
 		return nil
 	}
 
-	// pushing a tag, don't prompt the user the open a PR
-	if pushedRef.IsTag() {
-		return nil
+	userIdent, err := h.res.ResolveIdent(context.Background(), ownerDid)
+	user := ownerDid
+	if err == nil {
+		user = userIdent.Handle.String()
 	}
+
+	query := url.Values{}
+	query.Set("source", "branch")
+	query.Set("sourceBranch", pushedBranch)
+	query.Set("targetBranch", defaultBranch)
+
+	basePath, err := url.JoinPath(h.c.AppViewEndpoint, user, repoName, "pulls", "new")
+	if err != nil {
+		return err
+	}
+	pullURL := basePath + "?" + query.Encode()
 
 	ZWS := "\u200B"
 	*clientMsgs = append(*clientMsgs, ZWS)
-	*clientMsgs = append(*clientMsgs, fmt.Sprintf("Create a PR pointing to %s", defaultBranch))
-	*clientMsgs = append(*clientMsgs, fmt.Sprintf("\t%s/%s/%s/compare/%s...%s", h.c.AppViewEndpoint, user, repoName, defaultBranch, strings.TrimPrefix(line.Ref, "refs/heads/")))
+	*clientMsgs = append(*clientMsgs, "→  Open pull request:")
+	*clientMsgs = append(*clientMsgs, "   "+pullURL)
 	*clientMsgs = append(*clientMsgs, ZWS)
 	return nil
 }

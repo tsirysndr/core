@@ -9,8 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"slices"
 	"sort"
 	"strconv"
@@ -43,6 +45,7 @@ import (
 	"tangled.org/core/xrpc"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
+	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
@@ -96,6 +99,14 @@ func New(
 		indexer:          indexer,
 		ogreClient:       ogre.NewClient(config.Ogre.Host),
 	}
+}
+
+func (s *Pulls) knotClient(host string) *indigoxrpc.Client {
+	scheme := "https"
+	if s.config.Core.Dev {
+		scheme = "http"
+	}
+	return &indigoxrpc.Client{Host: fmt.Sprintf("%s://%s", scheme, host)}
 }
 
 // htmx fragment
@@ -341,15 +352,7 @@ func (s *Pulls) mergeCheck(r *http.Request, f *models.Repo, pull *models.Pull, s
 		return types.MergeCheckResponse{}
 	}
 
-	scheme := "https"
-	if s.config.Core.Dev {
-		scheme = "http"
-	}
-	host := fmt.Sprintf("%s://%s", scheme, f.Knot)
-
-	xrpcc := indigoxrpc.Client{
-		Host: host,
-	}
+	xrpcc := s.knotClient(f.Knot)
 
 	// combine patches of substack
 	subStack := stack.Below(pull)
@@ -360,7 +363,7 @@ func (s *Pulls) mergeCheck(r *http.Request, f *models.Repo, pull *models.Pull, s
 
 	resp, err := tangled.RepoMergeCheck(
 		r.Context(),
-		&xrpcc,
+		xrpcc,
 		&tangled.RepoMergeCheck_Input{
 			Did:    f.Did,
 			Name:   f.Name,
@@ -375,29 +378,25 @@ func (s *Pulls) mergeCheck(r *http.Request, f *models.Repo, pull *models.Pull, s
 		}
 	}
 
-	// convert xrpc response to internal types
-	conflicts := make([]types.ConflictInfo, len(resp.Conflicts))
-	for i, conflict := range resp.Conflicts {
-		conflicts[i] = types.ConflictInfo{
-			Filename: conflict.Filename,
-			Reason:   conflict.Reason,
-		}
-	}
+	return mergeCheckResponseFrom(resp)
+}
 
-	result := types.MergeCheckResponse{
+func mergeCheckResponseFrom(resp *tangled.RepoMergeCheck_Output) types.MergeCheckResponse {
+	conflicts := make([]types.ConflictInfo, len(resp.Conflicts))
+	for i, c := range resp.Conflicts {
+		conflicts[i] = types.ConflictInfo{Filename: c.Filename, Reason: c.Reason}
+	}
+	out := types.MergeCheckResponse{
 		IsConflicted: resp.Is_conflicted,
 		Conflicts:    conflicts,
 	}
-
 	if resp.Message != nil {
-		result.Message = *resp.Message
+		out.Message = *resp.Message
 	}
-
 	if resp.Error != nil {
-		result.Error = *resp.Error
+		out.Error = *resp.Error
 	}
-
-	return result
+	return out
 }
 
 func (s *Pulls) branchDeleteStatus(r *http.Request, repo *models.Repo, pull *models.Pull) *models.BranchDeleteStatus {
@@ -959,42 +958,13 @@ func (s *Pulls) NewPull(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		xrpcc := &indigoxrpc.Client{Host: s.config.KnotMirror.Url}
-
-		xrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
+		params, err := s.composeParams(r, f)
 		if err != nil {
-			if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-				l.Error("failed to call XRPC repo.branches", "xrpcerr", xrpcerr, "err", err)
-				s.pages.Error503(w)
-				return
-			}
-			l.Error("failed to fetch branches", "err", err)
-			return
-		}
-
-		var result types.RepoBranchesResponse
-		if err := json.Unmarshal(xrpcBytes, &result); err != nil {
-			l.Error("failed to decode XRPC response", "err", err)
+			l.Error("failed to build compose params", "err", err)
 			s.pages.Error503(w)
 			return
 		}
-
-		// can be one of "patch", "branch" or "fork"
-		strategy := r.URL.Query().Get("strategy")
-		// ignored if strategy is "patch"
-		sourceBranch := r.URL.Query().Get("sourceBranch")
-		targetBranch := r.URL.Query().Get("targetBranch")
-
-		s.pages.RepoNewPull(w, pages.RepoNewPullParams{
-			LoggedInUser: user,
-			RepoInfo:     s.repoResolver.GetRepoInfo(r, user),
-			Branches:     result.Branches,
-			Strategy:     strategy,
-			SourceBranch: sourceBranch,
-			TargetBranch: targetBranch,
-			Title:        r.URL.Query().Get("title"),
-			Body:         r.URL.Query().Get("body"),
-		})
+		s.pages.RepoNewPull(w, params)
 
 	case http.MethodPost:
 		title := r.FormValue("title")
@@ -1016,7 +986,7 @@ func (s *Pulls) NewPull(w http.ResponseWriter, r *http.Request) {
 		isBranchBased := isPushAllowed && sourceBranch != "" && fromFork == ""
 		isForkBased := fromFork != "" && sourceBranch != ""
 		isPatchBased := patch != "" && !isBranchBased && !isForkBased
-		isStacked := r.FormValue("isStacked") == "on"
+		isStacked := r.FormValue("mode") == "stack" && !isPatchBased
 
 		if isPatchBased && !patchutil.IsFormatPatch(patch) {
 			if title == "" {
@@ -1039,6 +1009,11 @@ func (s *Pulls) NewPull(w http.ResponseWriter, r *http.Request) {
 		// Can't mix branch-based and patch-based approaches
 		if isBranchBased && patch != "" {
 			s.pages.Notice(w, "pull", "Cannot select both patch and source branch.")
+			return
+		}
+
+		if isBranchBased && sourceBranch == targetBranch {
+			s.pages.Notice(w, "pull", "Source and target branch must be different.")
 			return
 		}
 
@@ -1083,25 +1058,28 @@ func (s *Pulls) NewPull(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		stackTitles := parseBracketedForm(r.Form, "stackTitle")
+		stackBodies := parseBracketedForm(r.Form, "stackBody")
+
 		// Handle the PR creation based on the type
 		if isBranchBased {
 			if !caps.PullRequests.BranchSubmissions {
 				s.pages.Notice(w, "pull", "This knot doesn't support branch-based pull requests. Try another way?")
 				return
 			}
-			s.handleBranchBasedPull(w, r, f, userDid, title, body, targetBranch, sourceBranch, isStacked)
+			s.handleBranchBasedPull(w, r, f, userDid, title, body, targetBranch, sourceBranch, isStacked, stackTitles, stackBodies)
 		} else if isForkBased {
 			if !caps.PullRequests.ForkSubmissions {
 				s.pages.Notice(w, "pull", "This knot doesn't support fork-based pull requests. Try another way?")
 				return
 			}
-			s.handleForkBasedPull(w, r, f, userDid, fromFork, title, body, targetBranch, sourceBranch, isStacked)
+			s.handleForkBasedPull(w, r, f, userDid, fromFork, title, body, targetBranch, sourceBranch, isStacked, stackTitles, stackBodies)
 		} else if isPatchBased {
 			if !caps.PullRequests.PatchSubmissions {
 				s.pages.Notice(w, "pull", "This knot doesn't support patch-based pull requests. Send your patch over email.")
 				return
 			}
-			s.handlePatchBasedPull(w, r, f, userDid, title, body, targetBranch, patch, isStacked)
+			s.handlePatchBasedPull(w, r, f, userDid, title, body, targetBranch, patch, isStacked, stackTitles, stackBodies)
 		}
 		return
 	}
@@ -1117,17 +1095,11 @@ func (s *Pulls) handleBranchBasedPull(
 	targetBranch,
 	sourceBranch string,
 	isStacked bool,
+	stackTitles, stackBodies map[string]string,
 ) {
 	l := s.logger.With("handler", "handleBranchBasedPull", "user", userDid, "target_branch", targetBranch, "source_branch", sourceBranch, "is_stacked", isStacked)
 
-	scheme := "http"
-	if !s.config.Core.Dev {
-		scheme = "https"
-	}
-	host := fmt.Sprintf("%s://%s", scheme, repo.Knot)
-	xrpcc := &indigoxrpc.Client{
-		Host: host,
-	}
+	xrpcc := s.knotClient(repo.Knot)
 
 	xrpcBytes, err := tangled.RepoCompare(r.Context(), xrpcc, repo.RepoIdentifier(), targetBranch, sourceBranch)
 	if err != nil {
@@ -1148,6 +1120,11 @@ func (s *Pulls) handleBranchBasedPull(
 		return
 	}
 
+	if len(comparison.FormatPatch) == 0 {
+		s.pages.Notice(w, "pull", "No commits between target and source.")
+		return
+	}
+
 	sourceRev := comparison.Rev2
 	patch := comparison.FormatPatchRaw
 	combined := comparison.CombinedPatchRaw
@@ -1162,20 +1139,20 @@ func (s *Pulls) handleBranchBasedPull(
 		Branch: sourceBranch,
 	}
 
-	s.createPullRequest(w, r, repo, userDid, title, body, targetBranch, patch, combined, sourceRev, pullSource, isStacked)
+	s.createPullRequest(w, r, repo, userDid, title, body, targetBranch, patch, combined, sourceRev, pullSource, isStacked, stackTitles, stackBodies)
 }
 
-func (s *Pulls) handlePatchBasedPull(w http.ResponseWriter, r *http.Request, repo *models.Repo, userDid syntax.DID, title, body, targetBranch, patch string, isStacked bool) {
+func (s *Pulls) handlePatchBasedPull(w http.ResponseWriter, r *http.Request, repo *models.Repo, userDid syntax.DID, title, body, targetBranch, patch string, isStacked bool, stackTitles, stackBodies map[string]string) {
 	if err := s.validator.ValidatePatch(&patch); err != nil {
 		s.logger.Error("patch validation failed", "err", err)
 		s.pages.Notice(w, "pull", "Invalid patch format. Please provide a valid diff.")
 		return
 	}
 
-	s.createPullRequest(w, r, repo, userDid, title, body, targetBranch, patch, "", "", nil, isStacked)
+	s.createPullRequest(w, r, repo, userDid, title, body, targetBranch, patch, "", "", nil, isStacked, stackTitles, stackBodies)
 }
 
-func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo *models.Repo, userDid syntax.DID, forkRepo string, title, body, targetBranch, sourceBranch string, isStacked bool) {
+func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo *models.Repo, userDid syntax.DID, forkRepo string, title, body, targetBranch, sourceBranch string, isStacked bool, stackTitles, stackBodies map[string]string) {
 	l := s.logger.With("handler", "handleForkBasedPull", "user", userDid, "fork_repo", forkRepo, "target_branch", targetBranch, "source_branch", sourceBranch, "is_stacked", isStacked)
 
 	repoString := strings.SplitN(forkRepo, "/", 2)
@@ -1228,14 +1205,7 @@ func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo
 	// hiddenRef: hidden/feature-1/main (on repo-fork)
 	// targetBranch: main (on repo-1)
 	// sourceBranch: feature-1 (on repo-fork)
-	forkScheme := "http"
-	if !s.config.Core.Dev {
-		forkScheme = "https"
-	}
-	forkHost := fmt.Sprintf("%s://%s", forkScheme, fork.Knot)
-	forkXrpcc := &indigoxrpc.Client{
-		Host: forkHost,
-	}
+	forkXrpcc := s.knotClient(fork.Knot)
 
 	forkXrpcBytes, err := tangled.RepoCompare(r.Context(), forkXrpcc, fork.RepoIdentifier(), hiddenRef, sourceBranch)
 	if err != nil {
@@ -1253,6 +1223,11 @@ func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo
 	if err := json.Unmarshal(forkXrpcBytes, &comparison); err != nil {
 		l.Error("failed to decode XRPC compare response for fork", "err", err)
 		s.pages.Notice(w, "pull", "Failed to create pull request. Try again later.")
+		return
+	}
+
+	if len(comparison.FormatPatch) == 0 {
+		s.pages.Notice(w, "pull", "No commits between target and source.")
 		return
 	}
 
@@ -1279,7 +1254,7 @@ func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo
 		RepoDid: forkDid,
 	}
 
-	s.createPullRequest(w, r, repo, userDid, title, body, targetBranch, patch, combined, sourceRev, pullSource, isStacked)
+	s.createPullRequest(w, r, repo, userDid, title, body, targetBranch, patch, combined, sourceRev, pullSource, isStacked, stackTitles, stackBodies)
 }
 
 func (s *Pulls) createPullRequest(
@@ -1293,6 +1268,7 @@ func (s *Pulls) createPullRequest(
 	sourceRev string,
 	pullSource *models.PullSource,
 	isStacked bool,
+	stackTitles, stackBodies map[string]string,
 ) {
 	l := s.logger.With("handler", "createPullRequest", "user", userDid, "target_branch", targetBranch, "is_stacked", isStacked)
 
@@ -1307,6 +1283,8 @@ func (s *Pulls) createPullRequest(
 			patch,
 			sourceRev,
 			pullSource,
+			stackTitles,
+			stackBodies,
 		)
 		return
 	}
@@ -1419,6 +1397,8 @@ func (s *Pulls) createPullRequest(
 
 	s.notifier.NewPull(r.Context(), pull)
 
+	s.applyCreationLabels(r.Context(), client, userDid, []*models.Pull{pull}, r.Form, repo)
+
 	ownerSlashRepo := reporesolver.GetBaseRepoPath(r, repo)
 	s.pages.HxLocation(w, fmt.Sprintf("/%s/pulls/%d", ownerSlashRepo, pullId))
 }
@@ -1432,17 +1412,11 @@ func (s *Pulls) createStackedPullRequest(
 	patch string,
 	sourceRev string,
 	pullSource *models.PullSource,
+	stackTitles, stackBodies map[string]string,
 ) {
 	l := s.logger.With("handler", "createStackedPullRequest", "user", userDid, "target_branch", targetBranch, "source_rev", sourceRev)
 
 	// run some necessary checks for stacked-prs first
-
-	//  must be branch or fork based
-	if sourceRev == "" {
-		l.Error("stacked PR from patch-based pull")
-		s.pages.Notice(w, "pull", "Stacking is only supported on branch and fork based pull-requests.")
-		return
-	}
 
 	formatPatches, err := patchutil.ExtractPatches(patch)
 	if err != nil {
@@ -1479,7 +1453,7 @@ func (s *Pulls) createStackedPullRequest(
 	}
 
 	// build a stack out of this patch
-	stack, err := s.newStack(r.Context(), repo, userDid, targetBranch, pullSource, formatPatches, blobs)
+	stack, err := s.newStack(r.Context(), repo, userDid, targetBranch, pullSource, formatPatches, blobs, stackTitles, stackBodies)
 	if err != nil {
 		l.Error("failed to create stack", "err", err)
 		s.pages.Notice(w, "pull", fmt.Sprintf("Failed to create stack: %v", err))
@@ -1542,190 +1516,668 @@ func (s *Pulls) createStackedPullRequest(
 		s.notifier.NewPull(r.Context(), p)
 	}
 
+	s.applyCreationLabels(r.Context(), client, userDid, stack, r.Form, repo)
+
 	ownerSlashRepo := reporesolver.GetBaseRepoPath(r, repo)
 	s.pages.HxLocation(w, fmt.Sprintf("/%s/pulls", ownerSlashRepo))
 }
 
-func (s *Pulls) ValidatePatch(w http.ResponseWriter, r *http.Request) {
-	l := s.logger.With("handler", "ValidatePatch")
-
-	_, err := s.repoResolver.Resolve(r)
-	if err != nil {
-		l.Error("failed to get repo and knot", "err", err)
-		return
-	}
-
-	patch := r.FormValue("patch")
-	if patch == "" {
-		s.pages.Notice(w, "patch-error", "Patch is required.")
-		return
-	}
-
-	if err := s.validator.ValidatePatch(&patch); err != nil {
-		l.Error("failed to validate patch", "err", err)
-		s.pages.Notice(w, "patch-error", "Invalid patch format. Please provide a valid git diff or format-patch.")
-		return
-	}
-
-	if patchutil.IsFormatPatch(patch) {
-		s.pages.Notice(w, "patch-preview", "git-format-patch detected. Title and description are optional; if left out, they will be extracted from the first commit.")
-	} else {
-		s.pages.Notice(w, "patch-preview", "Regular git-diff detected. Please provide a title and description.")
-	}
+func (s *Pulls) MarkdownPreview(w http.ResponseWriter, r *http.Request) {
+	body := r.FormValue("body")
+	s.pages.MarkdownPreviewFragment(w, body)
 }
 
-func (s *Pulls) PatchUploadFragment(w http.ResponseWriter, r *http.Request) {
-	user := s.oauth.GetMultiAccountUser(r)
+func (s *Pulls) RefreshCompose(w http.ResponseWriter, r *http.Request) {
+	l := s.logger.With("handler", "RefreshCompose")
 
-	s.pages.PullPatchUploadFragment(w, pages.PullPatchUploadParams{
-		RepoInfo: s.repoResolver.GetRepoInfo(r, user),
-	})
-}
-
-func (s *Pulls) CompareBranchesFragment(w http.ResponseWriter, r *http.Request) {
-	l := s.logger.With("handler", "CompareBranchesFragment")
-
-	user := s.oauth.GetMultiAccountUser(r)
 	f, err := s.repoResolver.Resolve(r)
 	if err != nil {
-		l.Error("failed to get repo and knot", "err", err)
+		l.Error("failed to resolve repo", "err", err)
+		s.pages.Error503(w)
 		return
 	}
 
-	xrpcc := &indigoxrpc.Client{Host: s.config.KnotMirror.Url}
-
-	xrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
+	params, err := s.composeParams(r, f)
 	if err != nil {
-		l.Error("failed to fetch branches", "err", err)
+		l.Error("failed to build compose params", "err", err)
 		s.pages.Error503(w)
 		return
 	}
+	w.Header().Set("HX-Replace-Url", composeCanonicalURL(params))
+	s.pages.PullComposeHostFragment(w, params)
+}
 
-	var result types.RepoBranchesResponse
-	if err := json.Unmarshal(xrpcBytes, &result); err != nil {
-		l.Error("failed to decode XRPC response", "err", err)
-		s.pages.Error503(w)
-		return
+func composeCanonicalURL(params pages.RepoNewPullParams) string {
+	base := fmt.Sprintf("/%s/pulls/new", params.RepoInfo.FullName())
+	q := url.Values{}
+	if params.IsStacked {
+		q.Set("mode", "stack")
+	}
+	if params.Source != "" && params.Source != pages.SourceBranch {
+		q.Set("source", string(params.Source))
+	}
+	if params.SourceBranch != "" {
+		q.Set("sourceBranch", params.SourceBranch)
+	}
+	if params.TargetBranch != "" {
+		q.Set("targetBranch", params.TargetBranch)
+	}
+	if params.Source == pages.SourceFork && params.Fork != "" {
+		q.Set("fork", params.Fork)
+	}
+	if len(q) == 0 {
+		return base
+	}
+	return base + "?" + q.Encode()
+}
+
+func (s *Pulls) composeParams(r *http.Request, repo *models.Repo) (pages.RepoNewPullParams, error) {
+	l := s.logger.With("handler", "composeParams")
+	user := s.oauth.GetMultiAccountUser(r)
+
+	branches, err := s.listBranches(r.Context(), repo)
+	if err != nil {
+		return pages.RepoNewPullParams{}, err
 	}
 
-	branches := result.Branches
-	sort.Slice(branches, func(i int, j int) bool {
-		return branches[i].Commit.Committer.When.After(branches[j].Commit.Committer.When)
-	})
-
-	withoutDefault := []types.Branch{}
-	for _, b := range branches {
-		if b.IsDefault {
-			continue
+	var forks []models.Repo
+	if user != nil {
+		forks, err = db.GetForksByDid(s.db, user.Did)
+		if err != nil {
+			l.Warn("failed to list user forks", "err", err, "user", user.Did)
 		}
-		withoutDefault = append(withoutDefault, b)
 	}
 
-	s.pages.PullCompareBranchesFragment(w, pages.PullCompareBranchesParams{
-		RepoInfo: s.repoResolver.GetRepoInfo(r, user),
-		Branches: withoutDefault,
-	})
+	repoInfo := s.repoResolver.GetRepoInfo(r, user)
+	source, ok := pages.ParseSource(r.FormValue("source"))
+	if !ok {
+		source = pages.SourceBranch
+		if !repoInfo.Roles.IsPushAllowed() {
+			source = pages.SourceFork
+		}
+	}
+
+	sourceBranch := r.FormValue("sourceBranch")
+	targetBranch := r.FormValue("targetBranch")
+	fork := r.FormValue("fork")
+	patch := r.FormValue("patch")
+
+	if source == pages.SourceFork && fork == "" && len(forks) == 1 {
+		fork = fmt.Sprintf("%s/%s", forks[0].Did, forks[0].Name)
+	}
+
+	var forkBranches []types.Branch
+	var forkBranchesErr error
+	if source == pages.SourceFork && fork != "" {
+		forkBranches, forkBranchesErr = s.listForkBranches(r.Context(), fork)
+		if forkBranchesErr != nil {
+			l.Warn("failed to list fork branches", "err", forkBranchesErr, "fork", fork)
+		}
+	}
+
+	sourceBranchList := sourceBranchChoices(branches)
+	targetBranch = defaultTargetBranch(branches, targetBranch)
+	sourceBranch = defaultSourceBranch(source, sourceBranch, sourceBranchList, forkBranches)
+
+	comparison, diff, prefetchErr := s.prefetchComparison(r, repo, source, fork, targetBranch, sourceBranch, patch)
+	var prefillErr string
+	if joined := errors.Join(prefetchErr, forkBranchesErr); joined != nil {
+		prefillErr = joined.Error()
+	}
+
+	mergeCheck := s.composeMergeCheck(r.Context(), repo, targetBranch, comparison)
+
+	refreshUrl := fmt.Sprintf("/%s/pulls/new/refresh", repoInfo.FullName())
+	var diffOpts types.DiffOpts
+	if r.FormValue("diff") == "split" {
+		diffOpts.Split = true
+	}
+	diffOpts.RefreshUrl = refreshUrl
+	diffOpts.Target = "#diff-area"
+
+	labelDefs, err := s.pullLabelDefs(repo)
+	if err != nil {
+		l.Warn("failed to load label definitions", "err", err)
+	}
+	labelState := labelStateFromForm(r.Form, labelDefs)
+	perCidLabelForms := parseStackLabelForms(r.Form)
+	stackLabelStates := make(map[string]models.LabelState, len(perCidLabelForms))
+	for cid, perForm := range perCidLabelForms {
+		stackLabelStates[cid] = labelStateFromForm(perForm, labelDefs)
+	}
+
+	stackTitles := parseBracketedForm(r.Form, "stackTitle")
+	stackBodies := parseBracketedForm(r.Form, "stackBody")
+	stackSplits := parseBracketedForm(r.Form, "stackSplit")
+
+	title := r.FormValue("title")
+	body := r.FormValue("body")
+	if comparison != nil && len(comparison.FormatPatch) > 0 {
+		first := comparison.FormatPatch[0]
+		if title == "" && first.PatchHeader != nil {
+			title = first.Title
+		}
+		if body == "" && first.PatchHeader != nil {
+			body = first.Body
+		}
+	}
+
+	isStacked := r.FormValue("mode") == "stack" && source != pages.SourcePatch
+	var stackedDiffs []pages.StackedDiff
+	if isStacked {
+		stackedDiffs = stackPerCommitDiffs(comparison, targetBranch, refreshUrl, stackSplits)
+	}
+
+	return pages.RepoNewPullParams{
+		LoggedInUser:     user,
+		RepoInfo:         repoInfo,
+		Branches:         branches,
+		SourceBranches:   sourceBranchList,
+		ForkBranches:     forkBranches,
+		Forks:            forks,
+		Source:           source,
+		SourceBranch:     sourceBranch,
+		TargetBranch:     targetBranch,
+		Fork:             fork,
+		Patch:            patch,
+		Title:            title,
+		Body:             body,
+		IsStacked:        isStacked,
+		Comparison:       comparison,
+		Diff:             diff,
+		DiffOpts:         diffOpts,
+		StackedDiffs:     stackedDiffs,
+		MergeCheck:       mergeCheck,
+		StackTitles:      stackTitles,
+		StackBodies:      stackBodies,
+		PrefillError:     prefillErr,
+		LabelDefs:        labelDefs,
+		LabelState:       labelState,
+		StackLabelStates: stackLabelStates,
+	}, nil
 }
 
-func (s *Pulls) CompareForksFragment(w http.ResponseWriter, r *http.Request) {
-	l := s.logger.With("handler", "CompareForksFragment")
-
-	user := s.oauth.GetMultiAccountUser(r)
-	if user != nil {
-		l = l.With("user", user.Did)
-	}
-
-	forks, err := db.GetForksByDid(s.db, user.Did)
-	if err != nil {
-		l.Error("failed to get forks", "err", err)
-		return
-	}
-
-	s.pages.PullCompareForkFragment(w, pages.PullCompareForkParams{
-		RepoInfo: s.repoResolver.GetRepoInfo(r, user),
-		Forks:    forks,
-		Selected: r.URL.Query().Get("fork"),
-	})
-}
-
-func (s *Pulls) CompareForksBranchesFragment(w http.ResponseWriter, r *http.Request) {
-	l := s.logger.With("handler", "CompareForksBranchesFragment")
-
-	user := s.oauth.GetMultiAccountUser(r)
-	if user != nil {
-		l = l.With("user", user.Did)
-	}
-
-	f, err := s.repoResolver.Resolve(r)
-	if err != nil {
-		l.Error("failed to get repo and knot", "err", err)
-		return
-	}
-
-	xrpcc := &indigoxrpc.Client{Host: s.config.KnotMirror.Url}
-
-	forkVal := r.URL.Query().Get("fork")
-	repoString := strings.SplitN(forkVal, "/", 2)
-	forkOwnerDid := repoString[0]
-	forkName := repoString[1]
-	// fork repo
-	repo, err := db.GetRepo(
+func (s *Pulls) pullLabelDefs(repo *models.Repo) (map[string]*models.LabelDefinition, error) {
+	defs, err := db.GetLabelDefinitions(
 		s.db,
-		orm.FilterEq("did", forkOwnerDid),
-		orm.FilterEq("name", forkName),
+		orm.FilterIn("at_uri", repo.Labels),
+		orm.FilterContains("scope", tangled.RepoPullNSID),
 	)
 	if err != nil {
-		l.Error("failed to get repo", "fork_owner_did", forkOwnerDid, "fork_name", forkName, "err", err)
-		return
+		return nil, err
 	}
 
-	sourceXrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, repo.RepoAt().String())
-	if err != nil {
-		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-			l.Error("failed to call XRPC repo.branches for source", "xrpcerr", xrpcerr, "err", err)
-			s.pages.Error503(w)
-			return
+	out := make(map[string]*models.LabelDefinition, len(defs))
+	for i := range defs {
+		d := defs[i]
+		if !slices.Contains(d.Scope, tangled.RepoPullNSID) {
+			continue
 		}
-		l.Error("failed to fetch source branches", "err", err)
-		return
+		out[d.AtUri().String()] = &d
 	}
+	return out, nil
+}
 
-	// Decode source branches
-	var sourceBranches types.RepoBranchesResponse
-	if err := json.Unmarshal(sourceXrpcBytes, &sourceBranches); err != nil {
-		l.Error("failed to decode source branches XRPC response", "err", err)
-		s.pages.Error503(w)
-		return
-	}
-
-	targetXrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
-	if err != nil {
-		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-			l.Error("failed to call XRPC repo.branches for target", "xrpcerr", xrpcerr, "err", err)
-			s.pages.Error503(w)
-			return
+func formLabelEntries(form url.Values, defs map[string]*models.LabelDefinition) iter.Seq2[string, string] {
+	return func(yield func(string, string) bool) {
+		for key := range defs {
+			for _, v := range form[key] {
+				if v == "" {
+					continue
+				}
+				if !yield(key, v) {
+					return
+				}
+			}
 		}
-		l.Error("failed to fetch target branches", "err", err)
+	}
+}
+
+func labelStateFromForm(form url.Values, defs map[string]*models.LabelDefinition) models.LabelState {
+	state := models.NewLabelState()
+	actx := &models.LabelApplicationCtx{Defs: defs}
+	for key, val := range formLabelEntries(form, defs) {
+		_ = actx.ApplyLabelOp(state, models.LabelOp{
+			Operation:    models.LabelOperationAdd,
+			OperandKey:   key,
+			OperandValue: val,
+		})
+	}
+	return state
+}
+
+func buildCreationLabelOps(
+	userDid syntax.DID,
+	subject syntax.ATURI,
+	rkey string,
+	form url.Values,
+	defs map[string]*models.LabelDefinition,
+	performedAt time.Time,
+) []models.LabelOp {
+	var ops []models.LabelOp
+	for key, val := range formLabelEntries(form, defs) {
+		ops = append(ops, models.LabelOp{
+			Did:          userDid.String(),
+			Rkey:         rkey,
+			Subject:      subject,
+			Operation:    models.LabelOperationAdd,
+			OperandKey:   key,
+			OperandValue: val,
+			PerformedAt:  performedAt,
+		})
+	}
+	return ops
+}
+
+func (s *Pulls) applyCreationLabels(
+	ctx context.Context,
+	client *atclient.APIClient,
+	userDid syntax.DID,
+	pulls []*models.Pull,
+	form url.Values,
+	repo *models.Repo,
+) {
+	l := s.logger.With("handler", "applyCreationLabels", "user", userDid)
+
+	defs, err := s.pullLabelDefs(repo)
+	if err != nil {
+		l.Warn("failed to fetch label defs", "err", err)
+		return
+	}
+	if len(defs) == 0 {
 		return
 	}
 
-	// Decode target branches
-	var targetBranches types.RepoBranchesResponse
-	if err := json.Unmarshal(targetXrpcBytes, &targetBranches); err != nil {
-		l.Error("failed to decode target branches XRPC response", "err", err)
-		s.pages.Error503(w)
-		return
+	perCidForms := parseStackLabelForms(form)
+
+	applyAll := form.Get("applyLabelsToAll") == "on"
+	var firstStackForm url.Values
+	if applyAll && len(pulls) > 0 && len(pulls[0].Submissions) > 0 {
+		if firstCid := pulls[0].Submissions[0].ChangeId(); firstCid != "" {
+			if f, ok := perCidForms[firstCid]; ok {
+				firstStackForm = f
+			}
+		}
 	}
 
-	sort.Slice(sourceBranches.Branches, func(i int, j int) bool {
-		return sourceBranches.Branches[i].Commit.Committer.When.After(sourceBranches.Branches[j].Commit.Committer.When)
-	})
+	performedAt := time.Now()
+	for _, pull := range pulls {
+		labelForm := form
+		if firstStackForm != nil {
+			labelForm = firstStackForm
+		} else if len(perCidForms) > 0 && len(pull.Submissions) > 0 {
+			if cid := pull.Submissions[0].ChangeId(); cid != "" {
+				if perForm, ok := perCidForms[cid]; ok {
+					labelForm = perForm
+				}
+			}
+		}
+		rkey := tid.TID()
+		raw := buildCreationLabelOps(userDid, pull.AtUri(), rkey, labelForm, defs, performedAt)
 
-	s.pages.PullCompareForkBranchesFragment(w, pages.PullCompareForkBranchesParams{
-		RepoInfo:       s.repoResolver.GetRepoInfo(r, user),
-		SourceBranches: sourceBranches.Branches,
-		TargetBranches: targetBranches.Branches,
+		valid := make([]models.LabelOp, 0, len(raw))
+		for _, op := range raw {
+			def := defs[op.OperandKey]
+			if err := s.validator.ValidateLabelOp(def, repo, &op); err != nil {
+				l.Warn("invalid label op", "err", err, "subject", op.Subject, "key", op.OperandKey)
+				continue
+			}
+			valid = append(valid, op)
+		}
+		if len(valid) == 0 {
+			continue
+		}
+
+		record := models.LabelOpsAsRecord(valid)
+		if _, err := comatproto.RepoPutRecord(ctx, client, &comatproto.RepoPutRecord_Input{
+			Collection: tangled.LabelOpNSID,
+			Repo:       userDid.String(),
+			Rkey:       rkey,
+			Record:     &lexutil.LexiconTypeDecoder{Val: &record},
+		}); err != nil {
+			l.Warn("failed to write label ops to PDS", "err", err, "subject", pull.AtUri())
+			continue
+		}
+
+		if err := s.indexLabelOps(ctx, valid); err != nil {
+			l.Warn("failed to index label ops", "err", err, "subject", pull.AtUri())
+			if _, err := comatproto.RepoDeleteRecord(context.Background(), client, &comatproto.RepoDeleteRecord_Input{
+				Collection: tangled.LabelOpNSID,
+				Repo:       userDid.String(),
+				Rkey:       rkey,
+			}); err != nil {
+				l.Warn("failed to rollback label ops record from PDS", "err", err, "subject", pull.AtUri())
+			}
+			continue
+		}
+
+		s.notifier.NewPullLabelOp(ctx, pull)
+	}
+}
+
+func (s *Pulls) indexLabelOps(ctx context.Context, ops []models.LabelOp) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, op := range ops {
+		if _, err := db.AddLabelOp(tx, &op); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Pulls) listBranches(ctx context.Context, repo *models.Repo) ([]types.Branch, error) {
+	xrpcc := &indigoxrpc.Client{Host: s.config.KnotMirror.Url}
+	xrpcBytes, err := tangled.GitTempListBranches(ctx, xrpcc, "", 0, repo.RepoAt().String())
+	if err != nil {
+		return nil, err
+	}
+	var result types.RepoBranchesResponse
+	if err := json.Unmarshal(xrpcBytes, &result); err != nil {
+		return nil, err
+	}
+	return result.Branches, nil
+}
+
+func (s *Pulls) listForkBranches(ctx context.Context, forkIdent string) ([]types.Branch, error) {
+	parts := strings.SplitN(forkIdent, "/", 2)
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid fork identifier: %s", forkIdent)
+	}
+	forkRepo, err := db.GetRepo(s.db, orm.FilterEq("did", parts[0]), orm.FilterEq("name", parts[1]))
+	if err != nil {
+		return nil, err
+	}
+	branches, err := s.listBranches(ctx, forkRepo)
+	if err != nil {
+		return nil, err
+	}
+	return sortBranchesByRecency(branches), nil
+}
+
+func sourceBranchChoices(branches []types.Branch) []types.Branch {
+	withoutDefault := slices.DeleteFunc(slices.Clone(branches), func(b types.Branch) bool {
+		return b.IsDefault
 	})
+	return sortBranchesByRecency(withoutDefault)
+}
+
+func defaultTargetBranch(branches []types.Branch, current string) string {
+	if slices.ContainsFunc(branches, func(b types.Branch) bool { return b.Reference.Name == current }) {
+		return current
+	}
+	if idx := slices.IndexFunc(branches, func(b types.Branch) bool { return b.IsDefault }); idx >= 0 {
+		return branches[idx].Reference.Name
+	}
+	return ""
+}
+
+func defaultSourceBranch(source pages.Source, current string, branchChoices, forkBranches []types.Branch) string {
+	var candidates []types.Branch
+	switch source {
+	case pages.SourceFork:
+		candidates = forkBranches
+	case pages.SourceBranch:
+		candidates = branchChoices
+	default:
+		return current
+	}
+	if slices.ContainsFunc(candidates, func(b types.Branch) bool { return b.Reference.Name == current }) {
+		return current
+	}
+	if len(candidates) == 0 {
+		return ""
+	}
+	return candidates[0].Reference.Name
+}
+
+func sortBranchesByRecency(branches []types.Branch) []types.Branch {
+	out := slices.Clone(branches)
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Commit == nil || out[j].Commit == nil {
+			return out[i].Commit != nil
+		}
+		return out[i].Commit.Committer.When.After(out[j].Commit.Committer.When)
+	})
+	return out
+}
+
+func (s *Pulls) prefetchComparison(r *http.Request, repo *models.Repo, source pages.Source, fork, targetBranch, sourceBranch, patch string) (*types.RepoFormatPatchResponse, *types.NiceDiff, error) {
+	var (
+		comparison *types.RepoFormatPatchResponse
+		err        error
+	)
+	switch source {
+	case pages.SourcePatch:
+		if strings.TrimSpace(patch) == "" {
+			return nil, nil, nil
+		}
+		if verr := s.validator.ValidatePatch(&patch); verr != nil {
+			return nil, nil, fmt.Errorf("invalid patch: paste a valid git diff or format-patch")
+		}
+		comparison = parsePastedPatch(patch)
+	case pages.SourceBranch:
+		if targetBranch == "" || sourceBranch == "" {
+			return nil, nil, nil
+		}
+		comparison, err = s.fetchBranchComparison(r.Context(), repo, targetBranch, sourceBranch)
+	case pages.SourceFork:
+		if fork == "" || targetBranch == "" || sourceBranch == "" {
+			return nil, nil, nil
+		}
+		comparison, err = s.fetchForkComparison(r, fork, targetBranch, sourceBranch)
+	default:
+		return nil, nil, nil
+	}
+	if err != nil {
+		s.logger.With("handler", "prefetchComparison").Warn("failed to pre-fetch comparison", "err", err, "source", source)
+		return nil, nil, err
+	}
+
+	return comparison, deriveDiff(comparison, targetBranch), nil
+}
+
+func (s *Pulls) composeMergeCheck(ctx context.Context, repo *models.Repo, targetBranch string, comparison *types.RepoFormatPatchResponse) *types.MergeCheckResponse {
+	if comparison == nil || targetBranch == "" {
+		return nil
+	}
+	patch := comparison.CombinedPatchRaw
+	if patch == "" {
+		patch = comparison.FormatPatchRaw
+	}
+	if patch == "" {
+		return nil
+	}
+
+	xrpcc := s.knotClient(repo.Knot)
+
+	resp, err := tangled.RepoMergeCheck(ctx, xrpcc, &tangled.RepoMergeCheck_Input{
+		Did:    repo.Did,
+		Name:   repo.Name,
+		Branch: targetBranch,
+		Patch:  patch,
+	})
+	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+		s.logger.With("handler", "composeMergeCheck").Warn("failed to check mergeability", "xrpcerr", xrpcerr, "err", err, "target_branch", targetBranch)
+		return &types.MergeCheckResponse{Error: xrpcerr.Error()}
+	}
+
+	out := mergeCheckResponseFrom(resp)
+	return &out
+}
+
+func bracketComponents(key, prefix string) ([]string, bool) {
+	if !strings.HasPrefix(key, prefix) {
+		return nil, false
+	}
+	rest := key[len(prefix):]
+	var parts []string
+	for len(rest) > 0 {
+		if !strings.HasPrefix(rest, "[") {
+			return nil, false
+		}
+		end := strings.Index(rest, "]")
+		if end <= 0 {
+			return nil, false
+		}
+		parts = append(parts, rest[1:end])
+		rest = rest[end+1:]
+	}
+	if len(parts) == 0 {
+		return nil, false
+	}
+	return parts, true
+}
+
+func parseBracketedForm(form url.Values, prefix string) map[string]string {
+	out := make(map[string]string)
+	for key, vals := range form {
+		parts, ok := bracketComponents(key, prefix)
+		if !ok || len(parts) != 1 || parts[0] == "" || len(vals) == 0 {
+			continue
+		}
+		out[parts[0]] = vals[0]
+	}
+	return out
+}
+
+func parseStackLabelForms(form url.Values) map[string]url.Values {
+	out := make(map[string]url.Values)
+	for key, vals := range form {
+		parts, ok := bracketComponents(key, "stackLabel")
+		if !ok || len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			continue
+		}
+		cid, atUri := parts[0], parts[1]
+		if _, ok := out[cid]; !ok {
+			out[cid] = make(url.Values)
+		}
+		out[cid][atUri] = append(out[cid][atUri], vals...)
+	}
+	return out
+}
+
+func parsePastedPatch(patch string) *types.RepoFormatPatchResponse {
+	if patch == "" {
+		return nil
+	}
+	response := &types.RepoFormatPatchResponse{FormatPatchRaw: patch}
+	if patchutil.IsFormatPatch(patch) {
+		if patches, err := patchutil.ExtractPatches(patch); err == nil {
+			response.FormatPatch = patches
+		}
+	}
+	return response
+}
+
+func (s *Pulls) fetchBranchComparison(ctx context.Context, repo *models.Repo, targetBranch, sourceBranch string) (*types.RepoFormatPatchResponse, error) {
+	xrpcc := s.knotClient(repo.Knot)
+
+	xrpcBytes, err := tangled.RepoCompare(ctx, xrpcc, repo.RepoIdentifier(), targetBranch, sourceBranch)
+	if err != nil {
+		return nil, err
+	}
+
+	var comparison types.RepoFormatPatchResponse
+	if err := json.Unmarshal(xrpcBytes, &comparison); err != nil {
+		return nil, err
+	}
+	return &comparison, nil
+}
+
+func (s *Pulls) fetchForkComparison(r *http.Request, forkIdent, targetBranch, sourceBranch string) (*types.RepoFormatPatchResponse, error) {
+	parts := strings.SplitN(forkIdent, "/", 2)
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid fork identifier: %s", forkIdent)
+	}
+	fork, err := db.GetForkByDid(s.db, parts[0], parts[1])
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := s.oauth.ServiceClient(
+		r,
+		oauth.WithService(fork.Knot),
+		oauth.WithLxm(tangled.RepoHiddenRefNSID),
+		oauth.WithDev(s.config.Core.Dev),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := tangled.RepoHiddenRef(
+		r.Context(),
+		client,
+		&tangled.RepoHiddenRef_Input{
+			ForkRef:   sourceBranch,
+			RemoteRef: targetBranch,
+			Repo:      fork.RepoAt().String(),
+		},
+	)
+	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+		return nil, xrpcerr
+	}
+	if !resp.Success {
+		if resp.Error != nil {
+			return nil, fmt.Errorf("hidden ref failed: %s", *resp.Error)
+		}
+		return nil, fmt.Errorf("hidden ref failed")
+	}
+
+	hiddenRef := fmt.Sprintf("hidden/%s/%s", sourceBranch, targetBranch)
+	forkXrpcc := s.knotClient(fork.Knot)
+
+	forkXrpcBytes, err := tangled.RepoCompare(r.Context(), forkXrpcc, fork.RepoIdentifier(), hiddenRef, sourceBranch)
+	if err != nil {
+		return nil, err
+	}
+
+	var comparison types.RepoFormatPatchResponse
+	if err := json.Unmarshal(forkXrpcBytes, &comparison); err != nil {
+		return nil, err
+	}
+	return &comparison, nil
+}
+
+func stackPerCommitDiffs(
+	comparison *types.RepoFormatPatchResponse,
+	targetBranch, refreshUrl string,
+	stackSplits map[string]string,
+) []pages.StackedDiff {
+	if comparison == nil {
+		return nil
+	}
+	out := make([]pages.StackedDiff, len(comparison.FormatPatch))
+	for i, p := range comparison.FormatPatch {
+		nd := patchutil.AsNiceDiff(p.Raw, targetBranch)
+		out[i].Diff = &nd
+		cid := p.ChangeIdOrEmpty()
+		if cid == "" {
+			continue
+		}
+		out[i].Opts = types.DiffOpts{
+			Split:      stackSplits[cid] == "split",
+			RefreshUrl: refreshUrl,
+			Target:     fmt.Sprintf("#stack-diff-%s", cid),
+			Field:      fmt.Sprintf("stackSplit[%s]", cid),
+		}
+	}
+	return out
+}
+
+func deriveDiff(comparison *types.RepoFormatPatchResponse, targetBranch string) *types.NiceDiff {
+	if comparison == nil {
+		return nil
+	}
+	raw := comparison.CombinedPatchRaw
+	if raw == "" {
+		raw = comparison.FormatPatchRaw
+	}
+	d := patchutil.AsNiceDiff(raw, targetBranch)
+	return &d
 }
 
 func (s *Pulls) ResubmitPull(w http.ResponseWriter, r *http.Request) {
@@ -1833,14 +2285,7 @@ func (s *Pulls) resubmitBranch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	scheme := "http"
-	if !s.config.Core.Dev {
-		scheme = "https"
-	}
-	host := fmt.Sprintf("%s://%s", scheme, f.Knot)
-	xrpcc := &indigoxrpc.Client{
-		Host: host,
-	}
+	xrpcc := s.knotClient(f.Knot)
 
 	xrpcBytes, err := tangled.RepoCompare(r.Context(), xrpcc, f.RepoIdentifier(), pull.TargetBranch, pull.PullSource.Branch)
 	if err != nil {
@@ -1937,12 +2382,7 @@ func (s *Pulls) resubmitFork(w http.ResponseWriter, r *http.Request) {
 
 	hiddenRef := fmt.Sprintf("hidden/%s/%s", pull.PullSource.Branch, pull.TargetBranch)
 	// extract patch by performing compare
-	forkScheme := "http"
-	if !s.config.Core.Dev {
-		forkScheme = "https"
-	}
-	forkHost := fmt.Sprintf("%s://%s", forkScheme, forkRepo.Knot)
-	forkXrpcBytes, err := tangled.RepoCompare(r.Context(), &indigoxrpc.Client{Host: forkHost}, forkRepo.RepoIdentifier(), hiddenRef, pull.PullSource.Branch)
+	forkXrpcBytes, err := tangled.RepoCompare(r.Context(), s.knotClient(forkRepo.Knot), forkRepo.RepoIdentifier(), hiddenRef, pull.PullSource.Branch)
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 			l.Error("failed to call XRPC repo.compare for fork", "xrpcerr", xrpcerr, "err", err, "hidden_ref", hiddenRef, "source_branch", pull.PullSource.Branch)
@@ -2115,7 +2555,7 @@ func (s *Pulls) resubmitStackedPullHelper(
 		blobs[i] = blob.Blob
 	}
 
-	newStack, err := s.newStack(r.Context(), repo, userDid, targetBranch, pull.PullSource, formatPatches, blobs)
+	newStack, err := s.newStack(r.Context(), repo, userDid, targetBranch, pull.PullSource, formatPatches, blobs, nil, nil)
 	if err != nil {
 		l.Error("failed to create resubmitted stack", "err", err)
 		s.pages.Notice(w, "pull-merge-error", "Failed to merge pull request. Try again later.")
@@ -2612,18 +3052,25 @@ func (s *Pulls) newStack(
 	pullSource *models.PullSource,
 	formatPatches []types.FormatPatch,
 	blobs []*lexutil.LexBlob,
+	stackTitles, stackBodies map[string]string,
 ) (models.Stack, error) {
 	var stack models.Stack
 	var parentAtUri *syntax.ATURI
 	for i, fp := range formatPatches {
 		//  all patches must have a jj change-id
-		_, err := fp.ChangeId()
+		cid, err := fp.ChangeId()
 		if err != nil {
 			return nil, fmt.Errorf("Stacking is only supported if all patches contain a change-id commit header.")
 		}
 
 		title := fp.Title
 		body := fp.Body
+		if override, ok := stackTitles[cid]; ok && strings.TrimSpace(override) != "" {
+			title = override
+		}
+		if override, ok := stackBodies[cid]; ok {
+			body = override
+		}
 		rkey := tid.TID()
 
 		mentions, references := s.mentionsResolver.Resolve(ctx, body)
