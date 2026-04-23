@@ -2,18 +2,31 @@
     <div class="flex flex-wrap gap-2 items-center">
         <select
             name="sourceBranch"
-            class="p-1 border border-gray-200 bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600"
+            hx-post="/{{ .RepoInfo.FullName }}/pulls/new/refresh"
+            hx-include="closest form"
+            hx-target="#pr-compose-host"
+            hx-swap="outerHTML"
+            hx-trigger="change"
+            hx-indicator="this"
+            class="peer p-1 border border-gray-200 bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600"
         >
-            <option disabled selected>source branch</option>
+            <option disabled {{ if not .SourceBranch }}selected{{ end }}>Source branch</option>
 
-            {{ $recent := index .SourceBranches 0 }}
+            {{ $recent := "" }}
+            {{ if .SourceBranches }}
+                {{ $recent = (index .SourceBranches 0).Reference.Name }}
+            {{ end }}
             {{ range .SourceBranches }}
-                {{ $isRecent := eq .Reference.Name $recent.Reference.Name }}
+                {{ $isRecent := eq .Reference.Name $recent }}
+                {{ $preset := false }}
+                {{ if $.SourceBranch }}
+                    {{ $preset = eq .Reference.Name $.SourceBranch }}
+                {{ else }}
+                    {{ $preset = $isRecent }}
+                {{ end }}
                 <option
                     value="{{ .Reference.Name }}"
-                    {{ if $isRecent }}
-                        selected
-                    {{ end }}
+                    {{ if $preset }}selected{{ end }}
                     class="py-1"
                 >
                     {{ .Reference.Name }}
@@ -21,5 +34,6 @@
                 </option>
             {{ end }}
         </select>
+        {{ i "loader-circle" "size-4 animate-spin hidden peer-[.htmx-request]:inline text-gray-500 dark:text-gray-400" }}
     </div>
 {{ end }}

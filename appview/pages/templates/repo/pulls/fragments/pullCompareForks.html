@@ -1,53 +1,37 @@
 {{ define "repo/pulls/fragments/pullCompareForks" }}
-    <div id="patch-upload">
-        <label for="forkSelect" class="dark:text-white"
-            >select a fork to compare</label
-        >
-        selected: {{ .Selected }}
-        <div class="flex flex-wrap gap-4 items-center">
-            <div class="flex flex-wrap gap-2 items-center">
-                <select
-                    id="forkSelect"
-                    name="fork"
-                    required
-                    class="p-1 border border-gray-200 bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600"
-                    hx-get="/{{ $.RepoInfo.FullName }}/pulls/new/fork-branches"
-                    hx-target="#branch-selection"
-                    hx-vals='{"fork": this.value}'
-                    hx-swap="innerHTML"
-                    onchange="document.getElementById('hiddenForkInput').value = this.value;"
-                >
-                    <option disabled selected>select a fork</option>
-                    {{ range .Forks }}
-                        <option value="{{ .Did }}/{{ .Name }}" {{ if eq .Name $.Selected }}selected{{ end }} class="py-1">
-                            {{ .Did | resolve }}/{{ .Name }}
-                        </option>
-                    {{ end }}
-                </select>
+    <div id="patch-upload" class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap gap-2 items-center">
+            <select
+                id="forkSelect"
+                name="fork"
+                required
+                class="peer p-1 border border-gray-200 bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                hx-post="/{{ $.RepoInfo.FullName }}/pulls/new/refresh"
+                hx-include="closest form"
+                hx-target="#pr-compose-host"
+                hx-swap="outerHTML"
+                hx-trigger="change"
+                hx-indicator="this"
+            >
+                <option disabled {{ if not $.Fork }}selected{{ end }}>Select a fork</option>
+                {{ range .Forks }}
+                    {{ $ident := printf "%s/%s" .Did .Name }}
+                    <option value="{{ $ident }}" {{ if eq $ident $.Fork }}selected{{ end }} class="py-1">
+                        {{ .Did | resolve }}/{{ .Name }}
+                    </option>
+                {{ end }}
+            </select>
+            {{ i "loader-circle" "size-4 animate-spin hidden peer-[.htmx-request]:inline text-gray-500 dark:text-gray-400" }}
+        </div>
 
-                <input
-                    type="hidden"
-                    id="hiddenForkInput"
-                    name="fork"
-                    value=""
-                />
-            </div>
-
-            <div id="branch-selection">
+        <div id="branch-selection">
+            {{ if and .Fork .ForkBranches }}
+                {{ template "repo/pulls/fragments/pullCompareForksBranches" (dict "SourceBranches" .ForkBranches "SourceBranch" .SourceBranch "RepoInfo" .RepoInfo) }}
+            {{ else }}
                 <div class="text-sm text-gray-500 dark:text-gray-400">
                     Select a fork first to view available branches
                 </div>
-            </div>
+            {{ end }}
         </div>
     </div>
-
-    <div class="flex items-center gap-2">
-      <input type="checkbox" id="isStacked" name="isStacked" value="on">
-      <label for="isStacked" class="my-0 py-0 normal-case font-normal">Submit as stacked PRs</label>
-    </div>
-
-    <p class="mt-4">
-        Title and description are optional; if left out, they will be extracted
-        from the first commit.
-    </p>
 {{ end }}
