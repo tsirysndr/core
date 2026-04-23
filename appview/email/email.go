@@ -33,10 +33,16 @@ func SendEmail(email Email) error {
 	return nil
 }
 
-// AddNewsletterContact adds an email address to the Resend newsletter segment.
+// AddNewsletterContact creates a global contact in Resend and adds them to the newsletter segment.
 func AddNewsletterContact(apiKey, segmentID, emailAddr string) error {
 	client := resend.NewClient(apiKey)
-	_, err := client.Contacts.Segments.Add(&resend.AddContactSegmentRequest{
+	_, err := client.Contacts.Create(&resend.CreateContactRequest{
+		Email: emailAddr,
+	})
+	if err != nil {
+		return fmt.Errorf("error creating contact: %w", err)
+	}
+	_, err = client.Contacts.Segments.Add(&resend.AddContactSegmentRequest{
 		SegmentId: segmentID,
 		Email:     emailAddr,
 	})
