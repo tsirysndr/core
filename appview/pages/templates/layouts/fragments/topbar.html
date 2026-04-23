@@ -51,7 +51,7 @@
 {{ $handle := resolve .Did }}
 <details class="relative inline-block text-left nav-dropdown">
     <summary class="cursor-pointer list-none flex items-center gap-1">
-        {{ template "user/fragments/pic" (list .Did "size-6") }}
+        {{ template "user/fragments/pic" (list .Did "size-8 md:size-6") }}
         <span class="hidden md:inline">{{ $handle | truncateAt30 }}</span>
     </summary>
     <div class="absolute right-0 mt-4 rounded bg-white dark:bg-gray-800 dark:text-white border border-gray-200 dark:border-gray-700 shadow-lg z-50 text-sm" style="width: 14rem;">
