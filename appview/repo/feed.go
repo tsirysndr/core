@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"slices"
 	"strings"
@@ -114,7 +113,7 @@ func (rp *Repo) getRepoFeed(ctx context.Context, repo *models.Repo, ownerSlashRe
 		commitItems, err := rp.createCommitItems(ctx, repo, ownerSlashRepo)
 		if err != nil {
 			// Soft failure: log error and continue with partial feed
-			log.Printf("failed to fetch commits for feed: %v", err)
+			rp.logger.Error("failed to fetch commits for feed", "err", err)
 		} else {
 			feed.Items = append(feed.Items, commitItems...)
 		}
@@ -125,7 +124,7 @@ func (rp *Repo) getRepoFeed(ctx context.Context, repo *models.Repo, ownerSlashRe
 		tagItems, err := rp.createTagItems(ctx, repo, ownerSlashRepo)
 		if err != nil {
 			// Soft failure: log error and continue with partial feed
-			log.Printf("failed to fetch tags for feed: %v", err)
+			rp.logger.Error("failed to fetch tags for feed", "err", err)
 		} else {
 			feed.Items = append(feed.Items, tagItems...)
 		}
@@ -308,12 +307,12 @@ func (rp *Repo) buildPullDescription(handle syntax.Handle, state string, pull *m
 func (rp *Repo) AtomFeed(w http.ResponseWriter, r *http.Request) {
 	f, err := rp.repoResolver.Resolve(r)
 	if err != nil {
-		log.Println("failed to fully resolve repo:", err)
+		rp.logger.Error("failed to fully resolve repo", "err", err)
 		return
 	}
 	repoOwnerId, ok := r.Context().Value("resolvedId").(identity.Identity)
 	if !ok || repoOwnerId.Handle.IsInvalidHandle() {
-		log.Println("failed to get resolved repo owner id")
+		rp.logger.Error("failed to get resolved repo owner id")
 		return
 	}
 	ownerSlashRepo := repoOwnerId.Handle.String() + "/" + f.Name
@@ -321,7 +320,7 @@ func (rp *Repo) AtomFeed(w http.ResponseWriter, r *http.Request) {
 	opts := parseFeedOpts(r)
 	feed, err := rp.getRepoFeed(r.Context(), f, ownerSlashRepo, opts)
 	if err != nil {
-		log.Println("failed to get repo feed:", err)
+		rp.logger.Error("failed to get repo feed", "err", err)
 		rp.pages.Error500(w)
 		return
 	}
