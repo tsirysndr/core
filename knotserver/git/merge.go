@@ -175,7 +175,7 @@ func (g *GitRepo) applyPatch(patchData, patchFile string, opts MergeOptions) err
 		return fmt.Errorf("failed to stage changes: %w", err)
 	}
 
-	commitArgs := []string{"-C", g.path, "commit"}
+	commitArgs := []string{"-C", g.path, "commit", "--allow-empty"}
 
 	// Set author if provided
 	authorName := opts.AuthorName
@@ -237,7 +237,7 @@ func (g *GitRepo) applySingleMailbox(singlePatch types.FormatPatch) (plumbing.Ha
 	}
 
 	var stderr bytes.Buffer
-	cmd := exec.Command("git", "-C", g.path, "am", tmpPatch)
+	cmd := exec.Command("git", "-C", g.path, "am", "--allow-empty", tmpPatch)
 	cmd.Stderr = &stderr
 
 	head, err := g.r.Head()
