@@ -8,9 +8,11 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/knotserver/db"
 	"tangled.org/core/knotserver/git"
 	"tangled.org/core/patchutil"
 	"tangled.org/core/rbac"
+	"tangled.org/core/tid"
 	"tangled.org/core/types"
 	xrpcerr "tangled.org/core/xrpc/errors"
 )
@@ -107,6 +109,28 @@ func (x *Xrpc) Merge(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	go func() {
+		refUpdate := tangled.GitRefUpdate{
+			RepoDid:      &repoDid,
+			OwnerDid:     &data.Did,
+			RepoName:     data.Name,
+			Ref:          data.Branch,
+			OldSha:       "", // TODO: fill this
+			NewSha:       "", // TODO: fill this
+			CommitterDid: actorDid.String(),
+		}
+		eventJson, err := json.Marshal(refUpdate)
+		if err != nil {
+			return
+		}
+
+		x.Db.InsertEvent(db.Event{
+			Rkey:      tid.TID(),
+			Nsid:      tangled.GitRefUpdateNSID,
+			EventJson: string(eventJson),
+		}, x.Notifier)
+	}()
 
 	w.WriteHeader(http.StatusOK)
 }
