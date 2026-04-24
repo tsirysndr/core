@@ -3,7 +3,9 @@ package state
 import (
 	"net/http"
 
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/appview/db"
+	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/orm"
@@ -70,12 +72,35 @@ func (s *State) Timeline(w http.ResponseWriter, r *http.Request) {
 		// non-fatal
 	}
 
+	var vouchSuggestions []models.VouchSuggestion
+	if user != nil {
+		vouchSuggestions, err = db.GetVouchSuggestions(s.db, user.Did, 3)
+		if err != nil {
+			s.logger.Error("failed to get vouch suggestions", "err", err)
+		}
+		if len(vouchSuggestions) > 0 {
+			suggestionDids := make([]syntax.DID, len(vouchSuggestions))
+			for i, sv := range vouchSuggestions {
+				suggestionDids[i] = syntax.DID(sv.Did)
+			}
+			relationships, err := db.GetVouchRelationshipsBatch(s.db, syntax.DID(user.Did), suggestionDids)
+			if err != nil {
+				s.logger.Error("failed to get vouch relationships for suggestions", "err", err)
+			} else {
+				for i := range vouchSuggestions {
+					vouchSuggestions[i].VouchRelationship = relationships[vouchSuggestions[i].Did]
+				}
+			}
+		}
+	}
+
 	s.pages.Timeline(w, pages.TimelineParams{
-		LoggedInUser:   user,
-		Timeline:       timeline,
-		Repos:          repos,
-		GfiLabel:       gfiLabel,
-		ShowNewsletter: s.showNewsletter(user),
+		LoggedInUser:     user,
+		Timeline:         timeline,
+		Repos:            repos,
+		GfiLabel:         gfiLabel,
+		VouchSuggestions: vouchSuggestions,
+		ShowNewsletter:   s.showNewsletter(user),
 	})
 }
 

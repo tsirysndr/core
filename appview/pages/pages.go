@@ -402,11 +402,12 @@ func (p *Pages) Brand(w io.Writer, params BrandParams) error {
 }
 
 type TimelineParams struct {
-	LoggedInUser *oauth.MultiAccountUser
-	Timeline     []models.TimelineEvent
-	Repos        []models.Repo
-	GfiLabel     *models.LabelDefinition
-	BlueskyPosts []models.BskyPost
+	LoggedInUser     *oauth.MultiAccountUser
+	Timeline         []models.TimelineEvent
+	Repos            []models.Repo
+	GfiLabel         *models.LabelDefinition
+	BlueskyPosts     []models.BskyPost
+	VouchSuggestions []models.VouchSuggestion
 	// ShowNewsletter controls whether the newsletter widget/CTA is rendered.
 	// For logged-in users it reflects their newsletter_preferences row; for
 	// anonymous visitors it is always true (dismissal falls back to

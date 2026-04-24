@@ -1,21 +1,21 @@
 {{ define "timeline/fragments/trending" }}
-<div class="pt-4">
-    <h3 class="text-xl font-bold dark:text-white flex items-center gap-2 px-6 pb-4">
-        Trending
-        {{ i "trending-up" "size-4 flex-shrink-0" }}
+  <div>
+    <h3 class="text-xl font-bold dark:text-white flex items-center gap-4 px-4 pb-4">
+      {{ i "trending-up" "size-5 flex-shrink-0" }}
+      Trending
     </h3>
     {{ if .Repos }}
-    <div class="flex gap-4 overflow-x-auto scrollbar-hide items-stretch lg:flex-col lg:overflow-x-visible">
-        {{ range $index, $repo := .Repos }}
-            <div class="flex-none w-96 border border-gray-200 dark:border-gray-700 rounded-sm lg:flex-none lg:w-auto">
-                {{ template "user/fragments/repoCard" (list $ $repo true) }}
-            </div>
-        {{ end }}
+    <div class="flex gap-4 overflow-x-auto scrollbar-hide items-stretch md:flex-col md:overflow-x-visible">
+      {{ range $index, $repo := .Repos }}
+      <div class="flex-none w-96 border border-gray-200 dark:border-gray-700 rounded-sm md:flex-none md:w-auto">
+        {{ template "user/fragments/repoCard" (list $ $repo true) }}
+      </div>
+      {{ end }}
     </div>
     {{ else }}
     <div class="p-6 border border-gray-200 dark:border-gray-700 rounded-sm text-sm text-gray-500 dark:text-gray-400 text-center">
-        No trending repositories this week
+      No trending repositories this week
     </div>
     {{ end }}
-</div>
+  </div>
 {{ end }}

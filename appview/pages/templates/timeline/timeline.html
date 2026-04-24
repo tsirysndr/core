@@ -16,18 +16,22 @@
 {{ end }}
 
 {{ define "content" }}
-<div id="timeline-grid" class="flex flex-col gap-4 lg:grid lg:grid-cols-3">
+<div id="timeline-grid" class="flex flex-col gap-4 md:grid md:grid-cols-3">
 
-    <div class="order-2 lg:order-none lg:col-span-2 lg:row-start-1">
+    <div class="order-3 md:order-none md:col-span-2 md:row-start-1">
         {{ template "timeline/fragments/timeline" . }}
     </div>
 
-    <div class="order-1 lg:order-none flex flex-col gap-6 lg:col-start-3 lg:row-start-1">
+    <div class="order-1 md:order-none flex flex-col gap-6 md:col-start-3 md:row-start-1 md:pt-4">
         {{ if .ShowNewsletter }}
-        <div id="newsletter-col" class="order-first lg:order-last">
+        <div id="newsletter-col" class="order-first md:order-last">
             {{ template "timeline/fragments/newsletterWidget" . }}
         </div>
         {{ end }}
+        {{ template "timeline/fragments/announcements" . }}
+        <div class="hidden md:block">
+            {{ template "timeline/fragments/vouchSuggestions" . }}
+        </div>
         {{ template "timeline/fragments/trending" . }}
     </div>
 </div>

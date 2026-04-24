@@ -1,0 +1,24 @@
+{{ define "timeline/fragments/vouchSuggestions" }}
+  {{ if and .LoggedInUser .VouchSuggestions }}
+    <div>
+      <h3 class="text-xl font-bold dark:text-white flex items-center gap-4 px-4 pb-4">
+        {{ i "shield-plus" "size-5 flex-shrink-0" }}
+        Suggested
+      </h3>
+      <div class="flex flex-col gap-4 bg-white dark:bg-gray-800 p-4 border border-gray-200 dark:border-gray-700 shadow-sm">
+        {{ range .VouchSuggestions }}
+        <div class="flex items-center gap-3 ">
+          {{ template "user/fragments/picLink" (list .Did.String "size-10") }}
+          <div class="flex flex-col min-w-0 flex-1">
+            <a href="/{{ resolve .Did.String }}" class="text-sm font-medium dark:text-white hover:underline truncate">{{ resolve .Did.String }}</a>
+            <span class="text-xs text-gray-500 dark:text-gray-400 truncate" title="{{ .Reason }}">{{ .Reason }}</span>
+          </div>
+          <div class="shrink-0">
+            {{ template "user/fragments/vouch" . }}
+          </div>
+        </div>
+        {{ end }}
+      </div>
+    </div>
+  {{ end }}
+{{ end }}

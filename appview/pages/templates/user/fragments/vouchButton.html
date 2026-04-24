@@ -11,7 +11,7 @@
 
 {{ $userDid := "" }}
 {{ with .VouchRelationship }}
-  {{ $userDid = .SubjectDid }}
+  {{ $userDid = .SubjectDid.String }}
 {{ end }}
 <button
   id="vouch-btn-{{ normalizeForHtmlId $userDid }}"

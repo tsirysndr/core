@@ -17,8 +17,8 @@
 {{ $userIdent := "" }}
 {{ $userDid := "" }}
 {{ with .VouchRelationship }}
-  {{ $userDid = .SubjectDid }}
-  {{ $userIdent = resolve .SubjectDid }}
+  {{ $userDid = .SubjectDid.String }}
+  {{ $userIdent = resolve .SubjectDid.String }}
 {{ end }}
 <div
   id="vouch-modal-{{ normalizeForHtmlId $userDid }}"
@@ -32,8 +32,8 @@
     class="flex flex-col gap-6 group">
 
     <div>
-      <h3 class="text-lg font-semibold">Vouch for {{ $userIdent }}</h3>
-      <p class="text-gray-700 dark:text-gray-300">
+      <p class="font-semibold mb-1 text-base">Vouch for {{ $userIdent }}</p>
+      <p class="text-gray-600 dark:text-gray-400 text-sm">
         {{ with .VouchRelationship }}
           {{ with .GetDirectVouch }}
               You {{if $isVouched}}vouched{{else}}denounced{{end}} {{ $userIdent }} {{ relTimeFmt .CreatedAt }}.

@@ -4,9 +4,9 @@
   {{ $denounces := (list) }}
   {{ range .IndirectVouches }}
     {{ if .IsVouch }}
-      {{ $vouches = append $vouches .Did }}
+      {{ $vouches = append $vouches .Did.String }}
     {{ else if .IsDenounce }}
-      {{ $denounces = append $denounces .Did }}
+      {{ $denounces = append $denounces .Did.String }}
     {{ end }}
   {{ end }}
 
@@ -18,7 +18,7 @@
         border-x border-green-600/25 dark:border-green-400/25
         {{ if $denounces }} border-t {{ else }} border-y {{ end }}
         ">
-        <a class="text-sm text-green-800 dark:text-green-200 hover:no-underline" href="/{{ .SubjectDid }}?tab=vouches">
+        <a class="text-sm text-green-800 dark:text-green-200 hover:no-underline" href="/{{ .SubjectDid.String }}?tab=vouches">
           vouched for by {{ len $vouches }} {{ if eq (len $vouches) 1 }}user{{ else }}users{{ end }}
         </a>
         {{ template "fragments/tinyAvatarList" (dict "all" $vouches "classes" "size-6") }}
@@ -32,7 +32,7 @@
         border-x border-red-600/25 dark:border-red-400/25
         {{ if $vouches }} border-b {{ else }} border-y {{ end }}
         ">
-        <a class="text-sm text-red-800 dark:text-red-200 hover:no-underline" href="/{{ .SubjectDid }}?tab=vouches">
+        <a class="text-sm text-red-800 dark:text-red-200 hover:no-underline" href="/{{ .SubjectDid.String }}?tab=vouches">
           denounced by {{ len $denounces }} {{ if eq (len $denounces) 1 }}user{{ else }}users{{ end }}
         </a>
         {{ template "fragments/tinyAvatarList" (dict "all" $denounces "classes" "size-6") }}
