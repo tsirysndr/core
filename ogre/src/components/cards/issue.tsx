@@ -37,8 +37,8 @@ export function IssueCard(data: IssueCardData) {
 
       <Row
         style={{
-          alignItems: "flex-end",
-          justifyContent: "space-between",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
         }}>
         <FooterStats
           createdAt={data.createdAt}

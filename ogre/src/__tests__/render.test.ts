@@ -87,9 +87,9 @@ describe("issue cards", () => {
     await renderAndSave(h(IssueCard, validated), "issue-card-long-title.png");
   });
 
-  test("renders issue with long author handle (reactions hidden)", async () => {
+  test("renders issue with long author handle", async () => {
     const data = createIssueData(avatarDataUri, {
-      authorHandle: "extremely-long-handle.example.com",
+      authorHandle: "very.very.long.tangled.org",
     });
     const validated = issueCardSchema.parse(data);
     await renderAndSave(
@@ -146,9 +146,9 @@ describe("pull request cards", () => {
     );
   });
 
-  test("renders pull request with long author handle (reactions hidden)", async () => {
+  test("renders pull request with long author handle", async () => {
     const data = createPullRequestData(avatarDataUri, {
-      authorHandle: "extremely-long-handle.example.com",
+      authorHandle: "very.very.long.tangled.org",
     });
     const validated = pullRequestCardSchema.parse(data);
     await renderAndSave(
