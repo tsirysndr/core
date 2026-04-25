@@ -3,7 +3,6 @@ package issues
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
@@ -17,13 +16,13 @@ import (
 func (rp *Issues) IssueOpenGraphSummary(w http.ResponseWriter, r *http.Request) {
 	f, err := rp.repoResolver.Resolve(r)
 	if err != nil {
-		log.Println("failed to get repo and knot", err)
+		rp.logger.Error("failed to get repo and knot", "err", err)
 		return
 	}
 
 	issue, ok := r.Context().Value("issue").(*models.Issue)
 	if !ok {
-		log.Println("issue not found in context")
+		rp.logger.Error("issue not found in context")
 		http.Error(w, "issue not found", http.StatusNotFound)
 		return
 	}
@@ -34,7 +33,7 @@ func (rp *Issues) IssueOpenGraphSummary(w http.ResponseWriter, r *http.Request) 
 		orm.FilterContains("scope", tangled.RepoIssueNSID),
 	)
 	if err != nil {
-		log.Println("failed to fetch label definitions")
+		rp.logger.Error("failed to fetch label definitions", "err", err)
 		http.Error(w, "label definitions not found", http.StatusInternalServerError)
 		return
 	}
@@ -100,7 +99,7 @@ func (rp *Issues) IssueOpenGraphSummary(w http.ResponseWriter, r *http.Request) 
 
 	imageBytes, err := rp.ogreClient.RenderIssueCard(r.Context(), payload)
 	if err != nil {
-		log.Println("failed to render issue card", err)
+		rp.logger.Error("failed to render issue card", "err", err)
 		http.Error(w, "failed to render issue card", http.StatusInternalServerError)
 		return
 	}
@@ -110,7 +109,7 @@ func (rp *Issues) IssueOpenGraphSummary(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(imageBytes)
 	if err != nil {
-		log.Println("failed to write issue card", err)
+		rp.logger.Error("failed to write issue card", "err", err)
 		return
 	}
 }
