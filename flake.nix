@@ -237,6 +237,7 @@
       tailwind-watcher =
         pkgs.writeShellScriptBin "run"
         ''
+          export BROWSERSLIST_IGNORE_OLD_DATA=true
           ${pkgs.tailwindcss}/bin/tailwindcss --watch=always -i input.css -o ./appview/pages/static/tw.css
         '';
     in {

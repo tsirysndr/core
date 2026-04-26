@@ -7,8 +7,7 @@ appview/pages/static/*
 result
 !.gitkeep
 out/
-./camo/node_modules/*
-./avatar/node_modules/*
+node_modules/
 patches
 *.qcow2
 .DS_Store
