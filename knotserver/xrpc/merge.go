@@ -110,14 +110,20 @@ func (x *Xrpc) Merge(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	oldSha := gr.Hash()
+	if err := gr.Refresh(); err != nil {
+		l.Error("failed to refresh", "error", err)
+	}
+	newSha := gr.Hash()
+
 	go func() {
 		refUpdate := tangled.GitRefUpdate{
 			RepoDid:      &repoDid,
 			OwnerDid:     &data.Did,
 			RepoName:     data.Name,
 			Ref:          data.Branch,
-			OldSha:       "", // TODO: fill this
-			NewSha:       "", // TODO: fill this
+			OldSha:       oldSha.String(),
+			NewSha:       newSha.String(),
 			CommitterDid: actorDid.String(),
 		}
 		eventJson, err := json.Marshal(refUpdate)

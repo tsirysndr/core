@@ -82,7 +82,7 @@ func (g *GitRepo) Hash() plumbing.Hash {
 
 // re-open a repository and update references
 func (g *GitRepo) Refresh() error {
-	refreshed, err := PlainOpen(g.path)
+	refreshed, err := Open(g.path, g.Hash().String())
 	if err != nil {
 		return err
 	}
