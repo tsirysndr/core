@@ -237,7 +237,7 @@ func (g *GitRepo) applySingleMailbox(singlePatch types.FormatPatch) (plumbing.Ha
 	}
 
 	var stderr bytes.Buffer
-	cmd := exec.Command("git", "-C", g.path, "am", "--allow-empty", tmpPatch)
+	cmd := exec.Command("git", "-C", g.path, "am", tmpPatch)
 	cmd.Stderr = &stderr
 
 	head, err := g.r.Head()
