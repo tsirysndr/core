@@ -87,7 +87,10 @@ function RoundsPill({ value, label }: MetricPillProps) {
 
 export function PullRequestCard(data: PullRequestCardData) {
   return (
-    <Card style={{ justifyContent: "space-between" }}>
+    <Card style={{
+        justifyContent: "space-between",
+        paddingBottom: 36,
+    }}>
       <Col style={{ gap: 48 }}>
         <Col style={{ gap: 32 }}>
           <Row style={{ justifyContent: "space-between" }}>
@@ -122,7 +125,7 @@ export function PullRequestCard(data: PullRequestCardData) {
 
       <Row
         style={{
-          alignItems: "flex-end",
+          alignItems: "center",
           justifyContent: "space-between",
         }}>
         <FooterStats

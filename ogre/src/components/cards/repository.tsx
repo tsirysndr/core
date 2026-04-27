@@ -48,7 +48,7 @@ export function RepositoryCard(data: RepositoryCardData) {
 
       <Row
         style={{
-          alignItems: "flex-end",
+          alignItems: "center",
           justifyContent: "space-between",
           flexGrow: 1,
         }}>

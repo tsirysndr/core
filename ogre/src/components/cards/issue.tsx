@@ -9,7 +9,10 @@ import type { IssueCardData } from "../../validation";
 
 export function IssueCard(data: IssueCardData) {
   return (
-    <Card style={{ justifyContent: "space-between" }}>
+    <Card style={{
+        justifyContent: "space-between",
+        paddingBottom: 36,
+    }}>
       <Col style={{ gap: 48 }}>
         <Col style={{ gap: 32 }}>
           <Row style={{ justifyContent: "space-between" }}>
@@ -37,7 +40,7 @@ export function IssueCard(data: IssueCardData) {
 
       <Row
         style={{
-            alignItems: "flex-end",
+            alignItems: "center",
             justifyContent: "space-between",
         }}>
         <FooterStats
