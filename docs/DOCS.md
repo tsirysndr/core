@@ -965,9 +965,9 @@ Spindle is configured using environment variables. The following environment var
 - `SPINDLE_SERVER_JETSTREAM_ENDPOINT`: The endpoint of the Jetstream server (default: `"wss://jetstream1.us-west.bsky.network/subscribe"`).
 - `SPINDLE_SERVER_DEV`: A boolean indicating whether the server is running in development mode (default: `false`).
 - `SPINDLE_SERVER_OWNER`: The DID of the owner (required).
+- `SPINDLE_SERVER_LOG_DIR`: The directory to store workflow logs (default: `"/var/log/spindle"`).
 - `SPINDLE_PIPELINES_NIXERY`: The Nixery URL (default: `"nixery.tangled.sh"`).
 - `SPINDLE_PIPELINES_WORKFLOW_TIMEOUT`: The default workflow timeout (default: `"5m"`).
-- `SPINDLE_PIPELINES_LOG_DIR`: The directory to store workflow logs (default: `"/var/log/spindle"`).
 
 ### Running spindle
 
