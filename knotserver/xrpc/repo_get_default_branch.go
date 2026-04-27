@@ -35,5 +35,5 @@ func (x *Xrpc) RepoGetDefaultBranch(w http.ResponseWriter, r *http.Request) {
 		When: time.UnixMicro(0).Format(time.RFC3339),
 	}
 
-	writeJson(w, response)
+	x.writeJson(w, response)
 }

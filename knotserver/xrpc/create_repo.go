@@ -109,7 +109,7 @@ func (h *Xrpc) CreateRepo(w http.ResponseWriter, r *http.Request) {
 			if _, statErr := os.Stat(didRepoPath); statErr == nil {
 				l.Info("repo already exists from previous attempt", "repoDid", existingDid)
 				output := tangled.RepoCreate_Output{RepoDid: &existingDid}
-				writeJson(w, &output)
+				h.writeJson(w, &output)
 				return
 			}
 			l.Warn("stale repo key found without directory, cleaning up", "repoDid", existingDid)
@@ -250,7 +250,7 @@ func (h *Xrpc) CreateRepo(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	writeJson(w, &tangled.RepoCreate_Output{RepoDid: &repoDid})
+	h.writeJson(w, &tangled.RepoCreate_Output{RepoDid: &repoDid})
 }
 
 func (h *Xrpc) requestCrawl(ctx context.Context, input *tangled.SyncRequestCrawl_Input) error {

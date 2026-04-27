@@ -58,7 +58,7 @@ func (x *Xrpc) RepoBlob(w http.ResponseWriter, r *http.Request) {
 				Branch: &submodule.Branch,
 			},
 		}
-		writeJson(w, response)
+		x.writeJson(w, response)
 		return
 	}
 
@@ -173,7 +173,7 @@ func (x *Xrpc) RepoBlob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJson(w, response)
+	x.writeJson(w, response)
 }
 
 // isTextualMimeType returns true if the MIME type represents textual content

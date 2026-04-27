@@ -81,5 +81,5 @@ func (x *Xrpc) RepoBranch(w http.ResponseWriter, r *http.Request) {
 		When:  commit.Author.When.Format(time.RFC3339),
 	}
 
-	writeJson(w, response)
+	x.writeJson(w, response)
 }

@@ -45,5 +45,5 @@ func (x *Xrpc) ListKeys(w http.ResponseWriter, r *http.Request) {
 		response.Cursor = &nextCursor
 	}
 
-	writeJson(w, response)
+	x.writeJson(w, response)
 }

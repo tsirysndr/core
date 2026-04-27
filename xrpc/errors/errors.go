@@ -66,6 +66,11 @@ var RefNotFoundError = NewXrpcError(
 	WithMessage("failed to access ref"),
 )
 
+var RequestTooLargeError = NewXrpcError(
+	WithTag("RequestTooLarge"),
+	WithMessage("request was too large"),
+)
+
 var AuthError = func(err error) XrpcError {
 	return NewXrpcError(
 		WithTag("Auth"),

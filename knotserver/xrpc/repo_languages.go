@@ -72,5 +72,5 @@ func (x *Xrpc) RepoLanguages(w http.ResponseWriter, r *http.Request) {
 		response.TotalFiles = &totalFiles
 	}
 
-	writeJson(w, response)
+	x.writeJson(w, response)
 }

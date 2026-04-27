@@ -37,5 +37,5 @@ func (x *Xrpc) RepoDiff(w http.ResponseWriter, r *http.Request) {
 		Diff: diff,
 	}
 
-	writeJson(w, response)
+	x.writeJson(w, response)
 }

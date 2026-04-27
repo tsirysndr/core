@@ -142,5 +142,5 @@ func (x *Xrpc) RepoTree(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJson(w, response)
+	x.writeJson(w, response)
 }

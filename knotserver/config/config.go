@@ -23,6 +23,7 @@ type Server struct {
 	JetstreamEndpoint  string `env:"JETSTREAM_ENDPOINT, default=wss://jetstream1.us-west.bsky.network/subscribe"`
 	Owner              string `env:"OWNER, required"`
 	LogDids            bool   `env:"LOG_DIDS, default=true"`
+	MaxResponseKB      int    `env:"MAX_RESPONSE_KB, default=5120"`
 
 	// This disables signature verification so use with caution.
 	Dev bool `env:"DEV, default=false"`

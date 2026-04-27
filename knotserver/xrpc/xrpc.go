@@ -1,7 +1,9 @@
 package xrpc
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -122,10 +124,33 @@ func writeError(w http.ResponseWriter, e xrpcerr.XrpcError, status int) {
 	json.NewEncoder(w).Encode(e)
 }
 
-func writeJson(w http.ResponseWriter, response any) {
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		writeError(w, xrpcerr.GenericError(err), http.StatusInternalServerError)
+type limitWriter struct {
+	buf     bytes.Buffer
+	limit   int
+	written int
+}
+
+var errResponseTooLarge = errors.New("response too large")
+
+func (lw *limitWriter) Write(p []byte) (int, error) {
+	if lw.written+len(p) > lw.limit {
+		return 0, errResponseTooLarge
+	}
+	n, err := lw.buf.Write(p)
+	lw.written += n
+	return n, err
+}
+
+func (x *Xrpc) writeJson(w http.ResponseWriter, response any) {
+	lw := &limitWriter{limit: x.Config.Server.MaxResponseKB * 1024}
+	if err := json.NewEncoder(lw).Encode(response); err != nil {
+		if errors.Is(err, errResponseTooLarge) {
+			writeError(w, xrpcerr.RequestTooLargeError, http.StatusRequestEntityTooLarge)
+		} else {
+			writeError(w, xrpcerr.GenericError(err), http.StatusInternalServerError)
+		}
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(lw.buf.Bytes())
 }

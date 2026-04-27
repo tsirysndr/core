@@ -99,5 +99,5 @@ func (x *Xrpc) RepoCompare(w http.ResponseWriter, r *http.Request) {
 		CombinedPatchRaw: combinedPatchRaw,
 	}
 
-	writeJson(w, response)
+	x.writeJson(w, response)
 }

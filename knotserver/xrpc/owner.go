@@ -18,5 +18,5 @@ func (x *Xrpc) Owner(w http.ResponseWriter, r *http.Request) {
 		Owner: owner,
 	}
 
-	writeJson(w, response)
+	x.writeJson(w, response)
 }

@@ -82,5 +82,5 @@ func (x *Xrpc) RepoLog(w http.ResponseWriter, r *http.Request) {
 
 	response.Log = true
 
-	writeJson(w, response)
+	x.writeJson(w, response)
 }

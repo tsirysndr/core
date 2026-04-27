@@ -81,5 +81,5 @@ func (x *Xrpc) RepoTag(w http.ResponseWriter, r *http.Request) {
 		Tag: &tr,
 	}
 
-	writeJson(w, response)
+	x.writeJson(w, response)
 }

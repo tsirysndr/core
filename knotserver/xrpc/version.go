@@ -56,5 +56,5 @@ func (x *Xrpc) Version(w http.ResponseWriter, r *http.Request) {
 		Version: version,
 	}
 
-	writeJson(w, response)
+	x.writeJson(w, response)
 }

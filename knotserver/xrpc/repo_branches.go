@@ -45,5 +45,5 @@ func (x *Xrpc) RepoBranches(w http.ResponseWriter, r *http.Request) {
 		Branches: branches,
 	}
 
-	writeJson(w, response)
+	x.writeJson(w, response)
 }

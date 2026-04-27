@@ -177,6 +177,12 @@ in
             default = false;
             description = "Enable development mode (disables signature verification)";
           };
+
+          maxResponseKB = mkOption {
+            type = types.int;
+            default = 5120;
+            description = "Maximum response size in kilobytes";
+          };
         };
       };
     };
@@ -282,6 +288,7 @@ in
               then "true"
               else "false"
             }"
+            "KNOT_SERVER_MAX_RESPONSE_KB=${toString cfg.server.maxResponseKB}"
           ];
           ExecStart = "${cfg.package}/bin/knot server";
           Restart = "always";
