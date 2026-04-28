@@ -1,0 +1,23 @@
+name = "tangled-jobs"
+main = "src/index.ts"
+compatibility_date = "2026-04-28"
+
+[[rules]]
+type = "Text"
+globs = ["**/*.md"]
+
+[vars]
+LINEAR_TEAM_ID = "4be92e1b-1c19-4d37-ab9f-38c7484a00af"
+
+# Set secrets via: wrangler secret put LINEAR_API_KEY
+# LINEAR_API_KEY = "lin_api_..."
+
+[[routes]]
+pattern = "jobs.tangled.org"
+zone_name = "tangled.org"
+custom_domain = true
+
+[observability]
+[observability.logs]
+enabled = true
+invocation_logs = true
