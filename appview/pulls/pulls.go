@@ -297,7 +297,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		diff = patchutil.Interdiff(previousPatch, currentPatch)
 	}
 
-	s.pages.RepoSinglePull(w, pages.RepoSinglePullParams{
+	err = s.pages.RepoSinglePull(w, pages.RepoSinglePullParams{
 		LoggedInUser:       user,
 		RepoInfo:           s.repoResolver.GetRepoInfo(r, user),
 		Pull:               pull,
@@ -318,6 +318,9 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		LabelDefs:          defs,
 		VouchRelationships: vouchRelationships,
 	})
+	if err != nil {
+		l.Error("failed to render page", "err", err)
+	}
 }
 
 func (s *Pulls) RepoSinglePull(w http.ResponseWriter, r *http.Request) {
@@ -804,7 +807,7 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.pages.RepoPulls(w, pages.RepoPullsParams{
+	err = s.pages.RepoPulls(w, pages.RepoPullsParams{
 		LoggedInUser:       s.oauth.GetMultiAccountUser(r),
 		RepoInfo:           repoInfo,
 		Pulls:              pulls,
@@ -817,6 +820,9 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 		PullCount:          totalPulls,
 		VouchRelationships: vouchRelationships,
 	})
+	if err != nil {
+		l.Error("failed to render page", "err", err)
+	}
 }
 
 func (s *Pulls) PullComment(w http.ResponseWriter, r *http.Request) {

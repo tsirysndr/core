@@ -68,7 +68,7 @@
 
     <span class="text-gray-500 dark:text-gray-400 text-sm flex flex-wrap items-center gap-1">
       opened by
-      {{ template "user/fragments/picLink" (list .Issue.Did "size-6" (index .VouchRelationships .Issue.Did)) }}
+      {{ template "user/fragments/picLink" (list .Issue.Did "size-6" (index .VouchRelationships (did .Issue.Did))) }}
       <a href="/{{ resolve .Issue.Did }}">{{ resolve .Issue.Did }}</a>
       <span class="select-none before:content-['\00B7']"></span>
       {{ if .Issue.Edited }}

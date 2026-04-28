@@ -15,7 +15,7 @@
           "LoggedInUser" $root.LoggedInUser
           "Issue" $root.Issue
           "Comment" $comment.Self
-          "VouchRelationship" (index $root.VouchRelationships $comment.Self.Did)
+          "VouchRelationship" (index $root.VouchRelationships (did $comment.Self.Did))
           ) }}
 
   <div class="rounded border border-gray-200 dark:border-gray-700 w-full overflow-hidden shadow-sm bg-gray-50 dark:bg-gray-800/50">
@@ -31,7 +31,7 @@
               "LoggedInUser" $root.LoggedInUser
               "Issue" $root.Issue
               "Comment" $reply
-              "VouchRelationship" (index $root.VouchRelationships $reply.Did)
+              "VouchRelationship" (index $root.VouchRelationships (did $reply.Did))
           ) }}
         </div>
       {{ end }}

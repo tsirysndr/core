@@ -18,7 +18,7 @@
       {{ if ne $did $vr.ViewerDid }}
         <button
           type="button"
-          popovertarget="vouch-modal-{{ normalizeForHtmlId $vr.SubjectDid }}"
+          popovertarget="vouch-modal-{{ normalizeForHtmlId $vr.SubjectDid.String }}"
           popovertargetaction="toggle"
           class="absolute -bottom-0.5 -right-0.5 w-1/2 h-1/2 cursor-pointer"
           title="{{ template "user/fragments/vouchTooltip" $vr }}">

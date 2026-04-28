@@ -23,6 +23,7 @@ import (
 	chromahtml "github.com/alecthomas/chroma/v2/formatters/html"
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/dustin/go-humanize"
 	"github.com/dustin/go-humanize/english"
 	"github.com/go-enry/go-enry/v2"
@@ -503,6 +504,10 @@ func (p *Pages) funcMap() template.FuncMap {
 				},
 				"PdsUserDomain": p.pdsCfg.UserDomain,
 			}
+		},
+		"did": func(s string) syntax.DID {
+			// cast to DID
+			return syntax.DID(s)
 		},
 	}
 }

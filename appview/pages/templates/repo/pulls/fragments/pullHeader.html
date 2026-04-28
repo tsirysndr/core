@@ -11,7 +11,7 @@
         {{ template "repo/pulls/fragments/pullState" .Pull.State }}
         <span class="text-gray-500 dark:text-gray-400 text-sm flex flex-wrap items-center gap-1">
             opened by
-            {{ template "user/fragments/picLink" (list .Pull.OwnerDid "size-6" (index .VouchRelationships .Pull.OwnerDid)) }}
+            {{ template "user/fragments/picLink" (list .Pull.OwnerDid "size-6" (index .VouchRelationships (did .Pull.OwnerDid))) }}
             <a href="/{{ resolve .Pull.OwnerDid }}">{{ resolve .Pull.OwnerDid }}</a>
             <span class="select-none before:content-['\00B7']"></span>
             {{ template "repo/fragments/time" .Pull.Created }}

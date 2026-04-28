@@ -27,7 +27,7 @@
         </span>
 
         <span class="ml-1 flex items-center gap-1">
-          {{ template "user/fragments/picLink" (list .Did "size-6" (index $.VouchRelationships .Did)) }}
+          {{ template "user/fragments/picLink" (list .Did "size-6" (index $.VouchRelationships (did .Did))) }}
           <a href="/{{ resolve .Did }}">{{ resolve .Did }}</a>
         </span>
 

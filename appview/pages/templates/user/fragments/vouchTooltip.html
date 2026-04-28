@@ -14,9 +14,9 @@
     {{- $direct := $vr.GetDirectVouch -}}
     {{- if $direct -}}
       {{- if $direct.IsVouch -}}
-        You vouched for {{ resolve $vr.SubjectDid }} {{ relTimeFmt $direct.CreatedAt }}. {{ $networkPart }}
+        You vouched for {{ resolve $vr.SubjectDid.String }} {{ relTimeFmt $direct.CreatedAt }}. {{ $networkPart }}
       {{- else -}}
-        You denounced {{ resolve $vr.SubjectDid }} {{ relTimeFmt $direct.CreatedAt }}. {{ $networkPart }}
+        You denounced {{ resolve $vr.SubjectDid.String }} {{ relTimeFmt $direct.CreatedAt }}. {{ $networkPart }}
       {{- end -}}
     {{- else -}}
       {{- $networkPart -}}.
