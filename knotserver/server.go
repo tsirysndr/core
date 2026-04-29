@@ -12,7 +12,8 @@ import (
 	"tangled.org/core/idresolver"
 	"tangled.org/core/jetstream"
 	"tangled.org/core/knotserver/config"
-	"tangled.org/core/knotserver/db"
+	knotdb "tangled.org/core/knotserver/db"
+	"tangled.org/core/knotserver/sandbox"
 	"tangled.org/core/log"
 	"tangled.org/core/notifier"
 	"tangled.org/core/rbac"
@@ -23,6 +24,12 @@ func Command() *cli.Command {
 		Name:   "server",
 		Usage:  "run a knot server",
 		Action: Run,
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "secure-mode",
+				Usage: "isolate git subprocesses to their own repository directory",
+			},
+		},
 		Description: `
 	Environment variables:
 		KNOT_SERVER_LISTEN_ADDR          (default: 0.0.0.0:5555)
@@ -33,6 +40,7 @@ func Command() *cli.Command {
 		KNOT_SERVER_OWNER                (required)
 		KNOT_SERVER_LOG_DIDS             (default: true)
 		KNOT_SERVER_DEV                  (default: false)
+		KNOT_SERVER_SECURE_MODE          (default: false)
 		KNOT_REPO_SCAN_PATH              (default: /home/git)
 		KNOT_REPO_README                 (comma-separated list)
 		KNOT_REPO_MAIN_BRANCH            (default: main)
@@ -53,20 +61,27 @@ func Run(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	err = hook.Setup(hook.Config(
-		hook.WithScanPath(c.Repo.ScanPath),
-		hook.WithInternalApi(c.Server.InternalListenAddr),
-	))
-	if err != nil {
-		return fmt.Errorf("failed to setup hooks: %w", err)
+	// CLI flag overrides env var.
+	if cmd.Bool("secure-mode") {
+		c.Server.SecureMode = true
 	}
-	logger.Info("successfully finished setting up hooks")
+
+	if !c.Server.SecureMode {
+		err = hook.Setup(hook.Config(
+			hook.WithScanPath(c.Repo.ScanPath),
+			hook.WithInternalApi(c.Server.InternalListenAddr),
+		))
+		if err != nil {
+			return fmt.Errorf("failed to setup hooks: %w", err)
+		}
+		logger.Info("successfully finished setting up hooks")
+	}
 
 	if c.Server.Dev {
 		logger.Info("running in dev mode, signature verification is disabled")
 	}
 
-	db, err := db.Setup(ctx, c.Server.DBPath)
+	db, err := knotdb.Setup(ctx, c.Server.DBPath)
 	if err != nil {
 		return fmt.Errorf("failed to load db: %w", err)
 	}
@@ -97,9 +112,37 @@ func Run(ctx context.Context, cmd *cli.Command) error {
 		logger.Warn("knot members backfill failed, continuing", "err", err)
 	}
 
+	// probe and initialise the sandbox backend.
+	var sb sandbox.Backend
+	if c.Server.SecureMode {
+		var warn string
+		sb, warn = sandbox.New(func(repoPath string) (uint32, uint32, error) {
+			return sandbox.LookupUIDForRepoPath(c.Repo.ScanPath, repoPath)
+		})
+		if warn != "" {
+			return fmt.Errorf("secure-mode: %s", warn)
+		}
+		logger.Info("secure-mode: activated", "backend", sb.Name())
+
+		// refuse to start if any repos have not yet been isolation-migrated.
+		unmigrated, countErr := db.CountUnmigratedRepos()
+		if countErr != nil {
+			return fmt.Errorf("secure-mode: checking unmigrated repos: %w", countErr)
+		}
+		if unmigrated > 0 {
+			return fmt.Errorf(
+				"secure-mode: %d repo(s) have not been isolation-migrated; "+
+					"run 'knot migrate-isolation' first",
+				unmigrated,
+			)
+		}
+	} else {
+		sb = &sandbox.NoopBackend{}
+	}
+
 	go migrateReposOnStartup(ctx, c, db, e, &notifier, log.SubLogger(logger, "migrate"))
 
-	mux, err := Setup(ctx, c, db, e, jc, &notifier, resolver)
+	mux, err := Setup(ctx, c, db, e, jc, &notifier, resolver, sb)
 	if err != nil {
 		return fmt.Errorf("failed to setup server: %w", err)
 	}

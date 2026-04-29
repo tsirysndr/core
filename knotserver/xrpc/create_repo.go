@@ -204,7 +204,7 @@ func (h *Xrpc) CreateRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if data.Source != nil && *data.Source != "" {
-		err = git.Fork(repoPath, *data.Source, h.Config)
+		err = git.ForkWithSandbox(repoPath, *data.Source, h.Config, h.Sandbox)
 		if err != nil {
 			l.Error("forking repo", "error", err.Error())
 			cleanupAll()
@@ -259,6 +259,38 @@ func (h *Xrpc) CreateRepo(w http.ResponseWriter, r *http.Request) {
 		cleanupAll()
 		writeError(w, xrpcerr.GenericError(err), http.StatusInternalServerError)
 		return
+	}
+
+	if h.Config.Server.SecureMode {
+		ownerUID, err := h.Db.GetOrAssignOwnerUID(actorDid.String())
+		if err != nil {
+			l.Error("failed to get/assign owner uid", "error", err.Error())
+			cleanupAll()
+			writeError(w, xrpcerr.GenericError(err), http.StatusInternalServerError)
+			return
+		}
+		if err := sandbox.ChmodRepoTree(repoPath); err != nil {
+			l.Error("failed to chmod repo tree", "error", err.Error())
+			cleanupAll()
+			writeError(w, xrpcerr.GenericError(err), http.StatusInternalServerError)
+			return
+		}
+		serviceGid, err := sandbox.ServiceGid(h.Config.Repo.ScanPath)
+		if err != nil {
+			l.Error("failed to resolve service gid", "error", err.Error())
+			cleanupAll()
+			writeError(w, xrpcerr.GenericError(err), http.StatusInternalServerError)
+			return
+		}
+		if err := sandbox.ChownRepoTree(repoPath, int(ownerUID), int(serviceGid)); err != nil {
+			l.Error("failed to chown repo tree", "error", err.Error())
+			cleanupAll()
+			writeError(w, xrpcerr.GenericError(err), http.StatusInternalServerError)
+			return
+		}
+		if err := h.Db.MarkRepoIsolated(repoDid); err != nil {
+			l.Error("failed to mark repo isolated", "error", err.Error())
+		}
 	}
 
 	if prepared != nil {

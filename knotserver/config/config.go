@@ -27,6 +27,9 @@ type Server struct {
 
 	// This disables signature verification so use with caution.
 	Dev bool `env:"DEV, default=false"`
+
+	// SecureMode enables per-repository subprocess isolation.
+	SecureMode bool `env:"SECURE_MODE, default=false"`
 }
 
 type Git struct {
