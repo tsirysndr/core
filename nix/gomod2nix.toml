@@ -548,6 +548,9 @@ schema = 3
   [mod."github.com/labstack/gommon"]
     version = "v0.4.1"
     hash = "sha256-qfjV9jmtR8I7gC7/Hm02XDbuVLX8UkRNi3wPer8Jkm4="
+  [mod."github.com/landlock-lsm/go-landlock"]
+    version = "v0.8.1"
+    hash = "sha256-7H6/LBmv/d4vDIfZcJ0PeNiNU2PInkw29aQU1yHWxsU="
   [mod."github.com/lucasb-eyer/go-colorful"]
     version = "v1.3.0"
     hash = "sha256-6BKrJsfmxie+YFAWzTYVPQfrwjQEXRo+J8LY+50C1BU="
@@ -846,6 +849,9 @@ schema = 3
   [mod."gotest.tools/v3"]
     version = "v3.5.2"
     hash = "sha256-eAxnRrF2bQugeFYzGLOr+4sLyCPOpaTWpoZsIKNP1WE="
+  [mod."kernel.org/pub/linux/libs/security/libcap/psx"]
+    version = "v1.2.77"
+    hash = "sha256-oqlAG5XMkQ4toFSIbqGg+2biuw+IyNrogcMralnmvfA="
   [mod."lukechampine.com/blake3"]
     version = "v1.4.1"
     hash = "sha256-HaZGo9L44ptPsgxIhvKy3+0KZZm1+xt+cZC1rDQA9Yc="
