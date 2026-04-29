@@ -4,7 +4,7 @@ template:
 slug: federation
 title: we need a federation of forges
 subtitle: git is decentralized, but what of the rest?
-image: https://assets.tangled.network/home-page-self-host-light.svg
+image: https://assets.tangled.network/blog/federation/Light.png
 date: 2026-04-29
 authors:
   - name: Akshay
@@ -13,8 +13,8 @@ authors:
 ---
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://assets.tangled.network/home-page-self-host-dark.svg">
-  <img class="h-auto max-w-full" src="https://assets.tangled.network/home-page-self-host-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="https://assets.tangled.network/blog/federation/Dark.png">
+  <img class="h-auto max-w-full" src="https://assets.tangled.network/blog/federation/Light.png">
 </picture>
 
 GitHub seems to be crumbling the past couple of weeks.
