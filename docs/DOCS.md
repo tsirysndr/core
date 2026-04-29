@@ -603,6 +603,125 @@ printf "Hi from this knot!\n" > /home/git/motd
 Note that you should add a newline at the end if setting a non-empty message
 since the knot won't do this for you.
 
+## Secure Mode
+
+Secure Mode isolates each `git` subprocess to the repository it is
+operating on, using two mechanisms:
+
+- **Linux Landlock** restricts the filesystem paths the subprocess
+  can access -- it can only read/write its own repository and the
+  system directories it needs to run.
+- **UID isolation** runs each subprocess as a virtual UID assigned
+  to the repository owner, so that repositories belonging to
+  different owners are isolated from each other at the OS level
+  even if Landlock were somehow bypassed.
+
+Secure Mode requires:
+
+- Linux kernel >= 5.19 (Landlock V2). This is the minimum needed
+  for `git push` to work, because receive-pack's quarantine
+  migration uses cross-directory rename which requires the
+  Landlock `REFER` access right (added in V2). Kernels 5.13-5.18
+  support Landlock V1 and clones will work, but pushes will fail
+  with cross-device link errors. On kernels without any Landlock
+  support (< 5.13), the sandbox call is a no-op: UID isolation
+  still applies but no filesystem restriction is enforced.
+- `CAP_SETUID`, `CAP_SETGID`, and `CAP_CHOWN` available to the
+  knot process. The NixOS module grants these automatically; for
+  manual setups see the `setcap` step below.
+
+### NixOS
+
+Add `server.secureMode = true;` to your knot module configuration:
+
+```nix
+services.tangled.knot = {
+  server.secureMode = true;
+  # ... other options
+};
+```
+
+The NixOS module handles everything else automatically:
+
+- Grants the required capabilities to the knot service via
+  `AmbientCapabilities` in the systemd unit.
+- Installs a capability-bearing wrapper at
+  `/run/wrappers/bin/knot` via `security.wrappers`, so that
+  SSH-invoked git operations (pushes) also run under the correct
+  UID without requiring the service to run as root.
+- Runs `knot migrate-isolation` at service start to chown
+  existing repositories to their virtual UIDs.
+
+### Manual setup
+
+**Step 1.** Grant the required capabilities to the knot binary.
+This allows the knot process to switch to virtual UIDs at runtime
+without running as root. You will need to repeat this step
+whenever the binary is updated.
+
+```
+sudo setcap cap_setuid,cap_setgid,cap_chown+eip /usr/local/bin/knot
+```
+
+**Step 2.** Run the migration tool to assign virtual UIDs to all
+existing repositories and set their filesystem permissions. This
+must be run as root:
+
+```
+sudo knot migrate-isolation \
+  --git-dir /home/git \
+  --db /home/git/knotserver.db \
+  --internal-api 127.0.0.1:5444
+```
+
+You can re-run this at any time with `--force` to reapply
+permissions (e.g. after a manual repair or after updating the
+binary).
+
+**Step 2a.** Ensure the home directory is traversable by
+non-group users. Git subprocesses run as virtual UIDs that are
+not in the git group, and they need to resolve
+`$HOME/.config/git/config` to load the global config:
+
+```
+sudo chmod o+x /home/git
+```
+
+This adds only the execute bit, not read -- the virtual UIDs can
+traverse to known paths but cannot list directory contents.
+
+**Step 3.** Enable Secure Mode in your environment file:
+
+```
+KNOT_SERVER_SECURE_MODE=true
+```
+
+Or pass it as a flag:
+
+```
+knot server --secure-mode
+```
+
+**Step 4.** Regenerate the `AuthorizedKeysCommand` with the
+`-secure-mode` flag. This causes `knot keys` to emit guard
+command lines that include `-secure-mode`, so SSH pushes also
+get UID isolation:
+
+```
+sudo tee /etc/ssh/sshd_config.d/authorized_keys_command.conf <<EOF
+Match User git
+  AuthorizedKeysCommand /usr/local/bin/knot keys \
+    -o authorized-keys -secure-mode
+  AuthorizedKeysCommandUser nobody
+EOF
+```
+
+Reload `sshd` after making this change.
+
+> **Note:** the server will refuse to start in Secure Mode if any
+> repositories have not yet been isolation-migrated. Re-run
+> `migrate-isolation` if you see this error.
+
 ## Troubleshooting
 
 If you run your own knot, you may run into some of these
