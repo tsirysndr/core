@@ -178,6 +178,12 @@ in
             description = "Enable development mode (disables signature verification)";
           };
 
+          secureMode = mkOption {
+            type = types.bool;
+            default = false;
+            description = "Isolate git subprocesses with Landlock (requires kernel >= 5.13)";
+          };
+
           maxResponseKB = mkOption {
             type = types.int;
             default = 5120;
@@ -222,8 +228,22 @@ in
             -output authorized-keys \
             -internal-api "http://${cfg.server.internalListenAddr}" \
             -git-dir "${cfg.repo.scanPath}" \
-            -log-path /tmp/knotguard.log
+            -log-path /tmp/knotguard.log \
+            ${optionalString cfg.server.secureMode "-secure-mode -guard-path /run/wrappers/bin/knot"}
         '';
+      };
+
+      # In secure mode, the guard subcommand (run via sshd's forced command as
+      # the git user) needs CAP_SETUID to drop to the virtual UID before exec'ing
+      # git. security.wrappers installs a setcap'd wrapper around the binary.
+      security.wrappers = mkIf cfg.server.secureMode {
+        knot = {
+          source = "${cfg.package}/bin/knot";
+          owner = "root";
+          group = cfg.gitUser;
+          permissions = "u+rx,g+x";
+          capabilities = "cap_setuid,cap_setgid,cap_chown+eip";
+        };
       };
 
       systemd.services.knot = {
@@ -243,8 +263,6 @@ in
             '';
         in ''
           mkdir -p "${cfg.repo.scanPath}"
-          chown -R ${cfg.gitUser}:${cfg.gitUser} "${cfg.repo.scanPath}"
-
           mkdir -p "${cfg.stateDir}/.config/git"
           cat > "${cfg.stateDir}/.config/git/config" << EOF
           [user]
@@ -255,46 +273,76 @@ in
           [uploadpack]
               allowFilter = true
               allowReachableSHA1InWant = true
+          [safe]
+              directory = *
           EOF
           ${setMotd}
-          chown -R ${cfg.gitUser}:${cfg.gitUser} "${cfg.stateDir}"
+          chown ${cfg.gitUser}:${cfg.gitUser} "${cfg.repo.scanPath}"
+          chown -R ${cfg.gitUser}:${cfg.gitUser} "${cfg.stateDir}/.config"
+          ${optionalString cfg.server.secureMode ''
+            # secure mode runs git subprocesses as virtual UIDs that are not in
+            # the git group. they need execute (traverse) permission on the
+            # state dir so they can resolve $HOME/.config/git/config; read
+            # permission is intentionally withheld so they can't list other
+            # repos by name.
+            chmod o+x "${cfg.stateDir}"
+          ''}
+          ${optionalString (cfg.motdFile != null || cfg.motd != null) "chown ${cfg.gitUser}:${cfg.gitUser} ${cfg.stateDir}/motd"}
+          ${optionalString cfg.server.secureMode ''
+            ${cfg.package}/bin/knot migrate-isolation \
+              --force \
+              --git-dir "${cfg.repo.scanPath}" \
+              --db "${cfg.server.dbPath}" \
+              --internal-api "${cfg.server.internalListenAddr}"
+            chown ${cfg.gitUser}:${cfg.gitUser} "${cfg.server.dbPath}"
+          ''}
         '';
 
-        serviceConfig = {
-          User = cfg.gitUser;
-          PermissionsStartOnly = true;
-          WorkingDirectory = cfg.stateDir;
-          Environment = [
-            "PATH=${lib.makeBinPath [pkgs.bash pkgs.git pkgs.coreutils]}:/run/current-system/sw/bin"
-            "KNOT_REPO_SCAN_PATH=${cfg.repo.scanPath}"
-            "KNOT_REPO_README=${concatStringsSep "," cfg.repo.readme}"
-            "KNOT_REPO_MAIN_BRANCH=${cfg.repo.mainBranch}"
-            "KNOT_GIT_USER_NAME=${cfg.git.userName}"
-            "KNOT_GIT_USER_EMAIL=${cfg.git.userEmail}"
-            "APPVIEW_ENDPOINT=${cfg.appviewEndpoint}"
-            "KNOT_SERVER_INTERNAL_LISTEN_ADDR=${cfg.server.internalListenAddr}"
-            "KNOT_SERVER_LISTEN_ADDR=${cfg.server.listenAddr}"
-            "KNOT_SERVER_DB_PATH=${cfg.server.dbPath}"
-            "KNOT_SERVER_HOSTNAME=${cfg.server.hostname}"
-            "KNOT_SERVER_PLC_URL=${cfg.server.plcUrl}"
-            "KNOT_SERVER_JETSTREAM_ENDPOINT=${cfg.server.jetstreamEndpoint}"
-            "KNOT_SERVER_OWNER=${cfg.server.owner}"
-            "KNOT_MIRRORS=${concatStringsSep "," cfg.knotmirrors}"
-            "KNOT_SERVER_LOG_DIDS=${
-              if cfg.server.logDids
-              then "true"
-              else "false"
-            }"
-            "KNOT_SERVER_DEV=${
-              if cfg.server.dev
-              then "true"
-              else "false"
-            }"
-            "KNOT_SERVER_MAX_RESPONSE_KB=${toString cfg.server.maxResponseKB}"
-          ];
-          ExecStart = "${cfg.package}/bin/knot server";
-          Restart = "always";
-        };
+        serviceConfig =
+          {
+            User = cfg.gitUser;
+            PermissionsStartOnly = true;
+            WorkingDirectory = cfg.stateDir;
+            Environment = [
+              "PATH=${lib.makeBinPath [pkgs.bash pkgs.git pkgs.coreutils]}:/run/current-system/sw/bin"
+              "KNOT_REPO_SCAN_PATH=${cfg.repo.scanPath}"
+              "KNOT_REPO_README=${concatStringsSep "," cfg.repo.readme}"
+              "KNOT_REPO_MAIN_BRANCH=${cfg.repo.mainBranch}"
+              "KNOT_GIT_USER_NAME=${cfg.git.userName}"
+              "KNOT_GIT_USER_EMAIL=${cfg.git.userEmail}"
+              "APPVIEW_ENDPOINT=${cfg.appviewEndpoint}"
+              "KNOT_SERVER_INTERNAL_LISTEN_ADDR=${cfg.server.internalListenAddr}"
+              "KNOT_SERVER_LISTEN_ADDR=${cfg.server.listenAddr}"
+              "KNOT_SERVER_DB_PATH=${cfg.server.dbPath}"
+              "KNOT_SERVER_HOSTNAME=${cfg.server.hostname}"
+              "KNOT_SERVER_PLC_URL=${cfg.server.plcUrl}"
+              "KNOT_SERVER_JETSTREAM_ENDPOINT=${cfg.server.jetstreamEndpoint}"
+              "KNOT_SERVER_OWNER=${cfg.server.owner}"
+              "KNOT_MIRRORS=${concatStringsSep "," cfg.knotmirrors}"
+              "KNOT_SERVER_LOG_DIDS=${
+                if cfg.server.logDids
+                then "true"
+                else "false"
+              }"
+              "KNOT_SERVER_DEV=${
+                if cfg.server.dev
+                then "true"
+                else "false"
+              }"
+              "KNOT_SERVER_MAX_RESPONSE_KB=${toString cfg.server.maxResponseKB}"
+              "KNOT_SERVER_SECURE_MODE=${
+                if cfg.server.secureMode
+                then "true"
+                else "false"
+              }"
+            ];
+            ExecStart = "${cfg.package}/bin/knot server";
+            Restart = "always";
+          }
+          // optionalAttrs cfg.server.secureMode {
+            AmbientCapabilities = ["CAP_CHOWN" "CAP_SETUID" "CAP_SETGID"];
+            CapabilityBoundingSet = ["CAP_CHOWN" "CAP_SETUID" "CAP_SETGID"];
+          };
       };
 
       networking.firewall.allowedTCPPorts = mkIf cfg.openFirewall [22];
