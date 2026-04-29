@@ -20,9 +20,7 @@
 {{ define "bodyClasses" }}!bg-white dark:!bg-gray-900{{ end }}
 
 {{ define "topbarLayout" }}
-<header class="max-w-screen-xl mx-auto w-full" style="z-index: 20;">
-  {{ template "layouts/fragments/topbar" . }}
-</header>
+  {{ template "blog/fragments/topbar" . }}
 {{ end }}
 
 {{ define "footerLayout" }}{{ template "blog/fragments/footer" . }}{{ end }}
@@ -33,10 +31,14 @@
 
     <header class="not-prose mb-4">
       {{ $authors := .Post.Meta.Authors }}
-      <p class="mb-1 text-sm text-gray-600 dark:text-gray-400">
-        {{ $date := .Post.ParsedDate }}
-        {{ $date | shortTimeFmt }}
-      </p>
+      <div class="flex items-center gap-2 mb-1 text-sm text-gray-600 dark:text-gray-400">
+        <a href="/" class="flex items-center gap-1 text-gray-600 dark:text-gray-400">{{ i "arrow-left" "size-4" }} all posts</a>
+        ·
+        <p>
+          {{ $date := .Post.ParsedDate }}
+          {{ $date | shortTimeFmt }}
+        </p>
+      </div class="flex items-center gap-2">
 
       <h1 class="mb-0 text-2xl font-bold dark:text-white">
         {{ .Post.Meta.Title }}

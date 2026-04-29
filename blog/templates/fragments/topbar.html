@@ -1,0 +1,21 @@
+{{ define "blog/fragments/topbar" }}
+  <header class="max-w-screen-xl mx-auto w-full" style="z-index: 20;">
+    <nav class="mx-auto space-x-4 px-6 py-2">
+      <div class="flex justify-between p-0 items-center">
+        <div id="left-items">
+          <a href="https://tangled.org" class="text-2xl no-underline hover:no-underline flex items-center gap-2">
+            {{ template "fragments/logotypeSmall" }}
+          </a>
+        </div>
+
+        <div id="right-items" class="flex items-center gap-4">
+          <a href="https://tangled.org/login">login</a>
+          <span class="text-gray-500 dark:text-gray-400">or</span>
+          <a href="https://tangled.org/signup" class="btn-create py-0 hover:no-underline hover:text-white flex items-center gap-2">
+            join now {{ i "arrow-right" "size-4" }}
+          </a>
+        </div>
+      </div>
+    </nav>
+  </header>
+{{ end }}
