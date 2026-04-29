@@ -41,6 +41,14 @@ func Command() *cli.Command {
 				Usage: "path to log file",
 				Value: "/home/git/log",
 			},
+			&cli.StringFlag{
+				Name:  "guard-path",
+				Usage: "path to the knot binary for the authorized_keys forced command (defaults to os.Executable)",
+			},
+			&cli.BoolFlag{
+				Name:  "secure-mode",
+				Usage: "emit -secure-mode in the authorized_keys forced command",
+			},
 		},
 	}
 }
@@ -53,10 +61,14 @@ func Run(ctx context.Context, cmd *cli.Command) error {
 	logPath := cmd.String("log-path")
 	output := cmd.String("output")
 
-	executablePath, err := os.Executable()
-	if err != nil {
-		l.Error("error getting path of executable", "error", err)
-		return err
+	executablePath := cmd.String("guard-path")
+	if executablePath == "" {
+		var err error
+		executablePath, err = os.Executable()
+		if err != nil {
+			l.Error("error getting path of executable", "error", err)
+			return err
+		}
 	}
 
 	resp, err := http.Get(internalApi + "/keys")
@@ -92,7 +104,7 @@ func Run(ctx context.Context, cmd *cli.Command) error {
 			return err
 		}
 	case "authorized-keys":
-		formatted := formatKeyData(executablePath, gitDir, logPath, internalApi, data)
+		formatted := formatKeyData(executablePath, gitDir, logPath, internalApi, cmd.Bool("secure-mode"), data)
 		_, err := os.Stdout.Write([]byte(formatted))
 		if err != nil {
 			l.Error("error writing to stdout", "error", err)
@@ -111,7 +123,11 @@ func Run(ctx context.Context, cmd *cli.Command) error {
 	return nil
 }
 
-func formatKeyData(executablePath, gitDir, logPath, endpoint string, data []map[string]any) string {
+func formatKeyData(executablePath, gitDir, logPath, endpoint string, secureMode bool, data []map[string]any) string {
+	secureFlag := ""
+	if secureMode {
+		secureFlag = " -secure-mode"
+	}
 	var result string
 	for _, entry := range data {
 		raw, _ := entry["key"].(string)
@@ -120,8 +136,8 @@ func formatKeyData(executablePath, gitDir, logPath, endpoint string, data []map[
 			continue
 		}
 		result += fmt.Sprintf(
-			`command="%s guard -git-dir %s -user %s -log-path %s -internal-api %s",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty %s`+"\n",
-			executablePath, gitDir, entry["did"], logPath, endpoint, ssh.MarshalAuthorizedKey(key))
+			`command="%s guard -git-dir %s -user %s -log-path %s -internal-api %s%s",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty %s`+"\n",
+			executablePath, gitDir, entry["did"], logPath, endpoint, secureFlag, ssh.MarshalAuthorizedKey(key))
 	}
 	return result
 }
