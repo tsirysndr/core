@@ -74,6 +74,10 @@ func Setup(config config) error {
 		}
 
 		userPath := filepath.Join(config.scanPath, did)
+		if _, err := os.Stat(userPath); errors.Is(err, fs.ErrPermission) {
+			slog.Warn("hook setup: skipping inaccessible repo", "path", userPath)
+			continue
+		}
 		if err := SetupRepo(config, userPath); err != nil {
 			if errors.Is(err, ErrNoGitRepo) {
 				slog.Warn("hook setup: skipping non-repo entry", "path", userPath, "err", err)
@@ -111,6 +115,12 @@ func SetupRepo(config config, path string) error {
 }
 
 func mkHook(config config, hookPath string) error {
+	// use the absolute path to the underlying binary rather than a bare
+	// `knot` lookup. on NixOS, bare `knot` resolves to /run/wrappers/bin/knot
+	// which has restrictive perms (only the git group can exec it), so hooks
+	// running as a virtual UID fail with EACCES. the underlying binary in
+	// /nix/store is world-readable. hooks are regenerated on every deploy
+	// so the store path stays fresh.
 	executablePath, err := os.Executable()
 	if err != nil {
 		return err
@@ -126,7 +136,11 @@ done
 %s hook -git-dir "$GIT_DIR" -user-did "$GIT_USER_DID" -user-handle "$GIT_USER_HANDLE" -internal-api "%s" "${push_options[@]}" post-receive
 	`, executablePath, config.internalApi)
 
-	return os.WriteFile(hookPath, []byte(hookContent), 0755)
+	if err := os.WriteFile(hookPath, []byte(hookContent), 0755); err != nil {
+		return err
+	}
+	// os.WriteFile doesn't change the mode on existing files; chmod explicitly.
+	return os.Chmod(hookPath, 0755)
 }
 
 func mkDelegate(path string) error {
@@ -148,5 +162,8 @@ for i in ${exitcodes}; do
 done
 	`)
 
-	return os.WriteFile(path, []byte(content), 0755)
+	if err := os.WriteFile(path, []byte(content), 0755); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0755)
 }
