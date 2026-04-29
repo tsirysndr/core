@@ -10,6 +10,7 @@ import (
 	"tangled.org/core/hook"
 	"tangled.org/core/keyfetch"
 	"tangled.org/core/knotserver"
+	"tangled.org/core/knotserver/sandbox/sandboxexec"
 	tlog "tangled.org/core/log"
 )
 
@@ -22,6 +23,8 @@ func main() {
 			knotserver.Command(),
 			keyfetch.Command(),
 			hook.Command(),
+			knotserver.MigrateIsolationCommand(),
+			sandboxexec.Command(),
 		},
 	}
 
