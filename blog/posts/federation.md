@@ -4,7 +4,7 @@ template:
 slug: federation
 title: we need a federation of forges
 subtitle: git is decentralized, but what of the rest?
-image: https://assets.tangled.network/blog/federation/Light.png
+image: https://assets.tangled.network/blog/federation/Light-OG.png
 date: 2026-04-29
 authors:
   - name: Akshay
