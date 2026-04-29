@@ -103,6 +103,7 @@ in
         };
         # This is fine because any and all ports that are forwarded to host are explicitly marked above, we don't need a separate guest firewall
         networking.firewall.enable = false;
+        services.timesyncd.enable = lib.mkForce true;
         time.timeZone = "Europe/London";
         services.getty.autologinUser = "root";
         environment.systemPackages = with pkgs; [curl vim git sqlite litecli postgresql_14];
@@ -110,6 +111,7 @@ in
           enable = true;
           motd = "Welcome to the development knot!\n";
           server = {
+            secureMode = false;
             owner = envVar "TANGLED_VM_KNOT_OWNER";
             hostname = envVarOr "TANGLED_VM_KNOT_HOST" "localhost:6444";
             plcUrl = plcUrl;
@@ -155,6 +157,7 @@ in
         };
         services.tangled.knotmirror = {
           enable = true;
+          knotSSRF = false;
           listenAddr = "0.0.0.0:7000";
           metricsListenAddr = "0.0.0.0:7100";
           adminListenAddr = "0.0.0.0:7200";
