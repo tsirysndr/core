@@ -11,9 +11,11 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/urfave/cli/v3"
+	"tangled.org/core/knotserver/sandbox"
 	"tangled.org/core/log"
 )
 
@@ -48,6 +50,10 @@ func Command() *cli.Command {
 				Usage: "path to message of the day file",
 				Value: "/home/git/motd",
 			},
+			&cli.BoolFlag{
+				Name:  "secure-mode",
+				Usage: "isolate git subprocesses to their own repository directory",
+			},
 		},
 	}
 }
@@ -60,6 +66,7 @@ func Run(ctx context.Context, cmd *cli.Command) error {
 	logPath := cmd.String("log-path")
 	endpoint := cmd.String("internal-api")
 	motdFile := cmd.String("motd-file")
+	secureMode := cmd.Bool("secure-mode")
 
 	logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -157,6 +164,27 @@ func Run(ctx context.Context, cmd *cli.Command) error {
 	gitCmd.Env = append(os.Environ(),
 		fmt.Sprintf("GIT_USER_DID=%s", incomingUser),
 	)
+
+	if secureMode {
+		sb, warn := sandbox.New(func(repoPath string) (uint32, uint32, error) {
+			return sandbox.LookupUIDForRepoPath(gitDir, repoPath)
+		})
+		if warn != "" {
+			l.Warn("secure-mode: sandbox degraded", "reason", warn)
+		} else {
+			l.Info("secure-mode: wrapping git command", "backend", sb.Name())
+		}
+		wrapped, wrapErr := sb.Wrap(fullPath, gitCmd)
+		if wrapErr != nil {
+			l.Error("sandbox wrap failed", "error", wrapErr)
+		} else {
+			gitCmd = wrapped
+		}
+	}
+
+	if gitCmd.SysProcAttr == nil {
+		gitCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	}
 
 	if err := gitCmd.Run(); err != nil {
 		l.Error("command failed", "error", err)
