@@ -62,6 +62,7 @@ func (h *Knot) InfoRefs(w http.ResponseWriter, r *http.Request) {
 		GitProtocol: r.Header.Get("Git-Protocol"),
 		Dir:         repoPath,
 		Stdout:      w,
+		Sandbox:     h.sandbox,
 	}
 
 	serviceName := r.URL.Query().Get("service")
@@ -119,6 +120,7 @@ func (h *Knot) UploadArchive(w http.ResponseWriter, r *http.Request) {
 		Dir:         repo,
 		Stdout:      w,
 		Stdin:       bodyReader,
+		Sandbox:     h.sandbox,
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -166,6 +168,7 @@ func (h *Knot) UploadPack(w http.ResponseWriter, r *http.Request) {
 		Dir:         repo,
 		Stdout:      w,
 		Stdin:       bodyReader,
+		Sandbox:     h.sandbox,
 	}
 
 	w.WriteHeader(http.StatusOK)

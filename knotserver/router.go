@@ -14,6 +14,7 @@ import (
 	"tangled.org/core/jetstream"
 	"tangled.org/core/knotserver/config"
 	"tangled.org/core/knotserver/db"
+	"tangled.org/core/knotserver/sandbox"
 	"tangled.org/core/knotserver/xrpc"
 	"tangled.org/core/log"
 	"tangled.org/core/notifier"
@@ -32,11 +33,12 @@ type Knot struct {
 	l        *slog.Logger
 	n        *notifier.Notifier
 	resolver *idresolver.Resolver
+	sandbox  sandbox.Backend
 	motd     []byte
 	motdMu   sync.RWMutex
 }
 
-func Setup(ctx context.Context, c *config.Config, db *db.DB, e *rbac.Enforcer, jc *jetstream.JetstreamClient, n *notifier.Notifier, resolver *idresolver.Resolver) (http.Handler, error) {
+func Setup(ctx context.Context, c *config.Config, db *db.DB, e *rbac.Enforcer, jc *jetstream.JetstreamClient, n *notifier.Notifier, resolver *idresolver.Resolver, sb sandbox.Backend) (http.Handler, error) {
 	h := Knot{
 		c:        c,
 		db:       db,
@@ -45,6 +47,7 @@ func Setup(ctx context.Context, c *config.Config, db *db.DB, e *rbac.Enforcer, j
 		jc:       jc,
 		n:        n,
 		resolver: resolver,
+		sandbox:  sb,
 		motd:     defaultMotd,
 	}
 
@@ -140,6 +143,7 @@ func (h *Knot) XrpcRouter() http.Handler {
 		Notifier:    h.n,
 		Resolver:    h.resolver,
 		ServiceAuth: serviceAuth,
+		Sandbox:     h.sandbox,
 	}
 
 	return xrpc.Router()

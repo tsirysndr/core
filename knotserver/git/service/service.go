@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+
+	"tangled.org/core/knotserver/sandbox"
 )
 
 // Mostly from charmbracelet/soft-serve and sosedoff/gitkit.
@@ -19,12 +21,25 @@ type ServiceCommand struct {
 	Dir         string
 	Stdin       io.Reader
 	Stdout      http.ResponseWriter
+	Sandbox     sandbox.Backend
 }
 
 func (c *ServiceCommand) RunService(cmd *exec.Cmd) error {
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Dir = c.Dir
 	cmd.Env = append(cmd.Env, fmt.Sprintf("GIT_PROTOCOL=%s", c.GitProtocol))
+
+	if c.Sandbox != nil {
+		var wrapErr error
+		cmd, wrapErr = c.Sandbox.Wrap(c.Dir, cmd)
+		if wrapErr != nil {
+			return fmt.Errorf("sandbox wrap: %w", wrapErr)
+		}
+	} else {
+		cmd.Dir = c.Dir
+	}
+
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	}
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -101,10 +116,6 @@ func (c *ServiceCommand) UploadArchive() error {
 		".",
 	}...)
 
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Env = append(cmd.Env, fmt.Sprintf("GIT_PROTOCOL=%s", c.GitProtocol))
-	cmd.Dir = c.Dir
-
 	return c.RunService(cmd)
 }
 
@@ -114,10 +125,6 @@ func (c *ServiceCommand) UploadPack() error {
 		"--stateless-rpc",
 		".",
 	}...)
-
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Env = append(cmd.Env, fmt.Sprintf("GIT_PROTOCOL=%s", c.GitProtocol))
-	cmd.Dir = c.Dir
 
 	return c.RunService(cmd)
 }

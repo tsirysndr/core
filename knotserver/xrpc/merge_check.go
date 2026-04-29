@@ -49,6 +49,9 @@ func (x *Xrpc) MergeCheck(w http.ResponseWriter, r *http.Request) {
 		fail(xrpcerr.GenericError(fmt.Errorf("failed to open repository: %w", err)))
 		return
 	}
+	if x.Sandbox != nil {
+		gr = gr.WithSandbox(x.Sandbox)
+	}
 
 	mo := git.MergeOptions{}
 	mo.CommitMessage = "merge check"

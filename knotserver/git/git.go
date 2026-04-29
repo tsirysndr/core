@@ -17,6 +17,7 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"tangled.org/core/knotserver/sandbox"
 )
 
 var (
@@ -28,9 +29,10 @@ var (
 )
 
 type GitRepo struct {
-	path string
-	r    *git.Repository
-	h    plumbing.Hash
+	path    string
+	r       *git.Repository
+	h       plumbing.Hash
+	sandbox sandbox.Backend
 }
 
 // infoWrapper wraps the property of a TreeEntry so it can export fs.FileInfo
@@ -75,6 +77,14 @@ func PlainOpen(path string) (*GitRepo, error) {
 		return nil, fmt.Errorf("opening %s: %w", path, err)
 	}
 	return &g, nil
+}
+
+// WithSandbox returns a copy of the GitRepo that uses the given sandbox
+// backend for all git subprocesses.
+func (g *GitRepo) WithSandbox(sb sandbox.Backend) *GitRepo {
+	cp := *g
+	cp.sandbox = sb
+	return &cp
 }
 
 func (g *GitRepo) Hash() plumbing.Hash {

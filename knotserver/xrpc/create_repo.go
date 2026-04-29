@@ -19,6 +19,7 @@ import (
 	"tangled.org/core/hook"
 	"tangled.org/core/knotserver/git"
 	"tangled.org/core/knotserver/repodid"
+	"tangled.org/core/knotserver/sandbox"
 	"tangled.org/core/rbac"
 	xrpcerr "tangled.org/core/xrpc/errors"
 )

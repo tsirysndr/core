@@ -64,6 +64,9 @@ func (x *Xrpc) Merge(w http.ResponseWriter, r *http.Request) {
 		fail(xrpcerr.GenericError(fmt.Errorf("failed to open repository: %w", err)))
 		return
 	}
+	if x.Sandbox != nil {
+		gr = gr.WithSandbox(x.Sandbox)
+	}
 
 	mo := git.MergeOptions{}
 	if data.AuthorName != nil {

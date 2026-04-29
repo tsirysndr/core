@@ -6,6 +6,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"syscall"
 )
 
 const (
@@ -19,7 +20,20 @@ func (g *GitRepo) runGitCmd(command string, extraArgs ...string) ([]byte, error)
 	args = append(args, extraArgs...)
 
 	cmd := exec.Command("git", args...)
-	cmd.Dir = g.path
+
+	if g.sandbox != nil {
+		var wrapErr error
+		cmd, wrapErr = g.sandbox.Wrap(g.path, cmd)
+		if wrapErr != nil {
+			return nil, fmt.Errorf("sandbox wrap: %w", wrapErr)
+		}
+	} else {
+		cmd.Dir = g.path
+	}
+
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	}
 
 	out, err := cmd.Output()
 	if err != nil {

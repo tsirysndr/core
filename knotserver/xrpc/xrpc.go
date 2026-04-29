@@ -17,6 +17,7 @@ import (
 	"tangled.org/core/jetstream"
 	"tangled.org/core/knotserver/config"
 	"tangled.org/core/knotserver/db"
+	"tangled.org/core/knotserver/sandbox"
 	"tangled.org/core/notifier"
 	"tangled.org/core/rbac"
 	xrpcerr "tangled.org/core/xrpc/errors"
@@ -32,6 +33,7 @@ type Xrpc struct {
 	Notifier    *notifier.Notifier
 	Resolver    *idresolver.Resolver
 	ServiceAuth *serviceauth.ServiceAuth
+	Sandbox     sandbox.Backend
 }
 
 func (x *Xrpc) Router() http.Handler {

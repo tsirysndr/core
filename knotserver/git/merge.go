@@ -108,8 +108,14 @@ func (e ErrMerge) Error() string {
 	return fmt.Sprintf("merge failed: %s", e.Message)
 }
 
+// createTemp creates a temporary patch file in the system temp directory.
 func createTemp(data string) (string, error) {
-	tmpFile, err := os.CreateTemp("", "git-patch-*.patch")
+	return createTempIn("", data)
+}
+
+// createTempIn creates a temporary patch file in dir (empty = system /tmp).
+func createTempIn(dir string, data string) (string, error) {
+	tmpFile, err := os.CreateTemp(dir, "git-patch-*.patch")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary patch file: %w", err)
 	}
@@ -150,13 +156,26 @@ func (g *GitRepo) cloneTemp(targetBranch string) (string, error) {
 
 func (g *GitRepo) applyPatch(patchData, patchFile string, opts MergeOptions) error {
 	var stderr bytes.Buffer
-	var cmd *exec.Cmd
+
+	// wrapCmd optionally sandboxes a command to g.path.
+	wrapCmd := func(cmd *exec.Cmd) (*exec.Cmd, error) {
+		if g.sandbox != nil {
+			return g.sandbox.Wrap(g.path, cmd)
+		}
+		cmd.Dir = g.path
+		return cmd, nil
+	}
 
 	// configure default git user before merge
-	exec.Command("git", "-C", g.path, "config", "user.name", opts.CommitterName).Run()
-	exec.Command("git", "-C", g.path, "config", "user.email", opts.CommitterEmail).Run()
-	exec.Command("git", "-C", g.path, "config", "advice.mergeConflict", "false").Run()
-	exec.Command("git", "-C", g.path, "config", "advice.amWorkDir", "false").Run()
+	for _, cfgArgs := range [][]string{
+		{"-C", g.path, "config", "user.name", opts.CommitterName},
+		{"-C", g.path, "config", "user.email", opts.CommitterEmail},
+		{"-C", g.path, "config", "advice.mergeConflict", "false"},
+		{"-C", g.path, "config", "advice.amWorkDir", "false"},
+	} {
+		cfgCmd, _ := wrapCmd(exec.Command("git", cfgArgs...))
+		cfgCmd.Run() //nolint:errcheck // best-effort config
+	}
 
 	// if patch is a format-patch, apply using 'git am'
 	if opts.FormatPatch {
@@ -164,13 +183,20 @@ func (g *GitRepo) applyPatch(patchData, patchFile string, opts MergeOptions) err
 	}
 
 	// else, apply using 'git apply' and commit it manually
-	applyCmd := exec.Command("git", "-C", g.path, "apply", patchFile)
+	applyCmd, err := wrapCmd(exec.Command("git", "-C", g.path, "apply", patchFile))
+	if err != nil {
+		return fmt.Errorf("sandbox wrap for git apply: %w", err)
+	}
 	applyCmd.Stderr = &stderr
 	if err := applyCmd.Run(); err != nil {
 		return fmt.Errorf("patch application failed: %s", stderr.String())
 	}
 
-	stageCmd := exec.Command("git", "-C", g.path, "add", ".")
+	stderr.Reset()
+	stageCmd, err := wrapCmd(exec.Command("git", "-C", g.path, "add", "."))
+	if err != nil {
+		return fmt.Errorf("sandbox wrap for git add: %w", err)
+	}
 	if err := stageCmd.Run(); err != nil {
 		return fmt.Errorf("failed to stage changes: %w", err)
 	}
@@ -192,8 +218,11 @@ func (g *GitRepo) applyPatch(patchData, patchFile string, opts MergeOptions) err
 		commitArgs = append(commitArgs, "-m", opts.CommitBody)
 	}
 
-	cmd = exec.Command("git", commitArgs...)
-
+	cmd, err := wrapCmd(exec.Command("git", commitArgs...))
+	if err != nil {
+		return fmt.Errorf("sandbox wrap for git commit: %w", err)
+	}
+	stderr.Reset()
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
@@ -231,13 +260,29 @@ func (g *GitRepo) applyMailbox(patchData string) error {
 }
 
 func (g *GitRepo) applySingleMailbox(singlePatch types.FormatPatch) (plumbing.Hash, error) {
-	tmpPatch, err := createTemp(singlePatch.Raw)
+	// when sandboxed, create the patch file inside g.path so it is
+	// within the bound directory and visible to the git subprocess.
+	patchDir := ""
+	if g.sandbox != nil {
+		patchDir = g.path
+	}
+	tmpPatch, err := createTempIn(patchDir, singlePatch.Raw)
 	if err != nil {
 		return plumbing.ZeroHash, fmt.Errorf("failed to create temporary patch file for singular mailbox patch: %w", err)
 	}
 
 	var stderr bytes.Buffer
-	cmd := exec.Command("git", "-C", g.path, "am", tmpPatch)
+	rawCmd := exec.Command("git", "-C", g.path, "am", tmpPatch)
+	var cmd *exec.Cmd
+	if g.sandbox != nil {
+		cmd, err = g.sandbox.Wrap(g.path, rawCmd)
+		if err != nil {
+			return plumbing.ZeroHash, fmt.Errorf("sandbox wrap for git am: %w", err)
+		}
+	} else {
+		rawCmd.Dir = g.path
+		cmd = rawCmd
+	}
 	cmd.Stderr = &stderr
 
 	head, err := g.r.Head()
@@ -327,15 +372,6 @@ func (g *GitRepo) MergeCheckWithOptions(patchData string, targetBranch string, m
 		return val
 	}
 
-	patchFile, err := createTemp(patchData)
-	if err != nil {
-		return &ErrMerge{
-			Message:    err.Error(),
-			OtherError: err,
-		}
-	}
-	defer os.Remove(patchFile)
-
 	tmpDir, err := g.cloneTemp(targetBranch)
 	if err != nil {
 		return &ErrMerge{
@@ -345,9 +381,27 @@ func (g *GitRepo) MergeCheckWithOptions(patchData string, targetBranch string, m
 	}
 	defer os.RemoveAll(tmpDir)
 
+	// when sandboxed, create the patch file inside tmpDir so it is
+	// visible to the git subprocess.
+	patchDir := ""
+	if g.sandbox != nil {
+		patchDir = tmpDir
+	}
+	patchFile, err := createTempIn(patchDir, patchData)
+	if err != nil {
+		return &ErrMerge{
+			Message:    err.Error(),
+			OtherError: err,
+		}
+	}
+	defer os.Remove(patchFile)
+
 	tmpRepo, err := PlainOpen(tmpDir)
 	if err != nil {
 		return err
+	}
+	if g.sandbox != nil {
+		tmpRepo = tmpRepo.WithSandbox(g.sandbox)
 	}
 
 	result := tmpRepo.applyPatch(patchData, patchFile, mo)
@@ -356,15 +410,6 @@ func (g *GitRepo) MergeCheckWithOptions(patchData string, targetBranch string, m
 }
 
 func (g *GitRepo) MergeWithOptions(patchData string, targetBranch string, opts MergeOptions) error {
-	patchFile, err := createTemp(patchData)
-	if err != nil {
-		return &ErrMerge{
-			Message:    err.Error(),
-			OtherError: err,
-		}
-	}
-	defer os.Remove(patchFile)
-
 	tmpDir, err := g.cloneTemp(targetBranch)
 	if err != nil {
 		return &ErrMerge{
@@ -374,9 +419,27 @@ func (g *GitRepo) MergeWithOptions(patchData string, targetBranch string, opts M
 	}
 	defer os.RemoveAll(tmpDir)
 
+	// when sandboxed, create the patch file inside tmpDir so it is
+	// visible to the git subprocess.
+	patchDir := ""
+	if g.sandbox != nil {
+		patchDir = tmpDir
+	}
+	patchFile, err := createTempIn(patchDir, patchData)
+	if err != nil {
+		return &ErrMerge{
+			Message:    err.Error(),
+			OtherError: err,
+		}
+	}
+	defer os.Remove(patchFile)
+
 	tmpRepo, err := PlainOpen(tmpDir)
 	if err != nil {
 		return err
+	}
+	if g.sandbox != nil {
+		tmpRepo = tmpRepo.WithSandbox(g.sandbox)
 	}
 
 	if err := tmpRepo.applyPatch(patchData, patchFile, opts); err != nil {
@@ -384,6 +447,18 @@ func (g *GitRepo) MergeWithOptions(patchData string, targetBranch string, opts M
 	}
 
 	pushCmd := exec.Command("git", "-C", tmpDir, "push")
+	if g.sandbox != nil {
+		// the push needs access to both tmpDir (source) and g.path (target bare repo).
+		pushCmd, err = g.sandbox.WrapMulti([]string{tmpDir, g.path}, pushCmd)
+		if err != nil {
+			return &ErrMerge{
+				Message:    "sandbox wrap for git push failed",
+				OtherError: err,
+			}
+		}
+	} else {
+		pushCmd.Dir = tmpDir
+	}
 	if err := pushCmd.Run(); err != nil {
 		return &ErrMerge{
 			Message:    "failed to push changes to bare repository",

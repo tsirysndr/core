@@ -5,15 +5,24 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"os"
 	"os/exec"
 	"path/filepath"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	knotconfig "tangled.org/core/knotserver/config"
+	"tangled.org/core/knotserver/sandbox"
 )
 
 func Fork(repoPath, source string, cfg *knotconfig.Config) error {
+	return ForkWithSandbox(repoPath, source, cfg, nil)
+}
+
+// ForkWithSandbox clones source into repoPath, optionally wrapping the
+// post-clone configure step in sb. The initial clone itself is not sandboxed
+// because the target directory doesn't exist yet when the ruleset is applied.
+func ForkWithSandbox(repoPath, source string, cfg *knotconfig.Config, sb sandbox.Backend) error {
 	u, err := url.Parse(source)
 	if err != nil {
 		return fmt.Errorf("failed to parse source URL: %w", err)
@@ -28,7 +37,20 @@ func Fork(repoPath, source string, cfg *knotconfig.Config) error {
 		return fmt.Errorf("failed to bare clone repository: %w", err)
 	}
 
+	// ensure repoPath exists before attempting to sandbox the configure step.
+	if _, statErr := os.Stat(repoPath); statErr != nil {
+		return fmt.Errorf("clone did not create %s: %w", repoPath, statErr)
+	}
+
 	configureCmd := exec.Command("git", "-C", repoPath, "config", "receive.hideRefs", "refs/hidden")
+	if sb != nil {
+		configureCmd, err = sb.Wrap(repoPath, configureCmd)
+		if err != nil {
+			return fmt.Errorf("sandbox wrap for git config: %w", err)
+		}
+	} else {
+		configureCmd.Dir = repoPath
+	}
 	if err := configureCmd.Run(); err != nil {
 		return fmt.Errorf("failed to configure hidden refs: %w", err)
 	}
