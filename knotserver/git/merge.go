@@ -256,9 +256,11 @@ func (g *GitRepo) applySingleMailbox(singlePatch types.FormatPatch) (plumbing.Ha
 		}
 	}
 
-	if err := g.Refresh(); err != nil {
+	refreshed, err := PlainOpen(g.path)
+	if err != nil {
 		return plumbing.ZeroHash, fmt.Errorf("failed to refresh repository state: %w", err)
 	}
+	*g = *refreshed
 
 	head, err = g.r.Head()
 	if err != nil {
