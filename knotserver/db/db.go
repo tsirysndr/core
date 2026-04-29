@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 	_ "github.com/mattn/go-sqlite3"
@@ -17,6 +18,10 @@ import (
 type DB struct {
 	db     *sql.DB
 	logger *slog.Logger
+
+	// uidAssignMu serialises GetOrAssignOwnerUID across goroutines so that
+	// concurrent callers don't race on the uid_counter read-modify-write.
+	uidAssignMu sync.Mutex
 }
 
 type DBTX interface {
@@ -193,14 +198,46 @@ func Setup(ctx context.Context, dbPath string) (*DB, error) {
 
 	if err := orm.RunMigration(conn, logger, "create-knot-members", func(tx *sql.Tx) error {
 		_, mErr := tx.ExecContext(ctx, `
-			create table if not exists knot_members (
-				id integer primary key autoincrement,
-				did text not null,
-				rkey text not null,
-				subject text not null,
-				created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-				unique (did, rkey)
+		create table if not exists knot_members (
+			id integer primary key autoincrement,
+			did text not null,
+			rkey text not null,
+			subject text not null,
+			created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+			unique (did, rkey)
+		);
+	`)
+		return mErr
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := orm.RunMigration(conn, logger, "add-isolated-at-to-repo-keys", func(tx *sql.Tx) error {
+		_, mErr := tx.ExecContext(ctx, `ALTER TABLE repo_keys ADD COLUMN isolated_at DATETIME`)
+		return mErr
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := orm.RunMigration(conn, logger, "add-owner-uid-tables", func(tx *sql.Tx) error {
+		_, mErr := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS owner_uid_assignments (
+				owner_did  TEXT PRIMARY KEY,
+				uid        INTEGER NOT NULL UNIQUE,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 			);
+
+			CREATE TABLE IF NOT EXISTS uid_counter (
+				next_uid INTEGER NOT NULL DEFAULT 100000
+			);
+		`)
+		if mErr != nil {
+			return mErr
+		}
+		// Seed the counter only if the table is empty.
+		_, mErr = tx.ExecContext(ctx, `
+			INSERT INTO uid_counter (next_uid)
+			SELECT 100000 WHERE NOT EXISTS (SELECT 1 FROM uid_counter)
 		`)
 		return mErr
 	}); err != nil {
