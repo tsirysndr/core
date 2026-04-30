@@ -2,17 +2,15 @@
   {{ $d := .def }}
   {{ $v := .val }}
   {{ $withPrefix := .withPrefix }}
+  {{ $baseFilterQuery := .baseFilterQuery }}
+  {{ $basePath := .basePath }}
 
   {{ $lhs := printf "%s" $d.Name }}
   {{ $rhs := "" }}
-  {{ $isDid := false }}
-  {{ $resolvedVal := "" }}
 
   {{ if not $d.ValueType.IsNull }}
-    {{ $isDid = $d.ValueType.IsDidFormat }}
-    {{ if $isDid }}
-      {{ $resolvedVal = resolve $v }}
-      {{ $v = $resolvedVal }}
+    {{ if $d.ValueType.IsDidFormat }}
+      {{ $v = resolve $v }}
     {{ end }}
 
     {{ if not $withPrefix }}
@@ -26,8 +24,16 @@
 
   {{ $chipClasses := "w-fit flex items-center gap-2 font-normal normal-case rounded py-1 px-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-inherit" }}
 
-  {{ if $isDid }}
-    <a href="/{{ $resolvedVal }}" class="{{ $chipClasses }} no-underline hover:underline">
+  {{ if $basePath }}
+    {{ $filterToken := printf "label:%s" $d.Name }}
+    {{ if not $d.ValueType.IsNull }}
+      {{ $filterToken = printf "%s:%s" $d.Name $v }}
+    {{ end }}
+    {{ $fullQuery := $filterToken }}
+    {{ if ne $baseFilterQuery "" }}
+      {{ $fullQuery = printf "%s %s" $baseFilterQuery $filterToken }}
+    {{ end }}
+    <a href="{{ $basePath }}?q={{ urlquery $fullQuery }}" class="{{ $chipClasses }}">
       {{ template "repo/fragments/colorBall" (dict "color" $d.GetColor) }}
       {{ printf "%s%s" $lhs $rhs }}
     </a>

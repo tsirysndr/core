@@ -1172,6 +1172,7 @@ type RepoIssuesParams struct {
 	Page               pagination.Page
 	FilterState        string
 	FilterQuery        string
+	BaseFilterQuery    string
 	VouchRelationships map[syntax.DID]*models.VouchRelationship
 }
 
@@ -1335,6 +1336,7 @@ type RepoPullsParams struct {
 	Active             string
 	FilterState        string
 	FilterQuery        string
+	BaseFilterQuery    string
 	Stacks             []models.Stack
 	Pipelines          map[string]models.Pipeline
 	LabelDefs          map[string]*models.LabelDefinition

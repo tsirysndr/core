@@ -71,7 +71,9 @@
           "RepoPrefix" .RepoInfo.FullName
           "LabelDefs" .LabelDefs
           "VouchRelationships" .VouchRelationships
-          ) }}
+          "BaseFilterQuery" $.BaseFilterQuery
+          "BasePath" (printf "/%s/issues" .RepoInfo.FullName))
+    }}
   </div>
   {{if gt .IssueCount .Page.Limit }}
     {{ template "fragments/pagination" (dict

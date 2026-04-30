@@ -111,7 +111,7 @@
                     {{ $state := $topPR.Labels }}
                     {{ range $k, $d := $.LabelDefs }}
                       {{ range $v, $s := $state.GetValSet $d.AtUri.String }}
-                        {{ template "labels/fragments/label" (dict "def" $d "val" $v "withPrefix" true) }}
+                        {{ template "labels/fragments/label" (dict "def" $d "val" $v "withPrefix" true "baseFilterQuery" $.BaseFilterQuery "basePath" (printf "/%s/pulls" $.RepoInfo.FullName)) }}
                       {{ end }}
                     {{ end }}
                 </div>

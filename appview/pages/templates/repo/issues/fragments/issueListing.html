@@ -46,7 +46,7 @@
         {{ $state := .Labels }}
         {{ range $k, $d := $.LabelDefs }}
           {{ range $v, $s := $state.GetValSet $d.AtUri.String }}
-            {{ template "labels/fragments/label" (dict "def" $d "val" $v "withPrefix" true) }}
+            {{ template "labels/fragments/label" (dict "def" $d "val" $v "withPrefix" true "baseFilterQuery" $.BaseFilterQuery "basePath" $.BasePath) }}
           {{ end }}
         {{ end }}
       </div>

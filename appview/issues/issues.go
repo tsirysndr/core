@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
@@ -1002,7 +1003,16 @@ func (rp *Issues) RepoIssues(w http.ResponseWriter, r *http.Request) {
 			l.Error("failed to fetch vouch relationships", "err", err)
 		}
 	}
-
+	baseFilterParts := make([]string, 0, len(query.Items()))
+	for _, item := range query.Items() {
+		if item.Kind == searchquery.KindTagValue {
+			if item.Key == "label" || !searchquery.KnownTags[item.Key] {
+				continue
+			}
+		}
+		baseFilterParts = append(baseFilterParts, item.Raw)
+	}
+	baseFilterQuery := strings.Join(baseFilterParts, " ")
 	rp.pages.RepoIssues(w, pages.RepoIssuesParams{
 		LoggedInUser:       rp.oauth.GetMultiAccountUser(r),
 		RepoInfo:           repoInfo,
@@ -1011,6 +1021,7 @@ func (rp *Issues) RepoIssues(w http.ResponseWriter, r *http.Request) {
 		LabelDefs:          defs,
 		FilterState:        filterState,
 		FilterQuery:        query.String(),
+		BaseFilterQuery:    baseFilterQuery,
 		Page:               page,
 		VouchRelationships: vouchRelationships,
 	})
