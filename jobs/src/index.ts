@@ -450,9 +450,7 @@ async function createLinearIssue(
 		'',
 		'## Cover letter',
 		'',
-		'```',
 		data.cover,
-		'```',
 	]
 		.filter((l): l is string => l !== null)
 		.join('\n');
