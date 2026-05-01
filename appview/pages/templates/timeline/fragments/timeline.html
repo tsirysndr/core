@@ -6,22 +6,21 @@
         </h3>
 
         <div class="flex flex-col gap-4">
-          {{ range $i, $e := .Timeline }}
+          {{ range $i, $g := .Timeline }}
             <div class="relative">
               {{ if ne $i 0 }}
                 <div class="absolute left-8 -top-4 w-px h-4 bg-gray-300 dark:bg-gray-600"></div>
               {{ end }}
-              {{ with $e }}
-                <div class="flex flex-col divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-sm">
-                  {{ if .Repo }}
-                    {{ template "timeline/fragments/repoEvent" (list $ .) }}
-                  {{ else if .RepoStar }}
-                    {{ template "timeline/fragments/starEvent" (list $ .) }}
-                  {{ else if .Follow }}
-                    {{ template "timeline/fragments/followEvent" (list $ .) }}
-                  {{ end }}
-                </div>
-              {{ end }}
+              {{ $primary := $g.Primary }}
+              <div class="flex flex-col divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-sm">
+                {{ if $primary.Repo }}
+                  {{ template "timeline/fragments/repoEvent" (list $ $g) }}
+                {{ else if $primary.RepoStar }}
+                  {{ template "timeline/fragments/starEvent" (list $ $g) }}
+                {{ else if $primary.Follow }}
+                  {{ template "timeline/fragments/followEvent" (list $ $g) }}
+                {{ end }}
+              </div>
             </div>
           {{ end }}
         </div>
@@ -30,7 +29,8 @@
 
 {{ define "timeline/fragments/repoEvent" }}
   {{ $root := index . 0 }}
-  {{ $event := index . 1 }}
+  {{ $group := index . 1 }}
+  {{ $event := $group.Primary }}
   {{ $repo := $event.Repo }}
   {{ $source := $event.Source }}
   {{ $userHandle := resolve $repo.Did }}
@@ -59,14 +59,21 @@
 
 {{ define "timeline/fragments/starEvent" }}
   {{ $root := index . 0 }}
-  {{ $event := index . 1 }}
+  {{ $group := index . 1 }}
+  {{ $event := $group.Primary }}
   {{ $star := $event.RepoStar }}
   {{ with $star }}
-    {{ $starrerHandle := resolve .Did }}
     {{ $repoOwnerHandle :=  resolve .Repo.Did }}
     <div class="pl-6 py-2 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 flex flex-wrap items-center gap-2 text-sm">
-        {{ template "user/fragments/picHandleLink" $starrerHandle }}
-        starred
+        {{ template "user/fragments/picHandleLink" .Did }}
+        {{ if $group.IsCollapsed }}
+          <span class="inline-flex items-center gap-1.5">
+            {{ template "timeline/fragments/othersBadge" $group }}
+            starred
+          </span>
+        {{ else }}
+          starred
+        {{ end }}
         <a href="/{{ $repoOwnerHandle }}/{{ .Repo.Name }}" class="no-underline hover:underline">
           {{ $repoOwnerHandle | truncateAt30 }}/{{ .Repo.Name }}
         </a>
@@ -80,21 +87,28 @@
 
 {{ define "timeline/fragments/followEvent" }}
   {{ $root := index . 0 }}
-  {{ $event := index . 1 }}
+  {{ $group := index . 1 }}
+  {{ $event := $group.Primary }}
   {{ $follow := $event.Follow }}
   {{ $profile := $event.Profile }}
   {{ $followStats := $event.FollowStats }}
   {{ $followStatus := $event.FollowStatus }}
 
-  {{ $userHandle :=  resolve $follow.UserDid }}
   {{ $subjectHandle :=  resolve $follow.SubjectDid }}
   <div class="pl-6 py-2 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 flex flex-wrap items-center gap-2 text-sm">
-      {{ template "user/fragments/picHandleLink" $userHandle }}
-      followed
+      {{ template "user/fragments/picHandleLink" $follow.UserDid }}
+      {{ if $group.IsCollapsed }}
+        <span class="inline-flex items-center gap-1.5">
+          {{ template "timeline/fragments/othersBadge" $group }}
+          followed
+        </span>
+      {{ else }}
+        followed
+      {{ end }}
       {{ template "user/fragments/picHandleLink" $subjectHandle }}
       <span class="text-gray-700 dark:text-gray-400 text-xs">{{ template "repo/fragments/time" $follow.FollowedAt }}</span>
   </div>
-  {{ template "user/fragments/followCard" 
+  {{ template "user/fragments/followCard"
       (dict
           "LoggedInUser" $root.LoggedInUser
           "UserDid" $follow.SubjectDid
@@ -102,4 +116,25 @@
           "FollowStatus" $followStatus
           "FollowersCount" $followStats.Followers
           "FollowingCount" $followStats.Following) }}
+{{ end }}
+
+{{ define "timeline/fragments/othersBadge" }}
+  {{ $group := . }}
+  <span class="relative group inline-flex items-center cursor-pointer" tabindex="0"
+   >and&nbsp;<span class="underline decoration-dotted decoration-gray-400">{{ $group.OthersCount }} other user{{ if ne $group.OthersCount 1 }}s{{ end }}</span
+    ><div class="absolute left-0 top-full pt-1 z-10 hidden group-hover:block group-focus-within:block">
+      <div class="min-w-48 max-w-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-lg p-2 cursor-default">
+        <ul class="flex flex-col gap-1">
+          {{ range $other := $group.Others }}
+            <li class="flex items-center gap-2 text-sm cursor-pointer">
+              {{ if $other.RepoStar }}
+                {{ template "user/fragments/picHandleLink" $other.RepoStar.Did }}
+              {{ else if $other.Follow }}
+                {{ template "user/fragments/picHandleLink" $other.Follow.UserDid }}
+              {{ end }}
+            </li>
+          {{ end }}
+        </ul>
+      </div>
+    </div></span>
 {{ end }}

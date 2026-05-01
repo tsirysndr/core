@@ -403,7 +403,7 @@ func (p *Pages) Brand(w io.Writer, params BrandParams) error {
 
 type TimelineParams struct {
 	LoggedInUser     *oauth.MultiAccountUser
-	Timeline         []models.TimelineEvent
+	Timeline         []models.TimelineGroup
 	Repos            []models.Repo
 	GfiLabel         *models.LabelDefinition
 	BlueskyPosts     []models.BskyPost

@@ -11,7 +11,7 @@ import (
 
 // TODO: this gathers heterogenous events from different sources and aggregates
 // them in code; if we did this entirely in sql, we could order and limit and paginate easily
-func MakeTimeline(e Execer, limit int, loggedInUserDid string, limitToUsersIsFollowing bool) ([]models.TimelineEvent, error) {
+func MakeTimeline(e Execer, limit int, loggedInUserDid string, limitToUsersIsFollowing bool) ([]models.TimelineGroup, error) {
 	var events []models.TimelineEvent
 
 	var userIsFollowing []string
@@ -27,17 +27,22 @@ func MakeTimeline(e Execer, limit int, loggedInUserDid string, limitToUsersIsFol
 		}
 	}
 
-	repos, err := getTimelineRepos(e, limit, loggedInUserDid, userIsFollowing)
+	// Fetch more events than we need to so that when we collapse each individual
+	// event into groups, we can still be relatively confident that we will have
+	// `limit` groups to fill the timeline with. Adjust multiplier as necessary.
+	fetchLimit := limit * 2
+
+	repos, err := getTimelineRepos(e, fetchLimit, loggedInUserDid, userIsFollowing)
 	if err != nil {
 		return nil, err
 	}
 
-	stars, err := getTimelineStars(e, limit, loggedInUserDid, userIsFollowing)
+	stars, err := getTimelineStars(e, fetchLimit, loggedInUserDid, userIsFollowing)
 	if err != nil {
 		return nil, err
 	}
 
-	follows, err := getTimelineFollows(e, limit, loggedInUserDid, userIsFollowing)
+	follows, err := getTimelineFollows(e, fetchLimit, loggedInUserDid, userIsFollowing)
 	if err != nil {
 		return nil, err
 	}
@@ -50,12 +55,45 @@ func MakeTimeline(e Execer, limit int, loggedInUserDid string, limitToUsersIsFol
 		return events[i].EventAt.After(events[j].EventAt)
 	})
 
-	// Limit the slice to 100 events
-	if len(events) > limit {
-		events = events[:limit]
+	groups := collapseTimeline(events)
+	if len(groups) > limit {
+		groups = groups[:limit]
 	}
+	return groups, nil
+}
 
-	return events, nil
+// collapseTimeline merges consecutive events that share the same operation
+// and target into one TimelineGroup (assumes events are sorted newest-first).
+func collapseTimeline(events []models.TimelineEvent) []models.TimelineGroup {
+	var groups []models.TimelineGroup
+	i := 0
+	for i < len(events) {
+		group := models.TimelineGroup{Primary: events[i]}
+		j := i + 1
+		for j < len(events) && canCollapse(events[i], events[j]) {
+			group.Others = append(group.Others, events[j])
+			j++
+		}
+		groups = append(groups, group)
+		i = j
+	}
+	return groups
+}
+
+// canCollapse reports whether two adjacent events in the timeline represent
+// the same operation on the same target (repo starred or user followed).
+func canCollapse(a, b models.TimelineEvent) bool {
+	switch {
+	case a.RepoStar != nil && b.RepoStar != nil:
+		if a.RepoStar.Repo == nil || b.RepoStar.Repo == nil {
+			return false
+		}
+		return a.RepoStar.Repo.RepoAt() == b.RepoStar.Repo.RepoAt()
+	case a.Follow != nil && b.Follow != nil:
+		return a.Follow.SubjectDid == b.Follow.SubjectDid
+	default:
+		return false
+	}
 }
 
 func fetchStarStatuses(e Execer, loggedInUserDid string, repos []models.Repo) (map[string]bool, error) {
