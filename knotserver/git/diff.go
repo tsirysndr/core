@@ -108,7 +108,8 @@ func (g *GitRepo) DiffTree(commit1, commit2 *object.Commit) (*types.DiffTree, er
 		return nil, err
 	}
 
-	diffs, _, err := gitdiff.Parse(strings.NewReader(patch.String()))
+	patchStr := patch.String()
+	diffs, _, err := gitdiff.Parse(strings.NewReader(patchStr))
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +117,7 @@ func (g *GitRepo) DiffTree(commit1, commit2 *object.Commit) (*types.DiffTree, er
 	return &types.DiffTree{
 		Rev1:  commit1.Hash.String(),
 		Rev2:  commit2.Hash.String(),
-		Patch: patch.String(),
+		Patch: patchStr,
 		Diff:  diffs,
 	}, nil
 }
