@@ -165,6 +165,7 @@ func (g *GitRepo) FileContentN(path string, cap int64) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer reader.Close()
 
 	buf := new(bytes.Buffer)
 	if _, err = buf.ReadFrom(io.LimitReader(reader, cap)); err != nil {
