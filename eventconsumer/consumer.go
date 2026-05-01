@@ -54,14 +54,21 @@ type Source interface {
 type Consumer struct {
 	wg         sync.WaitGroup
 	dialer     *websocket.Dialer
-	connMap    sync.Map
 	jobQueue   chan job
 	logger     *slog.Logger
 	randSource *rand.Rand
 
-	// rw lock over edits to ConsumerConfig
-	cfgMu sync.RWMutex
-	cfg   ConsumerConfig
+	// sourcesMu guards sources. It must only be held for short, non-blocking
+	// map operations; never across a blocking call (dial, read, close).
+	sourcesMu sync.Mutex
+	sources   map[Source]*sourceState
+
+	cfg ConsumerConfig
+}
+
+type sourceState struct {
+	cancel context.CancelFunc
+	conn   *websocket.Conn
 }
 
 type job struct {
@@ -97,6 +104,7 @@ func NewConsumer(cfg ConsumerConfig) *Consumer {
 		jobQueue:   make(chan job, cfg.QueueSize), // buffered job queue
 		logger:     cfg.Logger,
 		randSource: rand.New(rand.NewSource(time.Now().UnixNano())),
+		sources:    make(map[Source]*sourceState),
 	}
 }
 
@@ -111,34 +119,64 @@ func (c *Consumer) Start(ctx context.Context) {
 
 	// start streaming
 	for source := range c.cfg.Sources {
-		c.wg.Add(1)
-		go c.startConnectionLoop(ctx, source)
+		c.AddSource(ctx, source)
 	}
 }
 
 func (c *Consumer) Stop() {
-	c.connMap.Range(func(_, val any) bool {
-		if conn, ok := val.(*websocket.Conn); ok {
-			conn.Close()
+	// snapshot conns under lock so we don't hold sourcesMu across Close
+	c.sourcesMu.Lock()
+	conns := make([]*websocket.Conn, 0, len(c.sources))
+	for _, st := range c.sources {
+		if st.conn != nil {
+			conns = append(conns, st.conn)
 		}
-		return true
-	})
+	}
+	c.sourcesMu.Unlock()
+
+	for _, conn := range conns {
+		conn.Close()
+	}
+
 	c.wg.Wait()
 	close(c.jobQueue)
 }
 
 func (c *Consumer) AddSource(ctx context.Context, s Source) {
-	// we are already listening to this source
-	if _, ok := c.cfg.Sources[s]; ok {
+	c.sourcesMu.Lock()
+	if _, ok := c.sources[s]; ok {
+		c.sourcesMu.Unlock()
 		c.logger.Info("source already present", "source", s)
 		return
 	}
+	srcCtx, cancel := context.WithCancel(ctx)
+	c.sources[s] = &sourceState{cancel: cancel}
+	c.sourcesMu.Unlock()
 
-	c.cfgMu.Lock()
-	c.cfg.Sources[s] = struct{}{}
 	c.wg.Add(1)
-	go c.startConnectionLoop(ctx, s)
-	c.cfgMu.Unlock()
+	go c.startConnectionLoop(srcCtx, s)
+}
+
+func (c *Consumer) RemoveSource(s Source) {
+	c.sourcesMu.Lock()
+	st, ok := c.sources[s]
+	if !ok {
+		c.sourcesMu.Unlock()
+		c.logger.Info("source not present", "source", s)
+		return
+	}
+	delete(c.sources, s)
+	cancel := st.cancel
+	conn := st.conn
+	c.sourcesMu.Unlock()
+
+	// release lock before any potentially blocking call
+	if cancel != nil {
+		cancel()
+	}
+	if conn != nil {
+		conn.Close()
+	}
 }
 
 func (c *Consumer) worker(ctx context.Context) {
@@ -238,9 +276,31 @@ func (c *Consumer) runConnection(ctx context.Context, source Source) error {
 		return err
 	}
 
-	c.connMap.Store(source, conn)
-	defer conn.Close()
-	defer c.connMap.Delete(source)
+	// Register the conn. If the source was removed (or our ctx cancelled)
+	// while we were dialing, drop this conn instead of installing it.
+	c.sourcesMu.Lock()
+	st, ok := c.sources[source]
+	if !ok || ctx.Err() != nil {
+		c.sourcesMu.Unlock()
+		conn.Close()
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return nil
+	}
+	st.conn = conn
+	c.sourcesMu.Unlock()
+
+	defer func() {
+		// Clear the conn from state, but only if it's still our conn (a
+		// concurrent RemoveSource may have already done it).
+		c.sourcesMu.Lock()
+		if st, ok := c.sources[source]; ok && st.conn == conn {
+			st.conn = nil
+		}
+		c.sourcesMu.Unlock()
+		conn.Close()
+	}()
 
 	c.logger.Info("connected", "source", source)
 
