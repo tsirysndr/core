@@ -145,7 +145,8 @@ func (g *GitRepo) formatSinglePatch(commit plumbing.Hash, extraArgs ...string) (
 		return "", nil, err
 	}
 
-	formatPatch, err := patchutil.ExtractPatches(stdout.String())
+	raw := stdout.String()
+	formatPatch, err := patchutil.ExtractPatches(raw)
 	if err != nil {
 		return "", nil, err
 	}
@@ -154,7 +155,7 @@ func (g *GitRepo) formatSinglePatch(commit plumbing.Hash, extraArgs ...string) (
 		return "", nil, fmt.Errorf("running format-patch on single commit produced more than on patch")
 	}
 
-	return stdout.String(), &formatPatch[0], nil
+	return raw, &formatPatch[0], nil
 }
 
 func (g *GitRepo) ResolveRevision(revStr string) (*object.Commit, error) {
