@@ -73,6 +73,10 @@ type CamoConfig struct {
 	SharedSecret string `env:"SHARED_SECRET"`
 }
 
+func (c *CamoConfig) Enabled() bool {
+	return c.SharedSecret != ""
+}
+
 type AvatarConfig struct {
 	Host         string `env:"HOST, default=https://avatar.tangled.sh"`
 	SharedSecret string `env:"SHARED_SECRET"`

@@ -25,7 +25,6 @@ import (
 	"go.abhg.dev/goldmark/mermaid"
 	htmlparse "golang.org/x/net/html"
 
-	"tangled.org/core/api/tangled"
 	textension "tangled.org/core/appview/pages/markup/extension"
 	"tangled.org/core/appview/pages/repoinfo"
 )
@@ -177,6 +176,8 @@ func visitNode(ctx *RenderContext, node *htmlparse.Node) {
 	switch node.Type {
 	case htmlparse.ElementNode:
 		switch node.Data {
+		case "a":
+			// TODO: transform `./` or `/` links to tree link
 		case "img", "source":
 			for i, attr := range node.Attr {
 				if attr.Key != "src" {
@@ -185,8 +186,8 @@ func visitNode(ctx *RenderContext, node *htmlparse.Node) {
 
 				camoUrl, _ := url.Parse(ctx.CamoUrl)
 				dstUrl, _ := url.Parse(attr.Val)
-				if dstUrl.Host != camoUrl.Host {
-					attr.Val = ctx.imageFromKnotTransformer(attr.Val)
+				if camoUrl != nil && dstUrl != nil && dstUrl.Host != camoUrl.Host {
+					attr.Val = ctx.imageToRawTransformer(attr.Val)
 					attr.Val = ctx.camoImageLinkTransformer(attr.Val)
 					node.Attr[i] = attr
 				}
@@ -224,18 +225,13 @@ func (a *MarkdownTransformer) Transform(node *ast.Document, reader text.Reader, 
 			case *ast.Heading:
 				a.rctx.anchorHeadingTransformer(n)
 			case *ast.Link:
+				// TODO: run this on HTML transformation instead
 				a.rctx.relativeLinkTransformer(n)
-			case *ast.Image:
-				a.rctx.imageFromKnotAstTransformer(n)
-				a.rctx.camoImageLinkAstTransformer(n)
 			}
 		case RendererTypeDefault:
 			switch n := n.(type) {
 			case *ast.Heading:
 				a.rctx.anchorHeadingTransformer(n)
-			case *ast.Image:
-				a.rctx.imageFromKnotAstTransformer(n)
-				a.rctx.camoImageLinkAstTransformer(n)
 			}
 		}
 
@@ -257,36 +253,15 @@ func (rctx *RenderContext) relativeLinkTransformer(link *ast.Link) {
 	link.Destination = []byte(newPath)
 }
 
-func (rctx *RenderContext) imageFromKnotTransformer(dst string) string {
+func (rctx *RenderContext) imageToRawTransformer(dst string) string {
 	if isAbsoluteUrl(dst) {
 		return dst
 	}
 
-	scheme := "https"
-	if rctx.IsDev {
-		scheme = "http"
-	}
-
 	actualPath := rctx.actualPath(dst)
 
-	repoName := fmt.Sprintf("%s/%s", rctx.RepoInfo.OwnerDid, rctx.RepoInfo.Name)
-
-	query := fmt.Sprintf("repo=%s&ref=%s&path=%s&raw=true",
-		url.QueryEscape(repoName), url.QueryEscape(rctx.RepoInfo.Ref), actualPath)
-
-	parsedURL := &url.URL{
-		Scheme:   scheme,
-		Host:     rctx.Knot,
-		Path:     path.Join("/xrpc", tangled.RepoBlobNSID),
-		RawQuery: query,
-	}
-	newPath := parsedURL.String()
-	return newPath
-}
-
-func (rctx *RenderContext) imageFromKnotAstTransformer(img *ast.Image) {
-	dst := string(img.Destination)
-	img.Destination = []byte(rctx.imageFromKnotTransformer(dst))
+	newDest := path.Join("/", rctx.RepoInfo.FullName(), "raw", rctx.RepoInfo.Ref, actualPath)
+	return newDest
 }
 
 func (rctx *RenderContext) anchorHeadingTransformer(h *ast.Heading) {

@@ -55,6 +55,7 @@ func (x *Xrpc) Router() http.Handler {
 	r.Get("/"+tangled.GitTempListCommitsNSID, x.ListCommits)
 	r.Get("/"+tangled.GitTempListLanguagesNSID, x.ListLanguages)
 	r.Get("/"+tangled.GitTempListTagsNSID, x.ListTags)
+	r.Get("/"+tangled.RepoBlobNSID, x.RepoBlob)
 	r.Post("/"+tangled.SyncRequestCrawlNSID, x.RequestCrawl)
 
 	return r

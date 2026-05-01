@@ -144,6 +144,7 @@ type BlobView struct {
 	HasTextView     bool // can show as code/text
 	HasRenderedView bool // can show rendered (markup/image/video/submodule)
 	HasRawView      bool // can download raw (everything except submodule)
+	FileTooLarge    bool // file too large (ignored for image files)
 
 	// current display mode
 	ShowingRendered bool // currently in rendered mode

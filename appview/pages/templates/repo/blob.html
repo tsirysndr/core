@@ -107,6 +107,10 @@
           <div id="blob-contents" class="whitespace-pre peer-target:bg-yellow-200 dark:peer-target:bg-yellow-900">{{ code .BlobView.Contents .Path | escapeHtml }}</div>
         {{ end }}
       </div>
+    {{ else if .BlobView.FileTooLarge }}
+      <p class="text-center text-gray-400 dark:text-gray-500">
+        This file is too large to render. <a href="/{{ .RepoInfo.FullName }}/raw/{{ pathEscape .Ref }}/{{ .Path }}">View raw.</a>.
+      </p>
     {{ else if .BlobView.ContentType.IsMarkup }}
       <div class="overflow-auto relative {{ $wrapContentClasses }}">
         {{ if .BlobView.ShowingRendered }}

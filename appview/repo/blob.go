@@ -51,15 +51,8 @@ func (rp *Repo) Blob(w http.ResponseWriter, r *http.Request) {
 	filePath := chi.URLParam(r, "*")
 	filePath, _ = url.PathUnescape(filePath)
 
-	scheme := "http"
-	if !rp.config.Core.Dev {
-		scheme = "https"
-	}
-	host := fmt.Sprintf("%s://%s", scheme, f.Knot)
-	xrpcc := &indigoxrpc.Client{
-		Host: host,
-	}
-	resp, err := tangled.RepoBlob(r.Context(), xrpcc, filePath, false, ref, f.RepoIdentifier())
+	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+	resp, err := tangled.RepoBlob(r.Context(), xrpcc, filePath, false, ref, f.RepoAt().String())
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		l.Error("failed to call XRPC repo.blob", "xrpcerr", xrpcerr, "err", err)
 		rp.pages.Error503(w)
@@ -135,23 +128,8 @@ func (rp *Repo) RepoBlobRaw(w http.ResponseWriter, r *http.Request) {
 	filePath := chi.URLParam(r, "*")
 	filePath, _ = url.PathUnescape(filePath)
 
-	scheme := "http"
-	if !rp.config.Core.Dev {
-		scheme = "https"
-	}
-	repo := f.RepoIdentifier()
-	baseURL := &url.URL{
-		Scheme: scheme,
-		Host:   f.Knot,
-		Path:   "/xrpc/sh.tangled.repo.blob",
-	}
-	query := baseURL.Query()
-	query.Set("repo", repo)
-	query.Set("ref", ref)
-	query.Set("path", filePath)
-	query.Set("raw", "true")
-	baseURL.RawQuery = query.Encode()
-	blobURL := baseURL.String()
+	blobURL := generateBlobURL(rp.config, f, ref, filePath)
+
 	req, err := http.NewRequest("GET", blobURL, nil)
 	if err != nil {
 		l.Error("failed to create request", "err", err)
@@ -187,12 +165,6 @@ func (rp *Repo) RepoBlobRaw(w http.ResponseWriter, r *http.Request) {
 	}
 
 	contentType := resp.Header.Get("Content-Type")
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		l.Error("error reading response body from knotserver", "err", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
 
 	// Normalize to bare media type before classification; strips parameters
 	// (e.g. "; charset=utf-8") and prevents bypass attempts like
@@ -208,14 +180,18 @@ func (rp *Repo) RepoBlobRaw(w http.ResponseWriter, r *http.Request) {
 		// Serve all textual content as plain text so the browser never
 		// interprets knot-supplied markup or scripts.
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.Write(body)
-	case safeBinaryMIMEType(mediaType):
+	case safeBinaryMIMEType(mediaType) || contentType == "application/octet-stream":
 		// Use the normalized type, never the raw knot-supplied string.
 		w.Header().Set("Content-Type", mediaType)
-		w.Write(body)
 	default:
 		w.WriteHeader(http.StatusUnsupportedMediaType)
 		w.Write([]byte("unsupported content type"))
+		return
+	}
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		l.Error("error streaming knotmirror response", "err", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -241,7 +217,7 @@ func NewBlobView(resp *tangled.RepoBlob_Output, config *config.Config, repo *mod
 	}
 
 	// Determine if binary
-	if resp.IsBinary != nil && *resp.IsBinary {
+	if (resp.IsBinary != nil && *resp.IsBinary) || (resp.FileTooLarge != nil && *resp.FileTooLarge) {
 		view.ContentSrc = generateBlobURL(config, repo, ref, filePath)
 		ext := strings.ToLower(filepath.Ext(resp.Path))
 
@@ -295,26 +271,15 @@ func NewBlobView(resp *tangled.RepoBlob_Output, config *config.Config, repo *mod
 }
 
 func generateBlobURL(config *config.Config, repo *models.Repo, ref, filePath string) string {
-	scheme := "http"
-	if !config.Core.Dev {
-		scheme = "https"
-	}
-
-	repoName := repo.RepoIdentifier()
-	baseURL := &url.URL{
-		Scheme: scheme,
-		Host:   repo.Knot,
-		Path:   "/xrpc/sh.tangled.repo.blob",
-	}
-	query := baseURL.Query()
-	query.Set("repo", repoName)
+	query := url.Values{}
+	query.Set("repo", string(repo.RepoAt()))
 	query.Set("ref", ref)
 	query.Set("path", filePath)
 	query.Set("raw", "true")
-	baseURL.RawQuery = query.Encode()
-	blobURL := baseURL.String()
 
-	if !config.Core.Dev {
+	blobURL := fmt.Sprintf("%s/xrpc/%s?%s", config.KnotMirror.Url, tangled.GitTempGetBlobNSID, query.Encode())
+
+	if config.Camo.Enabled() {
 		return markup.GenerateCamoURL(config.Camo.Host, config.Camo.SharedSecret, blobURL)
 	}
 	return blobURL

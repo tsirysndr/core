@@ -30,7 +30,8 @@ type RepoBlob_Output struct {
 	// content: File content (base64 encoded for binary files)
 	Content *string `json:"content,omitempty" cborgen:"content,omitempty"`
 	// encoding: Content encoding
-	Encoding *string `json:"encoding,omitempty" cborgen:"encoding,omitempty"`
+	Encoding     *string `json:"encoding,omitempty" cborgen:"encoding,omitempty"`
+	FileTooLarge *bool   `json:"fileTooLarge,omitempty" cborgen:"fileTooLarge,omitempty"`
 	// isBinary: Whether the file is binary
 	IsBinary   *bool                `json:"isBinary,omitempty" cborgen:"isBinary,omitempty"`
 	LastCommit *RepoBlob_LastCommit `json:"lastCommit,omitempty" cborgen:"lastCommit,omitempty"`
