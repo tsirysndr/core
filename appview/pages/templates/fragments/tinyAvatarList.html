@@ -7,7 +7,7 @@
     {{ range $i, $p := $ps }}
       {{ $zIdx := printf "z-%d0" (sub 5 $i) }}
       {{ $classes = printf "%s %s" $zIdx $classes }}
-      {{ template "user/fragments/picLink" (list . $classes ) }}
+      {{ template "user/fragments/picLink" (list (printf "%s" .) $classes ) }}
     {{ end }}
 
     {{ if gt (len $all) 5 }}
