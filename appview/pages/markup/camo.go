@@ -5,8 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-
-	"github.com/yuin/goldmark/ast"
 )
 
 func GenerateCamoURL(baseURL, secret, imageURL string) string {
@@ -18,19 +16,9 @@ func GenerateCamoURL(baseURL, secret, imageURL string) string {
 }
 
 func (rctx *RenderContext) camoImageLinkTransformer(dst string) string {
-	// don't camo on dev
-	if rctx.IsDev {
-		return dst
-	}
-
 	if rctx.CamoUrl != "" && rctx.CamoSecret != "" {
 		return GenerateCamoURL(rctx.CamoUrl, rctx.CamoSecret, dst)
 	}
 
 	return dst
-}
-
-func (rctx *RenderContext) camoImageLinkAstTransformer(img *ast.Image) {
-	dst := string(img.Destination)
-	img.Destination = []byte(rctx.camoImageLinkTransformer(dst))
 }

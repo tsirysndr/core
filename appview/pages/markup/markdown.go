@@ -184,13 +184,17 @@ func visitNode(ctx *RenderContext, node *htmlparse.Node) {
 					continue
 				}
 
-				camoUrl, _ := url.Parse(ctx.CamoUrl)
-				dstUrl, _ := url.Parse(attr.Val)
-				if camoUrl != nil && dstUrl != nil && dstUrl.Host != camoUrl.Host {
+				if isAbsoluteUrl(attr.Val) {
+					// apply camo to external links
+					camoUrl, _ := url.Parse(ctx.CamoUrl)
+					dstUrl, _ := url.Parse(attr.Val)
+					if camoUrl != nil && dstUrl != nil && dstUrl.Host != ctx.Hostname && dstUrl.Host != camoUrl.Host {
+						attr.Val = ctx.camoImageLinkTransformer(attr.Val)
+					}
+				} else {
 					attr.Val = ctx.imageToRawTransformer(attr.Val)
-					attr.Val = ctx.camoImageLinkTransformer(attr.Val)
-					node.Attr[i] = attr
 				}
+				node.Attr[i] = attr
 			}
 		}
 

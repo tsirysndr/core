@@ -278,10 +278,6 @@ func generateBlobURL(config *config.Config, repo *models.Repo, ref, filePath str
 	query.Set("raw", "true")
 
 	blobURL := fmt.Sprintf("%s/xrpc/%s?%s", config.KnotMirror.Url, tangled.GitTempGetBlobNSID, query.Encode())
-
-	if config.Camo.Enabled() {
-		return markup.GenerateCamoURL(config.Camo.Host, config.Camo.SharedSecret, blobURL)
-	}
 	return blobURL
 }
 
