@@ -77,7 +77,7 @@ func (rp *Repo) DeleteBranch(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-		l.Error("Faield to delete branch", "xrpcerr", xrpcerr, "err", err)
+		l.Error("Failed to delete branch", "xrpcerr", xrpcerr, "err", err)
 		rp.pages.Notice(w, noticeId, fmt.Sprintf("Failed to delete branch: %s", xrpcerr))
 		return
 	}

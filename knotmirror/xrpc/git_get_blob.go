@@ -95,7 +95,7 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 
 	case strings.HasPrefix(mimeType, "text/") || isTextualMimeType(mimeType):
 		w.Header().Set("Cache-Control", "public, no-cache")
-		// seve all text content as text/plain
+		// serve all text content as text/plain
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
 	default:

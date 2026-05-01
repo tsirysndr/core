@@ -37,7 +37,7 @@
         {{ with .VouchRelationship }}
           {{ with .GetDirectVouch }}
               You {{if $isVouched}}vouched{{else}}denounced{{end}} {{ $userIdent }} {{ relTimeFmt .CreatedAt }}.
-              You can change your descision below.
+              You can change your decision below.
           {{ else }}
             Vouching builds a web-of-trust across Tangled. Vouch for users you
             have had positive interactions with. <a href="https://blog.tangled.org/vouching" class="inline-flex items-center gap-1">Read more {{ i "arrow-right" "size-3" }}</a>
