@@ -149,7 +149,7 @@ func (c *Commit) Payload() string {
 		for _, p := range c.ParentHashes {
 			fmt.Fprintf(&payload, "parent %s\n", p.String())
 		}
-	} else {
+	} else if c.Parent != "" {
 		// present for backwards compatibility
 		fmt.Fprintf(&payload, "parent %s\n", c.Parent)
 	}
