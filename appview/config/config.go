@@ -15,7 +15,7 @@ type CoreConfig struct {
 	DbPath                  string `env:"DB_PATH, default=appview.db"`
 	ListenAddr              string `env:"LISTEN_ADDR, default=0.0.0.0:3000"`
 	AppviewHost             string `env:"APPVIEW_HOST, default=tangled.org"`
-	AppviewName             string `env:"APPVIEW_Name, default=Tangled"`
+	AppviewName             string `env:"APPVIEW_NAME, default=Tangled"`
 	Dev                     bool   `env:"DEV, default=false"`
 	DisallowedNicknamesFile string `env:"DISALLOWED_NICKNAMES_FILE"`
 
