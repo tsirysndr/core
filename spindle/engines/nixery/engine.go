@@ -257,6 +257,9 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 		CapAdd:         []string{"CAP_DAC_OVERRIDE", "CAP_CHOWN", "CAP_FOWNER", "CAP_SETUID", "CAP_SETGID"},
 		SecurityOpt:    []string{"no-new-privileges"},
 		ExtraHosts:     []string{"host.docker.internal:host-gateway"},
+		Resources: container.Resources{
+			Memory: e.cfg.NixeryPipelines.MaxJobMemoryMB * 1024 * 1024,
+		},
 	}, nil, nil, "")
 	if err != nil {
 		fmt.Fprintf(

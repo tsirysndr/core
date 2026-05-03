@@ -39,6 +39,7 @@ type OpenBaoConfig struct {
 type NixeryPipelines struct {
 	Nixery          string `env:"NIXERY, default=nixery.tangled.sh"`
 	WorkflowTimeout string `env:"WORKFLOW_TIMEOUT, default=5m"`
+	MaxJobMemoryMB  int64  `env:"MAX_JOB_MEMORY_MB, default=6144"` // per-container memory limit in MiB (default 6 GiB)
 }
 
 type S3 struct {
