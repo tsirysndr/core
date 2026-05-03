@@ -136,7 +136,7 @@
   <div class="flex col-span-full">
     <!-- left panel -->
     <div id="files" class="w-0 hidden md:block overflow-hidden sticky top-12 max-h-screen overflow-y-auto pb-12">
-      <section class="overflow-x-auto text-sm px-6 py-2 border-b border-x border-gray-200 dark:border-gray-700 w-full mx-auto min-h-full rounded-b rounded-t-none bg-white dark:bg-gray-800 drop-shadow-sm">
+      <section class="overflow-x-auto text-sm px-6 py-2 border-b border-x border-gray-200 dark:border-gray-700 w-full mx-auto min-h-full rounded-b rounded-t-none bg-white dark:bg-gray-800 shadow-sm">
         {{ template "repo/fragments/fileTree" $diff.FileTree }}
       </section>
     </div>
@@ -172,14 +172,14 @@
   <div id="bottomSheetBackdrop" class="fixed inset-0 bg-black/50 md:hidden opacity-0 pointer-events-none transition-opacity duration-300 z-40"></div>
   <!-- right panel - bottom sheet on mobile, side panel on desktop -->
   <div id="subs" class="fixed bottom-0 left-0 right-0 z-50 w-full md:static md:z-auto md:max-h-screen md:sticky md:top-12 overflow-hidden">
-    <details open id="bottomSheet" class="rounded-t-2xl md:rounded-t drop-shadow-lg md:drop-shadow-none group/panel">
+    <details open id="bottomSheet" class="rounded-t-2xl md:rounded-t shadow-lg md:shadow-none group/panel">
       <summary class="
         flex gap-4 items-center justify-between
         rounded-t-2xl md:rounded-t cursor-pointer list-none p-4 md:h-12
         text-white md:text-black md:dark:text-white
         {{ $bgColor }}
         md:bg-white md:dark:bg-gray-800
-        drop-shadow-sm border-t md:border-x border-gray-200 dark:border-gray-700
+        shadow-sm border-t md:border-x border-gray-200 dark:border-gray-700
         md:pointer-events-none
         ">
         <h2 class="">History</h2>
@@ -488,7 +488,7 @@
 
 {{ define "mergeStatus" }}
   {{ if .Pull.State.IsClosed }}
-  <div class="bg-gray-50 dark:bg-gray-700 border border-black dark:border-gray-500 rounded drop-shadow-sm px-6 py-2 relative">
+  <div class="bg-gray-50 dark:bg-gray-700 border border-black dark:border-gray-500 rounded shadow-sm px-6 py-2 relative">
     <div class="flex items-center gap-2 text-black dark:text-white">
       {{ i "ban" "w-4 h-4" }}
       <span class="font-medium">closed without merging</span
@@ -496,7 +496,7 @@
     </div>
   </div>
   {{ else if .Pull.State.IsMerged }}
-  <div class="bg-purple-50 dark:bg-purple-900 border border-purple-500 rounded drop-shadow-sm px-6 py-2 relative">
+  <div class="bg-purple-50 dark:bg-purple-900 border border-purple-500 rounded shadow-sm px-6 py-2 relative">
     <div class="flex items-center gap-2 text-purple-500 dark:text-purple-300">
       {{ i "git-merge" "w-4 h-4" }}
       <span class="font-medium">pull request successfully merged</span
@@ -504,7 +504,7 @@
     </div>
   </div>
   {{ else if .Pull.State.IsAbandoned }}
-  <div class="bg-red-50 dark:bg-red-900 border border-red-500 rounded drop-shadow-sm px-6 py-2 relative">
+  <div class="bg-red-50 dark:bg-red-900 border border-red-500 rounded shadow-sm px-6 py-2 relative">
     <div class="flex items-center gap-2 text-red-500 dark:text-red-300">
       {{ i "git-pull-request-closed" "w-4 h-4" }}
       <span class="font-medium">This pull has been deleted (possibly by jj abandon or jj squash)</span>
@@ -515,7 +515,7 @@
 
 {{ define "resubmitStatus" }}
   {{ if .ResubmitCheck.Yes }}
-  <div class="bg-amber-50 dark:bg-amber-900 border border-amber-500 rounded drop-shadow-sm px-6 py-2 relative">
+  <div class="bg-amber-50 dark:bg-amber-900 border border-amber-500 rounded shadow-sm px-6 py-2 relative">
     <div class="flex items-center gap-2 text-amber-500 dark:text-amber-300">
       {{ i "triangle-alert" "w-4 h-4" }}
       <span class="font-medium">this branch has been updated, consider resubmitting</span>
@@ -652,7 +652,7 @@
 {{ end }}
 
 {{ define "loginPrompt" }}
-  <div class="bg-amber-50 dark:bg-amber-900 border border-amber-500 rounded drop-shadow-sm p-2 relative flex gap-2 items-center">
+  <div class="bg-amber-50 dark:bg-amber-900 border border-amber-500 rounded shadow-sm p-2 relative flex gap-2 items-center">
     <a href="/signup" class="btn-create py-0 hover:no-underline hover:text-white flex items-center gap-2">
       sign up
     </a>

@@ -1,7 +1,7 @@
 {{ define "repo/issues/fragments/issueListing" }}
   <div class="flex flex-col gap-2">
     {{ range .Issues }}
-    <div class="rounded drop-shadow-sm bg-white px-6 py-4 dark:bg-gray-800 dark:border-gray-700">
+    <div class="rounded shadow-sm bg-white px-6 py-4 dark:bg-gray-800 dark:border-gray-700">
       <div class="pb-2">
         <a
             href="/{{ $.RepoPrefix }}/issues/{{ .IssueId }}"
