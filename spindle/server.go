@@ -48,9 +48,10 @@ type Spindle struct {
 	cfg    *config.Config
 	ks     *eventconsumer.Consumer
 	res    *idresolver.Resolver
-	vault  secrets.Manager
-	motd   []byte
-	motdMu sync.RWMutex
+	vault       secrets.Manager
+	motd        []byte
+	motdMu      sync.RWMutex
+	workflowSem chan struct{}
 }
 
 // New creates a new Spindle server with the provided configuration and engines.
@@ -98,6 +99,9 @@ func New(ctx context.Context, cfg *config.Config, engines map[string]models.Engi
 	jq := queue.NewQueue(cfg.Server.QueueSize, cfg.Server.MaxJobCount)
 	logger.Info("initialized queue", "queueSize", cfg.Server.QueueSize, "numWorkers", cfg.Server.MaxJobCount)
 
+	workflowSem := make(chan struct{}, cfg.Server.MaxConcurrentWorkflows)
+	logger.Info("initialized workflow semaphore", "maxConcurrentWorkflows", cfg.Server.MaxConcurrentWorkflows)
+
 	collections := []string{
 		tangled.SpindleMemberNSID,
 		tangled.RepoNSID,
@@ -121,17 +125,18 @@ func New(ctx context.Context, cfg *config.Config, engines map[string]models.Engi
 	resolver := idresolver.DefaultResolver(cfg.Server.PlcUrl)
 
 	spindle := &Spindle{
-		jc:    jc,
-		e:     e,
-		db:    d,
-		l:     logger,
-		n:     &n,
-		engs:  engines,
-		jq:    jq,
-		cfg:   cfg,
-		res:   resolver,
-		vault: vault,
-		motd:  defaultMotd,
+		jc:          jc,
+		e:           e,
+		db:          d,
+		l:           logger,
+		n:           &n,
+		engs:        engines,
+		jq:          jq,
+		cfg:         cfg,
+		res:         resolver,
+		vault:       vault,
+		motd:        defaultMotd,
+		workflowSem: workflowSem,
 	}
 
 	err = e.AddSpindle(rbacDomain)
@@ -393,7 +398,7 @@ func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source,
 
 		ok := s.jq.Enqueue(queue.Job{
 			Run: func() error {
-				engine.StartWorkflows(log.SubLogger(s.l, "engine"), s.vault, s.cfg, s.db, s.n, ctx, &models.Pipeline{
+				engine.StartWorkflows(log.SubLogger(s.l, "engine"), s.vault, s.cfg, s.db, s.n, s.workflowSem, ctx, &models.Pipeline{
 					RepoOwner: tpl.TriggerMetadata.Repo.Did,
 					RepoName:  repoName,
 					Workflows: workflows,

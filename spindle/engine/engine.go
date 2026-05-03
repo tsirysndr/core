@@ -21,7 +21,7 @@ var (
 	ErrWorkflowFailed = errors.New("workflow failed")
 )
 
-func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, db *db.DB, n *notifier.Notifier, ctx context.Context, pipeline *models.Pipeline, pipelineId models.PipelineId) {
+func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, db *db.DB, n *notifier.Notifier, workflowSem chan struct{}, ctx context.Context, pipeline *models.Pipeline, pipelineId models.PipelineId) {
 	l.Info("starting all workflows in parallel", "pipeline", pipelineId)
 
 	// extract secrets
@@ -80,6 +80,10 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 					l.Error("failed to set workflow status to running", "wid", wid, "err", err)
 					return
 				}
+
+				// acquire semaphore slot before starting the container
+				workflowSem <- struct{}{}
+				defer func() { <-workflowSem }()
 
 				err = eng.SetupWorkflow(ctx, wid, &w, wfLogger)
 				if err != nil {

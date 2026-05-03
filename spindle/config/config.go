@@ -19,7 +19,8 @@ type Server struct {
 	Secrets           Secrets `env:",prefix=SECRETS_"`
 	LogDir            string  `env:"LOG_DIR, default=/var/log/spindle"`
 	QueueSize         int     `env:"QUEUE_SIZE, default=100"`
-	MaxJobCount       int     `env:"MAX_JOB_COUNT, default=2"` // max number of jobs that run at a time
+	MaxJobCount              int `env:"MAX_JOB_COUNT, default=2"`               // max number of pipelines that run at a time
+	MaxConcurrentWorkflows   int `env:"MAX_CONCURRENT_WORKFLOWS, default=8"`    // max number of workflow containers running at once (memory cap)
 }
 
 func (s Server) Did() syntax.DID {
