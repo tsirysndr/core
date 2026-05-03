@@ -195,6 +195,8 @@ func (s *State) StandardRouter(mw *middleware.Middleware) http.Handler {
 		r.Delete("/", s.React)
 	})
 
+	r.Get("/profile/popover", s.ProfilePopover)
+
 	r.Route("/profile", func(r chi.Router) {
 		r.Use(middleware.AuthMiddleware(s.oauth))
 		r.Get("/edit-bio", s.EditBioFragment)

@@ -768,6 +768,24 @@ func (p *Pages) FollowFragment(w io.Writer, params FollowFragmentParams) error {
 	return p.executePlain("user/fragments/follow-oob", w, params)
 }
 
+type ProfilePopoverParams struct {
+	LoggedInUser      *oauth.MultiAccountUser
+	UserDid           string
+	Profile           *models.Profile
+	FollowStatus      models.FollowStatus
+	VouchRelationship *models.VouchRelationship
+	Stats             ProfilePopoverStats
+}
+
+type ProfilePopoverStats struct {
+	FollowersCount int64
+	FollowingCount int64
+}
+
+func (p *Pages) ProfilePopoverFragment(w io.Writer, params ProfilePopoverParams) error {
+	return p.executePlain("user/fragments/profilePopover", w, params)
+}
+
 type EditBioParams struct {
 	LoggedInUser *oauth.MultiAccountUser
 	Profile      *models.Profile

@@ -905,6 +905,55 @@ func (s *State) updateProfile(profile *models.Profile, w http.ResponseWriter, r 
 	s.pages.HxRedirect(w, "/"+user.Did)
 }
 
+func (s *State) ProfilePopover(w http.ResponseWriter, r *http.Request) {
+	l := s.logger.With("handler", "ProfilePopover")
+
+	did := r.URL.Query().Get("did")
+	if did == "" {
+		l.Warn("missing did param")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	profile, err := db.GetProfile(s.db, did)
+	if err != nil {
+		l.Error("failed to get profile", "did", did, "err", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if profile == nil {
+		profile = &models.Profile{Did: did}
+	}
+
+	followStats, err := db.GetFollowerFollowingCount(s.db, did)
+	if err != nil {
+		l.Error("failed to get follower stats", "did", did, "err", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	loggedInUser := s.oauth.GetMultiAccountUser(r)
+	followStatus := models.IsNotFollowing
+	var vouchRelationship *models.VouchRelationship
+
+	if loggedInUser != nil {
+		followStatus = db.GetFollowStatus(s.db, loggedInUser.Did, did)
+		vouchRelationship, _ = db.GetVouchRelationship(s.db, syntax.DID(loggedInUser.Did), syntax.DID(did))
+	}
+
+	s.pages.ProfilePopoverFragment(w, pages.ProfilePopoverParams{
+		LoggedInUser:      loggedInUser,
+		UserDid:           did,
+		Profile:           profile,
+		FollowStatus:      followStatus,
+		VouchRelationship: vouchRelationship,
+		Stats: pages.ProfilePopoverStats{
+			FollowersCount: followStats.Followers,
+			FollowingCount: followStats.Following,
+		},
+	})
+}
+
 func (s *State) EditBioFragment(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "EditBioFragment")
 	user := s.oauth.GetMultiAccountUser(r)
