@@ -54,7 +54,7 @@ func Setup(ctx context.Context, c *config.Config, db *db.DB, e *rbac.Enforcer, j
 	}
 
 	// configure owner
-	if err = h.configureOwner(); err != nil {
+	if err = h.configureOwner(ctx); err != nil {
 		return nil, err
 	}
 	h.l.Info("owner set", "did", h.c.Server.Owner)
@@ -171,7 +171,7 @@ func (h *Knot) resolveDidRedirect(next http.Handler) http.Handler {
 	})
 }
 
-func (h *Knot) configureOwner() error {
+func (h *Knot) configureOwner(ctx context.Context) error {
 	cfgOwner := h.c.Server.Owner
 
 	rbacDomain := "thisserver"
@@ -210,6 +210,11 @@ func (h *Knot) configureOwner() error {
 	}
 	if err := h.e.AddKnotOwner(rbacDomain, cfgOwner); err != nil {
 		return fmt.Errorf("failed to add owner to RBAC: %w", err)
+	}
+
+	err = h.fetchAndAddKeys(ctx, cfgOwner)
+	if err != nil {
+		h.l.Error("fetching and adding owners public keys", "error", err, "did", cfgOwner)
 	}
 
 	return nil

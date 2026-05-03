@@ -8,11 +8,11 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
-	"strings"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/bluesky-social/indigo/xrpc"
+	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	jmodels "github.com/bluesky-social/jetstream/pkg/models"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/models"
@@ -450,41 +450,38 @@ func (h *Knot) processCollaborator(ctx context.Context, event *jmodels.Event) er
 func (h *Knot) fetchAndAddKeys(ctx context.Context, did string) error {
 	l := log.FromContext(ctx)
 
-	keysEndpoint, err := url.JoinPath(h.c.AppViewEndpoint, "keys", did)
+	id, err := h.resolver.Directory().LookupDID(ctx, syntax.DID(did))
 	if err != nil {
-		l.Error("error building endpoint url", "did", did, "error", err.Error())
-		return fmt.Errorf("error building endpoint url: %w", err)
+		return fmt.Errorf("lookup did to fetch keys: %w", err)
 	}
 
-	resp, err := http.Get(keysEndpoint)
-	if err != nil {
-		l.Error("error getting keys", "did", did, "error", err)
-		return fmt.Errorf("error getting keys: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		l.Info("no keys found for did", "did", did)
+	serviceEndpoint, ok := id.Services["atproto_pds"]
+	if !ok {
+		l.Warn("did identity did not contain atproto_pds service while adding their keys", "did", did)
 		return nil
 	}
 
-	plaintext, err := io.ReadAll(resp.Body)
+	xrpcc := indigoxrpc.Client{Host: serviceEndpoint.URL}
+	resp, err := comatproto.RepoListRecords(context.Background(), &xrpcc, tangled.PublicKeyNSID, "", 50, did, false)
 	if err != nil {
-		l.Error("error reading response body", "error", err)
-		return fmt.Errorf("error reading response body: %w", err)
+		return fmt.Errorf("fetching public keys for did: %w", err)
 	}
 
-	for key := range strings.SplitSeq(string(plaintext), "\n") {
-		if key == "" {
+	for _, record := range resp.Records {
+		if record == nil {
+			continue
+		}
+		key := record.Value.Val.(*tangled.PublicKey)
+		if key == nil {
 			continue
 		}
 		pk := db.PublicKey{
-			Did: did,
+			Did:       did,
+			PublicKey: *key,
 		}
-		pk.Key = key
-		if err := h.db.AddPublicKey(pk); err != nil {
-			l.Error("failed to add public key", "error", err)
-			return fmt.Errorf("failed to add public key: %w", err)
+		err = h.db.AddPublicKey(pk)
+		if err != nil {
+			return fmt.Errorf("adding public key to db: %w", err)
 		}
 	}
 	return nil
