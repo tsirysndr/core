@@ -56,6 +56,13 @@
                 document.head.appendChild(script);
               });
             </script>
+            <script>
+              window.addEventListener('scroll', function() {
+                document.querySelectorAll('[data-profile-popover]:not(.hidden)').forEach(function(p) {
+                  p.classList.add('hidden');
+                });
+              }, { passive: true });
+            </script>
             <title>{{ block "title" . }}{{ end }}</title>
             {{ block "extrameta" . }}{{ end }}
         </head>

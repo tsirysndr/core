@@ -8,10 +8,14 @@
   {{ end }}
   <div class="relative inline-block"
        onmouseenter="(function(el){
-         var r=el.getBoundingClientRect(),p=el.querySelector('[data-profile-popover]');
-         if(p){p.style.top=r.bottom+'px';p.style.left=r.left+'px';p.classList.remove('hidden');}
+         clearTimeout(el._pht);
+         el._pht = setTimeout(function(){
+           var r=el.getBoundingClientRect(),p=el.querySelector('[data-profile-popover]');
+           if(p){p.style.top=r.bottom+'px';p.style.left=r.left+'px';p.classList.remove('hidden');}
+         }, 500);
        })(this)"
        onmouseleave="(function(el){
+         clearTimeout(el._pht);
          var p=el.querySelector('[data-profile-popover]');
          if(!p)return;
          var modal=document.getElementById('vouch-modal-'+p.dataset.vouchModalId);
