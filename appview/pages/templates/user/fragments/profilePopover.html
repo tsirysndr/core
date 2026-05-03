@@ -1,0 +1,59 @@
+{{ define "user/fragments/profilePopover" }}
+{{ $handle := resolve .UserDid }}
+<div class="space-y-2 dark:text-white">
+
+  <div class="flex items-center flex-row flex-nowrap gap-2">
+    <a href="/{{ $handle }}">
+      <img
+        src="{{ tinyAvatar .UserDid }}"
+        alt=""
+        class="rounded-full border border-gray-300 dark:border-gray-700 size-10"
+      />
+    </a>
+    <div class="min-w-0">
+      <p title="{{ $handle }}" class="font-bold dark:text-white overflow-hidden text-ellipsis whitespace-nowrap">
+        <a href="/{{ $handle }}">{{ $handle }}</a>
+      </p>
+      {{ with .Profile }}
+        {{ if .Pronouns }}
+          <p class="text-gray-500 dark:text-gray-400">{{ .Pronouns }}</p>
+        {{ end }}
+      {{ end }}
+    </div>
+  </div>
+
+  <div class="text-sm space-y-2">
+    {{ with .Profile }}
+      {{ if .Description }}
+        <p class="line-clamp-3">{{ .Description }}</p>
+      {{ end }}
+    {{ end }}
+
+    <div class="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap max-w-full text-sm">
+      {{ i "users" "size-4" }}
+      <a href="/{{ $handle }}?tab=followers">{{ .Stats.FollowersCount }} followers</a>
+      <span class="select-none after:content-['·']"></span>
+      <a href="/{{ $handle }}?tab=following">{{ .Stats.FollowingCount }} following</a>
+    </div>
+
+    {{ if and .LoggedInUser (ne .FollowStatus.String "IsSelf") }}
+      <div class="flex items-center gap-2">
+        {{ template "user/fragments/follow" . }}
+        {{ template "user/fragments/vouchButton" . }}
+      </div>
+
+      {{ if .VouchRelationship }}
+        {{ if .VouchRelationship.IndirectVouches }}
+          {{ template "user/fragments/networkVouches" .VouchRelationship }}
+        {{ end }}
+      {{ end }}
+    {{ end }}
+  </div>
+
+</div>
+
+  {{/* render the vouch modal outside the popover content div so the popover api places it in the top layer correctly */}}
+  {{ if and .LoggedInUser (ne .FollowStatus.String "IsSelf") }}
+    {{ template "user/fragments/vouchPopover" . }}
+  {{ end }}
+{{ end }}

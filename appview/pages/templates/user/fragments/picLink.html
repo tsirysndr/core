@@ -6,8 +6,23 @@
   {{ if ge (len .) 3 }}
     {{ $vr = index . 2 }}
   {{ end }}
-  <div class="relative inline-block">
-    <a href="/{{ $handle }}" title="{{ $handle }}">
+  <div class="relative inline-block"
+       onmouseenter="(function(el){
+         var r=el.getBoundingClientRect(),p=el.querySelector('[data-profile-popover]');
+         if(p){p.style.top=r.bottom+'px';p.style.left=r.left+'px';p.classList.remove('hidden');}
+       })(this)"
+       onmouseleave="(function(el){
+         var p=el.querySelector('[data-profile-popover]');
+         if(!p)return;
+         var modal=document.getElementById('vouch-modal-'+p.dataset.vouchModalId);
+         if(modal&&modal.matches(':popover-open'))return;
+         p.classList.add('hidden');
+       })(this)">
+    <a href="/{{ $handle }}" title="{{ $handle }}"
+       hx-get="/profile/popover?did={{ $did }}"
+       hx-trigger="mouseenter once"
+       hx-target="next [data-profile-popover-content]"
+       hx-swap="innerHTML">
       <img
           src="{{ tinyAvatar $did }}"
           alt=""
@@ -32,12 +47,21 @@
             {{ template "fragments/icons/shield-indirect-vouch" "w-full h-full text-white dark:text-gray-900" }}
           {{ else if $vr.IsIndirectDenounce }}
             {{ template "fragments/icons/shield-indirect-denounce" "w-full h-full text-white dark:text-gray-900" }}
-          {{ else }}
-            {{ template "fragments/icons/shield-empty" "w-full h-full" }}
           {{ end }}
         </button>
       {{ end }}
     {{ end }}
+    <div data-profile-popover
+         data-vouch-modal-id="{{ normalizeForHtmlId $did }}"
+         class="hidden z-[9999] pt-1 w-72"
+         style="position:fixed;">
+      <div data-profile-popover-content
+           class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-sm p-3">
+        <div class="flex items-center justify-center py-4">
+          {{ i "loader-circle" "w-5 h-5 animate-spin text-gray-400" }}
+        </div>
+      </div>
+    </div>
   </div>
   {{ if $vr }}
     {{ if ne $did $vr.ViewerDid }}
