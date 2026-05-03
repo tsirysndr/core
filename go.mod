@@ -28,7 +28,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/gliderlabs/ssh v0.3.8
 	github.com/go-chi/chi/v5 v5.2.0
-	github.com/go-enry/go-enry/v2 v2.9.2
+	github.com/go-enry/go-enry/v2 v2.9.6
 	github.com/go-git/go-git/v5 v5.14.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/feeds v1.2.0
