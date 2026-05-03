@@ -11,20 +11,21 @@
 {{ end }}
 
 {{ define "vouchAnnouncement" }}
-  <div class="relative overflow-hidden border border-teal-300 dark:border-teal-600 bg-gradient-to-b from-teal-50 to-teal-100 dark:from-teal-900 dark:to-teal-800 rounded-sm p-6">
+  <div class="relative overflow-hidden border border-indigo-200 dark:border-indigo-700 bg-gradient-to-b from-white to-indigo-50 dark:from-indigo-950 dark:to-indigo-900 rounded-sm p-6">
+<div class="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(165,180,252,0.35),transparent_70%)] dark:bg-[radial-gradient(ellipse_at_bottom_left,rgba(99,102,241,0.2),transparent_70%)]"></div>
     <div class="relative z-10">
-      <p class="font-semibold text-teal-800 dark:text-teal-300 mb-1">Build a web of trust</p>
-      <p class="text-teal-700 dark:text-teal-400">
+      <p class="font-semibold text-indigo-800 dark:text-indigo-300 mb-1">Build a web of trust</p>
+      <p class="text-indigo-700 dark:text-indigo-400">
         Vouch for trustworthy users that make open-source a better place. Visit a user's
         profile to vouch for them.
       </p>
 
       <div class="mt-3 flex items-center justify-between">
-        <a class="mt-3 no-underline inline-flex items-center gap-1 text-sm font-medium text-teal-700 dark:text-teal-300 hover:text-teal-900 dark:hover:text-teal-100 hover:underline" href="https://blog.tangled.org/vouching">
+        <a class="mt-3 no-underline inline-flex items-center gap-1 text-sm font-medium text-indigo-700 dark:text-indigo-300 hover:text-indigo-900 dark:hover:text-indigo-100 hover:underline" href="https://blog.tangled.org/vouching">
           Read more
         </a>
         {{ if and .LoggedInUser .VouchSuggestions }}
-          <a class="md:hidden mt-3 no-underline inline-flex items-center gap-1 text-sm font-medium text-teal-700 dark:text-teal-300 hover:text-teal-900 dark:hover:text-teal-100 hover:underline" href="/{{ .LoggedInUser.Did }}?tab=vouches">
+          <a class="md:hidden mt-3 no-underline inline-flex items-center gap-1 text-sm font-medium text-indigo-700 dark:text-indigo-300 hover:text-indigo-900 dark:hover:text-indigo-100 hover:underline" href="/{{ .LoggedInUser.Did }}?tab=vouches">
             View suggestions {{ i "arrow-right" "size-3.5" }}
           </a>
         {{ end }}
@@ -32,7 +33,7 @@
 
     </div>
 
-    <div class="pointer-events-none absolute -bottom-8 -right-16 text-teal-200 dark:text-teal-700 opacity-60">
+    <div class="pointer-events-none absolute -bottom-8 -right-16 text-indigo-200 dark:text-indigo-700 opacity-60">
       {{ i "shield-plus" "size-48" }}
     </div>
   </div>
