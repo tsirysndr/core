@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"tangled.org/core/api/tangled"
@@ -16,6 +17,8 @@ import (
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-chi/chi/v5"
 )
+
+var shaPattern = regexp.MustCompile(`^[0-9a-f]{4,40}$`)
 
 func (rp *Repo) CompareNew(w http.ResponseWriter, r *http.Request) {
 	l := rp.logger.With("handler", "RepoCompareNew")
@@ -129,6 +132,11 @@ func (rp *Repo) Compare(w http.ResponseWriter, r *http.Request) {
 	if base == "" || head == "" {
 		l.Error("invalid comparison")
 		rp.pages.Error404(w)
+		return
+	}
+
+	if shaPattern.MatchString(base) || shaPattern.MatchString(head) {
+		http.Error(w, "comparing by commit SHA is not allowed, use a branch or tag name", http.StatusForbidden)
 		return
 	}
 
