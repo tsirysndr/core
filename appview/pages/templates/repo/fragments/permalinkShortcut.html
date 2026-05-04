@@ -3,6 +3,7 @@
     (() => {
       {{ if .LastCommitInfo }}
       const abortController = new AbortController();
+      const scriptEl = document.currentScript;
       document.addEventListener('keydown', (e) => {
         if(e.key === 'y' && !e.ctrlKey && !e.metaKey && !e.altKey) {
           if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -12,7 +13,9 @@
       }, {signal: abortController.signal});
 
       document.body.addEventListener('htmx:beforeCleanupElement', (e) => {
-        abortController.abort();
+        if(e.target === scriptEl) {
+          abortController.abort();
+        }
       }, {signal: abortController.signal});
       {{ end }}
     })();
