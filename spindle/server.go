@@ -38,16 +38,16 @@ const (
 )
 
 type Spindle struct {
-	jc     *jetstream.JetstreamClient
-	db     *db.DB
-	e      *rbac.Enforcer
-	l      *slog.Logger
-	n      *notifier.Notifier
-	engs   map[string]models.Engine
-	jq     *queue.Queue
-	cfg    *config.Config
-	ks     *eventconsumer.Consumer
-	res    *idresolver.Resolver
+	jc          *jetstream.JetstreamClient
+	db          *db.DB
+	e           *rbac.Enforcer
+	l           *slog.Logger
+	n           *notifier.Notifier
+	engs        map[string]models.Engine
+	jq          *queue.Queue
+	cfg         *config.Config
+	ks          *eventconsumer.Consumer
+	res         *idresolver.Resolver
 	vault       secrets.Manager
 	motd        []byte
 	motdMu      sync.RWMutex

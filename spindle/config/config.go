@@ -9,18 +9,18 @@ import (
 )
 
 type Server struct {
-	ListenAddr        string  `env:"LISTEN_ADDR, default=0.0.0.0:6555"`
-	DBPath            string  `env:"DB_PATH, default=spindle.db"`
-	Hostname          string  `env:"HOSTNAME, required"`
-	JetstreamEndpoint string  `env:"JETSTREAM_ENDPOINT, default=wss://jetstream1.us-west.bsky.network/subscribe"`
-	PlcUrl            string  `env:"PLC_URL, default=https://plc.directory"`
-	Dev               bool    `env:"DEV, default=false"`
-	Owner             string  `env:"OWNER, required"`
-	Secrets           Secrets `env:",prefix=SECRETS_"`
-	LogDir            string  `env:"LOG_DIR, default=/var/log/spindle"`
-	QueueSize         int     `env:"QUEUE_SIZE, default=100"`
-	MaxJobCount              int `env:"MAX_JOB_COUNT, default=2"`               // max number of pipelines that run at a time
-	MaxConcurrentWorkflows   int `env:"MAX_CONCURRENT_WORKFLOWS, default=8"`    // max number of workflow containers running at once (memory cap)
+	ListenAddr             string  `env:"LISTEN_ADDR, default=0.0.0.0:6555"`
+	DBPath                 string  `env:"DB_PATH, default=spindle.db"`
+	Hostname               string  `env:"HOSTNAME, required"`
+	JetstreamEndpoint      string  `env:"JETSTREAM_ENDPOINT, default=wss://jetstream1.us-west.bsky.network/subscribe"`
+	PlcUrl                 string  `env:"PLC_URL, default=https://plc.directory"`
+	Dev                    bool    `env:"DEV, default=false"`
+	Owner                  string  `env:"OWNER, required"`
+	Secrets                Secrets `env:",prefix=SECRETS_"`
+	LogDir                 string  `env:"LOG_DIR, default=/var/log/spindle"`
+	QueueSize              int     `env:"QUEUE_SIZE, default=100"`
+	MaxJobCount            int     `env:"MAX_JOB_COUNT, default=2"`            // max number of pipelines that run at a time
+	MaxConcurrentWorkflows int     `env:"MAX_CONCURRENT_WORKFLOWS, default=8"` // max number of workflow containers running at once (memory cap)
 }
 
 func (s Server) Did() syntax.DID {
