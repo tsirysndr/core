@@ -1532,6 +1532,7 @@ type EditLabelPanelParams struct {
 	Defs         map[string]*models.LabelDefinition
 	Subject      string
 	State        models.LabelState
+	Prefix       string
 }
 
 func (p *Pages) EditLabelPanel(w io.Writer, params EditLabelPanelParams) error {

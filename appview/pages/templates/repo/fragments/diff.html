@@ -156,7 +156,7 @@
       {{ $isGenerated = isGenerated $n.Old }}
     {{ end }}
     <details {{ if and (not $isGenerated) (not $isDeleted) (not $collapsed) }}open{{ end }} id="file-{{ .Id }}" class="group border border-gray-200 dark:border-gray-700 w-full mx-auto rounded bg-white dark:bg-gray-800 drop-shadow-sm" tabindex="{{ add $idx 1 }}">
-      <summary class="list-none cursor-pointer sticky top-12 group-open:border-b border-gray-200 dark:border-gray-700">
+      <summary class="list-none cursor-pointer {{ if not $collapsed }}sticky top-12{{ end }} group-open:border-b border-gray-200 dark:border-gray-700">
         <div id="diff-file-header" class="rounded cursor-pointer bg-white dark:bg-gray-800 flex justify-between">
           <div id="left-side-items" class="p-2 flex gap-2 items-center overflow-x-auto">
             <span class="group-open:hidden inline">{{ i "chevron-right" "w-4 h-4" }}</span>
