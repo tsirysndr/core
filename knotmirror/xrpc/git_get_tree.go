@@ -13,6 +13,7 @@ import (
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/pages/markup"
 	"tangled.org/core/knotserver/git"
+	"tangled.org/core/types"
 )
 
 func (x *Xrpc) GetTree(w http.ResponseWriter, r *http.Request) {
@@ -106,11 +107,42 @@ func (x *Xrpc) getTree(ctx context.Context, repo syntax.ATURI, ref, path string)
 		}
 	}
 
+	// find the most recent commit across all entries for the directory-level last commit
+	var lastCommitInfo *types.LastCommitInfo
+	for _, file := range files {
+		if file.LastCommit == nil {
+			continue
+		}
+		if lastCommitInfo == nil {
+			lastCommitInfo = file.LastCommit
+			continue
+		}
+		if file.LastCommit.When.After(lastCommitInfo.When) {
+			lastCommitInfo = file.LastCommit
+		}
+	}
+
+	var lastCommit *tangled.GitTempGetTree_LastCommit
+	if lastCommitInfo != nil {
+		lastCommit = &tangled.GitTempGetTree_LastCommit{
+			Hash:    lastCommitInfo.Hash.String(),
+			Message: lastCommitInfo.Message,
+			When:    lastCommitInfo.When.Format(time.RFC3339),
+		}
+		if commit, err := gr.Commit(lastCommitInfo.Hash); err == nil {
+			lastCommit.Author = &tangled.GitTempGetTree_Signature{
+				Name:  commit.Author.Name,
+				Email: commit.Author.Email,
+			}
+		}
+	}
+
 	return &tangled.GitTempGetTree_Output{
-		Ref:    ref,
-		Parent: parentPtr,
-		Dotdot: dotdotPtr,
-		Files:  treeEntries,
+		Ref:        ref,
+		Parent:     parentPtr,
+		Dotdot:     dotdotPtr,
+		Files:      treeEntries,
+		LastCommit: lastCommit,
 		Readme: &tangled.GitTempGetTree_Readme{
 			Filename: readmeFileName,
 			Contents: readmeContents,
