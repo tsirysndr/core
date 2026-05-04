@@ -23,7 +23,13 @@ func (s *State) SwitchAccount(w http.ResponseWriter, r *http.Request) {
 
 	if err := s.oauth.SwitchAccount(w, r, did); err != nil {
 		l.Error("failed to switch account", "err", err)
-		s.pages.HxRedirect(w, "/login?error=session")
+		redirectURL, err := s.oauth.ClientApp.StartAuthFlow(r.Context(), did)
+		if err != nil {
+			l.Error("failed to resume login flow", "err", err)
+			s.pages.HxRedirect(w, "/login?error=session")
+			return
+		}
+		s.pages.HxRedirect(w, redirectURL)
 		return
 	}
 
