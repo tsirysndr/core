@@ -75,6 +75,12 @@ in
             description = "Maximum number of jobs queue up";
           };
 
+          maxConcurrentWorkflows = mkOption {
+            type = types.int;
+            default = 8;
+            description = "Maximum number of workflow containers running simultaneously (controls total memory usage)";
+          };
+
           secrets = {
             provider = mkOption {
               type = types.str;
@@ -108,6 +114,12 @@ in
             type = types.str;
             default = "5m";
             description = "Timeout for each step of a pipeline";
+          };
+
+          maxJobMemoryMb = mkOption {
+            type = types.int;
+            default = 6144;
+            description = "Memory limit per workflow container in MiB (default 6 GiB)";
           };
 
           logBucket = mkOption {
@@ -155,11 +167,13 @@ in
             "SPINDLE_SERVER_OWNER=${cfg.server.owner}"
             "SPINDLE_SERVER_MAX_JOB_COUNT=${toString cfg.server.maxJobCount}"
             "SPINDLE_SERVER_QUEUE_SIZE=${toString cfg.server.queueSize}"
+            "SPINDLE_SERVER_MAX_CONCURRENT_WORKFLOWS=${toString cfg.server.maxConcurrentWorkflows}"
             "SPINDLE_SERVER_SECRETS_PROVIDER=${cfg.server.secrets.provider}"
             "SPINDLE_SERVER_SECRETS_OPENBAO_PROXY_ADDR=${cfg.server.secrets.openbao.proxyAddr}"
             "SPINDLE_SERVER_SECRETS_OPENBAO_MOUNT=${cfg.server.secrets.openbao.mount}"
             "SPINDLE_NIXERY_PIPELINES_NIXERY=${cfg.pipelines.nixery}"
             "SPINDLE_NIXERY_PIPELINES_WORKFLOW_TIMEOUT=${cfg.pipelines.workflowTimeout}"
+            "SPINDLE_NIXERY_PIPELINES_MAX_JOB_MEMORY_MB=${toString cfg.pipelines.maxJobMemoryMb}"
             "SPINDLE_S3_LOG_BUCKET=${cfg.pipelines.logBucket}"
           ];
           ExecStart = "${cfg.package}/bin/spindle";
