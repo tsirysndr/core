@@ -162,7 +162,9 @@ func (rp *Repo) getLanguageInfo(
 		orm.FilterEq("ref", currentRef),
 	)
 
-	if err != nil || langs == nil {
+	if err != nil || langs == nil || containsOtherLanguage(langs) {
+		langs = nil
+
 		// non-fatal, fetch langs from ks via XRPC
 		xrpcc := &indigoxrpc.Client{
 			Host:   rp.config.KnotMirror.Url,
@@ -236,6 +238,15 @@ func (rp *Repo) getLanguageInfo(
 	})
 
 	return languageStats, nil
+}
+
+func containsOtherLanguage(langs []models.RepoLanguage) bool {
+	for _, l := range langs {
+		if l.Language == enry.OtherLanguage {
+			return true
+		}
+	}
+	return false
 }
 
 // buildIndexResponse creates a RepoIndexResponse by combining multiple xrpc calls in parallel

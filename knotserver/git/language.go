@@ -33,7 +33,7 @@ func (g *GitRepo) AnalyzeLanguages(ctx context.Context) (LangBreakdown, error) {
 		}
 
 		langType := enry.GetLanguageType(language)
-		if langType != enry.Programming && langType != enry.Markup && langType != enry.Unknown {
+		if langType != enry.Programming && langType != enry.Markup {
 			return nil
 		}
 
