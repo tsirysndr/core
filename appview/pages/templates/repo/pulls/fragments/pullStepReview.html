@@ -144,7 +144,7 @@
                                             type="text"
                                             name="{{ $titleName }}"
                                             value="{{ $displayTitle }}"
-                                            class="w-full dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                                            class="w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
                                             placeholder="{{ $p.Title }}"
                                         />
                                     </div>
@@ -216,14 +216,14 @@
     {{ if $p.SHA }}
         <span class="flex items-center gap-1 text-gray-700 dark:text-gray-300 flex-shrink-0">
             <button type="button"
-                class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300"
                 title="Copy SHA"
                 onclick="event.preventDefault(); event.stopPropagation(); navigator.clipboard.writeText('{{ $p.SHA }}'); this.innerHTML=`{{ i "copy-check" "w-4 h-4" }}`; setTimeout(() => this.innerHTML=`{{ i "copy" "w-4 h-4" }}`, 1500)">
                 {{ i "copy" "w-4 h-4" }}
             </button>
             <a href="/{{ $repoInfo.FullName }}/tree/{{ $p.SHA }}"
                onclick="event.stopPropagation()"
-               class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+               class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300"
                title="Browse repository at this commit">
                 {{ i "folder-code" "w-4 h-4" }}
             </a>
@@ -254,14 +254,14 @@
     <input type="checkbox" id="{{ $togId }}" class="hidden"/>
 
     <div id="{{ $diffAreaId }}">
-        <div class="bg-slate-100 dark:bg-gray-900 flex items-center gap-2 h-12 p-2 rounded-t-md border border-b-0 border-gray-200 dark:border-gray-700">
+        <div class="bg-slate-100 dark:bg-gray-700/50 flex items-center gap-2 h-12 p-2 rounded-t-md border border-b-0 border-gray-200 dark:border-gray-700">
             <label title="Toggle filetree panel" for="{{ $togId }}" class="hidden md:inline-flex items-center justify-center rounded cursor-pointer text-normal font-normal normal-case">
                 <span class="show-text">{{ i "panel-left-open" "size-4" }}</span>
                 <span class="hide-text">{{ i "panel-left-close" "size-4" }}</span>
             </label>
 
             {{ template "repo/fragments/diffStatPill" $stat }}
-            <span class="text-xs text-gray-600 dark:text-gray-400 hidden md:inline-flex">{{ $count }} changed file{{ if ne $count 1 }}s{{ end }}</span>
+            <span class="text-xs text-gray-600 dark:text-gray-300 hidden md:inline-flex">{{ $count }} changed file{{ if ne $count 1 }}s{{ end }}</span>
 
             <div class="flex-grow"></div>
 
@@ -425,14 +425,14 @@
     <input type="checkbox" id="composeFilesToggle" class="hidden"/>
 
     <div id="diff-area">
-        <div class="bg-slate-100 dark:bg-gray-900 flex items-center gap-2 h-12 p-2 rounded-t-md border border-b-0 border-gray-200 dark:border-gray-700">
+        <div class="bg-slate-100 dark:bg-gray-700/50 flex items-center gap-2 h-12 p-2 rounded-t-md border border-b-0 border-gray-200 dark:border-gray-700">
             <label title="Toggle filetree panel" for="composeFilesToggle" class="hidden md:inline-flex items-center justify-center rounded cursor-pointer text-normal font-normal normal-case">
                 <span class="show-text">{{ i "panel-left-open" "size-4" }}</span>
                 <span class="hide-text">{{ i "panel-left-close" "size-4" }}</span>
             </label>
 
             {{ template "repo/fragments/diffStatPill" $stat }}
-            <span class="text-xs text-gray-600 dark:text-gray-400 hidden md:inline-flex">{{ $count }} changed file{{ if ne $count 1 }}s{{ end }}</span>
+            <span class="text-xs text-gray-600 dark:text-gray-300 hidden md:inline-flex">{{ $count }} changed file{{ if ne $count 1 }}s{{ end }}</span>
 
             <div class="flex-grow"></div>
 

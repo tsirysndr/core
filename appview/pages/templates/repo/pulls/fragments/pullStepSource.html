@@ -94,13 +94,13 @@
 {{ end }}
 
 {{ define "pullSourceTabs" }}
-    {{ $active := "bg-white dark:bg-gray-800 shadow-sm cursor-default" }}
+    {{ $active := "bg-white dark:bg-gray-800 shadow-sm cursor-default border border-gray-700" }}
     {{ $inactive := "bg-transparent hover:bg-white/50 dark:hover:bg-gray-800/50" }}
-    {{ $shared := "group flex-1 p-3 text-left hover:no-underline flex flex-col gap-1 rounded border-0" }}
+    {{ $shared := "group flex-1 p-3 text-left hover:no-underline flex flex-col gap-1 rounded" }}
     {{ $titleCls := "font-medium text-sm dark:text-white flex items-center gap-2" }}
     {{ $descCls := "text-xs text-gray-500 dark:text-gray-400" }}
     {{ $fullName := .RepoInfo.FullName }}
-    <div class="flex gap-1 p-1 rounded-md bg-slate-100 dark:bg-gray-900"
+    <div class="flex gap-1 p-1.5 rounded-md bg-slate-100 dark:bg-gray-900 border dark:border-gray-700 items-center justify-stretch"
          hx-on::before-request="const t=event.target.closest('button'); if(!t||t.classList.contains('shadow-sm'))return event.preventDefault();">
         {{ if .RepoInfo.Roles.IsPushAllowed }}
             <button

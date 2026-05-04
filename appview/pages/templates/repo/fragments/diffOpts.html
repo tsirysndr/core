@@ -12,7 +12,7 @@
   {{ $field := .Field }}
   {{ if eq $field "" }}{{ $field = "diff" }}{{ end }}
 
-  <div class="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-gray-900 rounded-md text-gray-600 dark:text-gray-300"
+  <div class="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-gray-900 rounded-md text-gray-600 dark:text-gray-300 border dark:border-gray-700"
        hx-on::before-request="const t=event.target.closest('button'); if(!t||t.classList.contains('shadow-sm'))return event.preventDefault(); this.querySelectorAll('button').forEach(b => { const active=b===t; b.classList.toggle('bg-white',active); b.classList.toggle('dark:bg-gray-800',active); b.classList.toggle('shadow-sm',active); b.classList.toggle('cursor-default',active); b.classList.toggle('hover:text-gray-900',!active); b.classList.toggle('dark:hover:text-white',!active); })">
     <button
        {{ if $usePost }}

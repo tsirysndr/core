@@ -30,7 +30,7 @@
             name="title"
             id="title"
             value="{{ $root.Title }}"
-            class="w-full dark:bg-gray-700 dark:text-white dark:border-gray-600"
+            class="w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
             placeholder="One-line summary of your change."
         />
     </div>
@@ -54,7 +54,7 @@
     {{ $previewUrl := .PreviewUrl }}
     <div class="flex flex-col gap-2" data-md-editor="{{ $id }}">
         {{ $tabClasses := "group flex items-center gap-2 px-3 py-1 text-sm whitespace-nowrap rounded hover:no-underline data-[active=true]:bg-white data-[active=true]:dark:bg-gray-800 data-[active=true]:shadow-sm data-[active=true]:cursor-default data-[active=false]:hover:text-gray-900 data-[active=false]:dark:hover:text-white" }}
-        <div class="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-gray-900 rounded-md text-gray-600 dark:text-gray-300 self-start">
+        <div class="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-gray-900 rounded-md text-gray-600 dark:text-gray-300 self-start border dark:border-gray-700">
             <button type="button" data-md-mode="write"
                 data-active="true"
                 class="{{ $tabClasses }}">
@@ -80,7 +80,7 @@
                 id="{{ $id }}"
                 name="{{ $name }}"
                 rows="{{ $rows }}"
-                class="w-full resize-y dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                class="w-full resize-y dark:bg-gray-800 dark:text-white dark:border-gray-700"
                 placeholder="{{ $placeholder }}"
             >{{ $value }}</textarea>
         </div>
