@@ -260,13 +260,40 @@ func (i *Ingester) ingestVouch(ctx context.Context, e *jmodels.Event) error {
 			return fmt.Errorf("invalid cid: %w", err)
 		}
 
-		err = db.AddVouch(i.Db, &models.Vouch{
+		var evidences []syntax.ATURI
+		for _, raw := range record.Evidences {
+			uri, parseErr := syntax.ParseATURI(raw)
+			if parseErr != nil {
+				l.Warn("invalid evidence AT-URI, skipping", "uri", raw, "err", parseErr)
+				continue
+			}
+			evidences = append(evidences, uri)
+		}
+
+		ddb, ok := i.Db.Execer.(*db.DB)
+		if !ok {
+			return fmt.Errorf("failed to ingest vouch record, invalid db cast")
+		}
+
+		tx, txErr := ddb.Begin()
+		if txErr != nil {
+			return fmt.Errorf("failed to start transaction: %w", txErr)
+		}
+
+		addErr := db.AddVouch(tx, &models.Vouch{
 			Did:        syntax.DID(did),
 			SubjectDid: subjectId.DID,
 			Cid:        recordCid,
 			Kind:       kind,
 			Reason:     record.Reason,
+			Evidences:  evidences,
 		})
+		if addErr != nil {
+			tx.Rollback()
+			err = addErr
+		} else {
+			err = tx.Commit()
+		}
 
 	case jmodels.CommitOperationDelete:
 		err = db.DeleteVouchByRkey(i.Db, did, e.Commit.RKey)

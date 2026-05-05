@@ -38,6 +38,7 @@ type Vouch struct {
 	Cid        cid.Cid
 	Kind       VouchKind
 	Reason     *string
+	Evidences  []syntax.ATURI
 	CreatedAt  time.Time
 }
 

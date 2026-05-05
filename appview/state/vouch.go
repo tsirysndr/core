@@ -103,6 +103,15 @@ func (s *State) Vouch(w http.ResponseWriter, r *http.Request) {
 		reasonPtr = &reason
 	}
 
+	var evidences []string
+	for _, raw := range r.Form["evidences"] {
+		if _, err := syntax.ParseATURI(raw); err != nil {
+			l.Warn("invalid evidence AT-URI, skipping", "uri", raw, "err", err)
+			continue
+		}
+		evidences = append(evidences, raw)
+	}
+
 	var swapCid *string
 	existingVouch, err := db.GetVouch(s.db, currentUser.Did, subjectDid)
 	if err == nil {
@@ -120,6 +129,7 @@ func (s *State) Vouch(w http.ResponseWriter, r *http.Request) {
 				Kind:      string(kind),
 				Reason:    reasonPtr,
 				CreatedAt: createdAt,
+				Evidences: evidences,
 			}},
 	})
 	if err != nil {
@@ -143,11 +153,26 @@ func (s *State) Vouch(w http.ResponseWriter, r *http.Request) {
 		Cid:        newCid,
 		Kind:       kind,
 		Reason:     reasonPtr,
+		Evidences:  evidences,
 	}
 
-	err = db.AddVouch(s.db, vouch)
+	tx, err := s.db.Begin()
+	if err != nil {
+		l.Error("failed to start transaction", "err", err)
+		s.pages.Notice(w, "error", "Failed to save vouch.")
+		return
+	}
+	defer tx.Rollback()
+
+	err = db.AddVouch(tx, vouch)
 	if err != nil {
 		l.Error("failed to add vouch to db", "err", err)
+		s.pages.Notice(w, "error", "Failed to save vouch.")
+		return
+	}
+
+	if err = tx.Commit(); err != nil {
+		l.Error("failed to commit vouch transaction", "err", err)
 		s.pages.Notice(w, "error", "Failed to save vouch.")
 		return
 	}

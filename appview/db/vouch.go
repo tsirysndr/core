@@ -15,9 +15,43 @@ import (
 )
 
 func AddVouch(e Execer, vouch *models.Vouch) error {
-	query := `insert or replace into vouches (did, subject_did, cid, kind, reason) values (?, ?, ?, ?, ?)`
-	_, err := e.Exec(query, vouch.Did, vouch.SubjectDid, vouch.Cid.String(), vouch.Kind, vouch.Reason)
-	return err
+	// insert if not exists
+	_, err := e.Exec(
+		`insert or ignore into vouches (did, subject_did, cid, kind, reason) values (?, ?, ?, ?, ?)`,
+		vouch.Did, vouch.SubjectDid, vouch.Cid.String(), vouch.Kind, vouch.Reason,
+	)
+	if err != nil {
+		return err
+	}
+
+	// then update
+	_, err = e.Exec(
+		`update vouches set cid = ?, kind = ?, reason = ? where did = ? and subject_did = ?`,
+		vouch.Cid.String(), vouch.Kind, vouch.Reason, vouch.Did, vouch.SubjectDid,
+	)
+	if err != nil {
+		return err
+	}
+
+	// replace evidences: delete all existing, then insert new ones.
+	_, err = e.Exec(
+		`delete from vouch_evidences where vouch_id = (select id from vouches where did = ? and subject_did = ?)`,
+		vouch.Did, vouch.SubjectDid,
+	)
+	if err != nil {
+		return err
+	}
+	for _, uri := range vouch.Evidences {
+		_, err = e.Exec(
+			`insert into vouch_evidences (vouch_id, at_uri)
+			 values ((select id from vouches where did = ? and subject_did = ?), ?)`,
+			vouch.Did, vouch.SubjectDid, uri.String(),
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func GetVouch(e Execer, did, subjectDid string) (*models.Vouch, error) {
@@ -101,6 +135,30 @@ func GetVouches(e Execer, page pagination.Page, filters ...orm.Filter) ([]models
 	return vouches, nil
 }
 
+func GetVouchEvidences(e Execer, did, subjectDid string) ([]syntax.ATURI, error) {
+	rows, err := e.Query(
+		`select at_uri from vouch_evidences
+		 where vouch_id = (select id from vouches where did = ? and subject_did = ?)
+		 order by id asc`,
+		did, subjectDid,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var evidences []syntax.ATURI
+	for rows.Next() {
+		var uri string
+		if err := rows.Scan(&uri); err != nil {
+			log.Println("error scanning vouch evidence:", err)
+			continue
+		}
+		evidences = append(evidences, syntax.ATURI(uri))
+	}
+	return evidences, nil
+}
+
 func DeleteVouch(e Execer, did, subjectDid string) error {
 	_, err := e.Exec(`delete from vouches where did = ? and subject_did = ?`, did, subjectDid)
 	return err
@@ -118,14 +176,17 @@ func GetNetworkVouchTimeline(e Execer, viewerDid, profileDid string, page pagina
 	}
 
 	query := fmt.Sprintf(
-		`select did, subject_did, cid, kind, reason, created_at
-		from vouches
+		`select v.did, v.subject_did, v.cid, v.kind, v.reason, v.created_at,
+		        group_concat(ve.at_uri, '|') as evidences
+		from vouches v
+		left join vouch_evidences ve on ve.vouch_id = v.id
 		where (
-			subject_did = ? and did in (select subject_did from vouches where did = ? and kind = 'vouch')
+			v.subject_did = ? and v.did in (select subject_did from vouches where did = ? and kind = 'vouch')
 		) or (
-			did = ? and subject_did in (select subject_did from vouches where did = ? and kind = 'vouch')
+			v.did = ? and v.subject_did in (select subject_did from vouches where did = ? and kind = 'vouch')
 		)
-		order by created_at desc
+		group by v.did, v.subject_did
+		order by v.created_at desc
 		%s`,
 		pageClause)
 
@@ -141,8 +202,9 @@ func GetNetworkVouchTimeline(e Execer, viewerDid, profileDid string, page pagina
 		var cidStr string
 		var createdAt string
 		var reason sql.NullString
+		var evidences sql.NullString
 
-		if err := rows.Scan(&v.Did, &v.SubjectDid, &cidStr, &v.Kind, &reason, &createdAt); err != nil {
+		if err := rows.Scan(&v.Did, &v.SubjectDid, &cidStr, &v.Kind, &reason, &createdAt, &evidences); err != nil {
 			log.Println("error scanning vouch:", err)
 			continue
 		}
@@ -163,6 +225,12 @@ func GetNetworkVouchTimeline(e Execer, viewerDid, profileDid string, page pagina
 
 		if reason.Valid {
 			v.Reason = &reason.String
+		}
+
+		if evidences.Valid && evidences.String != "" {
+			for _, s := range strings.Split(evidences.String, "|") {
+				v.Evidences = append(v.Evidences, syntax.ATURI(s))
+			}
 		}
 
 		vouches = append(vouches, v)

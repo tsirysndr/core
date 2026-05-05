@@ -651,11 +651,6 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			foreign key (repo_at) references repos(at_uri) on delete cascade
 		);
 
-		create table if not exists migrations (
-			id integer primary key autoincrement,
-			name text unique
-		);
-
 		create table if not exists punchcard_preferences (
 			id integer primary key autoincrement,
 			user_did text not null unique,
@@ -669,6 +664,19 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			status     text not null check (status in ('subscribed', 'dismissed')),
 			email      text,
 			updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+		);
+
+		create table if not exists vouch_evidences (
+			id integer primary key autoincrement,
+			vouch_id integer not null,
+			at_uri text not null,
+			unique(vouch_id, at_uri),
+			foreign key (vouch_id) references vouches(id) on delete cascade
+		);
+
+		create table if not exists migrations (
+			id integer primary key autoincrement,
+			name text unique
 		);
 
 		-- indexes for better performance
@@ -1474,6 +1482,33 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		`)
 		return err
 	})
+
+	conn.ExecContext(ctx, "pragma foreign_keys = off;")
+	orm.RunMigration(conn, logger, "add-id-to-vouches", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			create table vouches_new (
+				id integer primary key autoincrement,
+				did text not null,
+				subject_did text not null,
+				cid text not null,
+				kind text not null default 'vouch',
+				reason text,
+				created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				unique(did, subject_did),
+				check (did <> subject_did),
+				check (kind in ('vouch', 'denounce'))
+			);
+
+			insert into vouches_new (did, subject_did, cid, kind, reason, created_at)
+			select did, subject_did, cid, kind, reason, created_at
+			from vouches;
+
+			drop table vouches;
+			alter table vouches_new rename to vouches;
+		`)
+		return err
+	})
+	conn.ExecContext(ctx, "pragma foreign_keys = on;")
 
 	return &DB{
 		db,
