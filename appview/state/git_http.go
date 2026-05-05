@@ -46,17 +46,12 @@ func (s *State) InfoRefs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	service := r.URL.Query().Get("service")
-	var contentType string
-	switch service {
-	case "git-receive-pack":
-		contentType = "application/x-git-receive-pack-advertisement"
-	default:
-		contentType = "application/x-git-upload-pack-advertisement"
+	if service != "git-receive-pack" {
 		go s.notifier.Clone(context.Background(), repo)
 	}
 
 	targetURL := fmt.Sprintf("%s://%s/%s/info/refs?%s", scheme, repo.Knot, repo.RepoIdentifier(), r.URL.RawQuery)
-	s.proxyRequest(w, r, targetURL, contentType)
+	http.Redirect(w, r, targetURL, http.StatusTemporaryRedirect)
 }
 
 func (s *State) UploadArchive(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +63,7 @@ func (s *State) UploadArchive(w http.ResponseWriter, r *http.Request) {
 	}
 
 	targetURL := fmt.Sprintf("%s://%s/%s/git-upload-archive?%s", scheme, repo.Knot, repo.RepoIdentifier(), r.URL.RawQuery)
-	s.proxyRequest(w, r, targetURL, "application/x-git-upload-archive-result")
+	http.Redirect(w, r, targetURL, http.StatusTemporaryRedirect)
 }
 
 func (s *State) UploadPack(w http.ResponseWriter, r *http.Request) {
@@ -80,7 +75,7 @@ func (s *State) UploadPack(w http.ResponseWriter, r *http.Request) {
 	}
 
 	targetURL := fmt.Sprintf("%s://%s/%s/git-upload-pack?%s", scheme, repo.Knot, repo.RepoIdentifier(), r.URL.RawQuery)
-	s.proxyRequest(w, r, targetURL, "application/x-git-upload-pack-result")
+	http.Redirect(w, r, targetURL, http.StatusTemporaryRedirect)
 }
 
 func (s *State) ReceivePack(w http.ResponseWriter, r *http.Request) {
