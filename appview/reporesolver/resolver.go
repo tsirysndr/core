@@ -127,6 +127,7 @@ func (rr *RepoResolver) GetRepoInfo(r *http.Request, user *oauth.MultiAccountUse
 		// this is basically a models.Repo
 		OwnerDid:    ownerId.DID.String(),
 		OwnerHandle: ownerHandle,
+		RepoDid:     repo.RepoDid,
 		Name:        repo.Name,
 		Rkey:        repo.Rkey,
 		Description: repo.Description,

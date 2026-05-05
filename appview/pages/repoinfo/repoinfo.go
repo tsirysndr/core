@@ -23,6 +23,13 @@ func (r RepoInfo) FullName() string {
 	return path.Join(r.owner(), r.Name)
 }
 
+func (r RepoInfo) RepoIdentifier() string {
+	if r.RepoDid != "" {
+		return r.RepoDid
+	}
+	return path.Join(r.OwnerDid, r.Name)
+}
+
 func (r RepoInfo) ownerWithoutAt() string {
 	if r.OwnerHandle != "" {
 		return r.OwnerHandle
@@ -59,6 +66,7 @@ type RepoInfo struct {
 	Rkey        string
 	OwnerDid    string
 	OwnerHandle string
+	RepoDid     string
 	Description string
 	Website     string
 	Topics      []string

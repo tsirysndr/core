@@ -7,7 +7,7 @@
       document.addEventListener('keydown', (e) => {
         if(e.key === 'y' && !e.ctrlKey && !e.metaKey && !e.altKey) {
           if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-          const permalinkUrl = '/{{ .RepoInfo.FullName }}/tree/{{ .LastCommitInfo.Hash }}/{{ .Path }}';
+          const permalinkUrl = '/{{ .RepoInfo.RepoIdentifier }}/tree/{{ .LastCommitInfo.Hash }}/{{ .Path }}';
           window.location.href = permalinkUrl;
         }
       }, {signal: abortController.signal});
