@@ -1,7 +1,9 @@
 package state
 
 import (
+	"cmp"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -68,17 +70,13 @@ func (s *State) Search(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			// sort repos to match search result order (by relevance)
-			repoMap := make(map[int64]models.Repo, len(repos))
-			for _, repo := range repos {
-				repoMap[repo.Id] = repo
+			hitIdx := make(map[int64]int, len(res.Hits))
+			for i, id := range res.Hits {
+				hitIdx[id] = i
 			}
-			repos = make([]models.Repo, 0, len(res.Hits))
-			for _, id := range res.Hits {
-				if repo, ok := repoMap[id]; ok {
-					repos = append(repos, repo)
-				}
-			}
+			slices.SortFunc(repos, func(a, b models.Repo) int {
+				return cmp.Compare(hitIdx[a.Id], hitIdx[b.Id])
+			})
 		}
 		resultCount = int(res.Total)
 
@@ -155,6 +153,77 @@ func (s *State) Search(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		l.Error("failed to render page", "err", err)
+	}
+}
+
+func (s *State) SearchQuick(w http.ResponseWriter, r *http.Request) {
+	s.searchQuick(w, r, false)
+}
+
+func (s *State) SearchQuickMobile(w http.ResponseWriter, r *http.Request) {
+	s.searchQuick(w, r, true)
+}
+
+func (s *State) searchQuick(w http.ResponseWriter, r *http.Request, mobile bool) {
+	rawQuery := r.URL.Query().Get("q")
+	if rawQuery == "" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	const pageSize = 5
+
+	query := searchquery.Parse(rawQuery)
+	tf := searchquery.ExtractTextFilters(query)
+
+	searchOpts := models.RepoSearchOptions{
+		Keywords:        tf.Keywords,
+		Phrases:         tf.Phrases,
+		NegatedKeywords: tf.NegatedKeywords,
+		NegatedPhrases:  tf.NegatedPhrases,
+		Page:            pagination.Page{Limit: pageSize},
+	}
+
+	var repos []models.Repo
+	var total int
+
+	if searchOpts.HasSearchFilters() {
+		res, err := s.indexer.Repos.Search(r.Context(), searchOpts)
+		if err != nil {
+			s.logger.Error("failed quick search", "err", err)
+			http.Error(w, "search failed", http.StatusInternalServerError)
+			return
+		}
+		total = int(res.Total)
+		if len(res.Hits) > 0 {
+			repos, err = db.GetRepos(s.db, orm.FilterIn("id", res.Hits))
+			if err != nil {
+				s.logger.Error("failed to get repos for quick search", "err", err)
+				http.Error(w, "search failed", http.StatusInternalServerError)
+				return
+			}
+			hitIdx := make(map[int64]int, len(res.Hits))
+			for i, id := range res.Hits {
+				hitIdx[id] = i
+			}
+			slices.SortFunc(repos, func(a, b models.Repo) int {
+				return cmp.Compare(hitIdx[a.Id], hitIdx[b.Id])
+			})
+		}
+	}
+
+	params := pages.SearchQuickParams{
+		Repos:  repos,
+		Query:  rawQuery,
+		Total:  total,
+	}
+
+	render := s.pages.SearchQuick
+	if mobile {
+		render = s.pages.SearchQuickMobile
+	}
+	if err := render(w, params); err != nil {
+		s.logger.Error("failed to render quick search", "err", err)
 	}
 }
 

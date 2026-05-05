@@ -5,15 +5,19 @@
   {{ $fullName := index . 2 }}
   {{ $starButton := false }}
   {{ $starData := dict }}
+  {{ $compact := false }}
   {{ if gt (len .) 3 }}
     {{ $starButton = index . 3 }}
     {{ if gt (len .) 4 }}
       {{ $starData = index . 4 }}
+      {{ if gt (len .) 5 }}
+        {{ $compact = index . 5 }}
+      {{ end }}
     {{ end }}
   {{ end }}
 
   {{ with $repo }}
-    <div class="py-4 px-6 gap-1 flex flex-col drop-shadow-sm bg-white dark:bg-gray-800 min-h-32">
+    <div class="{{ if not $compact }} min-h-32 {{ end }} {{ if $compact }} focus-within:bg-gray-100 dark:focus-within:bg-gray-800/80 {{ end }} py-4 px-6 gap-1 flex flex-col drop-shadow-sm bg-white dark:bg-gray-800">
       <div class="font-medium dark:text-white flex items-center justify-between">
         <div class="flex items-center min-w-0 flex-1 mr-2">
           {{ if .Source }}
@@ -23,9 +27,9 @@
           {{ end }}
           {{ $repoOwner := resolve .Did }}
           {{- if $fullName -}}
-            <a href="/{{ $repoOwner }}/{{ .Name }}" class="truncate min-w-0">{{ $repoOwner }}/{{ .Name }}</a>
+            <a href="/{{ $repoOwner }}/{{ .Name }}" data-nav-result class="truncate min-w-0 {{ if $compact }} focus:outline-none {{ end }}">{{ $repoOwner }}/{{ .Name }}</a>
           {{- else -}}
-            <a href="/{{ $repoOwner }}/{{ .Name }}" class="truncate min-w-0">{{ .Name }}</a>
+            <a href="/{{ $repoOwner }}/{{ .Name }}" data-nav-result class="truncate min-w-0 {{ if $compact }} focus:outline-none {{ end }}">{{ .Name }}</a>
           {{- end -}}
         </div>
         {{ if and $starButton $root.LoggedInUser }}

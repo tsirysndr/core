@@ -1674,6 +1674,25 @@ func (p *Pages) SearchRepos(w io.Writer, params SearchReposParams) error {
 	return p.execute("search/search", w, params)
 }
 
+type SearchQuickParams struct {
+	Repos []models.Repo
+	Query string
+	Total int
+}
+
+func (p *Pages) SearchQuick(w io.Writer, params SearchQuickParams) error {
+	return p.executePlain("search/fragments/quick", w, params)
+}
+
+func (p *Pages) SearchQuickMobile(w io.Writer, params SearchQuickParams) error {
+	tpl, err := p.parse("search/fragments/quick")
+	if err != nil {
+		return err
+	}
+	return tpl.ExecuteTemplate(w, "search/fragments/quickMobile", params)
+}
+
+
 func (p *Pages) Home(w io.Writer, params TimelineParams) error {
 	return p.execute("timeline/home", w, params)
 }

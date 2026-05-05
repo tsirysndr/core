@@ -9,10 +9,11 @@
 
             <div id="right-items" class="flex items-center gap-4">
                 {{ with .LoggedInUser }}
-                    {{ block "newButton" . }} {{ end }}
-                    {{ template "notifications/fragments/bell" }}
-                    {{ block "searchButton" . }} {{ end }}
-                    {{ block "profileDropdown" . }} {{ end }}
+                    <div class="flex items-center order-1 md:order-3">{{ block "newButton" . }} {{ end }}</div>
+                    <div class="flex items-center order-2 md:order-4">{{ template "notifications/fragments/bell" }}</div>
+                    <div class="flex items-center order-3 md:order-1">{{ block "search" . }} {{ end }}</div>
+                    <div class="hidden md:block md:order-2 w-px h-6 bg-gray-200 dark:bg-gray-700 self-center"></div>
+                    <div class="flex items-center order-4 md:order-5">{{ block "profileDropdown" . }} {{ end }}</div>
                 {{ else }}
                     <a href="/login">login</a>
                     <span class="text-gray-500 dark:text-gray-400">or</span>
@@ -43,8 +44,91 @@
 </details>
 {{ end }}
 
-{{ define "searchButton" }}
-<a href="/search">{{ i "search" "size-5 text-gray-500 dark:text-gray-400" }}</a>
+{{ define "search" }}
+<div class="relative hidden md:block" id="topbar-search-container">
+  <div id="topbar-search-box" class="relative flex items-center gap-2 px-2 pr-1.5 py-4 max-h-[30px] md:w-80 lg:w-96 border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900 focus-within:z-[51] before:content-[''] before:absolute before:inset-0 before:rounded-md before:invisible focus-within:before:visible before:ring-2 before:ring-transparent before:ring-offset-transparent before:ring-offset-1 before:pointer-events-none focus-within:before:ring-gray-300 dark:focus-within:before:ring-gray-600">
+    {{ i "search" "size-4 text-gray-400" }}
+    <input
+      type="text"
+      id="topbar-search-input"
+      name="q"
+      placeholder="search..."
+      autocomplete="off"
+      class="flex-1 border-none bg-transparent p-0 focus:outline-none focus:[box-shadow:none] text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 peer"
+      hx-get="/search/quick"
+      hx-trigger="input changed delay:10ms"
+      hx-target="#topbar-search-results"
+      hx-swap="innerHTML"
+      hx-indicator="#topbar-search-indicator"
+    />
+    <kbd class="pointer-events-none flex items-center text-xs border border-gray-200 dark:border-gray-600 rounded border-b-2 px-1 font-sans leading-5 text-gray-400 dark:text-gray-500 peer-focus:hidden peer-[:not(:placeholder-shown)]:hidden">⌘K</kbd>
+    <span id="topbar-search-indicator" class="shrink-0">
+      {{ i "loader-circle" "size-4 text-gray-400 animate-spin" }}
+    </span>
+    <button
+      type="button"
+      class="hidden peer-[:not(:placeholder-shown)]:block text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+      onclick="const i=document.getElementById('topbar-search-input');i.value='';htmx.trigger(i,'input');i.focus()"
+    >{{ i "x" "size-4" }}</button>
+  </div>
+  <div id="topbar-search-results" class="absolute w-full z-50"></div>
+</div>
+
+<button id="mobile-search-btn" class="md:hidden" type="button" data-action="open-mobile-search">
+  {{ i "search" "size-5 text-gray-500 dark:text-gray-400" }}
+</button>
+
+<div id="mobile-search-overlay"
+     class="md:hidden fixed inset-x-0 top-0 h-dvh z-50
+            bg-white dark:bg-gray-900
+            flex flex-col
+            opacity-0 pointer-events-none
+            transition-opacity duration-150
+            pt-[env(safe-area-inset-top)]"
+     aria-hidden="true">
+  <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
+    {{ i "search" "size-4 text-gray-400 shrink-0" }}
+    <input
+      type="text"
+      id="mobile-search-input"
+      name="q"
+      placeholder="search..."
+      autocomplete="off"
+      inputmode="search"
+      class="flex-1 min-w-0 border-none bg-transparent p-0 focus:outline-none focus:[box-shadow:none] text-[16px] text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 peer"
+      hx-get="/search/quick/mobile"
+      hx-trigger="input changed delay:10ms"
+      hx-target="#mobile-search-results"
+      hx-swap="innerHTML"
+      hx-indicator="#mobile-search-indicator"
+    />
+    <span id="mobile-search-indicator" class="shrink-0">
+      {{ i "loader-circle" "size-4 text-gray-400 animate-spin" }}
+    </span>
+    <button type="button" class="p-1 -mr-1 hit-area hit-area-4" data-action="close-mobile-search">
+      {{ i "x" "size-5 text-gray-400" }}
+    </button>
+  </div>
+  <div id="mobile-search-results" class="flex-1 flex flex-col overflow-hidden pb-[env(safe-area-inset-bottom)]"></div>
+  <div id="mobile-search-spacer" class="bg-gray-50 dark:bg-gray-800 hidden"></div>
+</div>
+<style>
+  #topbar-search-indicator,
+  #mobile-search-indicator {
+    display: none;
+    opacity: 0;
+    transition-property: opacity, display;
+    transition-duration: 150ms, 150ms;
+    transition-timing-function: ease-out;
+    transition-behavior: allow-discrete;
+  }
+  #topbar-search-indicator.htmx-request,
+  #mobile-search-indicator.htmx-request {
+    display: block;
+    opacity: 1;
+    transition-duration: 0s, 0s;
+  }
+</style>
 {{ end }}
 
 {{ define "profileDropdown" }}

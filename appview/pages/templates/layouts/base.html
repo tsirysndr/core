@@ -3,7 +3,7 @@
     <html lang="en" class="dark:bg-gray-900">
         <head>
             <meta charset="UTF-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
             <meta name="description" content="The next-generation social coding platform."/>
             <meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
 
@@ -23,6 +23,7 @@
             <script defer src="/static/htmx.min.js"></script>
             <script defer src="/static/htmx-ext-ws.min.js"></script>
             <script defer src="/static/actor-typeahead.js" type="module"></script>
+            <script defer src="/static/topbar-search.js"></script>
 
             <link rel="icon" href="/static/logos/dolly.ico" sizes="48x48"/>
             <link rel="icon" href="/static/logos/dolly.svg" sizes="any" type="image/svg+xml"/>
@@ -68,7 +69,7 @@
         </head>
         <body class="min-h-screen flex flex-col gap-4 bg-slate-100 dark:bg-gray-900 dark:text-white transition-colors duration-200 {{ block "bodyClasses" . }} {{ end }}">
           {{ block "topbarLayout" . }}
-            <header class="w-full col-span-full md:col-span-1 md:col-start-2 drop-shadow-sm dark:text-white bg-white dark:bg-gray-800" style="z-index: 20;">
+            <header class="w-full col-span-full md:col-span-1 md:col-start-2 shadow-sm dark:text-white bg-white dark:bg-gray-800 pt-[env(safe-area-inset-top)]" style="z-index: 20;">
 
                {{ if .LoggedInUser }}
                 <div id="upgrade-banner"
@@ -100,7 +101,7 @@
           {{ end }}
 
           {{ block "footerLayout" . }}
-            <footer class="mt-12">
+            <footer class="mt-12 pb-[env(safe-area-inset-bottom)]">
               {{ template "layouts/fragments/footer" . }}
             </footer>
           {{ end }}
