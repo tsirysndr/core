@@ -19,6 +19,8 @@ func init() {
 type GraphVouch struct {
 	LexiconTypeID string `json:"$type,const=sh.tangled.graph.vouch" cborgen:"$type,const=sh.tangled.graph.vouch"`
 	CreatedAt     string `json:"createdAt" cborgen:"createdAt"`
+	// evidences: Optional list of ATURIs serving as evidence for this vouch (ex. issues, PRs)
+	Evidences []string `json:"evidences,omitempty" cborgen:"evidences,omitempty"`
 	// kind: Whether this user is being vouched for or denounced
 	Kind string `json:"kind" cborgen:"kind"`
 	// reason: The reason for this vouch/denouncement

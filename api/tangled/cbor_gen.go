@@ -2467,7 +2467,11 @@ func (t *GraphVouch) MarshalCBOR(w io.Writer) error {
 	}
 
 	cw := cbg.NewCborWriter(w)
-	fieldCount := 4
+	fieldCount := 5
+
+	if t.Evidences == nil {
+		fieldCount--
+	}
 
 	if t.Reason == nil {
 		fieldCount--
@@ -2573,6 +2577,42 @@ func (t *GraphVouch) MarshalCBOR(w io.Writer) error {
 	if _, err := cw.WriteString(string(t.CreatedAt)); err != nil {
 		return err
 	}
+
+	// t.Evidences ([]string) (slice)
+	if t.Evidences != nil {
+
+		if len("evidences") > 1000000 {
+			return xerrors.Errorf("Value in field \"evidences\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("evidences"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("evidences")); err != nil {
+			return err
+		}
+
+		if len(t.Evidences) > 8192 {
+			return xerrors.Errorf("Slice value in field t.Evidences was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajArray, uint64(len(t.Evidences))); err != nil {
+			return err
+		}
+		for _, v := range t.Evidences {
+			if len(v) > 1000000 {
+				return xerrors.Errorf("Value in field v was too long")
+			}
+
+			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(v))); err != nil {
+				return err
+			}
+			if _, err := cw.WriteString(string(v)); err != nil {
+				return err
+			}
+
+		}
+	}
 	return nil
 }
 
@@ -2670,6 +2710,46 @@ func (t *GraphVouch) UnmarshalCBOR(r io.Reader) (err error) {
 				}
 
 				t.CreatedAt = string(sval)
+			}
+			// t.Evidences ([]string) (slice)
+		case "evidences":
+
+			maj, extra, err = cr.ReadHeader()
+			if err != nil {
+				return err
+			}
+
+			if extra > 8192 {
+				return fmt.Errorf("t.Evidences: array too large (%d)", extra)
+			}
+
+			if maj != cbg.MajArray {
+				return fmt.Errorf("expected cbor array")
+			}
+
+			if extra > 0 {
+				t.Evidences = make([]string, extra)
+			}
+
+			for i := 0; i < int(extra); i++ {
+				{
+					var maj byte
+					var extra uint64
+					var err error
+					_ = maj
+					_ = extra
+					_ = err
+
+					{
+						sval, err := cbg.ReadStringWithMax(cr, 1000000)
+						if err != nil {
+							return err
+						}
+
+						t.Evidences[i] = string(sval)
+					}
+
+				}
 			}
 
 		default:

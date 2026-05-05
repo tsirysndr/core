@@ -29,6 +29,15 @@
           "createdAt": {
             "type": "string",
             "format": "datetime"
+          },
+          "evidences": {
+            "type": "array",
+            "description": "Optional list of ATURIs serving as evidence for this vouch (ex. issues, PRs)",
+            "maxLength": 10,
+            "items": {
+              "type": "string",
+              "format": "at-uri"
+            }
           }
         }
       }
