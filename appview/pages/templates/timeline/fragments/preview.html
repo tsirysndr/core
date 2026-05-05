@@ -63,15 +63,16 @@
 
 {{ define "eventCard" }}
   {{ $root := index . 0 }}
-  {{ $e := index . 1 }}
+  {{ $g := index . 1 }}
+  {{ $e := $g.Primary }}
   {{ with $e }}
     <div class="flex flex-col divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-sm bg-white dark:bg-gray-800 drop-shadow-sm">
       {{ if .Repo }}
-        {{ template "repoEvent" (list $root .) }}
+        {{ template "repoEvent" (list $root $g) }}
       {{ else if .RepoStar }}
-        {{ template "starEvent" (list $root .) }}
+        {{ template "starEvent" (list $root $g) }}
       {{ else if .Follow }}
-        {{ template "followEvent" (list $root .) }}
+        {{ template "followEvent" (list $root $g) }}
       {{ end }}
     </div>
   {{ end }}
@@ -79,7 +80,8 @@
 
 {{ define "timelineEvent" }}
   {{ $i := index . 0 }}
-  {{ $e := index . 1 }}
+  {{ $g := index . 1 }}
+  {{ $e := $g.Primary }}
   {{ $variance := randInt 10 }}
   {{ $offset := add (index . 2) $variance }}
   {{ $left := mul $i 175 }}
@@ -87,7 +89,7 @@
     class="absolute left-0"
     style="bottom: {{ $offset }}px; left: {{ $left }}px; transform: translateX(-50%); z-index: 5;"
   >
-    {{ template "eventCard" (list $ $e) }}
+    {{ template "eventCard" (list $ $g) }}
   </div>
 
   <!-- vertical connector -->
@@ -105,7 +107,8 @@
 
 {{ define "repoEvent" }}
   {{ $root := index . 0 }}
-  {{ $event := index . 1 }}
+  {{ $group := index . 1 }}
+  {{ $event := $group.Primary }}
   {{ $repo := $event.Repo }}
   {{ $source := $event.Source }}
   {{ $userHandle := resolve $repo.Did }}
@@ -135,7 +138,8 @@
 
 {{ define "starEvent" }}
   {{ $root := index . 0 }}
-  {{ $event := index . 1 }}
+  {{ $group := index . 1 }}
+  {{ $event := $group.Primary }}
   {{ $star := $event.RepoStar }}
   {{ with $star }}
     {{ $starrerHandle := resolve .Did }}
@@ -146,7 +150,14 @@
       </div>
       <div class="px-4 flex items-center gap-2">
         {{ template "user/fragments/picHandleLink" $starrerHandle }}
-        starred
+        {{ if $group.IsCollapsed }}
+          <span class="inline-flex items-center gap-1.5">
+            {{ template "timeline/fragments/othersBadge" $group }}
+            starred
+          </span>
+        {{ else }}
+          starred
+        {{ end }}
         {{ template "user/fragments/pic" (list $repoOwnerHandle "size-6") }}
         <a href="/{{ $repoOwnerHandle }}/{{ .Repo.Name }}" class="no-underline hover:underline">
           {{ $repoOwnerHandle | truncateAt30 }}/{{ .Repo.Name }}
@@ -158,7 +169,8 @@
 
 {{ define "followEvent" }}
   {{ $root := index . 0 }}
-  {{ $event := index . 1 }}
+  {{ $group := index . 1 }}
+  {{ $event := $group.Primary }}
   {{ $follow := $event.Follow }}
   {{ $profile := $event.Profile }}
   {{ $followStats := $event.FollowStats }}
@@ -172,7 +184,14 @@
     </div>
     <div class="px-4 flex items-center gap-2">
       {{ template "user/fragments/picHandleLink" $userHandle }}
-      followed
+      {{ if $group.IsCollapsed }}
+        <span class="inline-flex items-center gap-1.5">
+          {{ template "timeline/fragments/othersBadge" $group }}
+          followed
+        </span>
+      {{ else }}
+        followed
+      {{ end }}
       {{ template "user/fragments/picHandleLink" $subjectHandle }}
     </div>
   </div>
