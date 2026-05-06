@@ -87,10 +87,11 @@ func (h *Knot) processKnotMember(ctx context.Context, event *jmodels.Event) erro
 
 // returns a repo path on disk if present, and error if not
 type targetRepo struct {
-	RepoPath string
-	OwnerDid string
-	RepoName string
-	RepoDid  string
+	RepoPath      string
+	OwnerDid      string
+	RepoName      string
+	RepoDid       string
+	DefaultBranch string // default branch
 }
 
 func (h *Knot) validatePullRecord(ctx context.Context, record *tangled.RepoPull) (*targetRepo, error) {
@@ -161,16 +162,19 @@ func (h *Knot) validatePullRecord(ctx context.Context, record *tangled.RepoPull)
 		return nil, fmt.Errorf("ignoring pull record: target has neither repo nor repoDid")
 	}
 
-	_, err := git.Open(repoPath, record.Source.Branch)
+	gr, err := git.Open(repoPath, record.Source.Branch)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open git repository: %w", err)
 	}
 
+	defaultBranch, _ := gr.FindMainBranch()
+
 	return &targetRepo{
-		RepoPath: repoPath,
-		OwnerDid: ownerDid,
-		RepoName: repoName,
-		RepoDid:  repoDid,
+		RepoPath:      repoPath,
+		OwnerDid:      ownerDid,
+		RepoName:      repoName,
+		RepoDid:       repoDid,
+		DefaultBranch: defaultBranch,
 	}, nil
 }
 
@@ -267,10 +271,11 @@ func (h *Knot) compilePipeline(ctx context.Context, targetRepo *targetRepo, sour
 			Kind:        string(workflow.TriggerKindPullRequest),
 			PullRequest: &trigger,
 			Repo: &tangled.Pipeline_TriggerRepo{
-				Knot:    h.c.Server.Hostname,
-				RepoDid: &targetRepo.RepoDid,
-				Did:     targetRepo.OwnerDid,
-				Repo:    &targetRepo.RepoName,
+				Knot:          h.c.Server.Hostname,
+				RepoDid:       &targetRepo.RepoDid,
+				Did:           targetRepo.OwnerDid,
+				Repo:          &targetRepo.RepoName,
+				DefaultBranch: targetRepo.DefaultBranch,
 			},
 		},
 	}

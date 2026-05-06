@@ -361,6 +361,8 @@ func (h *InternalHandle) triggerPipeline(
 		})
 	}
 
+	defaultBranch, _ := gr.FindMainBranch()
+
 	trigger := tangled.Pipeline_PushTriggerData{
 		Ref:    line.Ref,
 		OldSha: line.OldSha.String(),
@@ -368,10 +370,11 @@ func (h *InternalHandle) triggerPipeline(
 	}
 
 	triggerRepo := &tangled.Pipeline_TriggerRepo{
-		Did:     ownerDid,
-		Knot:    h.c.Server.Hostname,
-		Repo:    &repoName,
-		RepoDid: &repoDid,
+		Did:           ownerDid,
+		Knot:          h.c.Server.Hostname,
+		Repo:          &repoName,
+		RepoDid:       &repoDid,
+		DefaultBranch: defaultBranch,
 	}
 
 	compiler := workflow.Compiler{
