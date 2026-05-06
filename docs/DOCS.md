@@ -170,9 +170,9 @@ git remote -v
 
 You'll see something like:
 
-```
-origin  git@github.com:username/my-project (fetch)
-origin  git@github.com:username/my-project (push)
+```bash
+origin  git@github.com:username/my-project.git (fetch)
+origin  git@github.com:username/my-project.git (push)
 ```
 
 Update the remote URL to point to tangled:
@@ -189,7 +189,7 @@ git remote -v
 
 You should now see:
 
-```
+```bash
 origin  git@tangled.org:user.tngl.sh/my-project (fetch)
 origin  git@tangled.org:user.tngl.sh/my-project (push)
 ```
@@ -209,16 +209,16 @@ history, branches, and tags have been preserved.
 If you want to maintain your repository on multiple forges
 simultaneously, for example, keeping your primary repository
 on GitHub while mirroring to Tangled for backup or
-redundancy, you can do so by adding multiple remotes.
+redundancy, you can do so by adding [multiple remotes](https://git-scm.com/docs/git-push#_remotes).
 
 You can configure your local repository to push to both
 Tangled and, say, GitHub. You may already have the following
 setup:
 
-```
+```bash
 $ git remote -v
-origin  git@github.com:username/my-project (fetch)
-origin  git@github.com:username/my-project (push)
+origin  git@github.com:username/my-project.git (fetch)
+origin  git@github.com:username/my-project.git (push)
 ```
 
 Now add Tangled as an additional push URL to the same
@@ -229,20 +229,19 @@ git remote set-url --add --push origin git@tangled.org:user.tngl.sh/my-project
 ```
 
 You also need to re-add the original URL as a push
-destination (Git replaces the push URL when you use `--add`
-the first time):
+destination (Git will now use the original URL to fetch only):
 
 ```bash
-git remote set-url --add --push origin git@github.com:username/my-project
+git remote set-url --add --push origin git@github.com:username/my-project.git
 ```
 
 Verify your configuration:
 
-```
+```bash
 $ git remote -v
-origin  git@github.com:username/repo (fetch)
-origin  git@tangled.org:username/my-project (push)
-origin  git@github.com:username/repo (push)
+origin  git@github.com:username/my-project.git (fetch)
+origin  git@tangled.org:user.tngl.sh/my-project (push)
+origin  git@github.com:username/my-project.git (push)
 ```
 
 Notice that there's one fetch URL (the primary remote) and
@@ -267,8 +266,8 @@ If you prefer more control over which remote you push to,
 you can maintain separate remotes:
 
 ```bash
-git remote add github git@github.com:username/my-project
-git remote add tangled git@tangled.org:username/my-project
+git remote add github git@github.com:username/my-project.git
+git remote add tangled git@tangled.org:user.tngl.sh/my-project
 ```
 
 Then push to each explicitly:
