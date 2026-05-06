@@ -14,6 +14,39 @@ import (
 	"tangled.org/core/log"
 )
 
+func (s *State) SkipVouchSuggestion(w http.ResponseWriter, r *http.Request) {
+	l := log.SubLogger(s.logger, "skipVouchSuggestion")
+	currentUser := s.oauth.GetMultiAccountUser(r)
+
+	subject := r.FormValue("subject")
+	if subject == "" {
+		l.Warn("missing subject")
+		s.pages.Notice(w, "error", "Missing subject user.")
+		return
+	}
+
+	subjectIdent, err := s.idResolver.ResolveIdent(r.Context(), subject)
+	if err != nil {
+		l.Error("failed to resolve subject", "subject", subject, "err", err)
+		s.pages.Notice(w, "error", "Could not find that user.")
+		return
+	}
+
+	if currentUser.Did == subjectIdent.DID.String() {
+		l.Warn("cannot skip yourself")
+		s.pages.Notice(w, "error", "You cannot skip yourself.")
+		return
+	}
+
+	if err := db.SkipVouchSuggestion(s.db, currentUser.Did, subjectIdent.DID.String()); err != nil {
+		l.Error("failed to skip vouch suggestion", "err", err)
+		s.pages.Notice(w, "error", "Failed to skip suggestion.")
+		return
+	}
+
+	s.pages.HxRefresh(w)
+}
+
 func (s *State) Vouch(w http.ResponseWriter, r *http.Request) {
 	l := log.SubLogger(s.logger, "vouch")
 	l = s.logger.With("handler", "Vouch")

@@ -674,6 +674,15 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			foreign key (vouch_id) references vouches(id) on delete cascade
 		);
 
+		create table if not exists vouch_skips (
+			did text not null,
+			subject_did text not null,
+			created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+			primary key (did, subject_did),
+			check (did <> subject_did)
+		);
+
+
 		create table if not exists migrations (
 			id integer primary key autoincrement,
 			name text unique

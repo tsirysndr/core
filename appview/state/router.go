@@ -189,6 +189,7 @@ func (s *State) StandardRouter(mw *middleware.Middleware) http.Handler {
 
 	r.With(middleware.AuthMiddleware(s.oauth)).Route("/vouch", func(r chi.Router) {
 		r.Post("/", s.Vouch)
+		r.Post("/skip", s.SkipVouchSuggestion)
 	})
 
 	r.With(middleware.AuthMiddleware(s.oauth)).Route("/star", func(r chi.Router) {

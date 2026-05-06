@@ -308,6 +308,14 @@ func GetVouchRelationship(e Execer, viewerDid, subjectDid syntax.DID) (*models.V
 	return batch[subjectDid], nil
 }
 
+func SkipVouchSuggestion(e Execer, did, subjectDid string) error {
+	_, err := e.Exec(
+		`insert or ignore into vouch_skips (did, subject_did) values (?, ?)`,
+		did, subjectDid,
+	)
+	return err
+}
+
 // priority:
 //  1. collaborator invites sent
 //  2. knot member invites sent
@@ -390,6 +398,8 @@ func GetVouchSuggestions(e Execer, did string, limit int) ([]models.VouchSuggest
 		)
 		where did not in (
 			select subject_did from vouches where vouches.did = ?
+			union
+			select subject_did from vouch_skips where vouch_skips.did = ?
 		)
 		group by did
 		order by min(priority) asc, max(created) desc
@@ -405,7 +415,7 @@ func GetVouchSuggestions(e Execer, did string, limit int) ([]models.VouchSuggest
 		did, did, // issue_comments
 		did, did, // follows
 		did, did, // stars
-		did, // vouches exclusion
+		did, did, // existing vouches + skips exclusion
 		limit,
 	}
 
