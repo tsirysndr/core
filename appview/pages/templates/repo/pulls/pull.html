@@ -80,9 +80,12 @@
 
 {{ define "repoContentLayout" }}
   <div class="grid grid-cols-1 md:grid-cols-10 gap-4 w-full">
-    <section class="bg-white col-span-1 md:col-span-8 dark:bg-gray-800 p-6 rounded relative w-full mx-auto dark:text-white h-full flex-shrink">
-      {{ block "repoContent" . }}{{ end }}
-    </section>
+    <div class="col-span-1 md:col-span-8 flex flex-col gap-4">
+      <section class="bg-white dark:bg-gray-800 p-6 rounded relative w-full mx-auto dark:text-white h-full flex-shrink">
+        {{ block "repoContent" . }}{{ end }}
+      </section>
+      {{ template "repo/pulls/fragments/pullVouchNudge" . }}
+    </div>
     <div class="flex flex-col gap-6 col-span-1 md:col-span-2">
       {{ template "repo/fragments/labelPanel"
         (dict "RepoInfo" $.RepoInfo

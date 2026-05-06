@@ -19,7 +19,7 @@
             <span class="text-xs text-gray-500 dark:text-gray-400 truncate" title="{{ .Reason }}">{{ .Reason }}</span>
           </div>
           <div class="shrink-0">
-            {{ template "user/fragments/vouch" . }}
+            {{ template "user/fragments/vouch" (dict "VouchRelationship" .VouchRelationship) }}
           </div>
         </div>
         {{ end }}

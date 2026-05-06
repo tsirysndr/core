@@ -1,6 +1,9 @@
 {{ define "user/fragments/vouch" }}
 <div class="relative">
+  {{ $vr := index . "VouchRelationship" }}
+  {{ $ev := index . "Evidences" }}
+  {{ $popoverId := index . "PopoverId" }}
   {{ template "user/fragments/vouchButton" . }}
-  {{ template "user/fragments/vouchPopover" . }}
+  {{ template "user/fragments/vouchPopover" (dict "VouchRelationship" $vr "Evidences" $ev "PopoverId" $popoverId) }}
 </div>
 {{ end }}

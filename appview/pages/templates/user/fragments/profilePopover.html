@@ -39,7 +39,7 @@
     {{ if and .LoggedInUser (ne .FollowStatus.String "IsSelf") }}
       <div class="flex items-center gap-2">
         {{ template "user/fragments/follow" . }}
-        {{ template "user/fragments/vouchButton" . }}
+        {{ template "user/fragments/vouchButton" (dict "VouchRelationship" .VouchRelationship) }}
       </div>
 
       {{ if .VouchRelationship }}
@@ -54,6 +54,6 @@
 
   {{/* render the vouch modal outside the popover content div so the popover api places it in the top layer correctly */}}
   {{ if and .LoggedInUser (ne .FollowStatus.String "IsSelf") }}
-    {{ template "user/fragments/vouchPopover" . }}
+    {{ template "user/fragments/vouchPopover" (dict "VouchRelationship" .VouchRelationship) }}
   {{ end }}
 {{ end }}

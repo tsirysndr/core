@@ -1,0 +1,38 @@
+{{ define "repo/pulls/fragments/pullVouchNudge" }}
+  {{ $owner := .Pull.OwnerDid }}
+  {{ $vr := index .VouchRelationships (did $owner) }}
+  {{ $skipped := index .VouchSkips (did $owner) }}
+
+  {{ if and
+      .LoggedInUser
+      (ne .LoggedInUser.Did $owner)
+      (or .Pull.State.IsOpen .Pull.State.IsMerged)
+      (or (not $vr) $vr.IsEmpty)
+      (not $skipped) }}
+
+  <div class="border border-gray-200 dark:border-gray-700 rounded px-2 pl-4 py-2 flex items-center gap-4 text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800">
+    <span class="flex-1 flex items-center gap-2 flex-wrap">
+      {{ i "shield-question-mark" "size-4" }}
+      Would you like to vouch for
+      <a href="/{{ resolve $owner }}" class="inline-flex items-center gap-1 font-medium text-gray-900 dark:text-white hover:underline">
+        <img src="{{ tinyAvatar $owner }}" class="rounded-full size-4 inline" />
+        {{ resolve $owner }}
+      </a>
+      for their contribution?
+    </span>
+    <button
+      hx-post="/vouch/skip?subject={{ $owner }}"
+      hx-trigger="click"
+      hx-disabled-elt="this"
+      title="Skip suggestion"
+      class="group shrink-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-0.5"
+    >
+      <span class="group-[.htmx-request]:hidden">dismiss</span>
+      {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:block" }}
+    </button>
+    <div class="shrink-0">
+      {{ template "user/fragments/vouch" (dict "VouchRelationship" $vr "Evidences" (list .Pull.AtUri.String) "PopoverId" (printf "vouch-nudge-modal-%s" (normalizeForHtmlId $owner))) }}
+    </div>
+  </div>
+  {{ end }}
+{{ end }}

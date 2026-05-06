@@ -308,6 +308,15 @@ func GetVouchRelationship(e Execer, viewerDid, subjectDid syntax.DID) (*models.V
 	return batch[subjectDid], nil
 }
 
+func IsVouchSkipped(e Execer, did, subjectDid string) (bool, error) {
+	var exists bool
+	err := e.QueryRow(
+		`select exists(select 1 from vouch_skips where did = ? and subject_did = ?)`,
+		did, subjectDid,
+	).Scan(&exists)
+	return exists, err
+}
+
 func SkipVouchSuggestion(e Execer, did, subjectDid string) error {
 	_, err := e.Exec(
 		`insert or ignore into vouch_skips (did, subject_did) values (?, ?)`,

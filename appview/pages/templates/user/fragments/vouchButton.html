@@ -13,10 +13,12 @@
 {{ with .VouchRelationship }}
   {{ $userDid = .SubjectDid.String }}
 {{ end }}
+{{ $popoverId := index . "PopoverId" }}
+{{ if not $popoverId }}{{ $popoverId = printf "vouch-modal-%s" (normalizeForHtmlId $userDid) }}{{ end }}
 <button
   id="vouch-btn-{{ normalizeForHtmlId $userDid }}"
   type="button"
-  popovertarget="vouch-modal-{{ normalizeForHtmlId $userDid }}"
+  popovertarget="{{ $popoverId }}"
   popovertargetaction="toggle"
   class="{{ if $isVouched }}btn-create{{else if $isDenounced}}btn-cancel{{else}}btn{{end}} w-full flex gap-2 items-center justify-center">
   {{ if $isVouched }}

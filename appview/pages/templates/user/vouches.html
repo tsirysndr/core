@@ -50,7 +50,7 @@
             <span class="text-sm text-gray-500 dark:text-gray-400">{{ .Reason }}</span>
           </div>
           <div class="shrink-0 w-32">
-            {{ template "user/fragments/vouch" . }}
+            {{ template "user/fragments/vouch" (dict "VouchRelationship" .VouchRelationship) }}
           </div>
           <button
             hx-post="/vouch/skip?subject={{ .Did.String }}"

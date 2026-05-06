@@ -189,12 +189,19 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 	}
 
 	vouchRelationships := make(map[syntax.DID]*models.VouchRelationship)
+	vouchSkips := make(map[syntax.DID]bool)
 	if user != nil {
 		participants := pull.Participants()
 		vouchRelationships, err = db.GetVouchRelationshipsBatch(s.db, syntax.DID(user.Did), participants)
 		if err != nil {
 			l.Error("failed to fetch vouch relationships", "err", err)
 		}
+		ownerDid := syntax.DID(pull.OwnerDid)
+		skipped, err := db.IsVouchSkipped(s.db, user.Did, pull.OwnerDid)
+		if err != nil {
+			l.Error("failed to check vouch skip", "err", err)
+		}
+		vouchSkips[ownerDid] = skipped
 	}
 
 	patch := pull.Submissions[roundIdInt].CombinedPatch()
@@ -239,6 +246,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 
 		LabelDefs:          defs,
 		VouchRelationships: vouchRelationships,
+		VouchSkips:         vouchSkips,
 	})
 	if err != nil {
 		l.Error("failed to render page", "err", err)

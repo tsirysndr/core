@@ -1384,6 +1384,7 @@ type RepoSinglePullParams struct {
 
 	LabelDefs          map[string]*models.LabelDefinition
 	VouchRelationships map[syntax.DID]*models.VouchRelationship
+	VouchSkips         map[syntax.DID]bool
 }
 
 func (p *Pages) RepoSinglePull(w io.Writer, params RepoSinglePullParams) error {

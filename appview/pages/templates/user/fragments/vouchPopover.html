@@ -1,11 +1,13 @@
 {{ define "user/fragments/vouchPopover" }}
+{{ $vr := index . "VouchRelationship" }}
+{{ $ev := index . "Evidences" }}
 {{ $isVouched := false }}
 {{ $isDenounced := false }}
 {{ $isUndecided := false }}
-{{ if .VouchRelationship }}
-  {{ if .VouchRelationship.IsDirectVouch }}
+{{ if $vr }}
+  {{ if $vr.IsDirectVouch }}
     {{ $isVouched = true }}
-  {{ else if .VouchRelationship.IsDirectDenounce }}
+  {{ else if $vr.IsDirectDenounce }}
     {{ $isDenounced = true }}
   {{ else }}
     {{ $isUndecided = true }}
@@ -16,12 +18,14 @@
 
 {{ $userIdent := "" }}
 {{ $userDid := "" }}
-{{ with .VouchRelationship }}
+{{ with $vr }}
   {{ $userDid = .SubjectDid.String }}
   {{ $userIdent = resolve .SubjectDid.String }}
 {{ end }}
+{{ $popoverId := index . "PopoverId" }}
+{{ if not $popoverId }}{{ $popoverId = printf "vouch-modal-%s" (normalizeForHtmlId $userDid) }}{{ end }}
 <div
-  id="vouch-modal-{{ normalizeForHtmlId $userDid }}"
+  id="{{ $popoverId }}"
   popover
   class="bg-white w-[95%] md:w-96 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 drop-shadow dark:text-white backdrop:bg-gray-400/50 dark:backdrop:bg-gray-800/50 space-y-2">
 
@@ -34,7 +38,7 @@
     <div>
       <p class="font-semibold mb-1 text-base">Vouch for {{ $userIdent }}</p>
       <p class="text-gray-600 dark:text-gray-400 text-sm">
-        {{ with .VouchRelationship }}
+        {{ with $vr }}
           {{ with .GetDirectVouch }}
               You {{if $isVouched}}vouched{{else}}denounced{{end}} {{ $userIdent }} {{ relTimeFmt .CreatedAt }}.
               You can change your decision below.
@@ -46,36 +50,39 @@
       </p>
     </div>
 
-    {{ if .VouchRelationship }}
-      {{ if .VouchRelationship.IndirectVouches }}
+    {{ if $vr }}
+      {{ if $vr.IndirectVouches }}
       <div>
         <p class="font-semibold mb-1 text-sm">From your network:</p>
-        {{ template "user/fragments/networkVouches" .VouchRelationship }}
+        {{ template "user/fragments/networkVouches" $vr }}
       </div>
       {{ end }}
     {{ end }}
 
     <input type="hidden" name="subject" value="{{ $userDid }}" />
+    {{ range $ev }}
+      <input type="hidden" name="evidences" value="{{ . }}" />
+    {{ end }}
 
     {{ $labelClass := "grid grid-cols-[auto_1fr_auto] items-center gap-2 rounded p-2 py- ring-1 ring-gray-200 dark:ring-gray-700 cursor-pointer" }}
 
     <div class="grid grid-cols-3 gap-2">
       <input
-        id="vouch-{{ normalizeForHtmlId $userDid }}"
+        id="vouch-{{ $popoverId }}"
         type="radio"
         name="kind"
         value="vouch"
         {{ if $isVouched }}checked{{ end }}
         class="peer/vouch hidden appearance-none" />
       <input
-        id="denounce-{{ normalizeForHtmlId $userDid }}"
+        id="denounce-{{ $popoverId }}"
         type="radio"
         name="kind"
         value="denounce"
         {{ if $isDenounced }}checked{{ end }}
         class="peer/denounce hidden appearance-none" />
       <input
-        id="none-{{ normalizeForHtmlId $userDid }}"
+        id="none-{{ $popoverId }}"
         type="radio"
         name="kind"
         value="none"
@@ -83,7 +90,7 @@
         class="peer/none hidden appearance-none" />
 
       <label
-        for="vouch-{{ normalizeForHtmlId $userDid }}"
+        for="vouch-{{ $popoverId }}"
         class="
         {{ $labelClass }}
         hover:bg-gray-100 peer-checked/vouch:bg-green-200 peer-checked/vouch:text-green-800 peer-checked/vouch:ring-green-400
@@ -92,7 +99,7 @@
         <span class="text-sm font-medium">Vouch</span>
       </label>
       <label
-        for="denounce-{{ normalizeForHtmlId $userDid }}"
+        for="denounce-{{ $popoverId }}"
         class="
         {{ $labelClass }}
         hover:bg-gray-100 peer-checked/denounce:bg-red-200 peer-checked/denounce:text-red-800 peer-checked/denounce:ring-red-400
@@ -101,7 +108,7 @@
         <span class="text-sm font-medium">Denounce</span>
       </label>
       <label
-        for="none-{{ normalizeForHtmlId $userDid }}"
+        for="none-{{ $popoverId }}"
         class="
         {{ $labelClass }}
         hover:bg-gray-100 peer-checked/none:bg-gray-200 peer-checked/none:text-gray-800 peer-checked/none:ring-gray-400
@@ -111,13 +118,13 @@
       </label>
 
       <textarea
-        id="reason-{{ normalizeForHtmlId $userDid }}"
+        id="reason-{{ $popoverId }}"
         name="reason"
         rows="1"
         maxlength="300"
         placeholder="Write a reason..."
         class="w-full resize-none col-span-3 peer-checked/none:hidden">
-        {{- with .VouchRelationship -}}
+        {{- with $vr -}}
           {{- with .GetDirectVouch -}}
             {{- with .Reason -}}
               {{- . -}}
@@ -130,7 +137,7 @@
     <div class="flex gap-2">
       <button
         type="button"
-        popovertarget="vouch-modal-{{ normalizeForHtmlId $userDid }}"
+        popovertarget="{{ $popoverId }}"
         popovertargetaction="hide"
         class="btn flex-1 flex items-center justify-center gap-2">
         {{ i "x" "size-4" }}
@@ -141,7 +148,7 @@
         class="btn-create flex-1 flex items-center justify-center gap-2 text-white group">
         {{ i "check" "size-4 inline group-[.htmx-request]:hidden" }}
         {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
-        {{ if and .VouchRelationship .VouchRelationship.GetDirectVouch }} update {{ else }} save {{end}}
+        {{ if and $vr $vr.GetDirectVouch }} update {{ else }} save {{end}}
       </button>
     </div>
   </form>

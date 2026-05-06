@@ -109,7 +109,7 @@
       </div>
 
       {{ if ne .FollowStatus.String "IsSelf" }}
-        {{ template "user/fragments/vouch" . }}
+        {{ template "user/fragments/vouch" (dict "VouchRelationship" .VouchRelationship) }}
 
         {{ if .VouchRelationship }}
           {{ if .VouchRelationship.IndirectVouches }}
