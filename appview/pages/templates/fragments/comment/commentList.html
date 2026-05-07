@@ -38,13 +38,7 @@
       <input name="subject-cid" type="hidden" value="{{ $item.Self.Subject.Cid }}">
       <input name="reply-to-uri" type="hidden" value="{{ $item.Self.AtUri }}">
       <input name="reply-to-cid" type="hidden" value="{{ $item.Self.Cid }}">
-      {{ if $item.Self.IsLegacy }}
-        <div class="py-2 px-6 border-t flex gap-2 items-center border-gray-300 dark:border-gray-700">
-          <span class="text-orange-500">Can't reply to legacy comment.</span>
-        </div>
-      {{ else }}
-        {{ template "fragments/comment/replyPlaceholder" (dict "LoggedInUser" $root.LoggedInUser) }}
-      {{ end }}
+      {{ template "fragments/comment/replyPlaceholder" (dict "LoggedInUser" $root.LoggedInUser) }}
     </div>
   </div>
 {{ end }}

@@ -1,6 +1,7 @@
 package state
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -10,6 +11,8 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
+	"github.com/ipfs/go-cid"
+	"github.com/multiformats/go-multihash"
 
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/db"
@@ -176,20 +179,56 @@ func (s *State) NewComment(w http.ResponseWriter, r *http.Request) {
 	var replyTo *comatproto.RepoStrongRef
 	replyToUriRaw := r.FormValue("reply-to-uri")
 	replyToCidRaw := r.FormValue("reply-to-cid")
-	if replyToUriRaw != "" && replyToCidRaw != "" {
-		uri, err := syntax.ParseATURI(replyToUriRaw)
+	if replyToUriRaw != "" {
+		replyToUri, err := syntax.ParseATURI(replyToUriRaw)
 		if err != nil {
 			s.pages.Notice(w, noticeId, "reply-to-uri should be valid AT-URI")
 			return
 		}
-		cid, err := syntax.ParseCID(replyToCidRaw)
-		if err != nil {
-			s.pages.Notice(w, noticeId, "reply-to-cid should be valid CID")
-			return
+		// force replyTo.uri to `sh.tangled.feed.comment` collection, even when they aren't.
+		// we are expecting parent comment will be migrated later.
+		replyToUri = syntax.ATURI(fmt.Sprintf("at://%s/%s/%s", replyToUri.Authority(), tangled.FeedCommentNSID, replyToUri.RecordKey()))
+
+		var replyToCid syntax.CID
+		if replyToCidRaw != "" {
+			replyToCid, err = syntax.ParseCID(replyToCidRaw)
+			if err != nil {
+				s.pages.Notice(w, noticeId, "reply-to-cid should be valid CID")
+				return
+			}
+		} else {
+			// guess parent comment cid
+			subjectComment, err := db.GetComment(s.db, orm.FilterEq("did", replyToUri.Authority()), orm.FilterEq("rkey", replyToUri.RecordKey()))
+			if err != nil {
+				l.Warn("db: failed to query subject comment", "err", err)
+				s.pages.Notice(w, noticeId, "Subject record is unknown.")
+				return
+			}
+			if subjectComment.Deleted != nil {
+				// leave cid empty. reply comment won't pass the schema validation.
+			} else {
+				// guess cid from content
+				c, err := func() (cid.Cid, error) {
+					buf := new(bytes.Buffer)
+					if subjectComment.Subject.Cid == "" {
+						subjectComment.Subject.Cid = subject.Cid
+					}
+					if err := subjectComment.AsRecord().MarshalCBOR(buf); err != nil {
+						return cid.Undef, fmt.Errorf("MarshalCBOR: %w", err)
+					}
+					return cid.NewPrefixV1(cid.DagCBOR, multihash.SHA2_256).Sum(buf.Bytes())
+				}()
+				if err != nil {
+					l.Warn("cbor: failed to guess parent comment cid", "err", err)
+					s.pages.Notice(w, noticeId, "Parent comment is invalid.")
+					return
+				}
+				replyToCid = syntax.CID(c.String())
+			}
 		}
 		replyTo = &comatproto.RepoStrongRef{
-			Uri: uri.String(),
-			Cid: cid.String(),
+			Uri: replyToUri.String(),
+			Cid: replyToCid.String(),
 		}
 	}
 

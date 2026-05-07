@@ -44,10 +44,6 @@ func (c Comment) StrongRef() comatproto.RepoStrongRef {
 }
 
 func (c Comment) AsRecord() typegen.CBORMarshaler {
-	// can't convert to record for legacy types
-	if c.Collection != tangled.FeedCommentNSID {
-		return nil
-	}
 	var pullRoundIdx *int64
 	if c.PullRoundIdx != nil {
 		pullRoundIdx = new(int64)
@@ -204,8 +200,19 @@ func NewCommentList(comments []Comment) []CommentListItem {
 		if r.ReplyTo == nil {
 			continue
 		}
-		if parent, exists := toplevel[syntax.ATURI(r.ReplyTo.Uri)]; exists {
+		uri := syntax.ATURI(r.ReplyTo.Uri)
+		if parent, exists := toplevel[uri]; exists {
 			parent.Replies = append(parent.Replies, r)
+			continue
+		}
+		// HACK: fallback to legacy comment collections
+		if parent, exists := toplevel[syntax.ATURI(fmt.Sprintf("at://%s/%s/%s", uri.Authority(), tangled.RepoIssueCommentNSID, uri.RecordKey()))]; exists {
+			parent.Replies = append(parent.Replies, r)
+			continue
+		}
+		if parent, exists := toplevel[syntax.ATURI(fmt.Sprintf("at://%s/%s/%s", uri.Authority(), tangled.RepoPullCommentNSID, uri.RecordKey()))]; exists {
+			parent.Replies = append(parent.Replies, r)
+			continue
 		}
 	}
 

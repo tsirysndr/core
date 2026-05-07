@@ -11,16 +11,11 @@ import (
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/orm"
 )
 
 func PutComment(tx *sql.Tx, c *models.Comment, references []syntax.ATURI) error {
-	if c.Collection == "" {
-		c.Collection = tangled.FeedCommentNSID
-	}
-
 	var bodyBlobs, replyToUri, replyToCid *string
 	if len(c.Body.Blobs) > 0 {
 		encoded, err := json.Marshal(c.Body.Blobs)
