@@ -7,6 +7,7 @@
     {{ $vr = index . 2 }}
   {{ end }}
   <div class="relative inline-block"
+       {{ if $vr }}
        onmouseenter="(function(el){
          clearTimeout(el._pht);
          el._pht = setTimeout(function(){
@@ -21,12 +22,15 @@
          var modal=document.getElementById('vouch-modal-'+p.dataset.vouchModalId);
          if(modal&&modal.matches(':popover-open'))return;
          p.classList.add('hidden');
-       })(this)">
+       })(this)"
+       {{ end }}>
     <a href="/{{ $handle }}" title="{{ $handle }}"
+       {{ if $vr }}
        hx-get="/profile/popover?did={{ $did }}"
        hx-trigger="mouseenter once"
        hx-target="next [data-profile-popover-content]"
-       hx-swap="innerHTML">
+       hx-swap="innerHTML"
+       {{ end }}>
       <img
           src="{{ tinyAvatar $did }}"
           alt=""
@@ -55,6 +59,7 @@
         </button>
       {{ end }}
     {{ end }}
+    {{ if $vr }}
     <div data-profile-popover
          data-vouch-modal-id="{{ normalizeForHtmlId $did }}"
          class="hidden z-[9999] pt-1 w-80"
@@ -66,6 +71,7 @@
         </div>
       </div>
     </div>
+    {{ end }}
   </div>
   {{ if $vr }}
     {{ if ne $did $vr.ViewerDid }}

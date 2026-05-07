@@ -712,12 +712,14 @@ func (p *Pages) ProfileStrings(w io.Writer, params ProfileStringsParams) error {
 }
 
 type ProfileVouchesParams struct {
-	LoggedInUser *oauth.MultiAccountUser
-	Vouches      []models.Vouch
-	Suggestions  []models.VouchSuggestion
-	Card         *ProfileCard
-	Page         pagination.Page
-	Active       string
+	LoggedInUser   *oauth.MultiAccountUser
+	Vouches        []models.Vouch
+	Suggestions    []models.VouchSuggestion
+	Card           *ProfileCard
+	Page           pagination.Page
+	Active         string
+	EvidencePulls  map[syntax.ATURI]*models.Pull
+	EvidenceIssues map[syntax.ATURI]*models.Issue
 }
 
 func (p *Pages) ProfileVouches(w io.Writer, params ProfileVouchesParams) error {

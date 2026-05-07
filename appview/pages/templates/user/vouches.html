@@ -33,7 +33,7 @@
     <div class="relative flex flex-col gap-6 ml-5 px-4 border border-transparent">
       <div class="absolute top-8 bottom-8 w-0.5 bg-gray-200 dark:bg-gray-700 z-0"></div>
       {{ range .Vouches }}
-        {{ template "vouchTimelineItem" (list $.Card.UserDid $.LoggedInUser.Did .) }}
+        {{ template "vouchTimelineItem" (list $.Card.UserDid $.LoggedInUser.Did . $.EvidencePulls $.EvidenceIssues) }}
       {{ end }}
     </div>
   {{ end }}
@@ -72,13 +72,17 @@
   {{ $profileDid := index . 0 }}
   {{ $viewerDid := index . 1 }}
   {{ $v := index . 2 }}
+  {{ $evidencePulls := index . 3 }}
+  {{ $evidenceIssues := index . 4 }}
   {{ $isOutgoing := eq $v.Did $profileDid }}
   {{ $isVouch := $v.IsVouch }}
   {{ $isSelf := eq $profileDid $viewerDid }}
 
-  <div class="-ml-5 flex items-center gap-3 relative z-10">
-    <div class="flex-shrink-0 flex items-center justify-center size-10 rounded-full
-      {{ if $isVouch }}bg-green-200 dark:bg-green-800{{ else }}bg-red-200 dark:bg-red-800{{ end }}">
+  <div class="-ml-4 flex items-start gap-3 relative z-10">
+    <div class="flex-shrink-0 flex items-center justify-center size-8 rounded-full
+      {{ if $isVouch }}bg-green-200 dark:bg-green-800{{ else }}bg-red-200 dark:bg-red-800{{ end }}
+      border border-gray-300 dark:border-gray-700
+      ">
       {{ if $isVouch }}
         {{ if $isOutgoing }}
           {{ i "arrow-up-right" "size-5 text-green-500 dark:text-green-400" }}
@@ -94,8 +98,8 @@
       {{ end }}
     </div>
 
-    <div class="flex flex-col gap-1">
-      <div class="flex flex-wrap items-center gap-1 text-sm dark:text-white">
+    <div class="flex flex-col gap-1 mt-1">
+      <div class="flex flex-wrap items-center gap-1 dark:text-white">
         {{ if and $isSelf $isOutgoing }}
           <span class="font-medium text-gray-700 dark:text-gray-300">you</span>
         {{ else }}
@@ -109,10 +113,23 @@
         {{ else }}
           <a href="/{{ resolve $v.SubjectDid.String }}" class="font-medium hover:underline">{{ resolve $v.SubjectDid.String }}</a>
         {{ end }}
-        <span class="text-gray-400 dark:text-gray-500 text-xs">{{ relTimeFmt $v.CreatedAt }}</span>
+        <span class="text-gray-400 dark:text-gray-500 text-sm">{{ relTimeFmt $v.CreatedAt }}</span>
       </div>
       {{ with $v.Reason }}
-        <p class="text-gray-500 dark:text-gray-400">{{ . }}</p>
+        <p class="text-gray-500 dark:text-gray-400 text-sm">{{ . }}</p>
+      {{ end }}
+      {{ if $v.Evidences }}
+        <div class="flex flex-col gap-2 mt-1 text-sm">
+          {{ range $v.Evidences }}
+            {{ $pull := index $evidencePulls . }}
+            {{ $issue := index $evidenceIssues . }}
+            {{ if $pull }}
+              {{ template "user/fragments/pullEvent" $pull }}
+            {{ else if $issue }}
+              {{ template "user/fragments/issueEvent" $issue }}
+            {{ end }}
+          {{ end }}
+        </div>
       {{ end }}
     </div>
   </div>

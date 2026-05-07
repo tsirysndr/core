@@ -438,12 +438,50 @@ func (s *State) vouchesPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var pullAts, issueAts []syntax.ATURI
+	for _, v := range vouches {
+		for _, ev := range v.Evidences {
+			switch ev.Collection().String() {
+			case tangled.RepoPullNSID:
+				pullAts = append(pullAts, ev)
+			case tangled.RepoIssueNSID:
+				issueAts = append(issueAts, ev)
+			}
+		}
+	}
+
+	evidencePulls := make(map[syntax.ATURI]*models.Pull)
+	if len(pullAts) > 0 {
+		pulls, err := db.GetPulls(s.db, orm.FilterIn("at_uri", pullAts))
+		if err != nil {
+			l.Error("failed to get evidence pulls", "err", err)
+		} else {
+			for _, p := range pulls {
+				evidencePulls[p.AtUri()] = p
+			}
+		}
+	}
+
+	evidenceIssues := make(map[syntax.ATURI]*models.Issue)
+	if len(issueAts) > 0 {
+		issues, err := db.GetIssues(s.db, orm.FilterIn("at_uri", issueAts))
+		if err != nil {
+			l.Error("failed to get evidence issues", "err", err)
+		} else {
+			for i := range issues {
+				evidenceIssues[issues[i].AtUri()] = &issues[i]
+			}
+		}
+	}
+
 	err = s.pages.ProfileVouches(w, pages.ProfileVouchesParams{
-		LoggedInUser: loggedInUser,
-		Vouches:      vouches,
-		Suggestions:  suggestions,
-		Card:         profile,
-		Page:         page,
+		LoggedInUser:   loggedInUser,
+		Vouches:        vouches,
+		Suggestions:    suggestions,
+		Card:           profile,
+		Page:           page,
+		EvidencePulls:  evidencePulls,
+		EvidenceIssues: evidenceIssues,
 	})
 	if err != nil {
 		l.Error("failed to render page", "err", err)

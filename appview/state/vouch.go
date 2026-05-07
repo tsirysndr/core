@@ -136,13 +136,14 @@ func (s *State) Vouch(w http.ResponseWriter, r *http.Request) {
 		reasonPtr = &reason
 	}
 
-	var evidences []string
+	var evidences []syntax.ATURI
 	for _, raw := range r.Form["evidences"] {
-		if _, err := syntax.ParseATURI(raw); err != nil {
+		uri, err := syntax.ParseATURI(raw)
+		if err != nil {
 			l.Warn("invalid evidence AT-URI, skipping", "uri", raw, "err", err)
 			continue
 		}
-		evidences = append(evidences, raw)
+		evidences = append(evidences, uri)
 	}
 
 	var swapCid *string
@@ -162,7 +163,13 @@ func (s *State) Vouch(w http.ResponseWriter, r *http.Request) {
 				Kind:      string(kind),
 				Reason:    reasonPtr,
 				CreatedAt: createdAt,
-				Evidences: evidences,
+				Evidences: func() []string {
+					ss := make([]string, len(evidences))
+					for i, e := range evidences {
+						ss[i] = e.String()
+					}
+					return ss
+				}(),
 			}},
 	})
 	if err != nil {

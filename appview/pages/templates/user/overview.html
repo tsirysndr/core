@@ -129,33 +129,7 @@
       </summary>
       <div class="py-2 text-sm flex flex-col gap-3 mb-2">
         {{ range $items }}
-          {{ $repoOwner := resolve .Repo.Did }}
-          {{ $repoName := .Repo.Name }}
-          {{ $repoUrl := printf "%s/%s" $repoOwner $repoName }}
-
-          <div class="flex gap-2 text-gray-600 dark:text-gray-300">
-            {{ if .Open }}
-              <span class="text-green-600 dark:text-green-500">
-                {{ i "circle-dot" "w-4 h-4" }}
-              </span>
-            {{ else }}
-              <span class="text-gray-500 dark:text-gray-400">
-                {{ i "ban" "w-4 h-4" }}
-              </span>
-            {{ end }}
-            <div class="flex-none min-w-8 text-right">
-              <span class="text-gray-500 dark:text-gray-400">#{{ .IssueId }}</span>
-            </div>
-            <div class="break-words max-w-full">
-              <a href="/{{$repoUrl}}/issues/{{ .IssueId }}" class="no-underline hover:underline">
-                {{ .Title -}}
-              </a>
-              on
-              <a href="/{{$repoUrl}}" class="no-underline hover:underline whitespace-nowrap">
-                {{$repoUrl}}
-              </a>
-            </div>
-          </div>
+          {{ template "user/fragments/issueEvent" . }}
         {{ end }}
       </div>
     </details>
@@ -198,37 +172,7 @@
       </summary>
       <div class="py-2 text-sm flex flex-col gap-3 mb-2">
         {{ range $items }}
-          {{ $repoOwner := resolve .Repo.Did }}
-          {{ $repoName := .Repo.Name }}
-          {{ $repoUrl := printf "%s/%s" $repoOwner $repoName }}
-
-          <div class="flex gap-2 text-gray-600 dark:text-gray-300">
-            {{ if .State.IsOpen }}
-              <span class="text-green-600 dark:text-green-500">
-                {{ i "git-pull-request" "w-4 h-4" }}
-              </span>
-            {{ else if .State.IsMerged }}
-              <span class="text-purple-600 dark:text-purple-500">
-                {{ i "git-merge" "w-4 h-4" }}
-              </span>
-            {{ else }}
-              <span class="text-gray-600 dark:text-gray-300">
-                {{ i "git-pull-request-closed" "w-4 h-4" }}
-              </span>
-            {{ end }}
-            <div class="flex-none min-w-8 text-right">
-              <span class="text-gray-500 dark:text-gray-400">#{{ .PullId }}</span>
-            </div>
-            <div class="break-words max-w-full">
-              <a href="/{{$repoUrl}}/pulls/{{ .PullId }}" class="no-underline hover:underline">
-                {{ .Title -}}
-              </a>
-              on
-              <a href="/{{$repoUrl}}" class="no-underline hover:underline whitespace-nowrap">
-                {{$repoUrl}}
-              </a>
-            </div>
-          </div>
+          {{ template "user/fragments/pullEvent" . }}
         {{ end }}
       </div>
     </details>

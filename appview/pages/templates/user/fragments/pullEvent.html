@@ -1,0 +1,25 @@
+{{ define "user/fragments/pullEvent" }}
+  {{ $repoOwner := resolve .Repo.Did }}
+  {{ $repoUrl := printf "%s/%s" $repoOwner .Repo.Name }}
+  <div class="flex items-center gap-2 text-gray-600 dark:text-gray-300 overflow-hidden">
+    {{ if .State.IsOpen }}
+      <span class="text-green-600 dark:text-green-500 shrink-0">
+        {{ i "git-pull-request" "w-4 h-4" }}
+      </span>
+    {{ else if .State.IsMerged }}
+      <span class="text-purple-600 dark:text-purple-500 shrink-0">
+        {{ i "git-merge" "w-4 h-4" }}
+      </span>
+    {{ else }}
+      <span class="text-gray-600 dark:text-gray-300 shrink-0">
+        {{ i "git-pull-request-closed" "w-4 h-4" }}
+      </span>
+    {{ end }}
+    <span class="shrink-0 text-gray-500 dark:text-gray-400">#{{ .PullId }}</span>
+    <span class="truncate">
+      <a href="/{{ $repoUrl }}/pulls/{{ .PullId }}" class="no-underline hover:underline">{{- .Title -}}</a>
+      on
+      <a href="/{{ $repoUrl }}" class="no-underline hover:underline">{{ $repoUrl }}</a>
+    </span>
+  </div>
+{{ end }}
