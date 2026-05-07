@@ -48,28 +48,28 @@ func Config(opts ...setupOpt) config {
 //
 // directory structure is typically like so:
 //
-//	did:plc:foobar/repo1
-//	did:plc:foobar/repo2
-//	did:web:barbaz/repo1
+//	did:plc:repo1
+//	did:plc:repo2
+//	did:web:repo1
 func Setup(config config) error {
 	// iterate over all directories in current directory:
-	userDirs, err := os.ReadDir(config.scanPath)
+	repoDirs, err := os.ReadDir(config.scanPath)
 	if err != nil {
 		return err
 	}
 
-	for _, user := range userDirs {
-		if !user.IsDir() {
+	for _, repo := range repoDirs {
+		if !repo.IsDir() {
 			continue
 		}
 
-		did := user.Name()
+		did := repo.Name()
 		if !strings.HasPrefix(did, "did:") {
 			continue
 		}
 
 		userPath := filepath.Join(config.scanPath, did)
-		if err := SetupUser(config, userPath); err != nil {
+		if err := SetupRepo(config, userPath); err != nil {
 			return err
 		}
 	}
@@ -77,31 +77,7 @@ func Setup(config config) error {
 	return nil
 }
 
-// setup hooks in /scanpath/did:plc:user
-func SetupUser(config config, userPath string) error {
-	repos, err := os.ReadDir(userPath)
-	if err != nil {
-		return err
-	}
-
-	for _, repo := range repos {
-		if !repo.IsDir() {
-			continue
-		}
-
-		path := filepath.Join(userPath, repo.Name())
-		if err := SetupRepo(config, path); err != nil {
-			if errors.Is(err, ErrNoGitRepo) {
-				continue
-			}
-			return err
-		}
-	}
-
-	return nil
-}
-
-// setup hook in /scanpath/did:plc:user/repo
+// setup hook in /scanpath/did:plc:repo
 func SetupRepo(config config, path string) error {
 	if _, err := git.PlainOpen(path); err != nil {
 		return fmt.Errorf("%s: %w", path, ErrNoGitRepo)
