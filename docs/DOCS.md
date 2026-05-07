@@ -1500,6 +1500,22 @@ This document is laid out in reverse-chronological order.
 Newer migration guides are listed first, and older guides
 are further down the page.
 
+## Upgrading to v1.14.0-alpha
+
+Starting with v1.14.0-alpha, the fully knot uses the repoDID as its
+canonical handle for repositories. This unlocks repository
+renames from the appview UI and changes the wire format for
+the following lexicons (`sh.tangled.repo.pull`, `sh.tangled.repo.collaborator`,
+`sh.tangled.repo.issue`, `sh.tangled.git.refUpdate`).
+
+Knots that have not been upgraded may silently drop new push
+events, pull requests, issues, and collaborator invites for
+repositories they host until upgraded. So upgrade please!!!
+
+- Upgrade to the latest tag (v1.14.0 or above)
+- Head to the [knot dashboard](https://tangled.org/settings/knots) and
+  hit the "retry" button to verify your knot
+
 ## Upgrading to v1.13.0-alpha
 
 Starting with v1.13.0-alpha, every repository on a knot is

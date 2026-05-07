@@ -1949,6 +1949,13 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 	})
 	conn.ExecContext(ctx, "pragma foreign_keys = on;")
 
+	orm.RunMigration(conn, logger, "migrate-knots-to-repo-did-rename", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			update registrations set needs_upgrade = 1;
+		`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,

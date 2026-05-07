@@ -217,7 +217,7 @@
 
 {{ define "renameRepo" }}
   {{ if and .RepoInfo.Roles.IsOwner .RepoInfo.RepoDid }}
-  <form hx-post="/{{ $.RepoInfo.FullName }}/settings/rename" hx-swap="none">
+  <form hx-post="/{{ $.RepoInfo.FullName }}/settings/rename" hx-swap="none" class="group">
     <h2 class="text-sm pb-2 uppercase font-bold">Rename Repository</h2>
     <p class="text-gray-500 dark:text-gray-400 mb-2">
       Existing git remotes that use the old name will break. Use the
@@ -239,7 +239,7 @@
     <div class="flex justify-end pt-2">
       <button
         type="submit"
-        class="btn flex items-center gap-2 group"
+        class="btn flex items-center gap-2"
       >
         {{ i "pencil" "w-4 h-4" }}
         rename

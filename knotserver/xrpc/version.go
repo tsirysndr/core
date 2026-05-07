@@ -19,17 +19,13 @@ func (x *Xrpc) Version(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		var modVer string
-		var sha string
-		var modified bool
-
-		for _, mod := range info.Deps {
-			if mod.Path == "tangled.org/tangled.org/knotserver/xrpc" {
-				modVer = mod.Version
-				break
-			}
+		modVer := info.Main.Version
+		if modVer == "" || modVer == "(devel)" {
+			modVer = "(devel)"
 		}
 
+		var sha string
+		var modified bool
 		for _, setting := range info.Settings {
 			switch setting.Key {
 			case "vcs.revision":
@@ -37,10 +33,6 @@ func (x *Xrpc) Version(w http.ResponseWriter, r *http.Request) {
 			case "vcs.modified":
 				modified = setting.Value == "true"
 			}
-		}
-
-		if modVer == "" {
-			modVer = "unknown"
 		}
 
 		if sha == "" {
