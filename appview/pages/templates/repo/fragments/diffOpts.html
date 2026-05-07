@@ -4,16 +4,14 @@
     {{ $active = "split" }}
   {{ end }}
 
-  {{ $activeTab := "bg-white dark:bg-gray-800 shadow-sm cursor-default" }}
-  {{ $inactiveTab := "hover:text-gray-900 dark:hover:text-white" }}
   {{ $usePost := ne .RefreshUrl "" }}
   {{ $target := .Target }}
   {{ if eq $target "" }}{{ $target = "#diff-files" }}{{ end }}
   {{ $field := .Field }}
   {{ if eq $field "" }}{{ $field = "diff" }}{{ end }}
 
-  <div class="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-gray-900 rounded-md text-gray-600 dark:text-gray-300 border dark:border-gray-700"
-       hx-on::before-request="const t=event.target.closest('button'); if(!t||t.classList.contains('shadow-sm'))return event.preventDefault(); this.querySelectorAll('button').forEach(b => { const active=b===t; b.classList.toggle('bg-white',active); b.classList.toggle('dark:bg-gray-800',active); b.classList.toggle('shadow-sm',active); b.classList.toggle('cursor-default',active); b.classList.toggle('hover:text-gray-900',!active); b.classList.toggle('dark:hover:text-white',!active); })">
+  <div class="btn-group"
+       hx-on::before-request="const t=event.target.closest('button');if(!t||t.classList.contains('active'))return event.preventDefault();this.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b===t))">
     <button
        {{ if $usePost }}
        hx-post="{{ .RefreshUrl }}"
@@ -27,7 +25,7 @@
        hx-select="{{ $target }}"
        hx-swap="outerHTML"
        hx-indicator="this"
-       class="group flex items-center justify-center gap-2 px-3 py-1 text-sm whitespace-nowrap rounded hover:no-underline {{ if eq $active "unified" }} {{ $activeTab }} {{ else }} {{ $inactiveTab }} {{ end }}">
+       class="group btn-group-item {{ if eq $active "unified" }}active{{ end }}">
       {{ i "square-split-vertical" "size-4 inline group-[.htmx-request]:hidden" }}
       {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
       unified
@@ -45,7 +43,7 @@
        hx-select="{{ $target }}"
        hx-swap="outerHTML"
        hx-indicator="this"
-       class="group flex items-center justify-center gap-2 px-3 py-1 text-sm whitespace-nowrap rounded hover:no-underline {{ if eq $active "split" }} {{ $activeTab }} {{ else }} {{ $inactiveTab }} {{ end }}">
+       class="group btn-group-item {{ if eq $active "split" }}active{{ end }}">
       {{ i "square-split-horizontal" "size-4 inline group-[.htmx-request]:hidden" }}
       {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
       split

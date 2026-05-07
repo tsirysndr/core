@@ -53,23 +53,20 @@
     {{ $placeholder := .Placeholder }}
     {{ $previewUrl := .PreviewUrl }}
     <div class="flex flex-col gap-2" data-md-editor="{{ $id }}">
-        {{ $tabClasses := "group flex items-center gap-2 px-3 py-1 text-sm whitespace-nowrap rounded hover:no-underline data-[active=true]:bg-white data-[active=true]:dark:bg-gray-800 data-[active=true]:shadow-sm data-[active=true]:cursor-default data-[active=false]:hover:text-gray-900 data-[active=false]:dark:hover:text-white" }}
-        <div class="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-gray-900 rounded-md text-gray-600 dark:text-gray-300 self-start border dark:border-gray-700">
+        <div class="btn-group self-start text-gray-600 dark:text-gray-300">
             <button type="button" data-md-mode="write"
-                data-active="true"
-                class="{{ $tabClasses }}">
-                {{ i "pencil" "w-3.5 h-3.5 inline group-[.htmx-request]:hidden" }}
+                class="btn-group-item active group">
+                {{ i "pencil" "w-3.5 h-3.5" }}
                 Write
             </button>
             <button type="button" data-md-mode="preview"
-                data-active="false"
                 hx-post="{{ $previewUrl }}"
                 hx-vals='js:{body: document.querySelector("[data-md-editor=\"{{ $id }}\"] textarea").value}'
                 hx-params="body"
                 hx-target="[data-md-editor='{{ $id }}'] [data-md-preview]"
                 hx-swap="innerHTML"
                 hx-indicator="this"
-                class="{{ $tabClasses }}">
+                class="btn-group-item group">
                 {{ i "eye" "w-3.5 h-3.5 inline group-[.htmx-request]:hidden" }}
                 {{ i "loader-circle" "w-3.5 h-3.5 animate-spin hidden group-[.htmx-request]:inline" }}
                 Preview
@@ -138,7 +135,7 @@
                 p.classList.toggle('hidden', p.dataset.mdPanel !== mode);
             });
             editor.querySelectorAll('[data-md-mode]').forEach(b => {
-                b.dataset.active = (b === btn) ? 'true' : 'false';
+                b.classList.toggle('active', b === btn);
             });
         });
     })();
