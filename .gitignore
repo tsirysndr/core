@@ -25,3 +25,4 @@ genjwks.out
 blog/build/
 build/
 .wrangler/
+localinfra/certs/*

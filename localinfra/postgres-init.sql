@@ -1,0 +1,3 @@
+CREATE DATABASE plc;
+CREATE DATABASE mirror;
+CREATE DATABASE mirror_tap;

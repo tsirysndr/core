@@ -1,0 +1,283 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks: [tngl]
+
+  postgres:
+    image: postgres:14-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tnglr
+      POSTGRES_PASSWORD: tnglr
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./localinfra/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tnglr -d plc"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+    networks: [tngl]
+
+  pds:
+    image: ghcr.io/bluesky-social/pds:0.4.219
+    restart: unless-stopped
+    env_file: localinfra/pds.env
+    environment:
+      PDS_DID_PLC_URL: http://plc:8080
+      NODE_EXTRA_CA_CERTS: /caddy-ca/root.crt
+    volumes:
+      - pds-data:/pds
+      - ./localinfra/certs/root.crt:/caddy-ca/root.crt:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/xrpc/_health"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+    depends_on:
+      plc:
+        condition: service_started
+    networks: [tngl]
+
+  init-accounts:
+    image: alpine:3.22
+    restart: "no"
+    env_file: localinfra/pds.env
+    environment:
+      PDS_URL: http://pds:3000
+      OWNER_USER: alice
+      KNOT_HOSTNAME: knot.tngl.boltless.dev
+    volumes:
+      - ./localinfra/scripts/init-accounts.sh:/init.sh:ro
+      - init-state:/shared
+    command: sh -c "apk add --no-cache curl jq >/dev/null && sh /init.sh"
+    depends_on:
+      pds:
+        condition: service_healthy
+    networks: [tngl]
+
+  plc:
+    platform: linux/amd64
+    image: ghcr.io/bluesky-social/did-method-plc:plc-f2ab7516bac5bc0f3f86842fa94e996bd1b3815b
+    restart: unless-stopped
+    environment:
+      DEBUG_MODE: "1"
+      LOG_ENABLED: "true"
+      LOG_LEVEL: debug
+      LOG_DESTINATION: "1"
+      PLC_VERSION: 0.0.1
+      PORT: "8080"
+      DB_CREDS_JSON: &DB_CREDS_JSON '{"username":"tnglr","password":"tnglr","host":"postgres","port":5432}'
+      DB_MIGRATE_CREDS_JSON: *DB_CREDS_JSON
+    depends_on: [postgres]
+    networks: [tngl]
+
+  jetstream:
+    platform: linux/amd64
+    image: ghcr.io/bluesky-social/jetstream:sha-d5a3b62
+    restart: unless-stopped
+    environment:
+      JETSTREAM_DATA_DIR: /data
+      JETSTREAM_LIVENESS_TTL: 300s
+      JETSTREAM_WS_URL: wss://pds.tngl.boltless.dev/xrpc/com.atproto.sync.subscribeRepos
+    volumes:
+      - jetstream-data:/data
+      - ./localinfra/certs/root.crt:/etc/ssl/certs/caddy.crt:ro
+    depends_on:
+      pds:
+        condition: service_healthy
+    networks: [tngl]
+
+  knot:
+    build:
+      context: .
+      dockerfile: localinfra/knot.Dockerfile
+    restart: unless-stopped
+    environment:
+      KNOT_SERVER_HOSTNAME: knot.tngl.boltless.dev
+      KNOT_SERVER_LISTEN_ADDR: 0.0.0.0:5555
+      KNOT_SERVER_INTERNAL_LISTEN_ADDR: 127.0.0.1:5444
+      KNOT_SERVER_DB_PATH: /home/git/knotserver.db
+      KNOT_SERVER_PLC_URL: https://plc.tngl.boltless.dev
+      KNOT_SERVER_JETSTREAM_ENDPOINT: wss://jetstream.tngl.boltless.dev/subscribe
+      KNOT_SERVER_DEV: "false"
+      KNOT_REPO_SCAN_PATH: /home/git/repositories
+      APPVIEW_ENDPOINT: https://tangled.org
+      KNOT_MIRRORS: https://mirror.tngl.boltless.dev
+    ports:
+      - "2222:22"
+    volumes:
+      - knot-data:/home/git
+      - knot-ssh-keys:/etc/ssh/keys
+      - init-state:/shared:ro
+      - ./localinfra/certs/root.crt:/etc/ssl/certs/caddy.crt:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5555/"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+      start_period: 30s
+    depends_on:
+      plc:
+        condition: service_started
+      jetstream:
+        condition: service_started
+      knotmirror:
+        condition: service_healthy
+      init-accounts:
+        condition: service_completed_successfully
+    networks: [tngl]
+
+  knotmirror-tap:
+    image: ghcr.io/bluesky-social/indigo/tap:sha-4f47add43060c27e8a37d9d76482ecddf001fcd8 # 0.1.10
+    restart: unless-stopped
+    environment:
+      TAP_BIND: ":2480"
+      TAP_PLC_URL: https://plc.tngl.boltless.dev
+      TAP_RELAY_URL: https://pds.tngl.boltless.dev # PDS can be used as basic relay without collectiondir.
+      TAP_DATABASE_URL: postgres://tnglr:tnglr@postgres:5432/mirror_tap?sslmode=disable
+      TAP_COLLECTION_FILTERS: sh.tangled.repo
+      TAP_SIGNAL_COLLECTION: sh.tangled.repo
+      TAP_RESYNC_PARALLELISM: "10"
+      TAP_RETRY_TIMEOUT: 60s
+    volumes:
+      - ./localinfra/certs/root.crt:/etc/ssl/certs/caddy.crt:ro
+    depends_on:
+      postgres:
+        condition: service_started
+      pds:
+        condition: service_healthy
+    networks: [tngl]
+
+  knotmirror:
+    build:
+      context: .
+      dockerfile: localinfra/knotmirror.Dockerfile
+    restart: unless-stopped
+    environment:
+      MIRROR_LISTEN: 0.0.0.0:7000
+      MIRROR_ADMIN_LISTEN: 0.0.0.0:7200
+      MIRROR_HOSTNAME: mirror.tngl.boltless.dev
+      MIRROR_TAP_URL: http://knotmirror-tap:2480
+      MIRROR_DB_URL: postgres://tnglr:tnglr@postgres:5432/mirror?sslmode=disable
+      MIRROR_REDIS_ADDR: redis:6379
+      MIRROR_PLC_URL: https://plc.tngl.boltless.dev
+      MIRROR_GIT_BASEPATH: /data/repos
+      MIRROR_KNOT_USE_SSL: "true"
+      MIRROR_KNOT_SSRF: "true"
+      MIRROR_RESYNC_PARALLELISM: "4"
+    volumes:
+      - knotmirror-data:/data
+      - ./localinfra/certs/root.crt:/etc/ssl/certs/caddy.crt:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:7000/"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+    ports:
+      - "7201:7200"
+    depends_on:
+      postgres:
+        condition: service_started
+      knotmirror-tap:
+        condition: service_started
+    networks: [tngl]
+
+  tailwind:
+    image: d3fk/tailwindcss:v3
+    restart: unless-stopped
+    working_dir: /build
+    init: true
+    environment:
+      BROWSERSLIST_IGNORE_OLD_DATA: "true"
+    volumes:
+      - ./tailwind.config.js:/build/tailwind.config.js:ro
+      - ./input.css:/build/input.css:ro
+      - ./appview/pages/templates:/build/appview/pages/templates:ro
+      - ./docs:/build/docs:ro
+      - ./blog/templates:/build/blog/templates:ro
+      - ./blog/posts:/build/blog/posts:ro
+      - ./appview/pages/static:/build/appview/pages/static
+    command: ["-i", "input.css", "-o", "appview/pages/static/tw.css", "--watch=always"]
+    network_mode: none
+
+  appview:
+    build:
+      context: .
+      dockerfile: localinfra/appview.Dockerfile
+    restart: unless-stopped
+    environment:
+      TANGLED_DEV: "true"
+      TANGLED_APPVIEW_HOST: 127.0.0.1:3000
+      TANGLED_DB_PATH: /var/lib/appview/appview.db
+      TANGLED_PLC_URL: https://plc.tngl.boltless.dev
+      TANGLED_JETSTREAM_ENDPOINT: wss://jetstream.tngl.boltless.dev/subscribe
+      TANGLED_REDIS_ADDR: redis:6379
+      TANGLED_KNOTMIRROR_URL: https://mirror.tngl.boltless.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/src:cached
+      - go-cache:/go/cache
+      - go-mod-cache:/go/mod
+      - appview-data:/var/lib/appview
+      - init-state:/shared:ro
+      - ./localinfra/certs/root.crt:/etc/ssl/certs/caddy.crt:ro
+    depends_on:
+      redis:
+        condition: service_started
+      pds:
+        condition: service_healthy
+      init-accounts:
+        condition: service_completed_successfully
+    networks: [tngl]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./localinfra/Caddyfile:/etc/caddy/Caddyfile
+      - ./localinfra/certs:/etc/caddy/certs:ro
+      - caddy-data:/data
+    networks:
+      tngl:
+        aliases:
+          - plc.tngl.boltless.dev
+          - pds.tngl.boltless.dev
+          - alice.pds.tngl.boltless.dev
+          - bob.pds.tngl.boltless.dev
+          - jetstream.tngl.boltless.dev
+          - knot.tngl.boltless.dev
+          - spindle.tngl.boltless.dev
+          - tngl.boltless.dev
+          - mirror.tngl.boltless.dev
+
+volumes:
+  caddy-data:
+  postgres-data:
+  pds-data:
+  jetstream-data:
+  knot-data:
+  knot-ssh-keys:
+  knotmirror-data:
+  init-state:
+  go-cache:
+  go-mod-cache:
+  appview-data:
+
+networks:
+  tngl:
+    driver: bridge
+    # Public-looking subnet so SSRF checks see container IPs as "public".
+    # RFC1918 + doc/benchmark ranges are blocklisted; 11.x is unrouted on
+    # the public internet, so it passes the check and won't collide.
+    ipam:
+      config:
+        - subnet: 11.0.0.0/24

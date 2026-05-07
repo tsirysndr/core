@@ -1,0 +1,50 @@
+{
+    # use pinned CA from ./localinfra/certs
+    pki {
+        ca local {
+            name "Tangled Dev"
+            root_cn "Tangled Dev Root"
+            root {
+                format pem_file
+                cert /etc/caddy/certs/root.crt
+                key /etc/caddy/certs/root.key
+            }
+        }
+    }
+}
+
+# did-method-plc
+plc.tngl.boltless.dev {
+    tls internal
+    reverse_proxy plc:8080
+}
+
+# pds
+*.pds.tngl.boltless.dev, pds.tngl.boltless.dev {
+    tls internal
+    reverse_proxy pds:3000
+}
+
+# jetstream
+jetstream.tngl.boltless.dev {
+    tls internal
+    reverse_proxy jetstream:6008
+}
+
+# knot
+knot.tngl.boltless.dev {
+    tls internal
+    reverse_proxy knot:5555
+}
+
+# knotmirror
+mirror.tngl.boltless.dev {
+    tls internal
+    reverse_proxy knotmirror:7000
+}
+
+# appview
+tngl.boltless.dev {
+    tls internal
+    reverse_proxy appview:3000
+}
