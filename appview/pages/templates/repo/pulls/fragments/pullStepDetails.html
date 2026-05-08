@@ -1,11 +1,10 @@
 {{ define "repo/pulls/fragments/pullStepDetails" }}
     {{ $hasSidePanel := and .LabelDefs .RepoInfo.Roles.IsPushAllowed }}
-    {{ $previewUrl := printf "/%s/pulls/new/preview" .RepoInfo.FullName }}
     {{ $labelCtx := dict "Defs" .LabelDefs "State" .LabelState "RepoInfo" .RepoInfo "Subject" "" "LoggedInUser" .LoggedInUser }}
 
     <section class="flex flex-col md:flex-row gap-6">
         <div class="flex-1 min-w-0 flex flex-col gap-4">
-            {{ template "pullStepDetailsSingle" (dict "Root" . "PreviewUrl" $previewUrl) }}
+            {{ template "pullStepDetailsSingle" . }}
             {{ template "pullSubmitRow" . }}
         </div>
 
@@ -17,82 +16,37 @@
         {{ end }}
     </section>
 
-    {{ template "markdownEditorScript" }}
+    <script>
+      document.querySelectorAll('input[name=body]').forEach(el => {
+        el.addEventListener('oninput', () => {
+          document.querySelector('#bodyDirty').value = 1;
+        });
+      });
+    </script>
 {{ end }}
 
 {{ define "pullStepDetailsSingle" }}
-    {{ $root := .Root }}
-    {{ $previewUrl := .PreviewUrl }}
-    <input type="hidden" name="titleDirty" id="titleDirty" value="{{ if $root.TitleDirty }}1{{ end }}" />
-    <input type="hidden" name="bodyDirty" id="bodyDirty" value="{{ if $root.BodyDirty }}1{{ end }}" />
+    <input type="hidden" name="titleDirty" id="titleDirty" value="{{ if .TitleDirty }}1{{ end }}" />
+    <input type="hidden" name="bodyDirty" id="bodyDirty" value="{{ if .BodyDirty }}1{{ end }}" />
     <div class="flex flex-col gap-1">
         <label for="title" class="text-xs tracking-wide text-gray-800 dark:text-gray-200">Title</label>
         <input
             type="text"
             name="title"
             id="title"
-            value="{{ $root.Title }}"
+            value="{{ .Title }}"
             oninput="document.getElementById('titleDirty').value='1'"
             class="w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
             placeholder="One-line summary of your change."
         />
     </div>
 
-    {{ template "markdownEditor" (dict
-        "Id" "pull-body"
-        "Name" "body"
-        "Value" $root.Body
-        "Rows" 6
+    {{ template "fragments/markdownEditor" (dict
+        "Name"        "body"
+        "Value"       .Body
+        "Rows"        6
         "Placeholder" "Describe your change. Markdown is supported."
-        "PreviewUrl" $previewUrl
-        "DirtyFlag" "bodyDirty"
     ) }}
-{{ end }}
-
-{{ define "markdownEditor" }}
-    {{ $id := .Id }}
-    {{ $name := .Name }}
-    {{ $value := .Value }}
-    {{ $rows := .Rows }}
-    {{ $placeholder := .Placeholder }}
-    {{ $previewUrl := .PreviewUrl }}
-    {{ $dirtyFlag := .DirtyFlag }}
-    <div class="flex flex-col gap-2" data-md-editor="{{ $id }}">
-        <div class="btn-group self-start text-gray-600 dark:text-gray-300">
-            <button type="button" data-md-mode="write"
-                class="btn-group-item active group">
-                {{ i "pencil" "w-3.5 h-3.5" }}
-                Write
-            </button>
-            <button type="button" data-md-mode="preview"
-                hx-post="{{ $previewUrl }}"
-                hx-vals='js:{body: document.querySelector("[data-md-editor=\"{{ $id }}\"] textarea").value}'
-                hx-params="body"
-                hx-target="[data-md-editor='{{ $id }}'] [data-md-preview]"
-                hx-swap="innerHTML"
-                hx-indicator="this"
-                class="btn-group-item group">
-                {{ i "eye" "w-3.5 h-3.5 inline group-[.htmx-request]:hidden" }}
-                {{ i "loader-circle" "w-3.5 h-3.5 animate-spin hidden group-[.htmx-request]:inline" }}
-                Preview
-            </button>
-        </div>
-        <div data-md-panel="write">
-            <textarea
-                id="{{ $id }}"
-                name="{{ $name }}"
-                rows="{{ $rows }}"
-                class="w-full resize-y dark:bg-gray-800 dark:text-white dark:border-gray-700"
-                placeholder="{{ $placeholder }}"
-                {{ if $dirtyFlag }}oninput="document.getElementById('{{ $dirtyFlag }}').value='1'"{{ end }}
-            >{{ $value }}</textarea>
-        </div>
-        <div data-md-panel="preview" class="hidden">
-            <div data-md-preview class="min-h-[6rem] p-3 border border-gray-200 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-900/30">
-                <span class="text-gray-400 dark:text-gray-500 italic">Loading preview...</span>
-            </div>
-        </div>
-    </div>
 {{ end }}
 
 {{ define "pullSubmitRow" }}
@@ -124,26 +78,4 @@
             </span>
         </button>
     </div>
-{{ end }}
-
-{{ define "markdownEditorScript" }}
-    <script>
-    (() => {
-        if (window.__mdEditorWired) return;
-        window.__mdEditorWired = true;
-        document.body.addEventListener('click', (e) => {
-            const btn = e.target.closest('[data-md-mode]');
-            if (!btn) return;
-            const editor = btn.closest('[data-md-editor]');
-            if (!editor) return;
-            const mode = btn.dataset.mdMode;
-            editor.querySelectorAll('[data-md-panel]').forEach(p => {
-                p.classList.toggle('hidden', p.dataset.mdPanel !== mode);
-            });
-            editor.querySelectorAll('[data-md-mode]').forEach(b => {
-                b.classList.toggle('active', b === btn);
-            });
-        });
-    })();
-    </script>
 {{ end }}

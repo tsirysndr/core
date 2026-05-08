@@ -12,13 +12,12 @@
   >
     <input name="subject-uri" type="hidden" value="{{ .Pull.AtUri }}">
     <input name="pull-round-idx" type="hidden" value="{{ .RoundNumber }}">
-    <textarea
-      id="comment-textarea"
-      name="body"
-      class="w-full p-2 rounded border"
-      rows=8
-      placeholder="Add to the discussion..."></textarea
-    >
+    {{ template "fragments/markdownEditor"
+      (dict "Name"        "body"
+            "BlobName"    "blob"
+            "Rows"        8
+            "Required"    true
+            "Placeholder" "Add to the discussion...") }}
     {{ template "replyActions" . }}
     <div id="comment-error-{{ .RoundNumber }}" class="error"></div>
   </form>

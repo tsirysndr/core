@@ -98,7 +98,6 @@
 {{ define "pullReviewStackedCommits" }}
     {{ $root := . }}
     {{ $commits := .Comparison.FormatPatch }}
-    {{ $previewUrl := printf "/%s/pulls/new/preview" .RepoInfo.FullName }}
     {{ $hasSidePanel := and $root.LabelDefs $root.RepoInfo.Roles.IsPushAllowed }}
     <ul class="flex flex-col gap-2">
         {{ range $idx, $p := $commits }}
@@ -148,14 +147,11 @@
                                             placeholder="{{ $p.Title }}"
                                         />
                                     </div>
-                                    {{ template "markdownEditor" (dict
-                                        "Id" (printf "stack-body-%s" $cid)
+                                    {{ template "fragments/markdownEditor" (dict
                                         "Name" $bodyName
                                         "Value" $bodyValue
                                         "Rows" 4
                                         "Placeholder" "Describe this pull request. Markdown is supported."
-                                        "LabelText" "description"
-                                        "PreviewUrl" $previewUrl
                                     ) }}
                                 </div>
                                 {{ if $hasSidePanel }}

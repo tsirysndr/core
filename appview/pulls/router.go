@@ -14,7 +14,6 @@ func (s *Pulls) Router(mw *middleware.Middleware) http.Handler {
 		r.Get("/", s.NewPull)
 		r.Get("/refresh", s.RefreshCompose)
 		r.Post("/refresh", s.RefreshCompose)
-		r.Post("/preview", s.MarkdownPreview)
 		r.Post("/", s.NewPull)
 	})
 

@@ -8,11 +8,10 @@
     hx-disabled-elt="find button[type='submit']"
   >
     <input name="aturi" type="hidden" value="{{ .Comment.AtUri }}">
-    <textarea
-      name="body"
-      class="w-full p-2 rounded border border-gray-200 dark:border-gray-700"
-      rows="5"
-      autofocus>{{ .Comment.EditableBody }}</textarea>
+    {{ template "fragments/markdownEditor"
+      (dict "Name"         "body"
+            "Value"        .Comment.EditableBody
+            "Placeholder" "Describe this pull request. Markdown is supported.") }}
     <div id="comment-error" class="error"></div>
     {{ template "editActions" $ }}
   </form>
@@ -42,6 +41,8 @@
     hx-get="/comment?aturi={{ .Comment.AtUri }}"
     hx-target="closest form"
     hx-swap="outerHTML"
+    hx-indicator="this"
+    hx-disabled-elt="this"
   >
     {{ i "x" "size-4" }}
     Cancel

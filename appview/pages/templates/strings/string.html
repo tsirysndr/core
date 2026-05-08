@@ -125,13 +125,11 @@
         <div class="text-sm pb-2 text-gray-500 dark:text-gray-400">
           {{ template "user/fragments/picHandleLink" .LoggedInUser.Did }}
         </div>
-        <textarea
-          name="body"
-          class="w-full p-2 rounded"
-          placeholder="Add to the discussion. Markdown is supported."
-          rows="5"
-          required
-        ></textarea>
+        {{ template "fragments/markdownEditor"
+          (dict "Name"        "body"
+                "BlobName"    "blob"
+                "Required"    true
+                "Placeholder" "Add to the discussion. Markdown is supported.") }}
         <div id="comment-error" class="error"></div>
       </div>
       <div class="flex gap-2 mt-2">

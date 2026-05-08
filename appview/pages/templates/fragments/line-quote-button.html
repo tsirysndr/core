@@ -18,7 +18,7 @@
     const btnEnd = document.getElementById('line-quote-btn-end');
 
     const textarea = () =>
-      document.getElementById('comment-textarea');
+      document.querySelector('form[hx-post="/comment"] textarea');
 
     const lineOf = (el) =>
       el?.closest?.('span[id*="-O"]')

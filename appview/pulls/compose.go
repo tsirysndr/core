@@ -155,11 +155,6 @@ func (s *Pulls) NewPull(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Pulls) MarkdownPreview(w http.ResponseWriter, r *http.Request) {
-	body := r.FormValue("body")
-	s.pages.MarkdownPreviewFragment(w, body)
-}
-
 func (s *Pulls) RefreshCompose(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "RefreshCompose")
 

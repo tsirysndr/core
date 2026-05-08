@@ -71,7 +71,7 @@ func (s *State) EditCommentFragment(w http.ResponseWriter, r *http.Request) {
 		Comment: comment,
 	})
 	if err != nil {
-		l.Error("failed to render")
+		l.Error("failed to render", "err", err)
 	}
 }
 

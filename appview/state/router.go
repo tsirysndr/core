@@ -257,6 +257,9 @@ func (s *State) StandardRouter(mw *middleware.Middleware) http.Handler {
 		r.Delete("/", s.DeleteComment)
 	})
 
+	r.With(middleware.AuthMiddleware(s.oauth)).Route("/markup", func(r chi.Router) {
+		r.Post("/preview", s.MarkdownPreview)
+	})
 	r.Get("/profile/popover", s.ProfilePopover)
 
 	r.Route("/profile", func(r chi.Router) {

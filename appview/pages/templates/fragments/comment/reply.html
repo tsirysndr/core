@@ -8,12 +8,12 @@
     hx-disabled-elt="find button[type='submit']"
   >
     {{ template "user/fragments/picHandleLink" .LoggedInUser.Did }}
-    <textarea
-      name="body"
-      class="w-full p-2"
-      placeholder="Leave a reply..."
-      autofocus
-      rows="3"></textarea>
+    {{ template "fragments/markdownEditor"
+      (dict "Name"        "body"
+            "BlobName"    "blob"
+            "Rows"        3
+            "AutoFocus"   true
+            "Placeholder" "Leave a reply...") }}
     {{ template "replyActions" . }}
   </form>
 {{ end }}
