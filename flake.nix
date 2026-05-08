@@ -24,13 +24,11 @@
       flake = false;
     };
     htmx-src = {
-      url = "https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js";
+      url = "https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js";
       flake = false;
     };
     htmx-ws-src = {
-      # strange errors in console that i can't really make out
-      # url = "https://unpkg.com/htmx.org@2.0.4/dist/ext/ws.js";
-      url = "https://cdn.jsdelivr.net/npm/htmx-ext-ws@2.0.2";
+      url = "https://cdn.jsdelivr.net/npm/htmx-ext-ws@2.0.4";
       flake = false;
     };
     lucide-src = {

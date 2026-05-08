@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HTMX_URL="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"
-HTMX_WS_URL="https://cdn.jsdelivr.net/npm/htmx-ext-ws@2.0.2"
+HTMX_URL="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js"
+HTMX_WS_URL="https://cdn.jsdelivr.net/npm/htmx-ext-ws@2.0.4"
 MERMAID_URL="https://cdn.jsdelivr.net/npm/mermaid@11.12.3/dist/mermaid.min.js"
 MATHJAX_URL="https://cdn.jsdelivr.net/npm/mathjax@4.1.2/tex-svg.js"
 LUCIDE_URL="https://github.com/lucide-icons/lucide/releases/download/0.536.0/lucide-icons-0.536.0.zip"
