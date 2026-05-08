@@ -262,8 +262,9 @@ func (s *KnotSlurper) handleConnection(ctx context.Context, conn *websocket.Conn
 }
 
 type legacyGitRefUpdate struct {
-	OwnerDid *string `json:"ownerDid,omitempty"`
-	RepoDid  *string `json:"repo,omitempty"`
+	OwnerDid      *string `json:"ownerDid,omitempty"`
+	Repo          *string `json:"repo,omitempty"`
+	LegacyRepoDid *string `json:"repoDid,omitempty"`
 }
 
 type LegacyGitEvent struct {
@@ -288,10 +289,14 @@ func (s *KnotSlurper) ProcessEvent(ctx context.Context, task *Task) error {
 // via the stable RepoDid join. Returns (nil, "", nil) when the event has no
 // repoDid (unjoinable) and (nil, key, nil) on a clean miss.
 func (s *KnotSlurper) lookupRepoForRefUpdate(ctx context.Context, evt *LegacyGitEvent) (*models.Repo, string, error) {
-	if evt.Event.RepoDid == nil || *evt.Event.RepoDid == "" {
+	raw := evt.Event.Repo
+	if raw == nil || *raw == "" {
+		raw = evt.Event.LegacyRepoDid
+	}
+	if raw == nil || *raw == "" {
 		return nil, "", nil
 	}
-	repoDid := syntax.DID(*evt.Event.RepoDid)
+	repoDid := syntax.DID(*raw)
 	curr, err := db.GetRepoByRepoDid(ctx, s.db, repoDid)
 	return curr, repoDid.String(), err
 }
@@ -308,7 +313,7 @@ func (s *KnotSlurper) ProcessLegacyGitRefUpdate(ctx context.Context, source stri
 	if curr == nil {
 		if lookupKey == "" {
 			l.Warn("skipping gitRefUpdate: event has no fields to join on",
-				"repo_did", evt.Event.RepoDid)
+				"repo", evt.Event.Repo, "legacy_repo_did", evt.Event.LegacyRepoDid)
 		} else {
 			// if repo doesn't exist in DB, just ignore the event. That repo is unknown.
 			// Hopefully crawler/tap will sync it later.

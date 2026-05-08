@@ -371,7 +371,10 @@ func (i *Ingester) verifyOwnership(ctx context.Context, l *slog.Logger, repoDid,
 	if err != nil {
 		return false, fmt.Errorf("verify repo ownership: %w", err)
 	}
-	if result.OwnerDid.String() != eventDid {
+	if result.OwnerDid == "" {
+		l.Warn("knot lacks RepoDescribeRepo, skipping owner check; upgrade knot to 1.14+",
+			"repoDid", repoDid, "knot", result.KnotURL.String())
+	} else if result.OwnerDid.String() != eventDid {
 		l.Warn("rejecting repo event: owner mismatch",
 			"repoDid", repoDid,
 			"claimedOwner", eventDid,

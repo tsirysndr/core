@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/appview/compat113"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
@@ -301,9 +302,7 @@ func (s *Pulls) createPullRequest(
 		Collection: tangled.RepoPullNSID,
 		Repo:       userDid.String(),
 		Rkey:       rkey,
-		Record: &lexutil.LexiconTypeDecoder{
-			Val: &record,
-		},
+		Record:     compat113.Pull(&record),
 	})
 	if err != nil {
 		l.Error("failed to create pull request", "err", err)
@@ -403,9 +402,7 @@ func (s *Pulls) createStackedPullRequest(
 			RepoApplyWrites_Create: &comatproto.RepoApplyWrites_Create{
 				Collection: tangled.RepoPullNSID,
 				Rkey:       &p.Rkey,
-				Value: &lexutil.LexiconTypeDecoder{
-					Val: &record,
-				},
+				Value:      compat113.Pull(&record),
 			},
 		})
 	}

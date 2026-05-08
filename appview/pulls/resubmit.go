@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/appview/compat113"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
@@ -330,9 +331,7 @@ func (s *Pulls) resubmitPullHelper(
 		Repo:       userDid.String(),
 		Rkey:       pull.Rkey,
 		SwapRecord: ex.Cid,
-		Record: &lexutil.LexiconTypeDecoder{
-			Val: &record,
-		},
+		Record:     compat113.Pull(&record),
 	})
 	if err != nil {
 		l.Error("failed to update record on PDS", "err", err, "rkey", pull.Rkey)
@@ -521,9 +520,7 @@ func (s *Pulls) resubmitStackedPullHelper(
 			RepoApplyWrites_Create: &comatproto.RepoApplyWrites_Create{
 				Collection: tangled.RepoPullNSID,
 				Rkey:       &p.Rkey,
-				Value: &lexutil.LexiconTypeDecoder{
-					Val: &record,
-				},
+				Value:      compat113.Pull(&record),
 			},
 		})
 	}
@@ -581,9 +578,7 @@ func (s *Pulls) resubmitStackedPullHelper(
 			RepoApplyWrites_Update: &comatproto.RepoApplyWrites_Update{
 				Collection: tangled.RepoPullNSID,
 				Rkey:       op.Rkey,
-				Value: &lexutil.LexiconTypeDecoder{
-					Val: &record,
-				},
+				Value:      compat113.Pull(&record),
 			},
 		})
 	}

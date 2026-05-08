@@ -15,6 +15,7 @@ import (
 	"tangled.org/core/appview/cloudflare"
 
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/appview/compat113"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
@@ -759,9 +760,7 @@ func (rp *Repo) AddCollaborator(w http.ResponseWriter, r *http.Request) {
 		Collection: tangled.RepoCollaboratorNSID,
 		Repo:       currentUser.Did,
 		Rkey:       rkey,
-		Record: &lexutil.LexiconTypeDecoder{
-			Val: repoCollaboratorRecord(f, collaboratorIdent.DID.String(), createdAt),
-		},
+		Record:     compat113.Collaborator(repoCollaboratorRecord(f, collaboratorIdent.DID.String(), createdAt)),
 	})
 	// invalid record
 	if err != nil {
@@ -847,6 +846,11 @@ func (rp *Repo) RenameRepo(w http.ResponseWriter, r *http.Request) {
 
 	if f.RepoDid == "" {
 		rp.pages.Notice(w, noticeId, "This repository's knot has not completed the DID migration; rename is unavailable.")
+		return
+	}
+
+	if !compat113.KnotSupports114(r.Context(), f.Knot, rp.config.Core.Dev) {
+		rp.pages.Notice(w, noticeId, "This repository's knot is below v1.14 and does not yet support renames. Ask the knot operator to upgrade.")
 		return
 	}
 

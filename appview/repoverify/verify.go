@@ -2,6 +2,7 @@ package repoverify
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -109,6 +110,9 @@ func resolveAndDescribe(
 	client := &indigoxrpc.Client{Host: knot.String(), Client: httpClient}
 	out, err := tangled.RepoDescribeRepo(ctx, client, repoDid.String())
 	if xrpcErr := xrpcclient.HandleXrpcErr(err); xrpcErr != nil {
+		if errors.Is(xrpcErr, xrpcclient.ErrXrpcUnsupported) {
+			return Result{RepoDid: repoDid, KnotURL: knot}, nil
+		}
 		return Result{}, fmt.Errorf("describeRepo on %s: %w", knot, xrpcErr)
 	}
 
