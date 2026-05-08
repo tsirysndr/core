@@ -7,9 +7,8 @@
     {{ $required    := .Required    }}
     {{ $autofocus   := .AutoFocus   }}
     {{ $placeholder := .Placeholder }}
-    <div
+    <markdown-editor
         class="flex flex-col gap-2"
-        data-md-editor
         hx-disinherit="*"
         hx-include="this"
     >
@@ -46,24 +45,5 @@
                 <span class="text-gray-400 dark:text-gray-500 italic">Loading preview...</span>
             </div>
         </div>
-    </div>
-    <script>
-    (() => {
-        if (window.__mdEditorWired) return;
-        window.__mdEditorWired = true;
-        document.body.addEventListener('click', (e) => {
-            const btn = e.target.closest('[data-md-mode]');
-            if (!btn) return;
-            const editor = btn.closest('[data-md-editor]');
-            if (!editor) return;
-            const mode = btn.dataset.mdMode;
-            editor.querySelectorAll('[data-md-panel]').forEach(p => {
-                p.classList.toggle('hidden', p.dataset.mdPanel !== mode);
-            });
-            editor.querySelectorAll('[data-md-mode]').forEach(b => {
-                b.classList.toggle('active', b === btn);
-            });
-        });
-    })();
-    </script>
+    </markdown-editor>
 {{ end }}

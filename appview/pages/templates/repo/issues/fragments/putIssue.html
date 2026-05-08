@@ -16,13 +16,12 @@
     </div>
     <div>
       <label for="body">Body</label>
-      <textarea
-        name="body"
-        id="body"
-        rows="15"
-        class="w-full resize-y"
-        placeholder="Describe your issue. Markdown is supported."
-        >{{ if .Issue }}{{ .Issue.Body }}{{ end }}</textarea>
+      {{ template "fragments/markdownEditor"
+        (dict "Name"        "body"
+              "Value"       (and .Issue .Issue.Body)
+              "BlobName"    "blob"
+              "Rows"        15
+              "Placeholder" "Describe your issue. Markdown is supported.") }}
     </div>
     <div class="flex justify-between">
       <div id="issues" class="error"></div>

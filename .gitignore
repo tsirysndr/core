@@ -9,6 +9,7 @@ spindle/spindle-microvm-run
 result
 !.gitkeep
 !appview/pages/static/topbar-search.js
+!appview/pages/static/markdown-editor.js
 out/
 node_modules/
 patches
