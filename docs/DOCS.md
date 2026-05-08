@@ -830,6 +830,8 @@ By default, the following environment variables are set:
 
 - `CI` - Always set to `true` to indicate a CI environment
 - `TANGLED_PIPELINE_ID` - The AT URI of the current pipeline
+- `TANGLED_PIPELINE_KIND` - One of `push`, `pull_request` or
+  `manual`
 - `TANGLED_REPO_KNOT` - The repository's knot hostname
 - `TANGLED_REPO_DID` - The DID of the repository owner
 - `TANGLED_REPO_NAME` - The name of the repository

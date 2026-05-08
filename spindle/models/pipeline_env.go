@@ -21,7 +21,7 @@ func PipelineEnvVars(tr *tangled.Pipeline_TriggerMetadata, pipelineId PipelineId
 	env["CI"] = "true"
 
 	env["TANGLED_PIPELINE_ID"] = pipelineId.AtUri().String()
-	env["TANGLED_EVENT_NAME"] = tr.Kind
+	env["TANGLED_PIPELINE_KIND"] = tr.Kind
 
 	// Repo info
 	if tr.Repo != nil {
