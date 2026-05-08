@@ -1692,7 +1692,6 @@ func (p *Pages) SearchQuickMobile(w io.Writer, params SearchQuickParams) error {
 	return tpl.ExecuteTemplate(w, "search/fragments/quickMobile", params)
 }
 
-
 func (p *Pages) Home(w io.Writer, params TimelineParams) error {
 	return p.execute("timeline/home", w, params)
 }

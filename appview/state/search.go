@@ -213,9 +213,9 @@ func (s *State) searchQuick(w http.ResponseWriter, r *http.Request, mobile bool)
 	}
 
 	params := pages.SearchQuickParams{
-		Repos:  repos,
-		Query:  rawQuery,
-		Total:  total,
+		Repos: repos,
+		Query: rawQuery,
+		Total: total,
 	}
 
 	render := s.pages.SearchQuick
