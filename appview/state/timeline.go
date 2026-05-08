@@ -1,7 +1,6 @@
 package state
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
@@ -30,12 +29,12 @@ func (s *State) Home(w http.ResponseWriter, r *http.Request) {
 		s.logger.Error("failed to get bluesky posts", "err", err)
 	}
 
-	fmt.Println(s.pages.Home(w, pages.TimelineParams{
+	s.pages.Home(w, pages.TimelineParams{
 		LoggedInUser:   user,
 		Timeline:       timeline,
 		BlueskyPosts:   blueskyPosts,
 		ShowNewsletter: s.showNewsletter(user),
-	}))
+	})
 }
 func (s *State) HomeOrTimeline(w http.ResponseWriter, r *http.Request) {
 	if s.oauth.GetMultiAccountUser(r) != nil {
