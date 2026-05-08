@@ -46,7 +46,7 @@ func findIssueReferences(e Execer, refLinks []models.ReferenceLink) ([]syntax.AT
 	args := make([]any, 0, len(refLinks)*4)
 	for i, ref := range refLinks {
 		vals[i] = "(?, ?, ?, ?)"
-		args = append(args, ref.Handle, ref.Repo, ref.SubjectId, ref.CommentId)
+		args = append(args, ref.Handle, ref.Repo, ref.SubjectId, ref.CommentRkey)
 	}
 	query := fmt.Sprintf(
 		`with input(owner_did, name, issue_id, comment_id) as (
@@ -106,7 +106,7 @@ func findPullReferences(e Execer, refLinks []models.ReferenceLink) ([]syntax.ATU
 	args := make([]any, 0, len(refLinks)*4)
 	for i, ref := range refLinks {
 		vals[i] = "(?, ?, ?, ?)"
-		args = append(args, ref.Handle, ref.Repo, ref.SubjectId, ref.CommentId)
+		args = append(args, ref.Handle, ref.Repo, ref.SubjectId, ref.CommentRkey)
 	}
 	query := fmt.Sprintf(
 		`with input(owner_did, name, pull_id, comment_id) as (
@@ -271,21 +271,25 @@ func GetBacklinks(e Execer, target syntax.ATURI) ([]models.RichReferenceLink, er
 		return nil, fmt.Errorf("get issue backlinks: %w", err)
 	}
 	backlinks = append(backlinks, ls...)
-	ls, err = getIssueCommentBacklinks(e, target, backlinksMap[tangled.FeedCommentNSID])
-	if err != nil {
-		return nil, fmt.Errorf("get issue_comment backlinks: %w", err)
-	}
-	backlinks = append(backlinks, ls...)
 	ls, err = getPullBacklinks(e, backlinksMap[tangled.RepoPullNSID])
 	if err != nil {
 		return nil, fmt.Errorf("get pull backlinks: %w", err)
 	}
 	backlinks = append(backlinks, ls...)
-	ls, err = getPullCommentBacklinks(e, target, backlinksMap[tangled.FeedCommentNSID])
-	if err != nil {
-		return nil, fmt.Errorf("get pull_comment backlinks: %w", err)
+	switch target.Collection() {
+	case tangled.RepoIssueNSID:
+		ls, err = getIssueCommentBacklinks(e, target, backlinksMap[tangled.FeedCommentNSID])
+		if err != nil {
+			return nil, fmt.Errorf("get issue_comment backlinks: %w", err)
+		}
+		backlinks = append(backlinks, ls...)
+	case tangled.RepoPullNSID:
+		ls, err = getPullCommentBacklinks(e, target, backlinksMap[tangled.FeedCommentNSID])
+		if err != nil {
+			return nil, fmt.Errorf("get pull_comment backlinks: %w", err)
+		}
+		backlinks = append(backlinks, ls...)
 	}
-	backlinks = append(backlinks, ls...)
 
 	return backlinks, nil
 }
@@ -340,7 +344,7 @@ func getIssueCommentBacklinks(e Execer, target syntax.ATURI, aturis []syntax.ATU
 	exclude := orm.FilterNotEq("i.at_uri", target)
 	rows, err := e.Query(
 		fmt.Sprintf(
-			`select r.did, r.name, i.issue_id, c.id, i.title, i.open
+			`select r.did, r.name, i.issue_id, c.rkey, i.title, i.open
 			from comments c
 			join issues i
 				on i.at_uri = c.subject_uri
@@ -360,8 +364,8 @@ func getIssueCommentBacklinks(e Execer, target syntax.ATURI, aturis []syntax.ATU
 	for rows.Next() {
 		var l models.RichReferenceLink
 		l.Kind = models.RefKindIssue
-		l.CommentId = new(int)
-		if err := rows.Scan(&l.Handle, &l.Repo, &l.SubjectId, l.CommentId, &l.Title, &l.State); err != nil {
+		l.CommentRkey = new(syntax.RecordKey)
+		if err := rows.Scan(&l.Handle, &l.Repo, &l.SubjectId, l.CommentRkey, &l.Title, &l.State); err != nil {
 			return nil, err
 		}
 		refLinks = append(refLinks, l)
@@ -422,7 +426,7 @@ func getPullCommentBacklinks(e Execer, target syntax.ATURI, aturis []syntax.ATUR
 	exclude := orm.FilterNotEq("p.at_uri", target)
 	rows, err := e.Query(
 		fmt.Sprintf(
-			`select r.did, r.name, p.pull_id, c.id, p.title, p.state
+			`select r.did, r.name, p.pull_id, c.rkey, p.title, p.state
 			from repos r
 			join pulls p
 				on r.repo_did = p.repo_did
@@ -442,8 +446,8 @@ func getPullCommentBacklinks(e Execer, target syntax.ATURI, aturis []syntax.ATUR
 	for rows.Next() {
 		var l models.RichReferenceLink
 		l.Kind = models.RefKindPull
-		l.CommentId = new(int)
-		if err := rows.Scan(&l.Handle, &l.Repo, &l.SubjectId, l.CommentId, &l.Title, &l.State); err != nil {
+		l.CommentRkey = new(syntax.RecordKey)
+		if err := rows.Scan(&l.Handle, &l.Repo, &l.SubjectId, l.CommentRkey, &l.Title, &l.State); err != nil {
 			return nil, err
 		}
 		refLinks = append(refLinks, l)

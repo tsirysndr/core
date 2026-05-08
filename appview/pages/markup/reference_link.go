@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
 	"tangled.org/core/appview/models"
@@ -101,21 +102,20 @@ func parseTangledLink(baseHost string, urlStr string) *models.ReferenceLink {
 	if err != nil {
 		return nil
 	}
-	var commentId *int
+	var commentRkey *syntax.RecordKey
 	if u.Fragment != "" {
 		if strings.HasPrefix(u.Fragment, "comment-") {
-			commentIdStr := u.Fragment[len("comment-"):]
-			if id, err := strconv.Atoi(commentIdStr); err == nil {
-				commentId = &id
+			if rkey, err := syntax.ParseRecordKey(u.Fragment[len("comment-"):]); err != nil {
+				commentRkey = &rkey
 			}
 		}
 	}
 
 	return &models.ReferenceLink{
-		Handle:    handle,
-		Repo:      repo,
-		Kind:      kind,
-		SubjectId: subjectId,
-		CommentId: commentId,
+		Handle:      handle,
+		Repo:        repo,
+		Kind:        kind,
+		SubjectId:   subjectId,
+		CommentRkey: commentRkey,
 	}
 }

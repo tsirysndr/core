@@ -20,7 +20,7 @@ func TestMarkupParsing(t *testing.T) {
 			source:      `[link](http://127.0.0.1:3000/alice.pds.tngl.boltless.dev/coolproj/issues/1)`,
 			wantHandles: make([]string, 0),
 			wantRefLinks: []models.ReferenceLink{
-				{Handle: "alice.pds.tngl.boltless.dev", Repo: "coolproj", Kind: models.RefKindIssue, SubjectId: 1, CommentId: nil},
+				{Handle: "alice.pds.tngl.boltless.dev", Repo: "coolproj", Kind: models.RefKindIssue, SubjectId: 1, CommentRkey: nil},
 			},
 		},
 		{
@@ -28,7 +28,7 @@ func TestMarkupParsing(t *testing.T) {
 			source:      `<http://127.0.0.1:3000/alice.pds.tngl.boltless.dev/coolproj/issues/1>`,
 			wantHandles: make([]string, 0),
 			wantRefLinks: []models.ReferenceLink{
-				{Handle: "alice.pds.tngl.boltless.dev", Repo: "coolproj", Kind: models.RefKindIssue, SubjectId: 1, CommentId: nil},
+				{Handle: "alice.pds.tngl.boltless.dev", Repo: "coolproj", Kind: models.RefKindIssue, SubjectId: 1, CommentRkey: nil},
 			},
 		},
 	}

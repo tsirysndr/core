@@ -33,7 +33,7 @@
                 {{ i "git-pull-request-closed" "size-3" }}
               </span>
             {{ end }}
-            <a href="{{ . }}" class="line-clamp-1 text-sm"><span class="text-gray-500 dark:text-gray-400">#{{ .SubjectId }}</span> {{ .Title }}</a>
+            <a href="/{{ $repoUrl }}/{{ .Kind }}/{{ .SubjectId }}{{ with .CommentRkey }}#comment-{{.}}{{end}}" class="line-clamp-1 text-sm"><span class="text-gray-500 dark:text-gray-400">#{{ .SubjectId }}</span> {{ .Title }}</a>
           </div>
           {{ if not (eq $.RepoInfo.FullName $repoUrl) }}
           <div>

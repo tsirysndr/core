@@ -649,33 +649,6 @@
 </div>
 {{ end }}
 
-{{ define "submissionComment" }}
-  {{ $comment := index . 0 }}
-  {{ $root := index . 1 }}
-  <div id="comment-{{$comment.Id}}" class="flex gap-2 -ml-4 py-4 w-full mx-auto group/comment">
-    <!-- left column: profile picture -->
-    <div class="flex-shrink-0 h-fit relative">
-      {{ template "user/fragments/picLink" (list $comment.Did.String "size-8" (index $root.VouchRelationships (did $comment.OwnerDid))) }}
-    </div>
-    <!-- right column: name and body in two rows -->
-    <div class="flex-1 min-w-0">
-      <!-- Row 1: Author and timestamp -->
-      <div class="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1 group-target/comment:bg-yellow-200/30 group-target/comment:dark:bg-yellow-600/30">
-        {{ $handle := resolve $comment.Did.String }}
-        <a class="text-gray-500 dark:text-gray-400 hover:text-gray-500 dark:hover:text-gray-300" href="/{{ $handle }}">{{ $handle }}</a>
-        <span class="before:content-['·']"></span>
-        <a class="text-gray-500 dark:text-gray-400 hover:text-gray-500 dark:hover:text-gray-300" href="#comment-{{$comment.Id}}">
-          {{ template "repo/fragments/shortTime" $comment.Created }}
-        </a>
-      </div>
-      <!-- Row 2: Body text -->
-      <div class="prose dark:prose-invert mt-1">
-        {{ $comment.Body.Text | markdown }}
-      </div>
-    </div>
-  </div>
-{{ end }}
-
 {{ define "loginPrompt" }}
   <div class="bg-amber-50 dark:bg-amber-900 border border-amber-500 rounded shadow-sm p-2 relative flex gap-2 items-center">
     <a href="/signup" class="btn-create py-0 hover:no-underline hover:text-white flex items-center gap-2">
