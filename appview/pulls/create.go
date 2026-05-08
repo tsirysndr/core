@@ -300,6 +300,7 @@ func (s *Pulls) createPullRequest(
 		PullSource: pullSource,
 		State:      models.PullOpen,
 		Created:    now,
+		Repo:       repo,
 	}
 
 	record := pull.AsRecord()
