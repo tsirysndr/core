@@ -279,7 +279,7 @@ func (s *State) NewComment(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	err = db.PutComment(tx, &comment, references)
+	_, err = db.PutComment(tx, &comment, references)
 	if err != nil {
 		l.Error("failed to create comment", "err", err)
 		s.pages.Notice(w, noticeId, "Failed to create comment.")
@@ -377,7 +377,7 @@ func (s *State) EditComment(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	err = db.PutComment(tx, &newComment, references)
+	_, err = db.PutComment(tx, &newComment, references)
 	if err != nil {
 		l.Error("failed to perform update-description query", "err", err)
 		s.pages.Notice(w, noticeId, "Failed to update comment, try again later.")

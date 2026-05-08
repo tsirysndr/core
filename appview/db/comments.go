@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sort"
 	"strings"
 	"time"
@@ -15,12 +14,12 @@ import (
 	"tangled.org/core/orm"
 )
 
-func PutComment(tx *sql.Tx, c *models.Comment, references []syntax.ATURI) error {
+func PutComment(tx *sql.Tx, c *models.Comment, references []syntax.ATURI) (bool, error) {
 	var bodyBlobs, replyToUri, replyToCid *string
 	if len(c.Body.Blobs) > 0 {
 		encoded, err := json.Marshal(c.Body.Blobs)
 		if err != nil {
-			return fmt.Errorf("encoding blobs to json: %w", err)
+			return false, fmt.Errorf("encoding blobs to json: %w", err)
 		}
 		encodedStr := string(encoded)
 		bodyBlobs = &encodedStr
@@ -78,30 +77,29 @@ func PutComment(tx *sql.Tx, c *models.Comment, references []syntax.ATURI) error 
 		time.Now().Format(time.RFC3339),
 	)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	c.Id, err = result.LastInsertId()
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	affected, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	if affected < 1 {
-		log.Println("record is already stored. skipping operation")
-		return nil
+		return false, nil
 	}
 
 	// update references when comment is updated
 	if err := putReferences(tx, c.AtUri(), references); err != nil {
-		return fmt.Errorf("put reference_links: %w", err)
+		return false, fmt.Errorf("put reference_links: %w", err)
 	}
 
-	return nil
+	return true, nil
 }
 
 // PurgeComments actually purges a comment row from db instead of marking it as "deleted"

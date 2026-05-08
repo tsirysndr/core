@@ -1633,7 +1633,7 @@ func (i *Ingester) ingestComment(e *jmodels.Event) error {
 		}
 		defer tx.Rollback()
 
-		err = db.PutComment(tx, comment, references)
+		updated, err := db.PutComment(tx, comment, references)
 		if err != nil {
 			return fmt.Errorf("failed to create comment: %w", err)
 		}
@@ -1642,7 +1642,7 @@ func (i *Ingester) ingestComment(e *jmodels.Event) error {
 			return err
 		}
 
-		if e.Commit.Operation == jmodels.CommitOperationCreate {
+		if e.Commit.Operation == jmodels.CommitOperationCreate && updated {
 			i.Notifier.NewComment(ctx, comment, mentions)
 		}
 
