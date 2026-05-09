@@ -1,52 +1,164 @@
 {{ define "title" }}fork &middot; {{ .RepoInfo.FullName }}{{ end }}
 
 {{ define "content" }}
-<div class="p-6">
-  <p class="text-xl font-bold dark:text-white">Fork {{ .RepoInfo.FullName }}</p>
-</div>
-<div class="p-6 bg-white dark:bg-gray-800 drop-shadow-sm rounded">
-  <form hx-post="/{{ .RepoInfo.FullName }}/fork" class="space-y-12" hx-swap="none" hx-indicator="#spinner">
+<div class="grid grid-cols-12">
+  <div class="col-span-full md:col-start-3 md:col-span-8 p-4 pb-2 mb-4">
+    <h1 class="text-xl dark:text-white mb-1 flex items-center gap-2 flex-wrap">
+      {{ i "git-fork" "size-5 shrink-0" }}
+      Fork
+      <span class="flex items-center gap-1 font-normal">
+        {{ template "user/fragments/picHandleLink" .RepoInfo.OwnerDid }}
+        <span class="text-gray-400 dark:text-gray-500">/</span>
+        <span class="dark:text-white">{{ .RepoInfo.Name }}</span>
+      </span>
+    </h1>
+  </div>
 
-    <fieldset class="space-y-3">
-      <legend for="repo_name" class="dark:text-white">Repository name</legend>
-      <input type="text" id="repo_name" name="repo_name" value="{{ .RepoInfo.Name }}"
-        class="w-full p-2 border rounded bg-gray-100 dark:bg-gray-700 dark:text-white dark:border-gray-600" />
-    </fieldset>
+  <div class="col-span-full md:col-start-3 md:col-span-8 bg-white dark:bg-gray-800 drop-shadow-sm rounded overflow-hidden">
 
-    <fieldset class="space-y-3">
-      <legend class="dark:text-white">Select a knot to fork into</legend>
-      <div class="space-y-2">
-        <div class="flex flex-col">
-        {{ range .Knots }}
-          <div class="flex items-center">
-            <input
-                type="radio"
-                name="knot"
-                value="{{ . }}"
-                class="mr-2"
-                id="domain-{{ . }}"
-                {{if eq (len $.Knots) 1}}checked{{end}}                
+    {{/* Info banner */}}
+    <div class="flex items-center gap-3 p-4 md:px-7 border-b border-gray-100 dark:border-gray-700">
+      {{ i "badge-info" "size-6 text-gray-500 dark:text-gray-400 mt-0.5" }}
+      <p class="text-sm">
+        A fork is a copy of a repository.
+        <br/>
+        Forking gives you your own copy of a repository to work on independently.
+      </p>
+    </div>
+
+    <form hx-post="/{{ .RepoInfo.FullName }}/fork" hx-swap="none" hx-indicator="#spinner" class="p-6 md:px-10 pb-0">
+
+      {{/* Step 1 — Details */}}
+      <div class="flex gap-4 relative border-l border-gray-200 dark:border-gray-700 pl-6 pb-6">
+        {{ template "fork/numberCircle" 1 }}
+        <div class="flex-1">
+          <h2 class="text-lg font-semibold dark:text-white">Details</h2>
+
+          <div class="space-y-4">
+
+            {{/* Repository name */}}
+            <div>
+              <label class="block text-sm font-bold uppercase dark:text-white mb-1">Repository name</label>
+              <div class="flex flex-col md:flex-row md:items-center gap-2 md:gap-0 w-full">
+                <div class="shrink-0 hidden md:flex items-center px-2 py-2 gap-1 text-sm text-gray-700 dark:text-gray-300 md:border md:border-r-0 md:border-gray-300 md:dark:border-gray-600 md:rounded-l md:bg-gray-50 md:dark:bg-gray-700">
+                  {{ template "user/fragments/picHandle" .LoggedInUser.Did }}
+                </div>
+                <input
+                  type="text"
+                  id="repo_name"
+                  name="repo_name"
+                  value="{{ .RepoInfo.Name }}"
+                  required
+                  class="flex-1 dark:bg-gray-700 dark:text-white dark:border-gray-600 border border-gray-300 rounded md:rounded-r md:rounded-l-none px-3 py-2"
                 />
-            <label for="domain-{{ . }}" class="dark:text-white">{{ . }}</label>
+              </div>
+            </div>
+
+            {{/* Description */}}
+            <div>
+              <label for="fork_description" class="block text-sm font-bold uppercase dark:text-white mb-1">Description</label>
+              <input
+                type="text"
+                id="fork_description"
+                name="description"
+                value="{{ .RepoInfo.Description }}"
+                maxlength="140"
+                oninput="document.getElementById('fork-desc-count').textContent = this.value.length + '/140 characters'"
+                class="w-full dark:bg-gray-800 dark:text-white dark:border-gray-700 border border-gray-300 rounded px-3 py-2"
+                placeholder="A brief description of your project..."
+              />
+              <p id="fork-desc-count" class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ len .RepoInfo.Description }}/140 characters</p>
+            </div>
+
           </div>
-        {{ else }}
-        <p class="dark:text-white">No knots available.</p>
-        {{ end }}
         </div>
       </div>
-      <p class="text-sm text-gray-500 dark:text-gray-400">A knot hosts repository data. <a href="/settings/knots" class="underline">Learn how to register your own knot.</a></p>
-    </fieldset>
 
-    <div class="space-y-2">
-      <button type="submit" class="btn-create flex items-center gap-2">
-          {{ i "git-fork" "w-4 h-4" }}
+      {{/* Step 2 — Knot selection */}}
+      <div class="flex gap-4 relative border-l border-gray-200 dark:border-gray-700 pl-6 pb-6">
+        {{ template "fork/numberCircle" 2 }}
+        <div class="flex-1 flex flex-col gap-2">
+          <h2 class="text-lg font-semibold dark:text-white">Knot selection</h2>
+
+          <div class="space-y-4">
+
+            {{/* Knot info box */}}
+            <div id="knot-info" class="hidden flex gap-3 items-start bg-blue-50 dark:bg-blue-950 border border-blue-100 dark:border-blue-900 rounded p-3">
+              <div class="flex flex-col gap-1.5 flex-1 min-w-0">
+                <p class="text-sm font-medium dark:text-white">What is a knot?</p>
+                <p class="text-sm text-gray-600 dark:text-gray-400">Knots are lightweight servers for your repositories. Self-host one, or let Tangled manage it for you.</p>
+                <a href="/settings/knots" class="inline-flex items-center gap-1 text-sm underline dark:text-gray-300">
+                  Learn how to register your own knot
+                  {{ i "arrow-right" "size-3.5" }}
+                </a>
+              </div>
+              <button type="button" onclick="dismissKnotInfo()" class="shrink-0 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300">
+                {{ i "x" "size-4" }}
+              </button>
+            </div>
+
+            {{/* Knot list */}}
+            <div>
+              <label class="block text-sm font-bold uppercase dark:text-white mb-1">Select a knot</label>
+              <div class="w-full dark:bg-gray-800 dark:text-white dark:border-gray-700 space-y-2">
+                {{ range .Knots }}
+                  <div class="flex items-center">
+                    <input
+                      type="radio"
+                      name="knot"
+                      value="{{ . }}"
+                      id="knot-{{ . }}"
+                      required
+                      {{ if eq (len $.Knots) 1 }}checked{{ end }}
+                      class="mr-2"
+                    />
+                    <label for="knot-{{ . }}" class="dark:text-white">{{ . }}</label>
+                  </div>
+                {{ else }}
+                  <p class="text-sm text-gray-500 dark:text-gray-400">No knots available.</p>
+                {{ end }}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <div class="py-8 flex justify-end border-l border-gray-200 dark:border-gray-700 pl-6">
+        <button type="submit" class="btn-create flex items-center gap-2">
+          {{ i "git-fork" "size-4" }}
           fork repo
           <span id="spinner" class="group">
-            {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+            {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
           </span>
-      </button>
-      <div id="repo" class="error"></div>
-    </div>
-  </form>
+        </button>
+      </div>
+      <div id="repo" class="error mt-2 hidden"></div>
+
+    </form>
+  </div>
 </div>
+
+<script>
+  const KNOT_INFO_KEY = 'fork-knot-info-dismissed';
+
+  function dismissKnotInfo() {
+    localStorage.setItem(KNOT_INFO_KEY, '1');
+    document.getElementById('knot-info').classList.add('hidden');
+  }
+
+  if (!localStorage.getItem(KNOT_INFO_KEY)) {
+    const el = document.getElementById('knot-info');
+    el.classList.remove('hidden');
+    el.classList.add('flex');
+  }
+</script>
+{{ end }}
+
+{{ define "fork/numberCircle" }}
+  <div class="absolute top-px -left-[11px]">
+    <div class="size-6 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center text-sm font-medium dark:text-white">
+        {{.}}
+    </div>
+  </div>
 {{ end }}
