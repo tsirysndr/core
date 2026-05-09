@@ -169,6 +169,23 @@ func DeleteVouchByRkey(e Execer, did, rkey string) error {
 	return err
 }
 
+func CountNetworkVouchTimeline(e Execer, viewerDid, profileDid string) (int, error) {
+	var count int
+	err := e.QueryRow(
+		`select count(*) from (
+			select v.id from vouches v
+			where (
+				v.subject_did = ? and v.did in (select subject_did from vouches where did = ? and kind = 'vouch')
+			) or (
+				v.did = ? and v.subject_did in (select subject_did from vouches where did = ? and kind = 'vouch')
+			)
+			group by v.did, v.subject_did
+		)`,
+		profileDid, viewerDid, profileDid, viewerDid,
+	).Scan(&count)
+	return count, err
+}
+
 func GetNetworkVouchTimeline(e Execer, viewerDid, profileDid string, page pagination.Page) ([]models.Vouch, error) {
 	pageClause := ""
 	if page.Limit > 0 {

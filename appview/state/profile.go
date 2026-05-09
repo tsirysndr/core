@@ -406,10 +406,17 @@ func (s *State) vouchesPage(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromContext(r.Context())
 
 	var vouches []models.Vouch
+	var vouchCount int
 	if loggedInUser != nil {
 		vouches, err = db.GetNetworkVouchTimeline(s.db, loggedInUser.Did, profile.UserDid, page)
 		if err != nil {
 			l.Error("failed to get vouch timeline", "err", err)
+			s.pages.Error500(w)
+			return
+		}
+		vouchCount, err = db.CountNetworkVouchTimeline(s.db, loggedInUser.Did, profile.UserDid)
+		if err != nil {
+			l.Error("failed to count vouch timeline", "err", err)
 			s.pages.Error500(w)
 			return
 		}
@@ -480,6 +487,7 @@ func (s *State) vouchesPage(w http.ResponseWriter, r *http.Request) {
 		Suggestions:    suggestions,
 		Card:           profile,
 		Page:           page,
+		VouchCount:     vouchCount,
 		EvidencePulls:  evidencePulls,
 		EvidenceIssues: evidenceIssues,
 	})

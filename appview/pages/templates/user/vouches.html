@@ -5,11 +5,11 @@
   <div id="all-vouches" class="md:col-span-8 order-2 md:order-2 flex flex-col gap-6">
     {{ if $isSelf }}{{ template "vouchSuggestions" . }}{{ end }}
     {{ block "vouchTimeline" . }}{{ end }}
-    {{ if ge (len .Vouches) .Page.Limit }}
+    {{ if gt .VouchCount .Page.Limit }}
       {{ $handle := resolve .Card.UserDid }}
       {{ template "fragments/pagination" (dict
           "Page" .Page
-          "TotalCount" (add (len .Vouches) .Page.Offset)
+          "TotalCount" .VouchCount
           "BasePath" (printf "/%s" $handle)
           "QueryParams" (queryParams "tab" "vouches")
       ) }}

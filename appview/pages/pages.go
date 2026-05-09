@@ -717,6 +717,7 @@ type ProfileVouchesParams struct {
 	Suggestions    []models.VouchSuggestion
 	Card           *ProfileCard
 	Page           pagination.Page
+	VouchCount     int
 	Active         string
 	EvidencePulls  map[syntax.ATURI]*models.Pull
 	EvidenceIssues map[syntax.ATURI]*models.Issue
