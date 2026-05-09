@@ -104,6 +104,7 @@ type RepoStats struct {
 	StarCount  int
 	IssueCount IssueCount
 	PullCount  PullCount
+	ForkCount  int
 }
 
 type IssueCount struct {

@@ -370,6 +370,49 @@ func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 		return nil, fmt.Errorf("failed to execute pulls-count query: %w", err)
 	}
 
+	// get forks
+	forksInClause := strings.TrimSuffix(strings.Repeat("?, ", len(repoMap)), ", ")
+	forkArgs := make([]any, len(repoMap))
+	repoDidMap := make(map[string]syntax.ATURI)
+	i = 0
+	for aturi, r := range repoMap {
+		forkArgs[i] = r.RepoDid
+		repoDidMap[r.RepoDid] = aturi
+		i++
+	}
+
+	forksCountQuery := fmt.Sprintf(
+		`select source, count(1) from repos where source in (%s) group by source`,
+		forksInClause,
+	)
+
+	rows, err = e.Query(forksCountQuery, forkArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute fork-count query: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var repodid string
+		var count int
+		if err := rows.Scan(&repodid, &count); err != nil {
+			log.Println("err", "err", err)
+			continue
+		}
+
+		atURI, ok := repoDidMap[repodid]
+		if !ok {
+			continue
+		}
+
+		if r, ok := repoMap[atURI]; ok {
+			r.RepoStats.ForkCount = count
+		}
+	}
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to execute fork-count query: %w", err)
+	}
+
 	var repos []models.Repo
 	for _, r := range repoMap {
 		repos = append(repos, *r)
