@@ -5,6 +5,7 @@ package hook
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,6 +55,9 @@ func Config(opts ...setupOpt) config {
 func Setup(config config) error {
 	// iterate over all directories in current directory:
 	repoDirs, err := os.ReadDir(config.scanPath)
+	if errors.Is(err, fs.ErrNotExist) {
+		return os.MkdirAll(config.scanPath, 0755)
+	}
 	if err != nil {
 		return err
 	}
