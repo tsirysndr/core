@@ -878,3 +878,13 @@ func GetRepoLabels(e Execer, filters ...orm.Filter) ([]models.RepoLabel, error) 
 
 	return labels, nil
 }
+
+func GetForkCount(e Execer, sourceDID string) (int, error) {
+	forks := 0
+	err := e.QueryRow(
+		`select count(source) from repos where source = ?`, sourceDID).Scan(&forks)
+	if err != nil {
+		return 0, err
+	}
+	return forks, nil
+}

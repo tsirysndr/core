@@ -48,6 +48,7 @@ func (rp *Repo) Router(mw *middleware.Middleware) http.Handler {
 	r.Get("/archive/{ref}", rp.DownloadArchive)
 
 	r.With(middleware.Paginate).Get("/stars", rp.Stars)
+	r.With(middleware.Paginate).Get("/forks", rp.Forks)
 
 	r.Route("/fork", func(r chi.Router) {
 		r.Use(middleware.AuthMiddleware(rp.oauth))

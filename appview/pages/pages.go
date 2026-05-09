@@ -1557,6 +1557,20 @@ func (p *Pages) RepoStars(w io.Writer, params RepoStarsParams) error {
 	return p.executeRepo("repo/stars", w, params)
 }
 
+type RepoForksParams struct {
+	LoggedInUser *oauth.MultiAccountUser
+	RepoInfo     repoinfo.RepoInfo
+	Active       string
+	Forks        []models.Repo
+	Page         pagination.Page
+	TotalCount   int
+}
+
+func (p *Pages) RepoForks(w io.Writer, params RepoForksParams) error {
+	params.Active = "overview"
+	return p.executeRepo("repo/forks", w, params)
+}
+
 type PipelinesParams struct {
 	LoggedInUser *oauth.MultiAccountUser
 	RepoInfo     repoinfo.RepoInfo

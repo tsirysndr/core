@@ -117,15 +117,24 @@
             "IsStarred" .RepoInfo.IsStarred
             "StarCount" .RepoInfo.Stats.StarCount
             "RepoName" .RepoInfo.Name) }}
-    <a
-      class="btn text-sm no-underline hover:no-underline flex items-center gap-2 group"
-      hx-boost="true"
-      href="/{{ .RepoInfo.FullName }}/fork"
-    >
-      {{ i "git-fork" "w-4 h-4" }}
-      fork
-      {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-    </a>
+      <div class="flex w-full min-h-[30px] items-stretch overflow-hidden rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+        <a
+          class="btn text-sm no-underline hover:no-underline flex items-center gap-2 group"
+          hx-boost="true"
+          href="/{{ .RepoInfo.FullName }}/fork"
+        >
+          {{ i "git-fork" "w-4 h-4" }}
+          fork
+          {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+        </a>
+        <a
+          href="/{{ .RepoInfo.FullName }}/forks"
+          class="flex items-center px-2 text-sm no-underline hover:no-underline border-l border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
+          title="Forked by"
+        >
+          {{ .RepoInfo.Stats.ForkCount }}
+        </a>
+      </div>
     {{ template "repo/fragments/feedDropdown" . }}
   </div>
 {{ end }}
