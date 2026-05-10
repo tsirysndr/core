@@ -1,12 +1,12 @@
 {{ define "repo/pulls/fragments/pullHeader" }}
-<header class="pb-2">
-    <h1 class="text-2xl dark:text-white">
-        {{ .Pull.Title | description }}
-        <span class="text-gray-500 dark:text-gray-400">#{{ .Pull.PullId }}</span>
-    </h1>
-</header>
+<section id="pull-{{ .Pull.PullId }}">
+    <header class="pb-2">
+        <h1 class="text-2xl dark:text-white">
+            {{ .Pull.Title | description }}
+            <span class="text-gray-500 dark:text-gray-400">#{{ .Pull.PullId }}</span>
+        </h1>
+    </header>
 
-<section>
     <div class="flex items-center gap-2">
         {{ template "repo/pulls/fragments/pullState" .Pull.State }}
         <span class="text-gray-500 dark:text-gray-400 text-sm flex flex-wrap items-center gap-1">
@@ -38,6 +38,16 @@
                   {{ .Pull.PullSource.Branch }}
                 {{ end }}
               </span>
+            {{ end }}
+
+            {{ if and .LoggedInUser (eq .LoggedInUser.Did .Pull.OwnerDid) }}
+              <a
+                class="text-gray-500 dark:text-gray-400 flex gap-1 items-center group cursor-pointer"
+                hx-get="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/edit"
+                hx-swap="innerHTML"
+                hx-target="#pull-{{.Pull.PullId}}">
+                {{ i "pencil" "size-3" }}
+              </a>
             {{ end }}
         </span>
     </div>

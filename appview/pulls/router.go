@@ -35,6 +35,8 @@ func (s *Pulls) Router(mw *middleware.Middleware) http.Handler {
 
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.AuthMiddleware(s.oauth))
+			r.Get("/edit", s.EditPull)
+			r.Post("/edit", s.EditPull)
 			r.Route("/resubmit", func(r chi.Router) {
 				r.Get("/", s.ResubmitPull)
 				r.Post("/", s.ResubmitPull)

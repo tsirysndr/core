@@ -1468,6 +1468,16 @@ func (p *Pages) MarkdownPreviewFragment(w io.Writer, body string) error {
 	return p.executePlain("fragments/markdownPreview", w, body)
 }
 
+type EditPullParams struct {
+	LoggedInUser *oauth.MultiAccountUser
+	RepoInfo     repoinfo.RepoInfo
+	Pull         *models.Pull
+}
+
+func (p *Pages) EditPullFragment(w io.Writer, params EditPullParams) error {
+	return p.executePlain("repo/pulls/fragments/pullEdit", w, params)
+}
+
 type RepoPullsParams struct {
 	BaseParams
 	RepoInfo           repoinfo.RepoInfo

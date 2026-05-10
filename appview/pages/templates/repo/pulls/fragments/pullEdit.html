@@ -1,0 +1,42 @@
+{{ define "repo/pulls/fragments/pullEdit" }}
+<form
+  hx-post="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/edit"
+  hx-trigger="submit, keydown[(ctrlKey || metaKey) && key=='Enter'] from:(find input[type=text],find textarea)"
+  hx-swap="none"
+  hx-indicator="find button[type=submit]"
+>
+  <div class="flex flex-col gap-2">
+    <div>
+      <label for="title">Title</label>
+      <input type="text" name="title" id="title" class="w-full" value="{{ .Pull.Title }}" />
+    </div>
+    <div>
+      <label for="body">Body</label>
+      {{ template "fragments/markdownEditor"
+        (dict "Name"        "body"
+              "Value"       .Pull.Body
+              "BlobName"    "blob"
+              "Rows"        15
+              "Placeholder" "Describe your pull request. Markdown is supported.") }}
+    </div>
+    <div class="flex justify-between">
+      <div id="pulls" class="error"></div>
+      <div class="flex gap-2 items-stretch">
+        <a
+          class="btn flex items-center gap-2 no-underline hover:no-underline"
+          type="button"
+          href="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}"
+        >
+          {{ i "x" "size-4" }}
+          Cancel
+        </a>
+        <button type="submit" class="btn-create group flex items-center gap-2">
+          {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+          {{ i "pencil" "size-4 inline group-[.htmx-request]:hidden" }}
+          edit
+        </button>
+      </div>
+    </div>
+  </div>
+</form>
+{{ end }}
