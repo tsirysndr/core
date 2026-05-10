@@ -9,7 +9,7 @@ export interface Env {
 // ---------------------------------------------------------------------------
 // Job postings — add a new markdown file in src/postings/ and import it here
 // ---------------------------------------------------------------------------
-import softwareEngineer from './postings/software-engineer.md';
+// import softwareEngineer from './postings/software-engineer.md';
 
 interface Posting {
 	slug: string;
@@ -41,7 +41,7 @@ function parsePosting(slug: string, raw: string): Posting {
 }
 
 const POSTINGS: Posting[] = [
-	parsePosting('software-engineer', softwareEngineer as string),
+	// parsePosting('software-engineer', softwareEngineer as string),
 	// add more here as you create markdown files
 ];
 
