@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/eventconsumer"
@@ -39,6 +40,8 @@ const (
 
 type Spindle struct {
 	jc          *jetstream.JetstreamClient
+	tap         *Tap
+	embedTap    *embeddedTap
 	db          *db.DB
 	e           *rbac.Enforcer
 	l           *slog.Logger
@@ -52,13 +55,14 @@ type Spindle struct {
 	motd        []byte
 	motdMu      sync.RWMutex
 	workflowSem chan struct{}
+	rootCtx     context.Context
 }
 
 // New creates a new Spindle server with the provided configuration and engines.
 func New(ctx context.Context, cfg *config.Config, engines map[string]models.Engine) (*Spindle, error) {
 	logger := log.FromContext(ctx)
 
-	d, err := db.Make(cfg.Server.DBPath)
+	d, err := db.Make(ctx, cfg.Server.DBPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup db: %w", err)
 	}
@@ -104,8 +108,6 @@ func New(ctx context.Context, cfg *config.Config, engines map[string]models.Engi
 
 	collections := []string{
 		tangled.SpindleMemberNSID,
-		tangled.RepoNSID,
-		tangled.RepoCollaboratorNSID,
 	}
 	jc, err := jetstream.NewJetstreamClient(cfg.Server.JetstreamEndpoint, "spindle", collections, nil, log.SubLogger(logger, "jetstream"), d, true, true)
 	if err != nil {
@@ -137,6 +139,7 @@ func New(ctx context.Context, cfg *config.Config, engines map[string]models.Engi
 		vault:       vault,
 		motd:        defaultMotd,
 		workflowSem: workflowSem,
+		rootCtx:     ctx,
 	}
 
 	err = e.AddSpindle(rbacDomain)
@@ -176,6 +179,16 @@ func New(ctx context.Context, cfg *config.Config, engines map[string]models.Engi
 		ccfg.Sources[eventconsumer.NewKnotSource(knot)] = struct{}{}
 	}
 	spindle.ks = eventconsumer.NewConsumer(*ccfg)
+
+	if cfg.Server.Tap.Embed {
+		pw, err := randomAdminPassword()
+		if err != nil {
+			return nil, err
+		}
+		cfg.Server.Tap.AdminPassword = pw
+		logger.Info("embedded tap: using random admin password")
+	}
+	spindle.tap = NewTapClient(spindle)
 
 	return spindle, nil
 }
@@ -235,13 +248,50 @@ func (s *Spindle) Start(ctx context.Context) error {
 		defer stopper.Stop()
 	}
 
+	if s.cfg.Server.Tap.Embed {
+		emb, err := startEmbeddedTap(ctx, s.cfg, log.SubLogger(s.l, "embedtap"))
+		if err != nil {
+			return fmt.Errorf("starting embedded tap: %w", err)
+		}
+		s.embedTap = emb
+		defer s.embedTap.Shutdown()
+	}
+
 	go func() {
 		s.l.Info("starting knot event consumer")
 		s.ks.Start(ctx)
 	}()
 
+	s.l.Info("starting tap client", "url", s.cfg.Server.Tap.Url)
+	s.tap.Start(ctx)
+
 	s.l.Info("starting spindle server", "address", s.cfg.Server.ListenAddr)
 	return http.ListenAndServe(s.cfg.Server.ListenAddr, s.Router())
+}
+
+func (s *Spindle) declareTapInterest(ctx context.Context) {
+	repos, err := s.db.AllRepos()
+	if err != nil {
+		s.l.Warn("tap declare: failed to load known repos", "err", err)
+		return
+	}
+	seen := make(map[syntax.DID]struct{}, len(repos))
+	dids := make([]syntax.DID, 0, len(repos))
+	for _, r := range repos {
+		if r.Owner == "" {
+			continue
+		}
+		if _, ok := seen[r.Owner]; ok {
+			continue
+		}
+		seen[r.Owner] = struct{}{}
+		dids = append(dids, r.Owner)
+	}
+	if err := s.tap.AddOwnerDIDs(ctx, dids); err != nil {
+		s.l.Warn("tap declare: AddRepos rejected", "count", len(dids), "err", err)
+		return
+	}
+	s.l.Info("tap declare: known owner DIDs registered", "count", len(dids))
 }
 
 func Run(ctx context.Context) error {
@@ -319,19 +369,9 @@ func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source,
 			return fmt.Errorf("repo knot does not match event source: %s != %s", src.Key(), tpl.TriggerMetadata.Repo.Knot)
 		}
 
-		// filter by repos
-		repoName := ""
-		if tpl.TriggerMetadata.Repo.Repo != nil {
-			repoName = *tpl.TriggerMetadata.Repo.Repo
-		}
-
-		_, err = s.db.GetRepo(
-			tpl.TriggerMetadata.Repo.Knot,
-			tpl.TriggerMetadata.Repo.Did,
-			repoName,
-		)
+		repoDid, err := s.resolvePipelineRepoDid(tpl.TriggerMetadata.Repo)
 		if err != nil {
-			return fmt.Errorf("failed to get repo: %w", err)
+			return err
 		}
 
 		pipelineId := models.PipelineId{
@@ -399,8 +439,7 @@ func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source,
 		ok := s.jq.Enqueue(queue.Job{
 			Run: func() error {
 				engine.StartWorkflows(log.SubLogger(s.l, "engine"), s.vault, s.cfg, s.db, s.n, s.workflowSem, ctx, &models.Pipeline{
-					RepoOwner: tpl.TriggerMetadata.Repo.Did,
-					RepoName:  repoName,
+					RepoDid:   repoDid,
 					Workflows: workflows,
 				}, pipelineId)
 				return nil
@@ -417,6 +456,20 @@ func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source,
 	}
 
 	return nil
+}
+
+func (s *Spindle) resolvePipelineRepoDid(repo *tangled.Pipeline_TriggerRepo) (syntax.DID, error) {
+	if repo.RepoDid == nil || *repo.RepoDid == "" {
+		return "", fmt.Errorf("pipeline trigger missing repoDid")
+	}
+	repoDid, err := syntax.ParseDID(*repo.RepoDid)
+	if err != nil {
+		return "", fmt.Errorf("parse repoDid %s: %w", *repo.RepoDid, err)
+	}
+	if _, err := s.db.GetRepoByDid(repoDid); err != nil {
+		s.l.Warn("accepting knot pipeline assertion for unknown repoDid", "repoDid", repoDid, "err", err)
+	}
+	return repoDid, nil
 }
 
 func (s *Spindle) configureOwner() error {

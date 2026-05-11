@@ -13,6 +13,7 @@ type Server struct {
 	DBPath                 string  `env:"DB_PATH, default=spindle.db"`
 	Hostname               string  `env:"HOSTNAME, required"`
 	JetstreamEndpoint      string  `env:"JETSTREAM_ENDPOINT, default=wss://jetstream1.us-west.bsky.network/subscribe"`
+	Tap                    Tap     `env:",prefix=TAP_"`
 	PlcUrl                 string  `env:"PLC_URL, default=https://plc.directory"`
 	Dev                    bool    `env:"DEV, default=false"`
 	Owner                  string  `env:"OWNER, required"`
@@ -21,6 +22,15 @@ type Server struct {
 	QueueSize              int     `env:"QUEUE_SIZE, default=100"`
 	MaxJobCount            int     `env:"MAX_JOB_COUNT, default=2"`            // max number of pipelines that run at a time
 	MaxConcurrentWorkflows int     `env:"MAX_CONCURRENT_WORKFLOWS, default=8"` // max number of workflow containers running at once (memory cap)
+}
+
+type Tap struct {
+	Embed         bool   `env:"EMBED, default=true"`
+	Url           string `env:"URL, default=http://[::1]:2480"`
+	Bind          string `env:"BIND, default=[::1]:2480"`
+	DBPath        string `env:"DB_PATH, default=tap.db"`
+	RelayUrl      string `env:"RELAY_URL, default=https://bsky.network"`
+	AdminPassword string `env:"ADMIN_PASSWORD"`
 }
 
 func (s Server) Did() syntax.DID {
