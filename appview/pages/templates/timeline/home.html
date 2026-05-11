@@ -59,7 +59,7 @@
 {{ block "mainLayout" . }}
   <div class="flex-grow relative">
     <div
-      class="absolute opacity-50 dark:opacity-5 inset-x-0 top-0 bottom-[-50px] md:bottom-[-150px] pointer-events-none bg-[url('https://assets.tangled.network/yarn_ball.svg')] bg-no-repeat bg-right-bottom w-full">
+      class="absolute opacity-50 dark:opacity-5 inset-x-0 top-0 bottom-[-50px] md:bottom-[-150px] pointer-events-none bg-slate-200 dark:bg-slate-400 [mask-image:url('https://assets.tangled.network/yarn_ball_mask.svg')] [mask-repeat:no-repeat] [mask-position:right_bottom] [-webkit-mask-image:url('https://assets.tangled.network/yarn_ball_mask.svg')] [-webkit-mask-repeat:no-repeat] [-webkit-mask-position:right_bottom] w-full">
     </div>
     <div class="max-w-screen-xl mx-auto flex flex-col gap-4 relative z-10">
       {{ block "contentLayout" . }}

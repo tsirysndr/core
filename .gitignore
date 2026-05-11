@@ -7,6 +7,7 @@ appview/pages/static/*
 result
 !.gitkeep
 !appview/pages/static/topbar-search.js
+!appview/pages/static/assets
 out/
 node_modules/
 patches
