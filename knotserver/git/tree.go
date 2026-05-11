@@ -58,7 +58,7 @@ func (g *GitRepo) makeNiceTree(ctx context.Context, subtree *object.Tree, parent
 		entries: entries,
 	}
 
-	times, err := g.lastCommitDirIn(ctx, lastCommitDir, 2*time.Second)
+	times, err := g.lastCommitDirIn(ctx, lastCommitDir, 500*time.Millisecond)
 	if err != nil {
 		return nts
 	}
