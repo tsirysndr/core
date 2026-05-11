@@ -55,8 +55,8 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	knotstream := knotstream.NewKnotStream(logger, db, cfg)
 	crawler := NewCrawler(logger, db)
 	resyncer := NewResyncer(logger, db, gitm, cfg)
-	adminpage := NewAdminServer(logger, db, resyncer)
 	xrpc := xrpc.New(logger, cfg, db, rdb, resolver, knotstream)
+	adminpage := NewAdminServer(logger, db, resyncer, xrpc)
 
 	// maintain repository list with tap
 	// NOTE: this can be removed once we introduce did-for-repo because then we can just listen to KnotStream for #identity events.

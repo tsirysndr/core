@@ -3,6 +3,7 @@ package knotmirror
 import (
 	"database/sql"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"html"
 	"html/template"
@@ -16,6 +17,7 @@ import (
 	"tangled.org/core/appview/pagination"
 	"tangled.org/core/knotmirror/db"
 	"tangled.org/core/knotmirror/models"
+	"tangled.org/core/knotmirror/xrpc"
 )
 
 //go:embed templates/*.html
@@ -26,13 +28,15 @@ const repoPageSize = 20
 type AdminServer struct {
 	db       *sql.DB
 	resyncer *Resyncer
+	xrpc     *xrpc.Xrpc
 	logger   *slog.Logger
 }
 
-func NewAdminServer(l *slog.Logger, database *sql.DB, resyncer *Resyncer) *AdminServer {
+func NewAdminServer(l *slog.Logger, database *sql.DB, resyncer *Resyncer, x *xrpc.Xrpc) *AdminServer {
 	return &AdminServer{
 		db:       database,
 		resyncer: resyncer,
+		xrpc:     x,
 		logger:   l,
 	}
 }
@@ -44,7 +48,16 @@ func (s *AdminServer) Router() http.Handler {
 
 	r.Post("/api/triggerRepoResync", s.handleRepoResyncTrigger())
 	r.Post("/api/cancelRepoResync", s.handleRepoResyncCancel())
+	r.Get("/api/inflight", s.handleInflight())
 	return r
+}
+
+func (s *AdminServer) handleInflight() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		entries := s.xrpc.Inflight()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(entries)
+	}
 }
 
 func funcmap() template.FuncMap {

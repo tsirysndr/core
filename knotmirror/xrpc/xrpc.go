@@ -26,6 +26,7 @@ type Xrpc struct {
 	ks         *knotstream.KnotStream
 	logger     *slog.Logger
 	httpClient *http.Client
+	inflight   *inflightTracker
 }
 
 func New(logger *slog.Logger, cfg *config.Config, db *sql.DB, rdb *redis.Client, resolver *idresolver.Resolver, ks *knotstream.KnotStream) *Xrpc {
@@ -39,27 +40,32 @@ func New(logger *slog.Logger, cfg *config.Config, db *sql.DB, rdb *redis.Client,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		inflight: newInflightTracker(),
 	}
 }
 
 func (x *Xrpc) Router() http.Handler {
 	r := chi.NewRouter()
 
-	r.Get("/"+tangled.GitTempGetArchiveNSID, x.GetArchive)
-	r.Get("/"+tangled.GitTempGetBlobNSID, x.GetBlob)
-	r.Get("/"+tangled.GitTempGetBranchNSID, x.GetBranch)
-	// r.Get("/"+tangled.GitTempGetCommitNSID, x.GetCommit) // todo
-	// r.Get("/"+tangled.GitTempGetDiffNSID, x.GetDiff) // todo
-	// r.Get("/"+tangled.GitTempGetEntityNSID, x.GetEntity) // todo
-	// r.Get("/"+tangled.GitTempGetHeadNSID, x.GetHead) // todo
-	r.Get("/"+tangled.GitTempGetTagNSID, x.GetTag) // using types.Response
-	r.Get("/"+tangled.GitTempGetTreeNSID, x.GetTree)
-	r.Get("/"+tangled.GitTempListBranchesNSID, x.ListBranches) // wip, unknown output
-	r.Get("/"+tangled.GitTempListCommitsNSID, x.ListCommits)
-	r.Get("/"+tangled.GitTempListLanguagesNSID, x.ListLanguages)
-	r.Get("/"+tangled.GitTempListTagsNSID, x.ListTags)
-	r.Get("/"+tangled.RepoBlobNSID, x.RepoBlob)
-	r.Post("/"+tangled.SyncRequestCrawlNSID, x.RequestCrawl)
+	r.Group(func(r chi.Router) {
+		r.Use(x.inflight.middleware)
+
+		r.Get("/"+tangled.GitTempGetArchiveNSID, x.GetArchive)
+		r.Get("/"+tangled.GitTempGetBlobNSID, x.GetBlob)
+		r.Get("/"+tangled.GitTempGetBranchNSID, x.GetBranch)
+		// r.Get("/"+tangled.GitTempGetCommitNSID, x.GetCommit) // todo
+		// r.Get("/"+tangled.GitTempGetDiffNSID, x.GetDiff) // todo
+		// r.Get("/"+tangled.GitTempGetEntityNSID, x.GetEntity) // todo
+		// r.Get("/"+tangled.GitTempGetHeadNSID, x.GetHead) // todo
+		r.Get("/"+tangled.GitTempGetTagNSID, x.GetTag) // using types.Response
+		r.Get("/"+tangled.GitTempGetTreeNSID, x.GetTree)
+		r.Get("/"+tangled.GitTempListBranchesNSID, x.ListBranches) // wip, unknown output
+		r.Get("/"+tangled.GitTempListCommitsNSID, x.ListCommits)
+		r.Get("/"+tangled.GitTempListLanguagesNSID, x.ListLanguages)
+		r.Get("/"+tangled.GitTempListTagsNSID, x.ListTags)
+		r.Get("/"+tangled.RepoBlobNSID, x.RepoBlob)
+		r.Post("/"+tangled.SyncRequestCrawlNSID, x.RequestCrawl)
+	})
 
 	return r
 }
