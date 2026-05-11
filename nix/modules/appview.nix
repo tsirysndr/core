@@ -33,6 +33,12 @@ in
           description = "Listen address for the appview service";
         };
 
+        metricsListenAddr = mkOption {
+          type = types.str;
+          default = "0.0.0.0:9090";
+          description = "Listen address for the Prometheus metrics endpoint";
+        };
+
         dbPath = mkOption {
           type = types.str;
           default = "/var/lib/appview/appview.db";
@@ -286,6 +292,7 @@ in
           {
             TANGLED_DB_PATH = cfg.dbPath;
             TANGLED_LISTEN_ADDR = cfg.listenAddr;
+            TANGLED_METRICS_LISTEN_ADDR = cfg.metricsListenAddr;
             TANGLED_APPVIEW_HOST = cfg.appviewHost;
             TANGLED_APPVIEW_NAME = cfg.appviewName;
             TANGLED_DEV =
