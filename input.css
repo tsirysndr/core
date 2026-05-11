@@ -92,6 +92,7 @@
         label {
             @apply block text-gray-900 text-sm py-2 dark:text-gray-100;
         }
+        
         input,
         textarea {
             @apply block rounded p-3
@@ -99,6 +100,7 @@
             border border-gray-300 dark:border-gray-600
             focus:outline-none focus:ring-1 focus:ring-gray-400 dark:focus:ring-gray-500;
         }
+        
         input[type="checkbox"] {
             @apply appearance-none size-4 p-0 rounded
             bg-transparent border border-gray-200
@@ -111,8 +113,9 @@
             disabled:indeterminate:bg-gray-100 disabled:indeterminate:border-gray-200
             dark:border-gray-600
             dark:hover:bg-gray-700
-            dark:checked:bg-gray-100 dark:checked:border-transparent
+            dark:checked:bg-gray-100
             dark:checked:hover:bg-gray-200
+            dark:checked:border-gray-400
             dark:indeterminate:bg-gray-100 dark:indeterminate:border-transparent
             dark:disabled:bg-gray-700 dark:disabled:border-gray-600
             dark:disabled:checked:bg-gray-500 dark:disabled:checked:border-transparent
@@ -142,6 +145,49 @@
                 background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M2.5 6h7' stroke='rgb(107,114,128)' stroke-width='1.5' stroke-linecap='round'/></svg>");
             }
         }
+        
+        input[type="radio"] {
+            @apply appearance-none size-4 p-0 rounded-full bg-transparent border
+                        
+            border-gray-400 hover:border-gray-900
+            hover:bg-gray-200
+            
+            disabled:cursor-not-allowed
+            disabled:border-gray-300
+            disabled:checked:border-gray-300
+            disabled:hover:bg-inherit
+            
+            dark:border-gray-400 dark:hover:border-gray-100
+            
+            dark:hover:bg-gray-600
+            
+            dark:checked:border-gray-400
+            
+            dark:disabled:border-gray-500
+            dark:disabled:checked:border-gray-500
+            
+            focus:outline-none focus:ring-1
+            focus:ring-gray-400 dark:focus:ring-gray-500;
+            
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: 8px;
+        }
+        input[type="radio"]:checked {
+            background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><circle cx='6' cy='6' r='4.5' fill='rgb(17,24,39)'/></svg>");
+        }
+        input[type="radio"]:disabled:checked {
+            background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><circle cx='6' cy='6' r='4.5' fill='rgb(209,213,219)'/></svg>");
+        }
+        @media (prefers-color-scheme: dark) {
+            input[type="radio"]:checked {
+                background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><circle cx='6' cy='6' r='4.5' fill='rgb(243,244,246)'/></svg>");
+            }
+            input[type="radio"]:disabled:checked {
+                background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><circle cx='6' cy='6' r='4.5' fill='rgb(107,114,128)'/></svg>");
+            }
+        }
+
         details summary::-webkit-details-marker {
             display: none;
         }
