@@ -1956,6 +1956,11 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "drop-ghost-comments-table", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`DROP TABLE IF EXISTS comments`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,

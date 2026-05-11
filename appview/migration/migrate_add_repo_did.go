@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/atclient"
@@ -13,6 +14,36 @@ import (
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/db"
 )
+
+func (s *Migration) ensureCreatedAt(ctx context.Context, client *atclient.APIClient, did syntax.DID, record syntax.ATURI, current string) (string, error) {
+	if t, err := time.Parse(time.RFC3339, current); err == nil {
+		return t.UTC().Format(time.RFC3339), nil
+	}
+	var raw struct {
+		Value struct {
+			CreatedAt *string `json:"createdAt,omitempty"`
+			AddedAt   *string `json:"addedAt,omitempty"`
+		} `json:"value"`
+	}
+	params := map[string]any{
+		"collection": record.Collection().String(),
+		"repo":       did.String(),
+		"rkey":       record.RecordKey().String(),
+	}
+	if err := client.LexDo(ctx, lexutil.Query, "", "com.atproto.repo.getRecord", params, nil, &raw); err != nil {
+		return "", fmt.Errorf("ensure createdAt: get record: %w", err)
+	}
+	for _, cand := range []*string{raw.Value.CreatedAt, raw.Value.AddedAt} {
+		if cand == nil || *cand == "" {
+			continue
+		}
+		if t, err := time.Parse(time.RFC3339, *cand); err == nil {
+			return t.UTC().Format(time.RFC3339), nil
+		}
+	}
+	s.logger.Warn("createdAt unparseable, defaulting to now", "record", record.String())
+	return time.Now().UTC().Format(time.RFC3339), nil
+}
 
 func (s *Migration) migrateAddRepoDid(ctx context.Context, client *atclient.APIClient, did syntax.DID, record syntax.ATURI) error {
 	if record.Collection().String() == tangled.FeedStarNSID {
@@ -37,6 +68,10 @@ func (s *Migration) migrateAddRepoDid(ctx context.Context, client *atclient.APIC
 			return fmt.Errorf("db: failed to query repo: %w", err)
 		}
 		rec.RepoDid = &repo.RepoDid
+		rec.CreatedAt, err = s.ensureCreatedAt(ctx, client, did, record, rec.CreatedAt)
+		if err != nil {
+			return err
+		}
 
 	case tangled.RepoIssueNSID:
 		rec, ok := val.(*tangled.RepoIssue)
@@ -51,6 +86,10 @@ func (s *Migration) migrateAddRepoDid(ctx context.Context, client *atclient.APIC
 			return fmt.Errorf("db: failed to query repo by at_uri %q: %w", rec.Repo, err)
 		}
 		rec.Repo = repo.RepoDid
+		rec.CreatedAt, err = s.ensureCreatedAt(ctx, client, did, record, rec.CreatedAt)
+		if err != nil {
+			return err
+		}
 
 	case tangled.RepoPullNSID:
 		rec, ok := val.(*tangled.RepoPull)
@@ -73,6 +112,10 @@ func (s *Migration) migrateAddRepoDid(ctx context.Context, client *atclient.APIC
 				rec.Source.Repo = &sourceRepo.RepoDid
 			}
 		}
+		rec.CreatedAt, err = s.ensureCreatedAt(ctx, client, did, record, rec.CreatedAt)
+		if err != nil {
+			return err
+		}
 
 	case tangled.RepoCollaboratorNSID:
 		rec, ok := val.(*tangled.RepoCollaborator)
@@ -87,6 +130,10 @@ func (s *Migration) migrateAddRepoDid(ctx context.Context, client *atclient.APIC
 			return fmt.Errorf("db: failed to query repo by at_uri %q: %w", rec.Repo, err)
 		}
 		rec.Repo = repo.RepoDid
+		rec.CreatedAt, err = s.ensureCreatedAt(ctx, client, did, record, rec.CreatedAt)
+		if err != nil {
+			return err
+		}
 
 	case tangled.RepoArtifactNSID:
 		rec, ok := val.(*tangled.RepoArtifact)
@@ -99,6 +146,10 @@ func (s *Migration) migrateAddRepoDid(ctx context.Context, client *atclient.APIC
 				return fmt.Errorf("db: failed to query repo by at_uri %q: %w", *rec.Repo, err)
 			}
 			rec.RepoDid = &repo.RepoDid
+		}
+		rec.CreatedAt, err = s.ensureCreatedAt(ctx, client, did, record, rec.CreatedAt)
+		if err != nil {
+			return err
 		}
 
 	case tangled.ActorProfileNSID:
@@ -156,6 +207,7 @@ func (s *Migration) migrateAddRepoDidStar(ctx context.Context, client *atclient.
 
 	var legacy struct {
 		CreatedAt string  `json:"createdAt"`
+		AddedAt   string  `json:"addedAt"`
 		Subject   *string `json:"subject,omitempty"`
 	}
 	if err := json.Unmarshal(raw.Value, &legacy); err != nil {
@@ -173,8 +225,18 @@ func (s *Migration) migrateAddRepoDidStar(ctx context.Context, client *atclient.
 		return fmt.Errorf("repo has no repoDid: %s", *legacy.Subject)
 	}
 
+	createdAt := legacy.CreatedAt
+	if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
+		createdAt = t.UTC().Format(time.RFC3339)
+	} else if t, err := time.Parse(time.RFC3339, legacy.AddedAt); err == nil {
+		createdAt = t.UTC().Format(time.RFC3339)
+	} else {
+		s.logger.Warn("star createdAt unparseable, defaulting to now", "record", record.String())
+		createdAt = time.Now().UTC().Format(time.RFC3339)
+	}
+
 	newRecord := &tangled.FeedStar{
-		CreatedAt: legacy.CreatedAt,
+		CreatedAt: createdAt,
 		Subject: &tangled.FeedStar_Subject{
 			FeedStar_Repo: &tangled.FeedStar_Repo{Did: repo.RepoDid},
 		},
