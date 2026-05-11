@@ -25,6 +25,7 @@ func (x *Xrpc) ListLanguages(w http.ResponseWriter, r *http.Request) {
 		ref       = r.URL.Query().Get("ref")
 	)
 	l := x.logger.With("method", "git.listLanguages", "repo", repoQuery, "ref", ref)
+	l.Debug("request")
 
 	repo, err := syntax.ParseATURI(repoQuery)
 	if err != nil || repo.RecordKey() == "" {

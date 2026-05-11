@@ -30,6 +30,7 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	l := x.logger.With("repo", repo, "ref", ref, "path", path)
+	l.Debug("request")
 
 	if path == "" {
 		writeJson(w, http.StatusBadRequest, atclient.ErrorBody{Name: "BadRequest", Message: "missing path parameter"})

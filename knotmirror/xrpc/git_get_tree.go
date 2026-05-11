@@ -23,6 +23,7 @@ func (x *Xrpc) GetTree(w http.ResponseWriter, r *http.Request) {
 		path      = r.URL.Query().Get("path") // path can be empty (defaults to root)
 	)
 	l := x.logger.With("method", "git.getTree", "repo", repoQuery, "ref", ref)
+	l.Debug("request")
 
 	repo, err := syntax.ParseATURI(repoQuery)
 	if err != nil || repo.RecordKey() == "" {
