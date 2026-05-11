@@ -3,11 +3,15 @@ package tapc
 import "context"
 
 type SimpleIndexer struct {
-	EventHandler func(ctx context.Context, evt Event) error
-	ErrorHandler func(ctx context.Context, err error)
+	EventHandler   func(ctx context.Context, evt Event) error
+	ErrorHandler   func(ctx context.Context, err error)
+	ConnectHandler func(ctx context.Context)
 }
 
-var _ Handler = (*SimpleIndexer)(nil)
+var (
+	_ Handler        = (*SimpleIndexer)(nil)
+	_ ConnectHandler = (*SimpleIndexer)(nil)
+)
 
 func (i *SimpleIndexer) OnEvent(ctx context.Context, evt Event) error {
 	if i.EventHandler == nil {
@@ -21,4 +25,11 @@ func (i *SimpleIndexer) OnError(ctx context.Context, err error) {
 		return
 	}
 	i.ErrorHandler(ctx, err)
+}
+
+func (i *SimpleIndexer) OnConnect(ctx context.Context) {
+	if i.ConnectHandler == nil {
+		return
+	}
+	i.ConnectHandler(ctx)
 }

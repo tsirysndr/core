@@ -5,6 +5,7 @@ package tapc
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -19,6 +20,10 @@ import (
 type Handler interface {
 	OnEvent(ctx context.Context, evt Event) error
 	OnError(ctx context.Context, err error)
+}
+
+type ConnectHandler interface {
+	OnConnect(ctx context.Context)
 }
 
 type Client struct {
@@ -95,9 +100,8 @@ func (c *Client) Connect(ctx context.Context, handler Handler) error {
 	}
 	u.Path = "/channel"
 
-	// TODO: set auth on dial
-
 	url := u.String()
+	basicAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("admin:"+c.AdminPassword))
 
 	var backoff int
 	for {
@@ -108,22 +112,27 @@ func (c *Client) Connect(ctx context.Context, handler Handler) error {
 		}
 
 		header := http.Header{
-			"Authorization": []string{""},
+			"Authorization": []string{basicAuth},
 		}
 		conn, res, err := websocket.DefaultDialer.DialContext(ctx, url, header)
 		if err != nil {
+			if backoff < 12 {
+				backoff++
+			}
 			l.Warn("dialing failed", "url", url, "err", err, "backoff", backoff)
-			time.Sleep(time.Duration(5+backoff) * time.Second)
-			backoff++
+			time.Sleep(time.Duration(5*backoff) * time.Second)
 
 			continue
 		}
-		l.Info("connected to tap service")
+		backoff = 0
+		l.Info("connected to tap service", "subscription_code", res.StatusCode)
 
-		l.Info("tap event subscription response", "code", res.StatusCode)
+		if ch, ok := handler.(ConnectHandler); ok {
+			ch.OnConnect(ctx)
+		}
 
 		if err = c.handleConnection(ctx, conn, handler); err != nil {
-			l.Warn("tap connection failed", "err", err, "backoff", backoff)
+			l.Warn("tap connection failed", "err", err)
 		}
 	}
 }
