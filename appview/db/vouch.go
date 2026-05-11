@@ -373,7 +373,7 @@ func GetVouchSuggestions(e Execer, did string, limit int) ([]models.VouchSuggest
 			select p.owner_did as did, 3 as priority, p.created,
 				'This user opened a pull request on your repository' as reason
 			from pulls p
-			join repos r on r.at_uri = p.repo_at
+			join repos r on r.repo_did = p.repo_did
 			where r.did = ?
 				and p.owner_did != ?
 
@@ -382,7 +382,7 @@ func GetVouchSuggestions(e Execer, did string, limit int) ([]models.VouchSuggest
 			select i.did as did, 4 as priority, i.created,
 				'This user opened an issue on your repository' as reason
 			from issues i
-			join repos r on r.at_uri = i.repo_at
+			join repos r on r.repo_did = i.repo_did
 			where r.did = ?
 				and i.did != ?
 
@@ -391,7 +391,7 @@ func GetVouchSuggestions(e Execer, did string, limit int) ([]models.VouchSuggest
 			select pc.owner_did as did, 5 as priority, pc.created,
 				'This user commented on a pull request on your repository' as reason
 			from pull_comments pc
-			join repos r on r.at_uri = pc.repo_at
+			join repos r on r.repo_did = pc.repo_did
 			where r.did = ?
 				and pc.owner_did != ?
 
@@ -401,7 +401,7 @@ func GetVouchSuggestions(e Execer, did string, limit int) ([]models.VouchSuggest
 				'This user commented on an issue on your repository' as reason
 			from issue_comments ic
 			join issues i on i.at_uri = ic.issue_at
-			join repos r on r.at_uri = i.repo_at
+			join repos r on r.repo_did = i.repo_did
 			where r.did = ?
 				and ic.did != ?
 
@@ -418,7 +418,7 @@ func GetVouchSuggestions(e Execer, did string, limit int) ([]models.VouchSuggest
 			select r.did as did, 8 as priority, s.created,
 				'You recently starred a repository by this user' as reason
 			from stars s
-			join repos r on r.at_uri = s.subject_at
+			join repos r on r.at_uri = s.subject
 			where s.did = ?
 				and r.did != ?
 		)

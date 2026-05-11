@@ -373,13 +373,6 @@ func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 	// get forks
 	forksInClause := strings.TrimSuffix(strings.Repeat("?, ", len(repoMap)), ", ")
 	forkArgs := make([]any, len(repoMap))
-	repoDidMap := make(map[string]syntax.ATURI)
-	i = 0
-	for aturi, r := range repoMap {
-		forkArgs[i] = r.RepoDid
-		repoDidMap[r.RepoDid] = aturi
-		i++
-	}
 
 	forksCountQuery := fmt.Sprintf(
 		`select source, count(1) from repos where source in (%s) group by source`,
@@ -400,12 +393,7 @@ func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 			continue
 		}
 
-		atURI, ok := repoDidMap[repodid]
-		if !ok {
-			continue
-		}
-
-		if r, ok := repoMap[atURI]; ok {
+		if r, ok := repoMap[repodid]; ok {
 			r.RepoStats.ForkCount = count
 		}
 	}
