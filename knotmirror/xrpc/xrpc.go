@@ -10,6 +10,7 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/go-chi/chi/v5"
+	"github.com/redis/go-redis/v9"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/knotmirror/config"
@@ -20,16 +21,18 @@ import (
 type Xrpc struct {
 	cfg        *config.Config
 	db         *sql.DB
+	rdb        *redis.Client
 	resolver   *idresolver.Resolver
 	ks         *knotstream.KnotStream
 	logger     *slog.Logger
 	httpClient *http.Client
 }
 
-func New(logger *slog.Logger, cfg *config.Config, db *sql.DB, resolver *idresolver.Resolver, ks *knotstream.KnotStream) *Xrpc {
+func New(logger *slog.Logger, cfg *config.Config, db *sql.DB, rdb *redis.Client, resolver *idresolver.Resolver, ks *knotstream.KnotStream) *Xrpc {
 	return &Xrpc{
 		cfg:      cfg,
 		db:       db,
+		rdb:      rdb,
 		resolver: resolver,
 		ks:       ks,
 		logger:   log.SubLogger(logger, "xrpc"),

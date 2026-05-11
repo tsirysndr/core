@@ -2,6 +2,7 @@ package xrpc
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
@@ -11,6 +12,11 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/knotserver/git"
+)
+
+const (
+	RepoLanguagesByDid = "git_list_languages:repo:%s:%s"
+	RepoLanguagesTTL   = 24 * time.Hour
 )
 
 func (x *Xrpc) ListLanguages(w http.ResponseWriter, r *http.Request) {
@@ -25,6 +31,19 @@ func (x *Xrpc) ListLanguages(w http.ResponseWriter, r *http.Request) {
 		l.Error("invalid repo at-uri", "err", err)
 		writeJson(w, http.StatusBadRequest, atclient.ErrorBody{Name: "BadRequest", Message: fmt.Sprintf("repo parameter invalid: %s", repoQuery)})
 		return
+	}
+
+	if val, err := x.rdb.Get(r.Context(), fmt.Sprintf(RepoLanguagesByDid, repo, ref)).Result(); err == nil {
+		l.Debug("served from cache")
+		var langs []*tangled.GitTempListLanguages_Language
+		err = json.Unmarshal([]byte(val), &langs)
+		if err == nil {
+			writeJson(w, http.StatusOK, &tangled.GitTempListLanguages_Output{
+				Ref:       ref,
+				Languages: langs,
+			})
+			return
+		}
 	}
 
 	out, err := x.listLanguages(r.Context(), repo, ref)
@@ -58,6 +77,17 @@ func (x *Xrpc) listLanguages(ctx context.Context, repo syntax.ATURI, ref string)
 	if err != nil {
 		return nil, fmt.Errorf("analyzing languages: %w", err)
 	}
+
+	langs := sizesToLanguages(sizes)
+
+	go func() {
+		ctx := context.Background()
+		encoded, err := json.Marshal(langs)
+		if err != nil {
+			return
+		}
+		x.rdb.Set(ctx, fmt.Sprintf(RepoLanguagesByDid, repo, ref), encoded, RepoLanguagesTTL)
+	}()
 
 	return &tangled.GitTempListLanguages_Output{
 		Ref:       ref,

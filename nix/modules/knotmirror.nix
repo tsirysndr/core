@@ -98,6 +98,11 @@ in
         cfg.package
       ];
 
+      services.redis.servers.knotmirror = {
+        enable = true;
+        port = 6377;
+      };
+
       systemd.services.tap-knotmirror = {
         description = "knotmirror tap service";
         after = ["network.target"];
@@ -139,6 +144,7 @@ in
             "MIRROR_HOSTNAME=${cfg.hostname}"
             "MIRROR_TAP_URL=http://localhost:${toString cfg.tap.port}"
             "MIRROR_DB_URL=${cfg.dbUrl}"
+            "MIRROR_REDIS_ADDR=localhost:6377"
             "MIRROR_GIT_BASEPATH=/var/lib/knotmirror/repos"
             "MIRROR_KNOT_USE_SSL=${boolToString cfg.knotUseSSL}"
             "MIRROR_KNOT_SSRF=${boolToString cfg.knotSSRF}"

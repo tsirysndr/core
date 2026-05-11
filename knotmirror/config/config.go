@@ -11,6 +11,7 @@ type Config struct {
 	PlcUrl              string        `env:"MIRROR_PLC_URL, default=https://plc.directory"`
 	TapUrl              string        `env:"MIRROR_TAP_URL, default=http://localhost:2480"`
 	DbUrl               string        `env:"MIRROR_DB_URL, required"`
+	RedisAddr           string        `env:"MIRROR_REDIS_ADDR, required"`
 	KnotUseSSL          bool          `env:"MIRROR_KNOT_USE_SSL, default=false"` // use SSL for Knot when not scheme is not specified
 	KnotSSRF            bool          `env:"MIRROR_KNOT_SSRF, default=false"`
 	GitRepoBasePath     string        `env:"MIRROR_GIT_BASEPATH, default=repos"`

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/redis/go-redis/v9"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/knotmirror/config"
@@ -29,6 +30,8 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("initializing db: %w", err)
 	}
+
+	rdb := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
 
 	resolver := idresolver.DefaultResolver(cfg.PlcUrl)
 
@@ -53,7 +56,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	crawler := NewCrawler(logger, db)
 	resyncer := NewResyncer(logger, db, gitm, cfg)
 	adminpage := NewAdminServer(logger, db, resyncer)
-	xrpc := xrpc.New(logger, cfg, db, resolver, knotstream)
+	xrpc := xrpc.New(logger, cfg, db, rdb, resolver, knotstream)
 
 	// maintain repository list with tap
 	// NOTE: this can be removed once we introduce did-for-repo because then we can just listen to KnotStream for #identity events.
