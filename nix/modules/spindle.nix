@@ -101,6 +101,38 @@ in
               };
             };
           };
+
+          tap = {
+            embed = mkOption {
+              type = types.bool;
+              default = true;
+              description = "Run an embedded tap inside the spindle process";
+            };
+
+            url = mkOption {
+              type = types.str;
+              default = "http://[::1]:2480";
+              description = "URL the spindle's tap client dials";
+            };
+
+            bind = mkOption {
+              type = types.str;
+              default = "[::1]:2480";
+              description = "Loopback address the embedded tap server listens on";
+            };
+
+            dbPath = mkOption {
+              type = types.path;
+              default = "/var/lib/spindle/tap.db";
+              description = "Path to the embedded tap sqlite database";
+            };
+
+            relayUrl = mkOption {
+              type = types.str;
+              default = "https://bsky.network";
+              description = "Relay used by the embedded tap firehose";
+            };
+          };
         };
 
         pipelines = {
@@ -171,6 +203,11 @@ in
             "SPINDLE_SERVER_SECRETS_PROVIDER=${cfg.server.secrets.provider}"
             "SPINDLE_SERVER_SECRETS_OPENBAO_PROXY_ADDR=${cfg.server.secrets.openbao.proxyAddr}"
             "SPINDLE_SERVER_SECRETS_OPENBAO_MOUNT=${cfg.server.secrets.openbao.mount}"
+            "SPINDLE_SERVER_TAP_EMBED=${lib.boolToString cfg.server.tap.embed}"
+            "SPINDLE_SERVER_TAP_URL=${cfg.server.tap.url}"
+            "SPINDLE_SERVER_TAP_BIND=${cfg.server.tap.bind}"
+            "SPINDLE_SERVER_TAP_DB_PATH=${cfg.server.tap.dbPath}"
+            "SPINDLE_SERVER_TAP_RELAY_URL=${cfg.server.tap.relayUrl}"
             "SPINDLE_NIXERY_PIPELINES_NIXERY=${cfg.pipelines.nixery}"
             "SPINDLE_NIXERY_PIPELINES_WORKFLOW_TIMEOUT=${cfg.pipelines.workflowTimeout}"
             "SPINDLE_NIXERY_PIPELINES_MAX_JOB_MEMORY_MB=${toString cfg.pipelines.maxJobMemoryMb}"
