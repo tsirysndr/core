@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"io"
 	"path"
 	"strings"
 
@@ -11,14 +12,35 @@ import (
 
 type LangBreakdown map[string]int64
 
+const (
+	langContentLimit = 16 * 1024       // read up to 16 KB for language detection
+	langSizeLimit    = 1 * 1024 * 1024 // skip content read for blobs over 1 MB
+)
+
 func (g *GitRepo) AnalyzeLanguages(ctx context.Context) (LangBreakdown, error) {
 	sizes := make(map[string]int64)
 	err := g.Walk(ctx, "", func(node object.TreeEntry, parent *object.Tree, root string) error {
 		filepath := path.Join(root, node.Name)
 
-		content, err := g.FileContentN(filepath, 16*1024) // 16KB
+		if enry.IsVendor(filepath) || enry.IsDocumentation(filepath) ||
+			enry.IsDotFile(filepath) || enry.IsConfiguration(filepath) {
+			return nil
+		}
+
+		blob, err := object.GetBlob(g.r.Storer, node.Hash)
 		if err != nil {
 			return nil
+		}
+		sz := blob.Size
+
+		var content []byte
+		if sz <= langSizeLimit {
+			r, err := blob.Reader()
+			if err != nil {
+				return nil
+			}
+			content, _ = io.ReadAll(io.LimitReader(r, langContentLimit))
+			r.Close()
 		}
 
 		if enry.IsGenerated(filepath, content) ||
@@ -37,7 +59,6 @@ func (g *GitRepo) AnalyzeLanguages(ctx context.Context) (LangBreakdown, error) {
 			return nil
 		}
 
-		sz, _ := parent.Size(node.Name)
 		sizes[language] += sz
 
 		return nil
