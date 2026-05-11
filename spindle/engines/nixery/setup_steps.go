@@ -8,7 +8,11 @@ import (
 func nixConfStep() Step {
 	setupCmd := `mkdir -p /etc/nix
 echo 'extra-experimental-features = nix-command flakes' >> /etc/nix/nix.conf
-echo 'build-users-group = ' >> /etc/nix/nix.conf`
+echo 'build-users-group = ' >> /etc/nix/nix.conf
+echo 'sandbox = false' >> /etc/nix/nix.conf
+printf '#!/bin/sh\nrm -rf /homeless-shelter\n' > /etc/nix/post-build-hook.sh
+chmod +x /etc/nix/post-build-hook.sh
+echo 'post-build-hook = /etc/nix/post-build-hook.sh' >> /etc/nix/nix.conf`
 	return Step{
 		command: setupCmd,
 		name:    "Configure Nix",
