@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	securejoin "github.com/cyphar/filepath-securejoin"
 	"tangled.org/core/notifier"
 	"tangled.org/core/spindle/config"
 	"tangled.org/core/spindle/db"
@@ -26,8 +25,8 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 
 	// extract secrets
 	var allSecrets []secrets.UnlockedSecret
-	if didSlashRepo, err := securejoin.SecureJoin(pipeline.RepoOwner, pipeline.RepoName); err == nil {
-		if res, err := vault.GetSecretsUnlocked(ctx, secrets.RepoIdentifier(didSlashRepo)); err == nil {
+	if pipeline.RepoDid != "" {
+		if res, err := vault.GetSecretsUnlocked(ctx, secrets.RepoIdentifier(pipeline.RepoDid.String())); err == nil {
 			allSecrets = res
 		}
 	}

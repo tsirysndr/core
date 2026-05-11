@@ -1,8 +1,9 @@
 package models
 
+import "github.com/bluesky-social/indigo/atproto/syntax"
+
 type Pipeline struct {
-	RepoOwner string
-	RepoName  string
+	RepoDid   syntax.DID
 	Workflows map[Engine][]Workflow
 }
 

@@ -9,7 +9,6 @@ import (
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/bluesky-social/indigo/xrpc"
-	securejoin "github.com/cyphar/filepath-securejoin"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/rbac"
 	"tangled.org/core/spindle/models"
@@ -66,18 +65,19 @@ func (x *Xrpc) CancelPipeline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, ok := resp.Value.Val.(*tangled.Repo); !ok {
+	repoRec, ok := resp.Value.Val.(*tangled.Repo)
+	if !ok {
 		fail(xrpcerr.RepoNotFoundError)
 		return
 	}
-	didSlashRepo, err := securejoin.SecureJoin(ident.DID.String(), repoAt.RecordKey().String())
-	if err != nil {
-		fail(xrpcerr.GenericError(err))
+	if repoRec.RepoDid == nil || *repoRec.RepoDid == "" {
+		fail(xrpcerr.GenericError(fmt.Errorf("repo record %s has no repoDid", repoAt)))
 		return
 	}
+	repoDid := *repoRec.RepoDid
 
 	// TODO: fine-grained role based control
-	isRepoOwner, err := x.Enforcer.IsRepoOwner(actorDid.String(), rbac.ThisServer, didSlashRepo)
+	isRepoOwner, err := x.Enforcer.IsRepoOwner(actorDid.String(), rbac.ThisServer, repoDid)
 	if err != nil || !isRepoOwner {
 		fail(xrpcerr.AccessControlError(actorDid.String()))
 		return

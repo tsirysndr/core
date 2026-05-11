@@ -9,7 +9,6 @@ import (
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/bluesky-social/indigo/xrpc"
-	securejoin "github.com/cyphar/filepath-securejoin"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/rbac"
 	"tangled.org/core/spindle/secrets"
@@ -56,23 +55,24 @@ func (x *Xrpc) ListSecrets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, ok := resp.Value.Val.(*tangled.Repo); !ok {
+	repoRec, ok := resp.Value.Val.(*tangled.Repo)
+	if !ok {
 		fail(xrpcerr.RepoNotFoundError)
 		return
 	}
-	didPath, err := securejoin.SecureJoin(ident.DID.String(), repoAt.RecordKey().String())
-	if err != nil {
-		fail(xrpcerr.GenericError(err))
+	if repoRec.RepoDid == nil || *repoRec.RepoDid == "" {
+		fail(xrpcerr.GenericError(fmt.Errorf("repo record %s has no repoDid", repoAt)))
 		return
 	}
+	repoDid := *repoRec.RepoDid
 
-	if ok, err := x.Enforcer.IsSettingsAllowed(actorDid.String(), rbac.ThisServer, didPath); !ok || err != nil {
+	if ok, err := x.Enforcer.IsSettingsAllowed(actorDid.String(), rbac.ThisServer, repoDid); !ok || err != nil {
 		l.Error("insufficient permissions", "did", actorDid.String())
 		writeError(w, xrpcerr.AccessControlError(actorDid.String()), http.StatusUnauthorized)
 		return
 	}
 
-	ls, err := x.Vault.GetSecretsLocked(r.Context(), secrets.RepoIdentifier(didPath))
+	ls, err := x.Vault.GetSecretsLocked(r.Context(), secrets.RepoIdentifier(repoDid))
 	if err != nil {
 		l.Error("failed to get secret from vault", "did", actorDid.String(), "err", err)
 		writeError(w, xrpcerr.GenericError(err), http.StatusInternalServerError)
