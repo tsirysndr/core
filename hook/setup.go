@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,6 +75,10 @@ func Setup(config config) error {
 
 		userPath := filepath.Join(config.scanPath, did)
 		if err := SetupRepo(config, userPath); err != nil {
+			if errors.Is(err, ErrNoGitRepo) {
+				slog.Warn("hook setup: skipping non-repo entry", "path", userPath, "err", err)
+				continue
+			}
 			return err
 		}
 	}
