@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/state"
 	tlog "tangled.org/core/log"
@@ -34,6 +35,14 @@ func main() {
 	}
 
 	logger.Info("starting server", "address", c.Core.ListenAddr)
+
+	go func() {
+		logger.Info("starting metrics server", "address", c.Core.MetricsListenAddr)
+		http.Handle("/metrics", promhttp.Handler())
+		if err := http.ListenAndServe(c.Core.MetricsListenAddr, nil); err != nil {
+			logger.Error("failed to start metrics server", "err", err)
+		}
+	}()
 
 	if err := http.ListenAndServe(c.Core.ListenAddr, state.Router()); err != nil {
 		logger.Error("failed to start appview", "err", err)

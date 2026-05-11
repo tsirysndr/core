@@ -11,6 +11,7 @@ import (
 	"tangled.org/core/appview/issues"
 	"tangled.org/core/appview/knots"
 	"tangled.org/core/appview/labels"
+	"tangled.org/core/appview/metrics"
 	"tangled.org/core/appview/middleware"
 	"tangled.org/core/appview/migration"
 	"tangled.org/core/appview/notifications"
@@ -37,6 +38,8 @@ func (s *State) Router() http.Handler {
 		s.rdb,
 		s.logger,
 	)
+
+	router.Use(metrics.Middleware)
 
 	m := migration.NewMigration(s.db, s.oauth, s.idResolver.Directory(), s.logger)
 	router.Use(m.BackgroundMigrationMiddleware)
