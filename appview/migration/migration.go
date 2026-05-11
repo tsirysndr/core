@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
@@ -17,16 +18,24 @@ import (
 	"tangled.org/core/appview/oauth"
 )
 
+const maxConcurrentMigrations = 8
+
 type Migration struct {
-	db     *db.DB
-	oauth  *oauth.OAuth
-	dir    identity.Directory
-	logger *slog.Logger
+	db       *db.DB
+	oauth    *oauth.OAuth
+	dir      identity.Directory
+	logger   *slog.Logger
+	inflight sync.Map
+	sem      chan struct{}
 }
 
 func NewMigration(db *db.DB, oauth *oauth.OAuth, dir identity.Directory, logger *slog.Logger) *Migration {
 	return &Migration{
-		db, oauth, dir, logger,
+		db:     db,
+		oauth:  oauth,
+		dir:    dir,
+		logger: logger,
+		sem:    make(chan struct{}, maxConcurrentMigrations),
 	}
 }
 
@@ -34,15 +43,39 @@ func (s *Migration) BackgroundMigrationMiddleware(next http.Handler) http.Handle
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer next.ServeHTTP(w, r)
 
-		client, err := s.oauth.AuthorizedClient(r)
-		if err != nil {
-			return
-		}
-		if client.AccountDID == nil {
+		did := s.oauth.GetDidFromCookie(r)
+		if did == "" {
 			return
 		}
 
-		go s.runPendingMigrations(context.Background(), *client.AccountDID, client)
+		hasPending, err := db.HasPendingPdsRecordMigration(r.Context(), s.db, did)
+		if err != nil || !hasPending {
+			return
+		}
+
+		if _, loaded := s.inflight.LoadOrStore(did, struct{}{}); loaded {
+			return
+		}
+
+		select {
+		case s.sem <- struct{}{}:
+		default:
+			s.inflight.Delete(did)
+			return
+		}
+
+		client, err := s.oauth.AuthorizedClient(r)
+		if err != nil || client.AccountDID == nil {
+			<-s.sem
+			s.inflight.Delete(did)
+			return
+		}
+
+		go func() {
+			defer s.inflight.Delete(did)
+			defer func() { <-s.sem }()
+			s.runPendingMigrations(context.Background(), *client.AccountDID, client)
+		}()
 	})
 }
 

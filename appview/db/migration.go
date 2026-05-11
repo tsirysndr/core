@@ -58,6 +58,24 @@ func ListPendingPdsRecordMigrations(ctx context.Context, e Execer, user syntax.D
 	return migrations, nil
 }
 
+func HasPendingPdsRecordMigration(ctx context.Context, e Execer, user syntax.DID) (bool, error) {
+	var exists bool
+	err := e.QueryRowContext(ctx,
+		`select exists(
+			select 1 from pds_migration
+			where did = ?
+				and status = 'pending'
+				and retry_after < ?
+		)`,
+		user,
+		time.Now().Unix(),
+	).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 func EnqueuePdsRecordMigration(ctx context.Context, e Execer, name string, did syntax.DID, collection syntax.NSID, rkey syntax.RecordKey) error {
 	_, err := e.ExecContext(ctx,
 		`insert into pds_migration (name, did, collection, rkey)

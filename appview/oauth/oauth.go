@@ -245,6 +245,22 @@ func (o *OAuth) GetDid(r *http.Request) string {
 	return ""
 }
 
+func (o *OAuth) GetDidFromCookie(r *http.Request) syntax.DID {
+	userSession, err := o.SessStore.Get(r, SessionName)
+	if err != nil || userSession.IsNew {
+		return ""
+	}
+	d, ok := userSession.Values[SessionDid].(string)
+	if !ok {
+		return ""
+	}
+	parsed, err := syntax.ParseDID(d)
+	if err != nil {
+		return ""
+	}
+	return parsed
+}
+
 func (o *OAuth) AuthorizedClient(r *http.Request) (*atclient.APIClient, error) {
 	session, err := o.ResumeSession(r)
 	if err != nil {
