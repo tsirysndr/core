@@ -1519,6 +1519,36 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 	})
 	conn.ExecContext(ctx, "pragma foreign_keys = on;")
 
+	conn.ExecContext(ctx, "pragma foreign_keys = off;")
+	orm.RunMigration(conn, logger, "drop-pipeline-statuses-pipeline-fk", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			create table if not exists pipeline_statuses_new (
+				id integer primary key autoincrement,
+				spindle text not null,
+				rkey text not null,
+
+				pipeline_knot text not null,
+				pipeline_rkey text not null,
+
+				created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				workflow text not null,
+				status text not null,
+				error text,
+				exit_code integer not null default 0,
+
+				unique (spindle, rkey)
+			);
+
+			insert into pipeline_statuses_new
+			select * from pipeline_statuses;
+
+			drop table pipeline_statuses;
+			alter table pipeline_statuses_new rename to pipeline_statuses;
+		`)
+		return err
+	})
+	conn.ExecContext(ctx, "pragma foreign_keys = on;")
+
 	return &DB{
 		db,
 		logger,
