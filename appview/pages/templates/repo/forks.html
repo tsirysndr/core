@@ -4,19 +4,11 @@
     <h2 class="text-sm uppercase font-bold">Forked by</h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {{ range .Forks }}
-        {{ $handle := resolve .Did }}
-        {{ $name := .Name}}
         <div class="border border-gray-200 dark:border-gray-700 rounded p-4">
-          <div class="flex items-center gap-3">
-            {{ template "user/fragments/picLink" (list .Did "size-10") }}
-            <div class="flex-1 min-w-0">
-              <a href="/{{ $handle }}" class="block truncate">{{ $handle }}</a>
-              <a href="/{{ $handle }}/{{ $name }}" class="block truncate">{{ $name }}</a>
-              <p class="text-sm text-gray-500 dark:text-gray-400">
-                forked {{ .Created | relTimeFmt }}
-              </p>
-            </div>
-          </div>
+          {{ template "forkOwnerAndName" . }}
+          <p class="text-sm text-gray-500 dark:text-gray-400">
+            forked {{ .Created | relTimeFmt }}
+          </p>
         </div>
       {{ end }}
       {{ if eq .TotalCount 0 }}
@@ -31,5 +23,14 @@
           "QueryParams" (queryParams)
       ) }}
     {{ end }}
+  </div>
+{{ end }}
+
+{{ define "forkOwnerAndName" }}
+  <div class="flex items-center gap-1 flex-wrap text-lg">
+    {{ template "user/fragments/picHandleLink" .Did }}
+    <span class="select-none">/</span>
+    {{ $repoOwner := resolve .Did }}
+    <a href="/$repoOwner/{{ .Name }}">{{ .Name }}</a>
   </div>
 {{ end }}

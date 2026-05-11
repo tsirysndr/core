@@ -1525,13 +1525,16 @@ func (rp *Repo) Forks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rp.pages.RepoForks(w, pages.RepoForksParams{
+	err = rp.pages.RepoForks(w, pages.RepoForksParams{
 		LoggedInUser: user,
 		RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
 		Forks:        forks,
 		Page:         page,
 		TotalCount:   totalCount,
 	})
+	if err != nil {
+		l.Error("failed to render page", "err", err)
+	}
 }
 
 // this is used to rollback changes made to the PDS
