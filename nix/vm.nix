@@ -76,6 +76,11 @@ in
               host.port = 7200;
               guest.port = 7200;
             }
+            {
+              from = "host";
+              host.port = 7100;
+              guest.port = 7100;
+            }
           ];
           sharedDirectories = {
             # We can't use the 9p mounts directly for most of these
@@ -151,6 +156,7 @@ in
         services.tangled.knotmirror = {
           enable = true;
           listenAddr = "0.0.0.0:7000";
+          metricsListenAddr = "0.0.0.0:7100";
           adminListenAddr = "0.0.0.0:7200";
           hostname = "localhost:7000";
           dbUrl = "postgresql://tnglr@127.0.0.1:5432/mirror";

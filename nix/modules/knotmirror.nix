@@ -30,6 +30,12 @@ in
         description = "Address to listen on";
       };
 
+      metricsListenAddr = mkOption {
+        type = types.str;
+        default = "127.0.0.1:7100";
+        description = "Address to listen on";
+      };
+
       adminListenAddr = mkOption {
         type = types.str;
         default = "127.0.0.1:7200";
@@ -149,7 +155,7 @@ in
             "MIRROR_KNOT_USE_SSL=${boolToString cfg.knotUseSSL}"
             "MIRROR_KNOT_SSRF=${boolToString cfg.knotSSRF}"
             "MIRROR_RESYNC_PARALLELISM=12"
-            "MIRROR_METRICS_LISTEN=127.0.0.1:7100"
+            "MIRROR_METRICS_LISTEN=${cfg.metricsListenAddr}"
             "MIRROR_ADMIN_LISTEN=${cfg.adminListenAddr}"
             "MIRROR_SLURPER_CONCURRENCY=4"
           ];
