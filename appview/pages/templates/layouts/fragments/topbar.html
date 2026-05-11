@@ -61,7 +61,22 @@
       hx-swap="innerHTML"
       hx-indicator="#topbar-search-indicator"
     />
-    <kbd class="pointer-events-none flex items-center text-xs border border-gray-200 dark:border-gray-600 rounded border-b-2 px-1 font-sans leading-5 text-gray-400 dark:text-gray-500 peer-focus:hidden peer-[:not(:placeholder-shown)]:hidden">⌘K</kbd>
+    <kbd id="search-kbd" class="pointer-events-none flex items-center text-xs border border-gray-200 dark:border-gray-600 rounded border-b-2 px-1 font-sans leading-5 text-gray-400 dark:text-gray-500 peer-focus:hidden peer-[:not(:placeholder-shown)]:hidden"></kbd>
+    <script>
+      (function() {
+        var kbd = document.getElementById('search-kbd');
+        if (!kbd) return;
+        var ua = navigator.userAgent;
+        var isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
+        if (isMobile) {
+          kbd.style.display = 'none';
+        } else if (/Macintosh|Mac OS X/.test(ua)) {
+          kbd.textContent = '⌘K';
+        } else {
+          kbd.textContent = 'Ctrl+K';
+        }
+      })();
+    </script>
     <span id="topbar-search-indicator" class="shrink-0">
       {{ i "loader-circle" "size-4 text-gray-400 animate-spin" }}
     </span>
