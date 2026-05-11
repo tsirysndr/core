@@ -745,6 +745,19 @@ func (rp *Repo) AddCollaborator(w http.ResponseWriter, r *http.Request) {
 	l = l.With("collaborator", collaboratorIdent.Handle)
 	l = l.With("knot", f.Knot)
 
+	existing, err := db.GetCollaborators(rp.db,
+		orm.FilterEq("repo_did", f.RepoDid),
+		orm.FilterEq("subject_did", collaboratorIdent.DID.String()),
+	)
+	if err != nil {
+		fail("Failed to check existing collaborators.", err)
+		return
+	}
+	if len(existing) > 0 {
+		fail(fmt.Sprintf("%s is already a collaborator.", collaboratorIdent.Handle), nil)
+		return
+	}
+
 	// announce this relation into the firehose, store into owners' pds
 	client, err := rp.oauth.AuthorizedClient(r)
 	if err != nil {
@@ -803,7 +816,7 @@ func (rp *Repo) AddCollaborator(w http.ResponseWriter, r *http.Request) {
 
 	err = db.AddCollaborator(tx, models.Collaborator{
 		Did:        syntax.DID(currentUser.Did),
-		Rkey:       rkey,
+		Rkey:       sql.NullString{String: rkey, Valid: true},
 		SubjectDid: collaboratorIdent.DID,
 		RepoDid:    syntax.DID(f.RepoDid),
 		Created:    createdAt,

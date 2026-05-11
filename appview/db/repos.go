@@ -689,12 +689,16 @@ func EnqueuePdsRewritesForRepo(tx *sql.Tx, repoDid, repoAtUri string) error {
 
 		var pairs []struct{ did, rkey string }
 		for rows.Next() {
-			var d, r string
+			var d string
+			var r sql.NullString
 			if scanErr := rows.Scan(&d, &r); scanErr != nil {
 				rows.Close()
 				return fmt.Errorf("scan %s for pds rewrites: %w", src.table, scanErr)
 			}
-			pairs = append(pairs, struct{ did, rkey string }{d, r})
+			if !r.Valid {
+				continue
+			}
+			pairs = append(pairs, struct{ did, rkey string }{d, r.String})
 		}
 		rows.Close()
 		if rowsErr := rows.Err(); rowsErr != nil {

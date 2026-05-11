@@ -11,7 +11,10 @@ import (
 
 func AddCollaborator(e Execer, c models.Collaborator) error {
 	_, err := e.Exec(
-		`insert into collaborators (did, rkey, subject_did, repo_did) values (?, ?, ?, ?);`,
+		`insert into collaborators (did, rkey, subject_did, repo_did) values (?, ?, ?, ?)
+		on conflict(repo_did, subject_did) do update set
+			did = excluded.did,
+			rkey = excluded.rkey`,
 		c.Did, c.Rkey, c.SubjectDid, string(c.RepoDid),
 	)
 	return err

@@ -2127,6 +2127,37 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 	})
 	conn.ExecContext(ctx, "pragma foreign_keys = on;")
 
+	orm.RunMigration(conn, logger, "collaborators-unique-on-repo-subject", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			CREATE TABLE collaborators_new (
+				id          INTEGER PRIMARY KEY AUTOINCREMENT,
+				did         TEXT NOT NULL,
+				rkey        TEXT,
+				subject_did TEXT NOT NULL,
+				repo_did    TEXT NOT NULL,
+				created     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				UNIQUE(repo_did, subject_did),
+				FOREIGN KEY (repo_did) REFERENCES repos(repo_did) ON DELETE CASCADE
+			);
+			INSERT INTO collaborators_new (id, did, rkey, subject_did, repo_did, created)
+			SELECT id, did, rkey, subject_did, repo_did, created
+			FROM (
+				SELECT
+					id, did, rkey, subject_did, repo_did, created,
+					ROW_NUMBER() OVER (
+						PARTITION BY repo_did, subject_did
+						ORDER BY created DESC, id DESC
+					) AS rn
+				FROM collaborators
+			)
+			WHERE rn = 1;
+			DROP TABLE collaborators;
+			ALTER TABLE collaborators_new RENAME TO collaborators;
+			CREATE INDEX idx_collaborators_repo_did ON collaborators(repo_did);
+			CREATE INDEX idx_collaborators_subject_did ON collaborators(subject_did);
+		`)
+		return err
+	})
 	return &DB{
 		db,
 		logger,
