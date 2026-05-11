@@ -58,13 +58,17 @@ func (g *GitRepo) makeNiceTree(ctx context.Context, subtree *object.Tree, parent
 		entries: entries,
 	}
 
-	times, err := g.lastCommitDirIn(ctx, lastCommitDir, 500*time.Millisecond)
+	times, err := g.lastCommitDirIn(ctx, lastCommitDir, 300*time.Millisecond)
 	if err != nil {
 		return nts
 	}
 
 	for _, e := range subtree.Entries {
-		sz, _ := subtree.Size(e.Name)
+		var sz int64
+		blob, err := object.GetBlob(g.r.Storer, e.Hash)
+		if err == nil {
+			sz = blob.Size
+		}
 		fpath := path.Join(parent, e.Name)
 
 		var lastCommit *types.LastCommitInfo
