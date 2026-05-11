@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"runtime/pprof"
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
@@ -47,7 +48,10 @@ func (x *Xrpc) ListLanguages(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	out, err := x.listLanguages(r.Context(), repo, ref)
+	var out *tangled.GitTempListLanguages_Output
+	pprof.Do(r.Context(), pprof.Labels("repo", repo.String()), func(ctx context.Context) {
+		out, err = x.listLanguages(ctx, repo, ref)
+	})
 	if err != nil {
 		l.Warn("local mirror failed, trying proxy", "err", err)
 		if x.proxyToKnot(w, r, repo) {

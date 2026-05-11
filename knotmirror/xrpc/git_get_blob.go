@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"runtime/pprof"
 	"slices"
 	"strings"
 
@@ -37,7 +38,10 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, err := x.getFile(r.Context(), repo, ref, path)
+	var file *object.File
+	pprof.Do(r.Context(), pprof.Labels("repo", repo.String()), func(ctx context.Context) {
+		file, err = x.getFile(ctx, repo, ref, path)
+	})
 	if err != nil {
 		l.Warn("local mirror failed, trying proxy", "err", err)
 		if x.proxyToKnot(w, r, repo) {

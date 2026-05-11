@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"runtime/pprof"
 	"time"
 	"unicode/utf8"
 
@@ -31,7 +32,10 @@ func (x *Xrpc) GetTree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out, err := x.getTree(r.Context(), repo, ref, path)
+	var out *tangled.GitTempGetTree_Output
+	pprof.Do(r.Context(), pprof.Labels("repo", repo.String()), func(ctx context.Context) {
+		out, err = x.getTree(ctx, repo, ref, path)
+	})
 	if err != nil {
 		l.Warn("local mirror failed, trying proxy", "repo", repo, "err", err)
 		if x.proxyToKnot(w, r, repo) {
