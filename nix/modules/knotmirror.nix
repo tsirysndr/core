@@ -30,16 +30,16 @@ in
         description = "Address to listen on";
       };
 
-      metricsListenAddr = mkOption {
-        type = types.str;
-        default = "127.0.0.1:7100";
-        description = "Address to listen on";
-      };
-
       adminListenAddr = mkOption {
         type = types.str;
         default = "127.0.0.1:7200";
         description = "Address to listen on";
+      };
+
+      metricsListenAddr = mkOption {
+        type = types.str;
+        default = "0.0.0.0:7100";
+        description = "Listen address for the Prometheus metrics endpoint";
       };
 
       hostname = mkOption {

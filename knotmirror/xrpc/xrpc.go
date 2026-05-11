@@ -46,6 +46,7 @@ func New(logger *slog.Logger, cfg *config.Config, db *sql.DB, rdb *redis.Client,
 
 func (x *Xrpc) Router() http.Handler {
 	r := chi.NewRouter()
+	r.Use(metricsMiddleware)
 
 	r.Group(func(r chi.Router) {
 		r.Use(x.inflight.middleware)
