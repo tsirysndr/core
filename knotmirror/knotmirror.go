@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/redis/go-redis/v9"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/redis/go-redis/v9"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/knotmirror/config"
 	"tangled.org/core/knotmirror/db"
