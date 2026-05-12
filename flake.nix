@@ -182,9 +182,14 @@
     devShells = forAllSystems (system: let
       pkgs = nixpkgsFor.${system};
       packages' = self.packages.${system};
-      staticShell = pkgs.mkShell.override {
+      staticShell = args: (pkgs.mkShell.override {
         stdenv = pkgs.pkgsStatic.stdenv;
-      };
+      }) (args // {
+        nativeBuildInputs = args.nativeBuildInputs
+          ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
+            pkgs.darwin.cctools
+          ];
+      });
     in {
       default = staticShell {
         nativeBuildInputs = [
@@ -220,6 +225,11 @@
           cp -fr --no-preserve=ownership,mode ${packages'.appview-static-files}/* appview/pages/static
           export TANGLED_OAUTH_CLIENT_KID="$(date +%s)"
           export TANGLED_OAUTH_CLIENT_SECRET="$(${packages'.goat}/bin/goat key generate -t P-256 | grep -A1 "Secret Key" | tail -n1 | awk '{print $1}')"
+          # Make xcrun (Nix stub) able to find ld from the system Command Line Tools.
+          # Without this, worker-build/cargo fails with "error: tool 'ld' not found".
+          if [ -d /Library/Developer/CommandLineTools/usr/bin ]; then
+            export PATH=/Library/Developer/CommandLineTools/usr/bin:$PATH
+          fi
         '';
         env.CGO_ENABLED = 1;
       };

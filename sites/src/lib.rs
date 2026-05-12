@@ -7,30 +7,71 @@ use worker::*;
 ///
 /// Example KV entry:
 ///   key:   "foo.example.com"
-///   value: {"did": "did:plc:...", "repos": {"my_repo": true, "other_repo": false}}
+///   value: {"did": "did:plc:...",
+///           "repos": {"my_repo":    {"rkey": "3lk...", "is_index": true},
+///                     "other_repo": {"rkey": "3ll...", "is_index": false}}}
 ///
-/// The boolean on each repo indicates whether it is the index site for the
-/// domain (true) or a sub-path site (false). At most one repo may be true.
+/// The is_index flag on each entry indicates whether it is the index site
+/// for the domain (true) or a sub-path site (false). At most one repo may
+/// be true. The rkey identifies the {did}/{rkey}/ prefix in R2 where the
+/// site's objects live.
 #[derive(Deserialize)]
 struct DomainMapping {
+    #[serde(default)]
     did: String,
-    /// repo name → is_index
-    repos: HashMap<String, bool>,
+    /// repo name → entry
+    #[serde(default)]
+    repos: HashMap<String, RepoEntry>,
 }
 
-impl DomainMapping {
-    /// Returns the repo that is marked as the index site, if any.
-    fn index_repo(&self) -> Option<&str> {
-        self.repos
-            .iter()
-            .find_map(|(name, &is_index)| if is_index { Some(name.as_str()) } else { None })
+/// Deserialises from either {"rkey": "...", "is_index": bool} (new shape)
+/// or a bare bool (old shape, where the map key itself was the rkey).
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum RepoEntry {
+    New {
+        rkey: String,
+        #[serde(default)]
+        is_index: bool,
+    },
+    Legacy(bool),
+}
+
+impl RepoEntry {
+    fn is_index(&self) -> bool {
+        match self {
+            RepoEntry::New { is_index, .. } => *is_index,
+            RepoEntry::Legacy(b) => *b,
+        }
+    }
+
+    /// Returns the rkey, falling back to the map key (name) for the legacy
+    /// shape where the key itself was the rkey.
+    fn rkey<'a>(&'a self, name: &'a str) -> &'a str {
+        match self {
+            RepoEntry::New { rkey, .. } => rkey.as_str(),
+            RepoEntry::Legacy(_) => name,
+        }
     }
 }
 
-/// Build the R2 object key for a given did/repo and intra-site path.
+impl DomainMapping {
+    /// Returns the (name, entry) pair for the index site, if any.
+    fn index_repo(&self) -> Option<(&str, &RepoEntry)> {
+        self.repos.iter().find_map(|(name, entry)| {
+            if entry.is_index() {
+                Some((name.as_str(), entry))
+            } else {
+                None
+            }
+        })
+    }
+}
+
+/// Build the R2 object key for a given did/rkey and intra-site path.
 /// `site_path` should start with a `/` or be empty.
-fn r2_key(did: &str, repo: &str, site_path: &str) -> String {
-    let base = format!("{}/{}/", did, repo);
+fn r2_key(did: &str, rkey: &str, site_path: &str) -> String {
+    let base = format!("{}/{}/", did, rkey);
     if site_path.is_empty() || site_path == "/" {
         format!("{}index.html", base)
     } else {
@@ -68,10 +109,13 @@ fn response_from_object(obj: Object) -> Result<Response> {
         .content_type
         .unwrap_or_else(|| "application/octet-stream".to_string());
 
-    let body = obj.body().ok_or_else(|| Error::RustError("empty R2 body".into()))?;
+    let body = obj
+        .body()
+        .ok_or_else(|| Error::RustError("empty R2 body".into()))?;
     let mut resp = Response::from_body(body.response_body()?)?;
     resp.headers_mut().set("Content-Type", &content_type)?;
-    resp.headers_mut().set("Cache-Control", "public, max-age=60")?;
+    resp.headers_mut()
+        .set("Cache-Control", "public, max-age=60")?;
     Ok(resp)
 }
 
@@ -122,15 +166,15 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     // 1. sub-path site
     // If the first path segment matches a non-index repo, serve from it.
     if !first_segment.is_empty() {
-        if let Some(&is_index) = mapping.repos.get(&first_segment) {
-            if !is_index {
+        if let Some(entry) = mapping.repos.get(&first_segment) {
+            if !entry.is_index() {
                 // Strip the leading "/{first_segment}" to get the intra-site path.
                 let site_path = path
                     .trim_start_matches('/')
                     .trim_start_matches(&first_segment)
                     .to_string();
 
-                let key = r2_key(&mapping.did, &first_segment, &site_path);
+                let key = r2_key(&mapping.did, entry.rkey(&first_segment), &site_path);
                 return match fetch_from_r2(&bucket, &key).await? {
                     Some(obj) => response_from_object(obj),
                     None => Response::error("Not Found", 404),
@@ -141,8 +185,8 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
 
     // 2. index site
     // Fall back to the repo marked as the index site, serving the full path.
-    if let Some(index_repo) = mapping.index_repo() {
-        let key = r2_key(&mapping.did, index_repo, path);
+    if let Some((name, entry)) = mapping.index_repo() {
+        let key = r2_key(&mapping.did, entry.rkey(name), path);
         return match fetch_from_r2(&bucket, &key).await? {
             Some(obj) => response_from_object(obj),
             None => Response::error("Not Found", 404),
