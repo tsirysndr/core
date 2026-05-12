@@ -372,14 +372,13 @@ func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 
 	// get forks
 	forksInClause := strings.TrimSuffix(strings.Repeat("?, ", len(repoMap)), ", ")
-	forkArgs := make([]any, len(repoMap))
 
 	forksCountQuery := fmt.Sprintf(
 		`select source, count(1) from repos where source in (%s) group by source`,
 		forksInClause,
 	)
 
-	rows, err = e.Query(forksCountQuery, forkArgs...)
+	rows, err = e.Query(forksCountQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute fork-count query: %w", err)
 	}
