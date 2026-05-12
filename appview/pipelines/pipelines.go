@@ -181,23 +181,6 @@ var upgrader = websocket.Upgrader{
 func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 	l := p.logger.With("handler", "logs")
 
-	clientConn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		l.Error("websocket upgrade failed", "err", err)
-		return
-	}
-	defer func() {
-		_ = clientConn.WriteControl(
-			websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.CloseNormalClosure, "log stream complete"),
-			time.Now().Add(time.Second),
-		)
-		clientConn.Close()
-	}()
-
-	ctx, cancel := context.WithCancel(r.Context())
-	defer cancel()
-
 	f, err := p.repoResolver.Resolve(r)
 	if err != nil {
 		l.Error("failed to get repo and knot", "err", err)
@@ -241,12 +224,29 @@ func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 
 	url := scheme + "://" + strings.Join([]string{spindle, "logs", knot, rkey, workflow}, "/")
 	l = l.With("url", url)
+
+	clientConn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		l.Error("websocket upgrade failed", "err", err)
+		return
+	}
+	defer func() {
+		_ = clientConn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseNormalClosure, "log stream complete"),
+			time.Now().Add(time.Second),
+		)
+		clientConn.Close()
+	}()
+
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
 	l.Info("logs endpoint hit")
 
 	spindleConn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
 		l.Error("websocket dial failed", "err", err)
-		http.Error(w, "failed to connect to log stream", http.StatusBadGateway)
 		return
 	}
 	defer spindleConn.Close()
