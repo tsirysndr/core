@@ -970,7 +970,7 @@ func (rp *Repo) RenameRepo(w http.ResponseWriter, r *http.Request) {
 	rp.notifier.RenameRepo(r.Context(), syntax.DID(user.Did), &oldRepo, &newRepo)
 
 	if newRkey != f.Rkey {
-		rp.migrateSiteOnRename(r.Context(), f, newRkey)
+		rp.migrateSiteOnRename(r.Context(), f, newName, newRkey)
 	}
 
 	rp.pages.HxLocation(w, fmt.Sprintf("/%s", f.RepoDid))
@@ -994,7 +994,7 @@ func validateRenameInput(currentName, currentRkey, raw string) (string, error) {
 	return newName, nil
 }
 
-func (rp *Repo) migrateSiteOnRename(ctx context.Context, oldRepo *models.Repo, newRkey string) {
+func (rp *Repo) migrateSiteOnRename(ctx context.Context, oldRepo *models.Repo, newName, newRkey string) {
 	l := rp.logger.With("handler", "migrateSiteOnRename", "repo_did", oldRepo.RepoDid)
 
 	siteConfig, err := db.GetRepoSiteConfig(rp.db, oldRepo.RepoDid)
@@ -1011,27 +1011,32 @@ func (rp *Repo) migrateSiteOnRename(ctx context.Context, oldRepo *models.Repo, n
 	go func() {
 		bgCtx := context.Background()
 		oldRkey := oldRepo.Rkey
+		oldName := oldRepo.Name
 
 		if err := sites.Delete(bgCtx, rp.cfClient, oldRepo.Did, oldRkey); err != nil {
 			l.Error("sites: failed to delete old R2 prefix", "oldRkey", oldRkey, "err", err)
 		}
 
 		newRepo := *oldRepo
+		newRepo.Name = newName
 		newRepo.Rkey = newRkey
 		if deployErr := sites.Deploy(bgCtx, rp.cfClient, rp.config, &newRepo, siteConfig.Branch, siteConfig.Dir); deployErr != nil {
 			l.Error("sites: redeploy after rename failed", "err", deployErr)
 		}
 
 		if ownerClaim != nil {
-			if err := sites.DeleteDomainMapping(bgCtx, rp.cfClient, ownerClaim.Domain, oldRkey); err != nil {
-				l.Error("sites: failed to remove old KV mapping", "oldRkey", oldRkey, "err", err)
+			// drop the old name's entry when the name actually changed.
+			if oldName != newName {
+				if err := sites.DeleteDomainMapping(bgCtx, rp.cfClient, ownerClaim.Domain, oldName); err != nil {
+					l.Error("sites: failed to remove old KV mapping", "oldName", oldName, "err", err)
+				}
 			}
-			if err := sites.PutDomainMapping(bgCtx, rp.cfClient, ownerClaim.Domain, oldRepo.Did, newRkey, siteConfig.IsIndex); err != nil {
-				l.Error("sites: failed to write new KV mapping", "newRkey", newRkey, "err", err)
+			if err := sites.PutDomainMapping(bgCtx, rp.cfClient, ownerClaim.Domain, oldRepo.Did, newName, newRkey, siteConfig.IsIndex); err != nil {
+				l.Error("sites: failed to write new KV mapping", "newName", newName, "newRkey", newRkey, "err", err)
 			}
 		}
 
-		l.Info("sites: migrated on rename", "oldRkey", oldRkey, "newRkey", newRkey)
+		l.Info("sites: migrated on rename", "oldName", oldName, "oldRkey", oldRkey, "newName", newName, "newRkey", newRkey)
 	}()
 }
 

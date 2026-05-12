@@ -196,8 +196,7 @@ func (rp *Repo) sitesSettings(w http.ResponseWriter, r *http.Request) {
 	host := fmt.Sprintf("%s://%s", scheme, f.Knot)
 	xrpcc := &indigoxrpc.Client{Host: host}
 
-	repo := fmt.Sprintf("%s/%s", f.Did, f.Rkey)
-	xrpcBytes, err := tangled.RepoBranches(r.Context(), xrpcc, "", 0, repo)
+	xrpcBytes, err := tangled.RepoBranches(r.Context(), xrpcc, "", 0, f.RepoIdentifier())
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		l.Error("failed to call XRPC repo.branches", "xrpcerr", xrpcerr, "err", err)
 		rp.pages.Error503(w)
@@ -318,7 +317,7 @@ func (rp *Repo) SaveRepoSiteConfig(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if deployErr == nil {
-				if err := sites.PutDomainMapping(ctx, rp.cfClient, ownerClaim.Domain, f.Did, f.Rkey, isIndex); err != nil {
+				if err := sites.PutDomainMapping(ctx, rp.cfClient, ownerClaim.Domain, f.Did, f.Name, f.Rkey, isIndex); err != nil {
 					l.Error("sites: KV write failed", "domain", ownerClaim.Domain, "err", err)
 				}
 				rp.logger.Info("site deployed to r2", "repo", f.RepoIdentifier(), "is_index", isIndex)
@@ -363,7 +362,7 @@ func (rp *Repo) DeleteRepoSiteConfig(w http.ResponseWriter, r *http.Request) {
 				l.Error("sites: R2 delete failed", "repo", f.RepoIdentifier(), "err", err)
 			}
 			if ownerClaim != nil {
-				if err := sites.DeleteDomainMapping(ctx, rp.cfClient, ownerClaim.Domain, f.Rkey); err != nil {
+				if err := sites.DeleteDomainMapping(ctx, rp.cfClient, ownerClaim.Domain, f.Name); err != nil {
 					l.Error("sites: KV delete failed", "domain", ownerClaim.Domain, "err", err)
 				}
 			}

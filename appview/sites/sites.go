@@ -21,10 +21,18 @@ import (
 )
 
 // DomainMapping is the value stored in Workers KV, keyed by the bare domain.
-// Repos maps repo name → is_index; at most one repo may have is_index = true.
+// Repos maps repo name → RepoEntry; at most one repo may have IsIndex = true.
 type DomainMapping struct {
-	Did   string          `json:"did"`
-	Repos map[string]bool `json:"repos"`
+	Did   string               `json:"did"`
+	Repos map[string]RepoEntry `json:"repos"`
+}
+
+// RepoEntry is the per-repo value within a DomainMapping. Rkey is the
+// repository's atproto record key, which identifies the {did}/{rkey}/
+// prefix in R2 where the site's objects live.
+type RepoEntry struct {
+	Rkey    string `json:"rkey"`
+	IsIndex bool   `json:"is_index"`
 }
 
 // getOrNewMapping fetches the existing KV entry for domain, or returns a
@@ -35,28 +43,41 @@ func getOrNewMapping(ctx context.Context, cf *cloudflare.Client, domain, did str
 		return DomainMapping{}, fmt.Errorf("reading domain mapping for %q: %w", domain, err)
 	}
 	if raw == nil {
-		return DomainMapping{Did: did, Repos: make(map[string]bool)}, nil
+		return DomainMapping{Did: did, Repos: make(map[string]RepoEntry)}, nil
 	}
 	var m DomainMapping
 	if err := json.Unmarshal(raw, &m); err != nil {
 		return DomainMapping{}, fmt.Errorf("unmarshalling domain mapping for %q: %w", domain, err)
 	}
 	if m.Repos == nil {
-		m.Repos = make(map[string]bool)
+		m.Repos = make(map[string]RepoEntry)
 	}
 	return m, nil
 }
 
 // PutDomainMapping adds or updates a single repo entry within the per-domain
 // KV record. If isIndex is true, any previously indexed repo is demoted first.
-func PutDomainMapping(ctx context.Context, cf *cloudflare.Client, domain, did, repo string, isIndex bool) error {
+func PutDomainMapping(ctx context.Context, cf *cloudflare.Client, domain, did, repoName, repoRkey string, isIndex bool) error {
 	m, err := getOrNewMapping(ctx, cf, domain, did)
 	if err != nil {
 		return err
 	}
 
 	m.Did = did
-	m.Repos[repo] = isIndex
+
+	if isIndex {
+		for name, entry := range m.Repos {
+			if name == repoName {
+				continue
+			}
+			if entry.IsIndex {
+				entry.IsIndex = false
+				m.Repos[name] = entry
+			}
+		}
+	}
+
+	m.Repos[repoName] = RepoEntry{Rkey: repoRkey, IsIndex: isIndex}
 
 	val, err := json.Marshal(m)
 	if err != nil {
@@ -70,13 +91,13 @@ func PutDomainMapping(ctx context.Context, cf *cloudflare.Client, domain, did, r
 
 // DeleteDomainMapping removes a single repo from the per-domain KV record.
 // If it was the last repo, the key is deleted entirely.
-func DeleteDomainMapping(ctx context.Context, cf *cloudflare.Client, domain, repo string) error {
+func DeleteDomainMapping(ctx context.Context, cf *cloudflare.Client, domain, repoName string) error {
 	m, err := getOrNewMapping(ctx, cf, domain, "")
 	if err != nil {
 		return err
 	}
 
-	delete(m.Repos, repo)
+	delete(m.Repos, repoName)
 
 	if len(m.Repos) == 0 {
 		if err := cf.KVDelete(ctx, domain); err != nil {
