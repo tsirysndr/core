@@ -93,6 +93,33 @@ func scanRepo(row interface{ Scan(...any) error }) (*Repo, error) {
 	}, nil
 }
 
+func (d *DB) SiblingRkeysForRepoDid(owner, repoDid syntax.DID, excludeRkey syntax.RecordKey) ([]string, error) {
+	rows, err := d.Query(
+		`select rkey from repos
+		 where owner = ?
+		   and coalesce(repo_did, '') = ?
+		   and rkey <> ?`,
+		owner.String(), repoDid.String(), excludeRkey.String(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var collect func(acc []string) ([]string, error)
+	collect = func(acc []string) ([]string, error) {
+		if !rows.Next() {
+			return acc, rows.Err()
+		}
+		var r string
+		if err := rows.Scan(&r); err != nil {
+			return acc, err
+		}
+		return collect(append(acc, r))
+	}
+	return collect(nil)
+}
+
 func (d *DB) GetRepoByDid(repoDid syntax.DID) (*Repo, error) {
 	return scanRepo(d.QueryRow(
 		`select knot, owner, rkey, coalesce(repo_did, '') from repos where repo_did = ?`,

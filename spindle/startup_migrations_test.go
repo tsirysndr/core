@@ -3,6 +3,7 @@ package spindle
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 
+	"tangled.org/core/rbac"
 	"tangled.org/core/spindle/db"
 	"tangled.org/core/spindle/secrets"
 )
@@ -74,14 +76,20 @@ func tapRecordCount(t *testing.T, path string) int {
 	return n
 }
 
-func newTestSpindleDB(t *testing.T) *db.DB {
+func newTestSpindleDB(t *testing.T) (*db.DB, *rbac.Enforcer) {
 	t.Helper()
-	d, err := db.Make(context.Background(), filepath.Join(t.TempDir(), "spindle.db"))
+	p := filepath.Join(t.TempDir(), "spindle.db")
+	d, err := db.Make(context.Background(), p)
 	if err != nil {
 		t.Fatalf("db.Make: %v", err)
 	}
 	t.Cleanup(func() { d.Close() })
-	return d
+	e, err := rbac.NewEnforcer(p)
+	if err != nil {
+		t.Fatalf("rbac.NewEnforcer: %v", err)
+	}
+	e.E.EnableAutoSave(true)
+	return d, e
 }
 
 func newTestVault(t *testing.T) *secrets.SqliteManager {
@@ -107,10 +115,22 @@ func mustAddSecret(t *testing.T, vault secrets.Manager, repo, key, value string,
 	}
 }
 
+func mustAddCollab(t *testing.T, d *db.DB, owner, rkey, subject, repoDid string) {
+	t.Helper()
+	if err := d.AddRepoCollaborator(db.RepoCollaborator{
+		OwnerDid: syntax.DID(owner),
+		Rkey:     syntax.RecordKey(rkey),
+		Subject:  syntax.DID(subject),
+		RepoDid:  syntax.DID(repoDid),
+	}); err != nil {
+		t.Fatalf("AddRepoCollaborator(%s): %v", rkey, err)
+	}
+}
+
 func TestMigrateLegacyRepoSecrets_NameCandidate(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	d := newTestSpindleDB(t)
+	d, _ := newTestSpindleDB(t)
 	vault := newTestVault(t)
 
 	owner := syntax.DID("did:plc:akshay")
@@ -190,7 +210,7 @@ func TestMigrateLegacyRepoSecrets_NameCandidate(t *testing.T) {
 func TestMigrateLegacyRepoSecrets_RkeyCandidate(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	d := newTestSpindleDB(t)
+	d, _ := newTestSpindleDB(t)
 	vault := newTestVault(t)
 
 	owner := syntax.DID("did:plc:akshay")
@@ -218,7 +238,7 @@ func TestMigrateLegacyRepoSecrets_RkeyCandidate(t *testing.T) {
 func TestMigrateLegacyRepoSecrets_BothCandidates(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	d := newTestSpindleDB(t)
+	d, _ := newTestSpindleDB(t)
 	vault := newTestVault(t)
 
 	owner := syntax.DID("did:plc:akshay")
@@ -257,7 +277,7 @@ func TestMigrateLegacyRepoSecrets_BothCandidates(t *testing.T) {
 func TestMigrateLegacyRepoSecrets_PreExistingTakesPriority(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	d := newTestSpindleDB(t)
+	d, _ := newTestSpindleDB(t)
 	vault := newTestVault(t)
 
 	owner := syntax.DID("did:plc:akshay")
@@ -294,7 +314,7 @@ func TestMigrateLegacyRepoSecrets_PreExistingTakesPriority(t *testing.T) {
 func TestMigrateLegacyRepoSecrets_EmptyName(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	d := newTestSpindleDB(t)
+	d, _ := newTestSpindleDB(t)
 	vault := newTestVault(t)
 
 	owner := syntax.DID("did:plc:akshay")
@@ -319,7 +339,7 @@ func TestMigrateLegacyRepoSecrets_EmptyName(t *testing.T) {
 func TestMigrateLegacyRepoSecrets_BothEmpty(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	d := newTestSpindleDB(t)
+	d, _ := newTestSpindleDB(t)
 	vault := newTestVault(t)
 
 	owner := syntax.DID("did:plc:akshay")
@@ -347,10 +367,187 @@ func TestMigrateLegacyRepoSecrets_BothEmpty(t *testing.T) {
 	}
 }
 
+func TestMigrateLegacyRepoCasbin_NameCandidate(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	d, e := newTestSpindleDB(t)
+
+	if err := e.AddSpindle(rbacDomain); err != nil {
+		t.Fatalf("AddSpindle: %v", err)
+	}
+
+	owner := "did:plc:akshay"
+	repoDid := "did:plc:boltless"
+	displayName := "myrepo"
+	rkey := "3kspindlerkey00a"
+	collab := "did:plc:limpet"
+	oldNameKey := owner + "/" + displayName
+	oldRkeyKey := owner + "/" + rkey
+
+	mustAddCollab(t, d, owner, "3kcollabrkey0001", collab, repoDid)
+
+	if err := e.AddRepo(owner, rbacDomain, oldNameKey); err != nil {
+		t.Fatalf("seed AddRepo at Name key: %v", err)
+	}
+	if err := e.AddCollaborator(collab, rbacDomain, oldNameKey); err != nil {
+		t.Fatalf("seed AddCollaborator at Name key: %v", err)
+	}
+
+	migrateLegacyRepoCasbin(ctx, d, e, logger, syntax.DID(owner), displayName, syntax.RecordKey(rkey), syntax.DID(repoDid))
+
+	if got, err := e.IsSettingsAllowed(owner, rbacDomain, repoDid); err != nil || !got {
+		t.Errorf("owner should have settings at new repoDid key, allowed=%v err=%v", got, err)
+	}
+	if got, err := e.IsSettingsAllowed(collab, rbacDomain, repoDid); err != nil || !got {
+		t.Errorf("collab should have settings at new repoDid key, allowed=%v err=%v", got, err)
+	}
+	if got, err := e.IsSettingsAllowed(owner, rbacDomain, oldNameKey); err != nil || got {
+		t.Errorf("owner Name-keyed policy should be removed, allowed=%v err=%v", got, err)
+	}
+	if got, err := e.IsSettingsAllowed(collab, rbacDomain, oldNameKey); err != nil || got {
+		t.Errorf("collab Name-keyed policy should be removed, allowed=%v err=%v", got, err)
+	}
+	if got, err := e.IsSettingsAllowed(owner, rbacDomain, oldRkeyKey); err != nil || got {
+		t.Errorf("owner rkey-keyed policy should be absent (never added), allowed=%v err=%v", got, err)
+	}
+
+	migrateLegacyRepoCasbin(ctx, d, e, logger, syntax.DID(owner), displayName, syntax.RecordKey(rkey), syntax.DID(repoDid))
+
+	if got, err := e.IsSettingsAllowed(collab, rbacDomain, repoDid); err != nil || !got {
+		t.Errorf("collab settings still expected after idempotent re-run, allowed=%v err=%v", got, err)
+	}
+
+	var marked int
+	if err := d.QueryRow(
+		`select count(*) from migrations where name = ?`,
+		"legacy-casbin-rekey:"+repoDid+":"+rkey,
+	).Scan(&marked); err != nil {
+		t.Fatalf("query migrations: %v", err)
+	}
+	if marked != 1 {
+		t.Errorf("expected per-repo flag recorded exactly once, got %d", marked)
+	}
+}
+
+func TestMigrateLegacyRepoCasbin_RkeyCandidate(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	d, e := newTestSpindleDB(t)
+
+	if err := e.AddSpindle(rbacDomain); err != nil {
+		t.Fatalf("AddSpindle: %v", err)
+	}
+
+	owner := "did:plc:akshay"
+	repoDid := "did:plc:boltless"
+	displayName := "myrepo"
+	rkey := "3kspindlerkey00a"
+	collab := "did:plc:limpet"
+	oldRkeyKey := owner + "/" + rkey
+
+	mustAddCollab(t, d, owner, "3kcollabrkey0001", collab, repoDid)
+
+	if err := e.AddRepo(owner, rbacDomain, oldRkeyKey); err != nil {
+		t.Fatalf("seed AddRepo at rkey: %v", err)
+	}
+	if err := e.AddCollaborator(collab, rbacDomain, oldRkeyKey); err != nil {
+		t.Fatalf("seed AddCollaborator at rkey: %v", err)
+	}
+
+	migrateLegacyRepoCasbin(ctx, d, e, logger, syntax.DID(owner), displayName, syntax.RecordKey(rkey), syntax.DID(repoDid))
+
+	if got, err := e.IsSettingsAllowed(owner, rbacDomain, repoDid); err != nil || !got {
+		t.Errorf("owner should have settings at new repoDid key, allowed=%v err=%v", got, err)
+	}
+	if got, err := e.IsSettingsAllowed(collab, rbacDomain, repoDid); err != nil || !got {
+		t.Errorf("collab should have settings at new repoDid key, allowed=%v err=%v", got, err)
+	}
+	if got, err := e.IsSettingsAllowed(owner, rbacDomain, oldRkeyKey); err != nil || got {
+		t.Errorf("owner rkey-keyed policy should be removed, allowed=%v err=%v", got, err)
+	}
+	if got, err := e.IsSettingsAllowed(collab, rbacDomain, oldRkeyKey); err != nil || got {
+		t.Errorf("collab rkey-keyed policy should be removed, allowed=%v err=%v", got, err)
+	}
+}
+
+func TestMigrateLegacyRepoCasbin_BothCandidates(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	d, e := newTestSpindleDB(t)
+
+	if err := e.AddSpindle(rbacDomain); err != nil {
+		t.Fatalf("AddSpindle: %v", err)
+	}
+
+	owner := "did:plc:akshay"
+	repoDid := "did:plc:boltless"
+	displayName := "myrepo"
+	rkey := "3kspindlerkey00a"
+	collab := "did:plc:limpet"
+	oldNameKey := owner + "/" + displayName
+	oldRkeyKey := owner + "/" + rkey
+
+	mustAddCollab(t, d, owner, "3kcollabrkey0001", collab, repoDid)
+
+	if err := e.AddRepo(owner, rbacDomain, oldNameKey); err != nil {
+		t.Fatalf("seed AddRepo at Name key: %v", err)
+	}
+	if err := e.AddRepo(owner, rbacDomain, oldRkeyKey); err != nil {
+		t.Fatalf("seed AddRepo at rkey: %v", err)
+	}
+	if err := e.AddCollaborator(collab, rbacDomain, oldNameKey); err != nil {
+		t.Fatalf("seed AddCollaborator at Name key: %v", err)
+	}
+	if err := e.AddCollaborator(collab, rbacDomain, oldRkeyKey); err != nil {
+		t.Fatalf("seed AddCollaborator at rkey: %v", err)
+	}
+
+	migrateLegacyRepoCasbin(ctx, d, e, logger, syntax.DID(owner), displayName, syntax.RecordKey(rkey), syntax.DID(repoDid))
+
+	if got, err := e.IsSettingsAllowed(owner, rbacDomain, oldNameKey); err != nil || got {
+		t.Errorf("owner Name-keyed policy should be removed, allowed=%v err=%v", got, err)
+	}
+	if got, err := e.IsSettingsAllowed(owner, rbacDomain, oldRkeyKey); err != nil || got {
+		t.Errorf("owner rkey-keyed policy should be removed, allowed=%v err=%v", got, err)
+	}
+	if got, err := e.IsSettingsAllowed(collab, rbacDomain, oldNameKey); err != nil || got {
+		t.Errorf("collab Name-keyed policy should be removed, allowed=%v err=%v", got, err)
+	}
+	if got, err := e.IsSettingsAllowed(collab, rbacDomain, oldRkeyKey); err != nil || got {
+		t.Errorf("collab rkey-keyed policy should be removed, allowed=%v err=%v", got, err)
+	}
+}
+
+func TestMigrateLegacyRepoCasbin_BothEmpty(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	d, e := newTestSpindleDB(t)
+
+	if err := e.AddSpindle(rbacDomain); err != nil {
+		t.Fatalf("AddSpindle: %v", err)
+	}
+
+	owner := syntax.DID("did:plc:akshay")
+	repoDid := syntax.DID("did:plc:boltless")
+
+	migrateLegacyRepoCasbin(ctx, d, e, logger, owner, "", "", repoDid)
+
+	var marked int
+	if err := d.QueryRow(
+		`select count(*) from migrations where name like ?`,
+		"legacy-casbin-rekey:"+repoDid.String()+":%",
+	).Scan(&marked); err != nil {
+		t.Fatalf("query migrations: %v", err)
+	}
+	if marked != 0 {
+		t.Errorf("empty inputs should not record flag, got %d", marked)
+	}
+}
+
 func TestNudgeTapForResync(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	d := newTestSpindleDB(t)
+	d, _ := newTestSpindleDB(t)
 
 	tapPath := filepath.Join(t.TempDir(), "tap.db")
 	seedTapDB(t, tapPath)
@@ -422,7 +619,7 @@ func TestNudgeTapForResync(t *testing.T) {
 func TestNudgeTapForResync_MissingDB(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	d := newTestSpindleDB(t)
+	d, _ := newTestSpindleDB(t)
 
 	missing := filepath.Join(t.TempDir(), "absent.db")
 
@@ -445,7 +642,7 @@ func TestNudgeTapForResync_MissingDB(t *testing.T) {
 func TestNudgeTapForResync_EmptyPath(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	d := newTestSpindleDB(t)
+	d, _ := newTestSpindleDB(t)
 
 	if err := nudgeTapForResync(ctx, d, "", logger); err == nil {
 		t.Errorf("expected error for empty tap db path")
@@ -466,7 +663,7 @@ func TestNudgeTapForResync_EmptyPath(t *testing.T) {
 func TestRunStartupMigrations_NonEmbedSkipsTapNudge(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	d := newTestSpindleDB(t)
+	d, _ := newTestSpindleDB(t)
 
 	if err := runStartupMigrations(ctx, d, false, "", logger); err != nil {
 		t.Fatalf("non-embed should not error on empty path: %v", err)
@@ -487,7 +684,7 @@ func TestRunStartupMigrations_NonEmbedSkipsTapNudge(t *testing.T) {
 func TestCleanupOrphanRepos_DeletesWhenSiblingExists(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	d := newTestSpindleDB(t)
+	d, _ := newTestSpindleDB(t)
 
 	owner := "did:plc:akshay"
 	if _, err := d.Exec(`insert into repos (knot, owner, rkey, repo_did, created_at) values
@@ -521,7 +718,7 @@ func TestCleanupOrphanRepos_DeletesWhenSiblingExists(t *testing.T) {
 func TestCleanupOrphanRepos_KeepsWhenAlone(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	d := newTestSpindleDB(t)
+	d, _ := newTestSpindleDB(t)
 
 	owner := "did:plc:akshay"
 	if _, err := d.Exec(`insert into repos (knot, owner, rkey, repo_did, created_at) values
@@ -545,7 +742,7 @@ func TestCleanupOrphanRepos_KeepsWhenAlone(t *testing.T) {
 func TestCleanupOrphanRepos_PerOwnerScope(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	d := newTestSpindleDB(t)
+	d, _ := newTestSpindleDB(t)
 
 	ownerA := "did:plc:akshay"
 	ownerB := "did:plc:limpet"
@@ -579,7 +776,7 @@ func TestCleanupOrphanRepos_PerOwnerScope(t *testing.T) {
 func TestCleanupOrphanRepos_EmptyStringRepoDid(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	d := newTestSpindleDB(t)
+	d, _ := newTestSpindleDB(t)
 
 	owner := "did:plc:akshay"
 	if _, err := d.Exec(`insert into repos (knot, owner, rkey, repo_did, created_at) values
@@ -599,5 +796,161 @@ func TestCleanupOrphanRepos_EmptyStringRepoDid(t *testing.T) {
 	}
 	if emptyCount != 0 {
 		t.Errorf("empty-string repo_did orphan should be deleted when sibling exists, got %d remaining", emptyCount)
+	}
+}
+
+func TestMigrateLegacyRepoCasbin_MultipleCollabsAllRekeyed(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	d, e := newTestSpindleDB(t)
+
+	if err := e.AddSpindle(rbacDomain); err != nil {
+		t.Fatalf("AddSpindle: %v", err)
+	}
+
+	owner := "did:plc:akshay"
+	repoDid := "did:plc:boltless"
+	displayName := "myrepo"
+	rkey := "3kspindlerkey00a"
+	oldNameKey := owner + "/" + displayName
+	collabs := []string{"did:plc:limpet", "did:plc:nautilus", "did:plc:whelk", "did:plc:cuttle"}
+
+	var addCollabRows func(rest []string, idx int)
+	addCollabRows = func(rest []string, idx int) {
+		if len(rest) == 0 {
+			return
+		}
+		mustAddCollab(t, d, owner, fmt.Sprintf("3kcollabrkey%04d", idx), rest[0], repoDid)
+		addCollabRows(rest[1:], idx+1)
+	}
+	addCollabRows(collabs, 0)
+
+	if err := e.AddRepo(owner, rbacDomain, oldNameKey); err != nil {
+		t.Fatalf("seed owner: %v", err)
+	}
+	var seedAll func(rest []string) error
+	seedAll = func(rest []string) error {
+		if len(rest) == 0 {
+			return nil
+		}
+		if err := e.AddCollaborator(rest[0], rbacDomain, oldNameKey); err != nil {
+			return err
+		}
+		return seedAll(rest[1:])
+	}
+	if err := seedAll(collabs); err != nil {
+		t.Fatalf("seed collab policies: %v", err)
+	}
+
+	migrateLegacyRepoCasbin(ctx, d, e, logger, syntax.DID(owner), displayName, syntax.RecordKey(rkey), syntax.DID(repoDid))
+
+	var assertEach func(rest []string)
+	assertEach = func(rest []string) {
+		if len(rest) == 0 {
+			return
+		}
+		c := rest[0]
+		if got, err := e.IsSettingsAllowed(c, rbacDomain, repoDid); err != nil || !got {
+			t.Errorf("collab %s should have settings at repoDid, allowed=%v err=%v", c, got, err)
+		}
+		if got, err := e.IsPushAllowed(c, rbacDomain, repoDid); err != nil || !got {
+			t.Errorf("collab %s should have push at repoDid, allowed=%v err=%v", c, got, err)
+		}
+		if got, err := e.IsSettingsAllowed(c, rbacDomain, oldNameKey); err != nil || got {
+			t.Errorf("collab %s old policy should be wiped, allowed=%v err=%v", c, got, err)
+		}
+		assertEach(rest[1:])
+	}
+	assertEach(collabs)
+}
+
+func TestMigrateLegacyRepoCasbin_RenameSiblingsEachWiped(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	d, e := newTestSpindleDB(t)
+
+	if err := e.AddSpindle(rbacDomain); err != nil {
+		t.Fatalf("AddSpindle: %v", err)
+	}
+
+	owner := syntax.DID("did:plc:akshay")
+	repoDid := syntax.DID("did:plc:di4gol2smljyj6gjnjdu5qrg")
+	siblings := []string{"pre-rename-life", "i-renamed-this", "post-rename-rename", "post-rename-renamed-again"}
+
+	var seedAll func(rest []string) error
+	seedAll = func(rest []string) error {
+		if len(rest) == 0 {
+			return nil
+		}
+		if err := e.AddRepo(owner.String(), rbacDomain, owner.String()+"/"+rest[0]); err != nil {
+			return err
+		}
+		return seedAll(rest[1:])
+	}
+	if err := seedAll(siblings); err != nil {
+		t.Fatalf("seed siblings: %v", err)
+	}
+
+	var run func(rest []string)
+	run = func(rest []string) {
+		if len(rest) == 0 {
+			return
+		}
+		migrateLegacyRepoCasbin(ctx, d, e, logger, owner, "", syntax.RecordKey(rest[0]), repoDid)
+		run(rest[1:])
+	}
+	run(siblings)
+
+	var assertWiped func(rest []string)
+	assertWiped = func(rest []string) {
+		if len(rest) == 0 {
+			return
+		}
+		key := owner.String() + "/" + rest[0]
+		if got, err := e.IsSettingsAllowed(owner.String(), rbacDomain, key); err != nil || got {
+			t.Errorf("rename sibling %s should be wiped, allowed=%v err=%v", rest[0], got, err)
+		}
+		assertWiped(rest[1:])
+	}
+	assertWiped(siblings)
+
+	if got, err := e.IsSettingsAllowed(owner.String(), rbacDomain, repoDid.String()); err != nil || !got {
+		t.Errorf("owner should retain settings at repoDid, allowed=%v err=%v", got, err)
+	}
+}
+
+func TestMigrateLegacyRepoCasbin_StrandedCollabWiped(t *testing.T) {
+	ctx := context.Background()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	d, e := newTestSpindleDB(t)
+
+	if err := e.AddSpindle(rbacDomain); err != nil {
+		t.Fatalf("AddSpindle: %v", err)
+	}
+
+	owner := "did:plc:akshay"
+	repoDid := "did:plc:boltless"
+	displayName := "myrepo"
+	rkey := "3kspindlerkey00a"
+	strandedCollab := "did:plc:nautilus"
+	oldNameKey := owner + "/" + displayName
+
+	if err := e.AddRepo(owner, rbacDomain, oldNameKey); err != nil {
+		t.Fatalf("seed AddRepo at Name key: %v", err)
+	}
+	if err := e.AddCollaborator(strandedCollab, rbacDomain, oldNameKey); err != nil {
+		t.Fatalf("seed stranded collab at Name key: %v", err)
+	}
+
+	migrateLegacyRepoCasbin(ctx, d, e, logger, syntax.DID(owner), displayName, syntax.RecordKey(rkey), syntax.DID(repoDid))
+
+	if got, err := e.IsSettingsAllowed(strandedCollab, rbacDomain, oldNameKey); err != nil || got {
+		t.Errorf("stranded collab should be wiped from old key, allowed=%v err=%v", got, err)
+	}
+	if got, err := e.IsSettingsAllowed(owner, rbacDomain, oldNameKey); err != nil || got {
+		t.Errorf("owner old policy should be wiped, allowed=%v err=%v", got, err)
+	}
+	if got, err := e.IsSettingsAllowed(owner, rbacDomain, repoDid); err != nil || !got {
+		t.Errorf("owner should have settings at new repoDid key, allowed=%v err=%v", got, err)
 	}
 }

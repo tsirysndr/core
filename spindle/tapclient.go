@@ -138,6 +138,7 @@ func (t *Tap) processRepo(ctx context.Context, evt *tapc.RecordEventData) error 
 			legacyName = *record.Name
 		}
 		migrateLegacyRepoSecrets(ctx, t.spindle.db, t.spindle.vault, l, ownerDid, legacyName, rkey, repoDid)
+		migrateLegacyRepoCasbin(ctx, t.spindle.db, t.spindle.e, l, ownerDid, legacyName, rkey, repoDid)
 
 		if removed, err := t.spindle.db.CollapseRepoSiblings(ownerDid, repoDid); err != nil {
 			l.Warn("collapse rename siblings failed", "err", err)

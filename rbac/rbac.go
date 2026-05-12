@@ -208,6 +208,14 @@ func (e *Enforcer) RemoveCollaborator(collaborator, domain, repo string) error {
 	return err
 }
 
+func (e *Enforcer) WipeRepoPolicies(domain, repo string) error {
+	if err := checkRepoFormat(repo); err != nil {
+		return err
+	}
+	_, err := e.E.RemoveFilteredPolicy(1, domain, repo)
+	return err
+}
+
 func (e *Enforcer) GetUserByRole(role, domain string) ([]string, error) {
 	var membersWithoutRoles []string
 
