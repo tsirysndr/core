@@ -117,6 +117,18 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			unique(repo_at, issue_id),
 			foreign key (repo_at) references repos(at_uri) on delete cascade
 		);
+		create table if not exists comments (
+			id integer primary key autoincrement,
+			owner_did text not null,
+			issue_id integer not null,
+			repo_at text not null,
+			comment_id integer not null,
+			comment_at text not null,
+			body text not null,
+			created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+			unique(issue_id, comment_id),
+			foreign key (repo_at, issue_id) references issues(repo_at, issue_id) on delete cascade
+		);
 		create table if not exists pulls (
 			-- identifiers
 			id integer primary key autoincrement,
