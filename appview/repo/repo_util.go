@@ -103,9 +103,7 @@ func getPipelineStatuses(
 	ps, err := db.GetPipelineStatuses(
 		d,
 		len(shas),
-		orm.FilterEq("p.repo_owner", repo.Did),
-		orm.FilterEq("p.repo_name", repo.Rkey),
-		orm.FilterEq("p.knot", repo.Knot),
+		orm.FilterEq("p.repo_did", repo.RepoDid),
 		orm.FilterIn("p.sha", shas),
 	)
 	if err != nil {

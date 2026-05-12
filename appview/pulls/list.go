@@ -264,9 +264,7 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 	ps, err := db.GetPipelineStatuses(
 		s.db,
 		len(shas),
-		orm.FilterEq("p.repo_owner", f.Did),
-		orm.FilterEq("p.repo_name", f.Rkey),
-		orm.FilterEq("p.knot", f.Knot),
+		orm.FilterEq("p.repo_did", f.RepoDid),
 		orm.FilterIn("p.sha", shas),
 	)
 	if err != nil {
