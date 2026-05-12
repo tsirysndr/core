@@ -88,9 +88,7 @@ func (p *Pipelines) Index(w http.ResponseWriter, r *http.Request) {
 
 	filterKind := r.URL.Query().Get("trigger")
 	filters := []orm.Filter{
-		orm.FilterEq("p.repo_owner", f.Did),
-		orm.FilterEq("p.repo_name", f.Rkey),
-		orm.FilterEq("p.knot", f.Knot),
+		orm.FilterEq("p.repo_did", f.RepoDid),
 	}
 	switch filterKind {
 	case "push":
