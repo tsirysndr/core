@@ -31,6 +31,6 @@
     {{ template "user/fragments/picHandleLink" .Did }}
     <span class="select-none">/</span>
     {{ $repoOwner := resolve .Did }}
-    <a href="/$repoOwner/{{ .Name }}">{{ .Name }}</a>
+    <a href="/{{ $repoOwner }}/{{ .Name }}">{{ .Name }}</a>
   </div>
 {{ end }}
