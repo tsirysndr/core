@@ -19,6 +19,7 @@ func TestPipelineEnvVars_PushBranch(t *testing.T) {
 			Knot:          "example.com",
 			Did:           "did:plc:user123",
 			Repo:          sp("my-repo"),
+			RepoDid:       sp("did:plc:boltless"),
 			DefaultBranch: "main",
 		},
 	}
@@ -65,8 +66,8 @@ func TestPipelineEnvVars_PushBranch(t *testing.T) {
 	if env["TANGLED_REPO_DEFAULT_BRANCH"] != "main" {
 		t.Errorf("Expected TANGLED_REPO_DEFAULT_BRANCH='main', got '%s'", env["TANGLED_REPO_DEFAULT_BRANCH"])
 	}
-	if env["TANGLED_REPO_URL"] != "https://example.com/did:plc:user123/my-repo" {
-		t.Errorf("Expected TANGLED_REPO_URL='https://example.com/did:plc:user123/my-repo', got '%s'", env["TANGLED_REPO_URL"])
+	if env["TANGLED_REPO_URL"] != "https://example.com/did:plc:boltless" {
+		t.Errorf("Expected TANGLED_REPO_URL='https://example.com/did:plc:boltless', got '%s'", env["TANGLED_REPO_URL"])
 	}
 }
 
@@ -79,9 +80,10 @@ func TestPipelineEnvVars_PushTag(t *testing.T) {
 			Ref:    "refs/tags/v1.2.3",
 		},
 		Repo: &tangled.Pipeline_TriggerRepo{
-			Knot: "example.com",
-			Did:  "did:plc:user123",
-			Repo: sp("my-repo"),
+			Knot:    "example.com",
+			Did:     "did:plc:user123",
+			Repo:    sp("my-repo"),
+			RepoDid: sp("did:plc:boltless"),
 		},
 	}
 	id := PipelineId{
@@ -111,9 +113,10 @@ func TestPipelineEnvVars_PullRequest(t *testing.T) {
 			Action:       "opened",
 		},
 		Repo: &tangled.Pipeline_TriggerRepo{
-			Knot: "example.com",
-			Did:  "did:plc:user123",
-			Repo: sp("my-repo"),
+			Knot:    "example.com",
+			Did:     "did:plc:user123",
+			Repo:    sp("my-repo"),
+			RepoDid: sp("did:plc:boltless"),
 		},
 	}
 	id := PipelineId{
@@ -166,9 +169,10 @@ func TestPipelineEnvVars_ManualWithInputs(t *testing.T) {
 			},
 		},
 		Repo: &tangled.Pipeline_TriggerRepo{
-			Knot: "example.com",
-			Did:  "did:plc:user123",
-			Repo: sp("my-repo"),
+			Knot:    "example.com",
+			Did:     "did:plc:user123",
+			Repo:    sp("my-repo"),
+			RepoDid: sp("did:plc:boltless"),
 		},
 	}
 	id := PipelineId{
@@ -202,9 +206,10 @@ func TestPipelineEnvVars_DevMode(t *testing.T) {
 			Ref:    "refs/heads/main",
 		},
 		Repo: &tangled.Pipeline_TriggerRepo{
-			Knot: "localhost:3000",
-			Did:  "did:plc:user123",
-			Repo: sp("my-repo"),
+			Knot:    "localhost:3000",
+			Did:     "did:plc:user123",
+			Repo:    sp("my-repo"),
+			RepoDid: sp("did:plc:boltless"),
 		},
 	}
 	id := PipelineId{
@@ -214,7 +219,7 @@ func TestPipelineEnvVars_DevMode(t *testing.T) {
 	env := PipelineEnvVars(tr, id, true)
 
 	// Dev mode should use http:// and replace localhost with host.docker.internal
-	expectedURL := "http://host.docker.internal:3000/did:plc:user123/my-repo"
+	expectedURL := "http://host.docker.internal:3000/did:plc:boltless"
 	if env["TANGLED_REPO_URL"] != expectedURL {
 		t.Errorf("Expected TANGLED_REPO_URL='%s', got '%s'", expectedURL, env["TANGLED_REPO_URL"])
 	}
@@ -237,9 +242,10 @@ func TestPipelineEnvVars_NilPushData(t *testing.T) {
 		Kind: string(workflow.TriggerKindPush),
 		Push: nil,
 		Repo: &tangled.Pipeline_TriggerRepo{
-			Knot: "example.com",
-			Did:  "did:plc:user123",
-			Repo: sp("my-repo"),
+			Knot:    "example.com",
+			Did:     "did:plc:user123",
+			Repo:    sp("my-repo"),
+			RepoDid: sp("did:plc:boltless"),
 		},
 	}
 	id := PipelineId{

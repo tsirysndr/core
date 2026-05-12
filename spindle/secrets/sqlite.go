@@ -64,11 +64,15 @@ func (s *SqliteManager) init() error {
 
 func (s *SqliteManager) AddSecret(ctx context.Context, secret UnlockedSecret) error {
 	query := fmt.Sprintf(`
-		insert or ignore into %s (repo, key, value, created_by)
-		values (?, ?, ?, ?);
+		insert or ignore into %s (repo, key, value, created_at, created_by)
+		values (?, ?, ?, ?, ?);
 	`, s.tableName)
 
-	res, err := s.db.ExecContext(ctx, query, secret.Repo, secret.Key, secret.Value, secret.CreatedBy)
+	createdAt := secret.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now()
+	}
+	res, err := s.db.ExecContext(ctx, query, secret.Repo, secret.Key, secret.Value, createdAt.UTC().Format(time.RFC3339), secret.CreatedBy)
 	if err != nil {
 		return err
 	}

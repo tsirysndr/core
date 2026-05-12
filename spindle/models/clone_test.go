@@ -26,9 +26,10 @@ func TestBuildCloneStep_PushTrigger(t *testing.T) {
 			Ref:    "refs/heads/main",
 		},
 		Repo: &tangled.Pipeline_TriggerRepo{
-			Knot: "example.com",
-			Did:  "did:plc:user123",
-			Repo: sp("my-repo"),
+			Knot:    "example.com",
+			Did:     "did:plc:user123",
+			Repo:    sp("my-repo"),
+			RepoDid: sp("did:plc:boltless"),
 		},
 	}
 
@@ -64,7 +65,7 @@ func TestBuildCloneStep_PushTrigger(t *testing.T) {
 	if !strings.Contains(allCmds, "git checkout FETCH_HEAD") {
 		t.Error("Commands should contain 'git checkout FETCH_HEAD'")
 	}
-	if !strings.Contains(allCmds, "https://example.com/did:plc:user123/my-repo") {
+	if !strings.Contains(allCmds, "https://example.com/did:plc:boltless") {
 		t.Error("Commands should contain expected repo URL")
 	}
 }
@@ -85,9 +86,10 @@ func TestBuildCloneStep_PullRequestTrigger(t *testing.T) {
 			Action:       "opened",
 		},
 		Repo: &tangled.Pipeline_TriggerRepo{
-			Knot: "example.com",
-			Did:  "did:plc:user123",
-			Repo: sp("my-repo"),
+			Knot:    "example.com",
+			Did:     "did:plc:user123",
+			Repo:    sp("my-repo"),
+			RepoDid: sp("did:plc:boltless"),
 		},
 	}
 
@@ -112,9 +114,10 @@ func TestBuildCloneStep_ManualTrigger(t *testing.T) {
 			Inputs: nil,
 		},
 		Repo: &tangled.Pipeline_TriggerRepo{
-			Knot: "example.com",
-			Did:  "did:plc:user123",
-			Repo: sp("my-repo"),
+			Knot:    "example.com",
+			Did:     "did:plc:user123",
+			Repo:    sp("my-repo"),
+			RepoDid: sp("did:plc:boltless"),
 		},
 	}
 
@@ -143,9 +146,10 @@ func TestBuildCloneStep_SkipFlag(t *testing.T) {
 			NewSha: "abc123",
 		},
 		Repo: &tangled.Pipeline_TriggerRepo{
-			Knot: "example.com",
-			Did:  "did:plc:user123",
-			Repo: sp("my-repo"),
+			Knot:    "example.com",
+			Did:     "did:plc:user123",
+			Repo:    sp("my-repo"),
+			RepoDid: sp("did:plc:boltless"),
 		},
 	}
 
@@ -173,9 +177,10 @@ func TestBuildCloneStep_DevMode(t *testing.T) {
 			NewSha: "abc123",
 		},
 		Repo: &tangled.Pipeline_TriggerRepo{
-			Knot: "localhost:3000",
-			Did:  "did:plc:user123",
-			Repo: sp("my-repo"),
+			Knot:    "localhost:3000",
+			Did:     "did:plc:user123",
+			Repo:    sp("my-repo"),
+			RepoDid: sp("did:plc:boltless"),
 		},
 	}
 
@@ -183,7 +188,7 @@ func TestBuildCloneStep_DevMode(t *testing.T) {
 
 	// In dev mode, should use http:// and replace localhost with host.docker.internal
 	allCmds := strings.Join(step.Commands(), " ")
-	expectedURL := "http://host.docker.internal:3000/did:plc:user123/my-repo"
+	expectedURL := "http://host.docker.internal:3000/did:plc:boltless"
 	if !strings.Contains(allCmds, expectedURL) {
 		t.Errorf("Expected dev mode URL '%s' in commands", expectedURL)
 	}
@@ -203,9 +208,10 @@ func TestBuildCloneStep_DepthAndSubmodules(t *testing.T) {
 			NewSha: "abc123",
 		},
 		Repo: &tangled.Pipeline_TriggerRepo{
-			Knot: "example.com",
-			Did:  "did:plc:user123",
-			Repo: sp("my-repo"),
+			Knot:    "example.com",
+			Did:     "did:plc:user123",
+			Repo:    sp("my-repo"),
+			RepoDid: sp("did:plc:boltless"),
 		},
 	}
 
@@ -234,9 +240,10 @@ func TestBuildCloneStep_DefaultDepth(t *testing.T) {
 			NewSha: "abc123",
 		},
 		Repo: &tangled.Pipeline_TriggerRepo{
-			Knot: "example.com",
-			Did:  "did:plc:user123",
-			Repo: sp("my-repo"),
+			Knot:    "example.com",
+			Did:     "did:plc:user123",
+			Repo:    sp("my-repo"),
+			RepoDid: sp("did:plc:boltless"),
 		},
 	}
 
@@ -259,9 +266,10 @@ func TestBuildCloneStep_NilPushData(t *testing.T) {
 		Kind: string(workflow.TriggerKindPush),
 		Push: nil, // Nil push data should create error step
 		Repo: &tangled.Pipeline_TriggerRepo{
-			Knot: "example.com",
-			Did:  "did:plc:user123",
-			Repo: sp("my-repo"),
+			Knot:    "example.com",
+			Did:     "did:plc:user123",
+			Repo:    sp("my-repo"),
+			RepoDid: sp("did:plc:boltless"),
 		},
 	}
 
@@ -292,9 +300,10 @@ func TestBuildCloneStep_NilPRData(t *testing.T) {
 		Kind:        string(workflow.TriggerKindPullRequest),
 		PullRequest: nil, // Nil PR data should create error step
 		Repo: &tangled.Pipeline_TriggerRepo{
-			Knot: "example.com",
-			Did:  "did:plc:user123",
-			Repo: sp("my-repo"),
+			Knot:    "example.com",
+			Did:     "did:plc:user123",
+			Repo:    sp("my-repo"),
+			RepoDid: sp("did:plc:boltless"),
 		},
 	}
 
@@ -321,9 +330,10 @@ func TestBuildCloneStep_UnknownTriggerKind(t *testing.T) {
 	tr := tangled.Pipeline_TriggerMetadata{
 		Kind: "unknown_trigger",
 		Repo: &tangled.Pipeline_TriggerRepo{
-			Knot: "example.com",
-			Did:  "did:plc:user123",
-			Repo: sp("my-repo"),
+			Knot:    "example.com",
+			Did:     "did:plc:user123",
+			Repo:    sp("my-repo"),
+			RepoDid: sp("did:plc:boltless"),
 		},
 	}
 
@@ -350,9 +360,10 @@ func TestBuildCloneStep_NilCloneOpts(t *testing.T) {
 			NewSha: "abc123",
 		},
 		Repo: &tangled.Pipeline_TriggerRepo{
-			Knot: "example.com",
-			Did:  "did:plc:user123",
-			Repo: sp("my-repo"),
+			Knot:    "example.com",
+			Did:     "did:plc:user123",
+			Repo:    sp("my-repo"),
+			RepoDid: sp("did:plc:boltless"),
 		},
 	}
 

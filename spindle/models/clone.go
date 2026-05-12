@@ -103,10 +103,6 @@ func extractCommitSHA(tr tangled.Pipeline_TriggerMetadata) (string, error) {
 
 // BuildRepoURL constructs the repository URL from repo metadata.
 func BuildRepoURL(repo *tangled.Pipeline_TriggerRepo, devMode bool) string {
-	if repo == nil {
-		return ""
-	}
-
 	scheme := "https://"
 	if devMode {
 		scheme = "http://"
@@ -120,14 +116,7 @@ func BuildRepoURL(repo *tangled.Pipeline_TriggerRepo, devMode bool) string {
 		host = strings.ReplaceAll(host, "localhost", "host.docker.internal")
 	}
 
-	switch {
-	case repo.RepoDid != nil:
-		return fmt.Sprintf("%s%s/%s", scheme, host, *repo.RepoDid)
-	case repo.Repo != nil:
-		return fmt.Sprintf("%s%s/%s/%s", scheme, host, repo.Did, *repo.Repo)
-	default:
-		return ""
-	}
+	return fmt.Sprintf("%s%s/%s", scheme, host, *repo.RepoDid)
 }
 
 // buildFetchArgs constructs the arguments for git fetch based on clone options

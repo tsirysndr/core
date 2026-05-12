@@ -98,11 +98,15 @@ func (v *OpenBaoManager) AddSecret(ctx context.Context, secret UnlockedSecret) e
 		return ErrKeyAlreadyPresent
 	}
 
+	createdAt := secret.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now()
+	}
 	secretData := map[string]interface{}{
 		"value":      secret.Value,
 		"repo":       string(secret.Repo),
 		"key":        secret.Key,
-		"created_at": secret.CreatedAt.Format(time.RFC3339),
+		"created_at": createdAt.UTC().Format(time.RFC3339),
 		"created_by": secret.CreatedBy.String(),
 	}
 

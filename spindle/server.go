@@ -100,6 +100,10 @@ func New(ctx context.Context, cfg *config.Config, engines map[string]models.Engi
 		return nil, fmt.Errorf("unknown secrets provider: %s", cfg.Server.Secrets.Provider)
 	}
 
+	if err := runStartupMigrations(ctx, d, vault, logger); err != nil {
+		return nil, fmt.Errorf("failed to run startup migrations: %w", err)
+	}
+
 	jq := queue.NewQueue(cfg.Server.QueueSize, cfg.Server.MaxJobCount)
 	logger.Info("initialized queue", "queueSize", cfg.Server.QueueSize, "numWorkers", cfg.Server.MaxJobCount)
 
