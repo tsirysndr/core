@@ -150,9 +150,7 @@ func (p *Pipelines) Workflow(w http.ResponseWriter, r *http.Request) {
 	ps, err := db.GetPipelineStatuses(
 		p.db,
 		1,
-		orm.FilterEq("p.repo_owner", f.Did),
-		orm.FilterEq("p.repo_name", f.Rkey),
-		orm.FilterEq("p.knot", f.Knot),
+		orm.FilterEq("p.repo_did", f.RepoDid),
 		orm.FilterEq("p.id", pipelineId),
 	)
 	if err != nil {
@@ -217,9 +215,7 @@ func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 	ps, err := db.GetPipelineStatuses(
 		p.db,
 		1,
-		orm.FilterEq("p.repo_owner", f.Did),
-		orm.FilterEq("p.repo_name", f.Rkey),
-		orm.FilterEq("p.knot", f.Knot),
+		orm.FilterEq("p.repo_did", f.RepoDid),
 		orm.FilterEq("p.id", pipelineId),
 	)
 	if err != nil || len(ps) != 1 {
@@ -366,9 +362,7 @@ func (p *Pipelines) Cancel(w http.ResponseWriter, r *http.Request) {
 		ps, err := db.GetPipelineStatuses(
 			p.db,
 			1,
-			orm.FilterEq("p.repo_owner", f.Did),
-			orm.FilterEq("p.repo_name", f.Rkey),
-			orm.FilterEq("p.knot", f.Knot),
+			orm.FilterEq("p.repo_did", f.RepoDid),
 			orm.FilterEq("p.id", pipelineId),
 		)
 		if err != nil {
