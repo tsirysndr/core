@@ -3,78 +3,104 @@ package spindle
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 
-	"tangled.org/core/orm"
+	_ "github.com/mattn/go-sqlite3"
 	"tangled.org/core/spindle/db"
-	"tangled.org/core/spindle/secrets"
 )
 
-func runStartupMigrations(ctx context.Context, d *db.DB, vault secrets.Manager, logger *slog.Logger) error {
-	conn, err := d.DB.Conn(ctx)
-	if err != nil {
-		return fmt.Errorf("acquire spindle conn: %w", err)
+const forceTapResyncFlag = "force-tap-repo-resync-v1"
+
+func runStartupMigrations(ctx context.Context, d *db.DB, tapEmbed bool, tapDBPath string, logger *slog.Logger) error {
+	if err := cleanupOrphanRepos(ctx, d, logger); err != nil {
+		return fmt.Errorf("cleanup orphan repos: %w", err)
 	}
-	defer conn.Close()
-
-	return orm.RunMigration(conn, logger, "copy-owner-rkey-secrets-to-repo-did", func(tx *sql.Tx) error {
-		return copyOwnerRkeySecretsToRepoDid(ctx, tx, vault, logger)
-	})
+	if !tapEmbed {
+		logger.Warn("tap not embedded: legacy repos won't auto-resync; trigger external tap resync to migrate secrets/casbin")
+		return nil
+	}
+	if err := nudgeTapForResync(ctx, d, tapDBPath, logger); err != nil {
+		return fmt.Errorf("nudge tap for resync: %w", err)
+	}
+	return nil
 }
 
-type repoSecretPair struct {
-	oldID, newID secrets.RepoIdentifier
+func cleanupOrphanRepos(ctx context.Context, d *db.DB, logger *slog.Logger) error {
+	res, err := d.ExecContext(ctx, `
+		delete from repos
+		where coalesce(repo_did, '') = ''
+		  and exists (
+		    select 1 from repos r2
+		    where r2.owner = repos.owner
+		      and coalesce(r2.repo_did, '') <> ''
+		  )
+	`)
+	if err != nil {
+		return fmt.Errorf("delete orphan repos: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n > 0 {
+		logger.Info("cleaned up orphan repos missing repo_did", "deleted", n)
+	}
+	return nil
 }
 
-func loadRepoSecretPairs(ctx context.Context, tx *sql.Tx) ([]repoSecretPair, error) {
-	rows, err := tx.QueryContext(ctx,
-		`select owner, rkey, repo_did from repos
-		 where repo_did is not null and repo_did <> ''`,
+func nudgeTapForResync(ctx context.Context, d *db.DB, tapDBPath string, logger *slog.Logger) error {
+	if tapDBPath == "" {
+		return fmt.Errorf("tap db path empty in embed mode")
+	}
+	var exists bool
+	if err := d.QueryRowContext(ctx,
+		`select exists (select 1 from migrations where name = ?)`,
+		forceTapResyncFlag,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("check %s flag: %w", forceTapResyncFlag, err)
+	}
+	if exists {
+		logger.Warn("skipped migration, already applied", "migration", forceTapResyncFlag)
+		return nil
+	}
+
+	markDone := func() error {
+		if _, err := d.ExecContext(ctx,
+			`insert or ignore into migrations (name) values (?)`,
+			forceTapResyncFlag,
+		); err != nil {
+			return fmt.Errorf("mark %s done: %w", forceTapResyncFlag, err)
+		}
+		return nil
+	}
+
+	if _, err := os.Stat(tapDBPath); errors.Is(err, os.ErrNotExist) {
+		logger.Info("tap db not yet created, marking resync nudge done", "migration", forceTapResyncFlag, "path", tapDBPath)
+		return markDone()
+	} else if err != nil {
+		return fmt.Errorf("stat tap db: %w", err)
+	}
+
+	tdb, err := sql.Open("sqlite3", tapDBPath+"?_busy_timeout=5000")
+	if err != nil {
+		return fmt.Errorf("open tap db: %w", err)
+	}
+	defer tdb.Close()
+
+	if _, err := tdb.ExecContext(ctx, `delete from repo_records`); err != nil {
+		return fmt.Errorf("clear tap repo_records: %w", err)
+	}
+	res, err := tdb.ExecContext(ctx,
+		`update repos set state = 'desynchronized', retry_after = 0 where state in ('active','error')`,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("select repos: %w", err)
+		return fmt.Errorf("desync tap repos: %w", err)
 	}
-	defer rows.Close()
+	n, _ := res.RowsAffected()
 
-	var collect func(acc []repoSecretPair) ([]repoSecretPair, error)
-	collect = func(acc []repoSecretPair) ([]repoSecretPair, error) {
-		if !rows.Next() {
-			return acc, rows.Err()
-		}
-		var owner, rkey, repoDid string
-		if err := rows.Scan(&owner, &rkey, &repoDid); err != nil {
-			return acc, fmt.Errorf("scan repos row: %w", err)
-		}
-		return collect(append(acc, repoSecretPair{
-			oldID: secrets.RepoIdentifier(owner + "/" + rkey),
-			newID: secrets.RepoIdentifier(repoDid),
-		}))
-	}
-	return collect(nil)
-}
-
-func copyOwnerRkeySecretsToRepoDid(ctx context.Context, tx *sql.Tx, vault secrets.Manager, logger *slog.Logger) error {
-	pairs, err := loadRepoSecretPairs(ctx, tx)
-	if err != nil {
+	if err := markDone(); err != nil {
 		return err
 	}
-
-	var step func(remaining []repoSecretPair, totalCopied int) error
-	step = func(remaining []repoSecretPair, totalCopied int) error {
-		if len(remaining) == 0 {
-			logger.Info("secret copy migration complete", "rows", len(pairs), "copied", totalCopied)
-			return nil
-		}
-		p := remaining[0]
-		n, err := copyRepoSecrets(ctx, vault, p.oldID, p.newID)
-		if err != nil {
-			return fmt.Errorf("copy %s -> %s: %w", p.oldID, p.newID, err)
-		}
-		if n > 0 {
-			logger.Info("secrets copied", "old", p.oldID, "new", p.newID, "count", n)
-		}
-		return step(remaining[1:], totalCopied+n)
-	}
-	return step(pairs, 0)
+	logger.Info("nudged tap to resync", "migration", forceTapResyncFlag, "repos_desynced", n)
+	return nil
 }

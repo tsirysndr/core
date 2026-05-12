@@ -133,6 +133,12 @@ func (t *Tap) processRepo(ctx context.Context, evt *tapc.RecordEventData) error 
 			return fmt.Errorf("add repo: %w", err)
 		}
 
+		legacyName := ""
+		if record.Name != nil {
+			legacyName = *record.Name
+		}
+		migrateLegacyRepoSecrets(ctx, t.spindle.db, t.spindle.vault, l, ownerDid, legacyName, rkey, repoDid)
+
 		if removed, err := t.spindle.db.CollapseRepoSiblings(ownerDid, repoDid); err != nil {
 			l.Warn("collapse rename siblings failed", "err", err)
 		} else if removed > 0 {
@@ -332,11 +338,14 @@ func (t *Tap) purgeStalePendingCollabs() {
 	cutoff := time.Now().Add(-pendingCollabTTL)
 	t.pendingMu.Lock()
 	defer t.pendingMu.Unlock()
+	expired := 0
 	for did, list := range t.pendingCollabs {
 		kept := list[:0]
 		for _, p := range list {
 			if !p.at.Before(cutoff) {
 				kept = append(kept, p)
+			} else {
+				expired++
 			}
 		}
 		if len(kept) == 0 {
@@ -344,5 +353,8 @@ func (t *Tap) purgeStalePendingCollabs() {
 		} else {
 			t.pendingCollabs[did] = kept
 		}
+	}
+	if expired > 0 {
+		t.logger.Warn("expired buffered collaborator events without matching repo arrival", "count", expired, "ttl", pendingCollabTTL)
 	}
 }

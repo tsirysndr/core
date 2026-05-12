@@ -36,10 +36,18 @@ func (d *DB) CollapseRepoSiblings(owner, repoDid syntax.DID) (int64, error) {
 		`delete from repos
 		 where owner = ?
 		   and repo_did = ?
-		   and created_at is not null
-		   and created_at < (
-		     select max(created_at) from repos
-		     where owner = ? and repo_did = ? and created_at is not null
+		   and (
+		     (created_at is null and exists (
+		       select 1 from repos r2
+		       where r2.owner = repos.owner
+		         and r2.repo_did = repos.repo_did
+		         and r2.created_at is not null
+		         and r2.rkey <> repos.rkey
+		     ))
+		     or (created_at is not null and created_at < (
+		       select max(created_at) from repos
+		       where owner = ? and repo_did = ? and created_at is not null
+		     ))
 		   )`,
 		owner.String(), repoDid.String(), owner.String(), repoDid.String(),
 	)

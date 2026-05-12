@@ -100,7 +100,7 @@ func New(ctx context.Context, cfg *config.Config, engines map[string]models.Engi
 		return nil, fmt.Errorf("unknown secrets provider: %s", cfg.Server.Secrets.Provider)
 	}
 
-	if err := runStartupMigrations(ctx, d, vault, logger); err != nil {
+	if err := runStartupMigrations(ctx, d, cfg.Server.Tap.Embed, cfg.Server.Tap.DBPath, logger); err != nil {
 		return nil, fmt.Errorf("failed to run startup migrations: %w", err)
 	}
 
