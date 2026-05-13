@@ -522,7 +522,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 		)
 		if err != nil {
 			l.Error("service auth failed", "err", err)
-			s.pages.Notice(w, "repo", "Failed to reach knot server.")
+			s.pages.Notice(w, "repo", "Failed to authenticate. Please log out and log back in again.")
 			return
 		}
 
