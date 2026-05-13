@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"net/http"
@@ -13,7 +14,7 @@ import (
 	"tangled.org/core/appview/labels"
 	"tangled.org/core/appview/metrics"
 	"tangled.org/core/appview/middleware"
-	"tangled.org/core/appview/migration"
+	// "tangled.org/core/appview/migration"
 	"tangled.org/core/appview/notifications"
 	"tangled.org/core/appview/pipelines"
 	"tangled.org/core/appview/pulls"
@@ -41,8 +42,12 @@ func (s *State) Router() http.Handler {
 
 	router.Use(metrics.Middleware)
 
-	m := migration.NewMigration(s.db, s.oauth, s.idResolver.Directory(), s.logger)
-	router.Use(m.BackgroundMigrationMiddleware)
+	if err := db.ReapStaleRunningMigrations(context.Background(), s.db); err != nil {
+		s.logger.Warn("failed to reap stale running migrations", "err", err)
+	}
+	// PDS record migrator disabled while we isolate OAuth refresh behaviour.
+	// m := migration.NewMigration(s.db, s.oauth, s.idResolver.Directory(), s.logger)
+	// router.Use(m.BackgroundMigrationMiddleware)
 
 	router.Get("/pwa-manifest.json", s.WebAppManifest)
 	router.Get("/robots.txt", s.RobotsTxt)

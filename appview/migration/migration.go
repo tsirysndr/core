@@ -20,23 +20,34 @@ import (
 
 const maxConcurrentMigrations = 8
 
+type migrator func(ctx context.Context, client *atclient.APIClient, did syntax.DID, aturi syntax.ATURI) error
+
+type permAuthErrHandler func(ctx context.Context, did syntax.DID, sessId string, err error) bool
+
 type Migration struct {
-	db       *db.DB
-	oauth    *oauth.OAuth
-	dir      identity.Directory
-	logger   *slog.Logger
-	inflight sync.Map
-	sem      chan struct{}
+	db            *db.DB
+	oauth         *oauth.OAuth
+	dir           identity.Directory
+	logger        *slog.Logger
+	inflight      sync.Map
+	sem           chan struct{}
+	migrators     map[string]migrator
+	onPermAuthErr permAuthErrHandler
 }
 
 func NewMigration(db *db.DB, oauth *oauth.OAuth, dir identity.Directory, logger *slog.Logger) *Migration {
-	return &Migration{
-		db:     db,
-		oauth:  oauth,
-		dir:    dir,
-		logger: logger,
-		sem:    make(chan struct{}, maxConcurrentMigrations),
+	m := &Migration{
+		db:            db,
+		oauth:         oauth,
+		dir:           dir,
+		logger:        logger,
+		sem:           make(chan struct{}, maxConcurrentMigrations),
+		onPermAuthErr: oauth.HandlePermanentAuthErr,
 	}
+	m.migrators = map[string]migrator{
+		"add-repo-did": m.migrateAddRepoDid,
+	}
+	return m
 }
 
 func (s *Migration) BackgroundMigrationMiddleware(next http.Handler) http.Handler {
@@ -64,6 +75,7 @@ func (s *Migration) BackgroundMigrationMiddleware(next http.Handler) http.Handle
 			return
 		}
 
+		sessId := s.oauth.GetSessIdFromCookie(r)
 		client, err := s.oauth.AuthorizedClient(r)
 		if err != nil || client.AccountDID == nil {
 			<-s.sem
@@ -74,12 +86,12 @@ func (s *Migration) BackgroundMigrationMiddleware(next http.Handler) http.Handle
 		go func() {
 			defer s.inflight.Delete(did)
 			defer func() { <-s.sem }()
-			s.runPendingMigrations(context.Background(), *client.AccountDID, client)
+			s.runPendingMigrations(context.Background(), *client.AccountDID, sessId, client)
 		}()
 	})
 }
 
-func (s *Migration) runPendingMigrations(ctx context.Context, did syntax.DID, client *atclient.APIClient) {
+func (s *Migration) runPendingMigrations(ctx context.Context, did syntax.DID, sessId string, client *atclient.APIClient) {
 	l := s.logger.With("did", did)
 	migrations, err := db.ListPendingPdsRecordMigrations(ctx, s.db, did)
 	if err != nil {
@@ -88,25 +100,23 @@ func (s *Migration) runPendingMigrations(ctx context.Context, did syntax.DID, cl
 	}
 
 	for _, migration := range migrations {
-		if err := s.migrate(ctx, client, migration); err != nil {
+		if err := s.migrate(ctx, client, sessId, migration); err != nil {
 			l.Error("migration failed", "err", err)
 		}
 	}
 }
 
-func (s *Migration) migrate(ctx context.Context, client *atclient.APIClient, migration *models.PDSMigration) error {
+func (s *Migration) migrate(ctx context.Context, client *atclient.APIClient, sessId string, migration *models.PDSMigration) error {
 	l := s.logger.With(
 		"name", migration.Name,
 		"aturi", migration.RecordAtUri(),
 	)
 
-	var err error
-	switch migration.Name {
-	case "add-repo-did":
-		err = s.migrateAddRepoDid(ctx, client, migration.Did, migration.RecordAtUri())
-	default:
+	mig, ok := s.migrators[migration.Name]
+	if !ok {
 		return fmt.Errorf("unexpected migration name %s", migration.Name)
 	}
+	err := mig(ctx, client, migration.Did, migration.RecordAtUri())
 
 	if err == nil {
 		l.Info("migrated")
@@ -114,20 +124,24 @@ func (s *Migration) migrate(ctx context.Context, client *atclient.APIClient, mig
 	} else {
 		l.Warn("failed to migrate", "err", err)
 
-		errMsg := err.Error()
-		var retryCount = migration.RetryCount + 1
-		var retryAfter = time.Now().Add(3 * time.Second).Unix()
-
-		// remove null bytes
-		errMsg = strings.ReplaceAll(errMsg, "\x00", "")
-
-		migration.Status = models.PDSMigrationStatusPending
+		errMsg := strings.ReplaceAll(err.Error(), "\x00", "")
 		migration.ErrorMsg = &errMsg
-		migration.RetryCount = retryCount
-		migration.RetryAfter = retryAfter
+		migration.RetryCount++
+
+		if s.onPermAuthErr(ctx, migration.Did, sessId, err) {
+			migration.Status = models.PDSMigrationStatusFailed
+			migration.RetryAfter = 0
+		} else {
+			migration.Status = models.PDSMigrationStatusPending
+			migration.RetryAfter = time.Now().Add(retryBackoff(migration.RetryCount)).Unix()
+		}
 	}
 	if err := db.UpdatePdsRecordMigration(ctx, s.db, migration); err != nil {
 		return fmt.Errorf("failed to update migration status: %w", err)
 	}
 	return nil
+}
+
+func retryBackoff(retries int) time.Duration {
+	return min(time.Duration(retries)*5*time.Second, time.Hour)
 }

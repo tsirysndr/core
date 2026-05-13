@@ -17,11 +17,18 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	xrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/gorilla/sessions"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/posthog/posthog-go"
+	"golang.org/x/sync/singleflight"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/rbac"
+)
+
+const (
+	sessionCacheSize = 10000
+	sessionCacheTTL  = time.Hour
 )
 
 type OAuth struct {
@@ -39,6 +46,50 @@ type OAuth struct {
 
 	appPasswordSession   *AppPasswordSession
 	appPasswordSessionMu sync.Mutex
+
+	sessionCache *expirable.LRU[string, *oauth.ClientSession]
+	sessionSF    singleflight.Group
+}
+
+func sessionCacheKey(did syntax.DID, sessionId string) string {
+	return string(did) + ":" + sessionId
+}
+
+func (o *OAuth) resumeSession(ctx context.Context, did syntax.DID, sessionId string) (*oauth.ClientSession, error) {
+	key := sessionCacheKey(did, sessionId)
+	if v, ok := o.sessionCache.Get(key); ok {
+		return v, nil
+	}
+	v, err, _ := o.sessionSF.Do(key, func() (any, error) {
+		if v, ok := o.sessionCache.Get(key); ok {
+			return v, nil
+		}
+		sess, err := o.ClientApp.ResumeSession(ctx, did, sessionId)
+		if err != nil {
+			return nil, err
+		}
+		o.sessionCache.Add(key, sess)
+		return sess, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.(*oauth.ClientSession), nil
+}
+
+func (o *OAuth) EvictSession(did syntax.DID, sessionId string) {
+	o.sessionCache.Remove(sessionCacheKey(did, sessionId))
+}
+
+func (o *OAuth) HandlePermanentAuthErr(ctx context.Context, did syntax.DID, sessionId string, err error) bool {
+	if !IsPermanentAuthErr(err) {
+		return false
+	}
+	o.EvictSession(did, sessionId)
+	if logoutErr := o.ClientApp.Logout(ctx, did, sessionId); logoutErr != nil {
+		o.Logger.Warn("store logout after permanent auth error failed", "did", did, "err", logoutErr)
+	}
+	return true
 }
 
 func New(config *config.Config, ph posthog.Client, db *db.DB, enforcer *rbac.Enforcer, res *idresolver.Resolver, logger *slog.Logger) (*OAuth, error) {
@@ -89,17 +140,18 @@ func New(config *config.Config, ph posthog.Client, db *db.DB, enforcer *rbac.Enf
 
 	logger.Info("oauth setup successfully", "IsConfidential", clientApp.Config.IsConfidential())
 	return &OAuth{
-		ClientApp:  clientApp,
-		Config:     config,
-		SessStore:  sessStore,
-		JwksUri:    jwksUri,
-		ClientName: clientName,
-		ClientUri:  clientUri,
-		Posthog:    ph,
-		Db:         db,
-		Enforcer:   enforcer,
-		IdResolver: res,
-		Logger:     logger,
+		ClientApp:    clientApp,
+		Config:       config,
+		SessStore:    sessStore,
+		JwksUri:      jwksUri,
+		ClientName:   clientName,
+		ClientUri:    clientUri,
+		Posthog:      ph,
+		Db:           db,
+		Enforcer:     enforcer,
+		IdResolver:   res,
+		Logger:       logger,
+		sessionCache: expirable.NewLRU[string, *oauth.ClientSession](sessionCacheSize, nil, sessionCacheTTL),
 	}, nil
 }
 
@@ -148,7 +200,7 @@ func (o *OAuth) ResumeSession(r *http.Request) (*oauth.ClientSession, error) {
 
 	sessId := userSession.Values[SessionId].(string)
 
-	clientSess, err := o.ClientApp.ResumeSession(r.Context(), sessDid, sessId)
+	clientSess, err := o.resumeSession(r.Context(), sessDid, sessId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resume session: %w", err)
 	}
@@ -173,11 +225,14 @@ func (o *OAuth) DeleteSession(w http.ResponseWriter, r *http.Request) error {
 
 	sessId := userSession.Values[SessionId].(string)
 
+	o.EvictSession(sessDid, sessId)
+
 	// delete the session
 	err1 := o.ClientApp.Logout(r.Context(), sessDid, sessId)
 	if err1 != nil {
 		err1 = fmt.Errorf("failed to logout: %w", err1)
 	}
+	o.EvictSession(sessDid, sessId)
 
 	// remove the cookie
 	userSession.Options.MaxAge = -1
@@ -201,7 +256,7 @@ func (o *OAuth) SwitchAccount(w http.ResponseWriter, r *http.Request, targetDid 
 		return fmt.Errorf("invalid DID: %w", err)
 	}
 
-	sess, err := o.ClientApp.ResumeSession(r.Context(), did, account.SessionId)
+	sess, err := o.resumeSession(r.Context(), did, account.SessionId)
 	if err != nil {
 		registry.RemoveAccount(targetDid)
 		_ = o.saveAccounts(w, r, registry)
@@ -230,7 +285,9 @@ func (o *OAuth) RemoveAccount(w http.ResponseWriter, r *http.Request, targetDid 
 
 	did, err := syntax.ParseDID(targetDid)
 	if err == nil {
+		o.EvictSession(did, account.SessionId)
 		_ = o.ClientApp.Logout(r.Context(), did, account.SessionId)
+		o.EvictSession(did, account.SessionId)
 	}
 
 	registry.RemoveAccount(targetDid)
@@ -259,6 +316,18 @@ func (o *OAuth) GetDidFromCookie(r *http.Request) syntax.DID {
 		return ""
 	}
 	return parsed
+}
+
+func (o *OAuth) GetSessIdFromCookie(r *http.Request) string {
+	userSession, err := o.SessStore.Get(r, SessionName)
+	if err != nil || userSession.IsNew {
+		return ""
+	}
+	s, ok := userSession.Values[SessionId].(string)
+	if !ok {
+		return ""
+	}
+	return s
 }
 
 func (o *OAuth) AuthorizedClient(r *http.Request) (*atclient.APIClient, error) {

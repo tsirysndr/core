@@ -238,7 +238,7 @@ func (o *OAuth) ensureTangledProfile(sessData *oauth.ClientSessionData) {
 
 	l.Debug("creating empty Tangled profile")
 
-	sess, err := o.ClientApp.ResumeSession(ctx, sessData.AccountDID, sessData.SessionID)
+	sess, err := o.resumeSession(ctx, sessData.AccountDID, sessData.SessionID)
 	if err != nil {
 		l.Error("failed to resume session for profile creation", "err", err)
 		return

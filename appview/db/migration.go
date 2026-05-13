@@ -79,8 +79,20 @@ func HasPendingPdsRecordMigration(ctx context.Context, e Execer, user syntax.DID
 func EnqueuePdsRecordMigration(ctx context.Context, e Execer, name string, did syntax.DID, collection syntax.NSID, rkey syntax.RecordKey) error {
 	_, err := e.ExecContext(ctx,
 		`insert into pds_migration (name, did, collection, rkey)
-		values (?, ?, ?, ?)`,
+		values (?, ?, ?, ?)
+		on conflict(name, did, collection, rkey) do update set
+			status = case when pds_migration.status = 'failed' then 'pending' else pds_migration.status end,
+			retry_count = case when pds_migration.status = 'failed' then 0 else pds_migration.retry_count end,
+			retry_after = case when pds_migration.status = 'failed' then 0 else pds_migration.retry_after end,
+			error_msg = case when pds_migration.status = 'failed' then null else pds_migration.error_msg end`,
 		name, did, collection, rkey,
+	)
+	return err
+}
+
+func ReapStaleRunningMigrations(ctx context.Context, e Execer) error {
+	_, err := e.ExecContext(ctx,
+		`update pds_migration set status = 'pending' where status = 'running'`,
 	)
 	return err
 }

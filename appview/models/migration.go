@@ -30,6 +30,7 @@ const (
 	PDSMigrationStatusPending PDSMigrationStatus = "pending"
 	PDSMigrationStatusRunning PDSMigrationStatus = "running"
 	PDSMigrationStatusDone    PDSMigrationStatus = "done"
+	PDSMigrationStatusFailed  PDSMigrationStatus = "failed"
 )
 
 func (m *PDSMigration) RecordAtUri() syntax.ATURI {
