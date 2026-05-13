@@ -84,3 +84,23 @@ func TestCosmeticName_PresentWhenDiffers(t *testing.T) {
 		t.Errorf("cosmeticName = %q, want %q", *rec.Name, "MyRepo")
 	}
 }
+
+func TestRepoSlug(t *testing.T) {
+	cases := []struct {
+		name string
+		repo Repo
+		want string
+	}{
+		{"name set distinct from rkey", Repo{Name: "anemone", Rkey: "3kabc"}, "anemone"},
+		{"name equals rkey", Repo{Name: "scallop", Rkey: "scallop"}, "scallop"},
+		{"name empty falls to rkey", Repo{Name: "", Rkey: "whelk"}, "whelk"},
+		{"both empty", Repo{}, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.repo.Slug(); got != c.want {
+				t.Errorf("Slug() = %q, want %q", got, c.want)
+			}
+		})
+	}
+}

@@ -315,7 +315,7 @@ func (rp *Repo) AtomFeed(w http.ResponseWriter, r *http.Request) {
 		rp.logger.Error("failed to get resolved repo owner id")
 		return
 	}
-	ownerSlashRepo := repoOwnerId.Handle.String() + "/" + f.Rkey
+	ownerSlashRepo := repoOwnerId.Handle.String() + "/" + f.Slug()
 
 	opts := parseFeedOpts(r)
 	feed, err := rp.getRepoFeed(r.Context(), f, ownerSlashRepo, opts)

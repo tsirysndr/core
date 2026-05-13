@@ -35,19 +35,40 @@ func New(config *config.Config, enforcer *rbac.Enforcer, execer db.Execer, rdb *
 	return &RepoResolver{config: config, enforcer: enforcer, execer: execer, rdb: rdb}
 }
 
+func CanonicalRepoPath(handle string, repo *models.Repo) string {
+	return path.Join(handle, repo.Slug())
+}
+
+func CanonicalRedirectTarget(req *http.Request, canonical string) string {
+	parts := strings.SplitN(strings.TrimPrefix(req.URL.Path, "/"), "/", 3)
+	target := "/" + canonical
+	if len(parts) == 3 {
+		target += "/" + parts[2]
+	}
+	if req.URL.RawQuery != "" {
+		target += "?" + req.URL.RawQuery
+	}
+	return target
+}
+
 // NOTE: this... should not even be here. the entire package will be removed in future refactor
 func GetBaseRepoPath(r *http.Request, repo *models.Repo) string {
-	if repo.RepoDid != "" {
-		return repo.RepoDid
+	if id, ok := r.Context().Value("resolvedId").(identity.Identity); ok && !id.Handle.IsInvalidHandle() {
+		if h := id.Handle.String(); h != "" {
+			return CanonicalRepoPath(h, repo)
+		}
 	}
 	var (
 		user = chi.URLParam(r, "user")
 		name = chi.URLParam(r, "repo")
 	)
-	if user == "" || name == "" {
-		return repo.RepoIdentifier()
+	if user != "" && name != "" {
+		return path.Join(user, name)
 	}
-	return path.Join(user, name)
+	if repo.Name != "" {
+		return path.Join(repo.Did, repo.Name)
+	}
+	return repo.RepoIdentifier()
 }
 
 // TODO: move this out of `RepoResolver` struct

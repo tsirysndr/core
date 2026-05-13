@@ -27,9 +27,9 @@
           {{ end }}
           {{ $repoOwner := resolve .Did }}
           {{- if $fullName -}}
-            <a href="/{{ $repoOwner }}/{{ .Rkey }}" data-nav-result class="truncate min-w-0 {{ if $compact }} focus:outline-none {{ end }}">{{ $repoOwner }}/{{ .Name }}</a>
+            <a href="/{{ $repoOwner }}/{{ .Slug }}" data-nav-result class="truncate min-w-0 {{ if $compact }} focus:outline-none {{ end }}">{{ $repoOwner }}/{{ .Name }}</a>
           {{- else -}}
-            <a href="/{{ $repoOwner }}/{{ .Rkey }}" data-nav-result class="truncate min-w-0 {{ if $compact }} focus:outline-none {{ end }}">{{ .Name }}</a>
+            <a href="/{{ $repoOwner }}/{{ .Slug }}" data-nav-result class="truncate min-w-0 {{ if $compact }} focus:outline-none {{ end }}">{{ .Name }}</a>
           {{- end -}}
         </div>
         {{ if and $starButton $root.LoggedInUser }}

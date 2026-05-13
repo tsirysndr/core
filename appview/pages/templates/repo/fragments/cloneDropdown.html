@@ -38,14 +38,14 @@
     {{ template "cloneUrlItem" (
         dict
           "Label" "HTTPS"
-          "HandleUrl" (printf "https://tangled.org/%s/%s" $repoOwnerHandle .RepoInfo.Rkey)
+          "HandleUrl" (printf "https://tangled.org/%s/%s" $repoOwnerHandle .RepoInfo.Slug)
           "PermaUrl" (printf "https://tangled.org/%s" .RepoInfo.RepoDid)
           ) }}
 
     {{ template "cloneUrlItem" (
       dict
         "Label" "SSH"
-        "HandleUrl" (printf "git@%s:%s/%s" (stripPort $knot) $repoOwnerHandle .RepoInfo.Rkey)
+        "HandleUrl" (printf "git@%s:%s/%s" (stripPort $knot) $repoOwnerHandle .RepoInfo.Slug)
         "PermaUrl" (printf "git@%s:%s" (stripPort $knot) .RepoInfo.RepoDid)
         ) }}
 

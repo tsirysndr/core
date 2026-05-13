@@ -46,7 +46,7 @@
                   {{ i "book-marked" "w-4 h-4 mr-1.5 shrink-0" }}
                 {{ end }}
                 {{ $repoOwner := resolve .Repo.Did }}
-                <a href="/{{ $repoOwner }}/{{ .Repo.Rkey }}" class="truncate min-w-0">{{ $repoOwner }}/{{ .Repo.Name }}</a>
+                <a href="/{{ $repoOwner }}/{{ .Repo.Slug }}" class="truncate min-w-0">{{ $repoOwner }}/{{ .Repo.Name }}</a>
               </div>
             </div>
 
@@ -90,7 +90,7 @@
           {{ if gt (len .Issues) 0 }}
             <div class="grid grid-cols-1 rounded-b border-b border-t border-gray-200 dark:border-gray-900 divide-y divide-gray-200 dark:divide-gray-900">
               {{ range .Issues }}
-                <a href="/{{ resolve .Repo.Did }}/{{ .Repo.Rkey }}/issues/{{ .IssueId }}" class="no-underline hover:no-underline hover:bg-gray-100/25 hover:dark:bg-gray-700/25">
+                <a href="/{{ resolve .Repo.Did }}/{{ .Repo.Slug }}/issues/{{ .IssueId }}" class="no-underline hover:no-underline hover:bg-gray-100/25 hover:dark:bg-gray-700/25">
                   <div class="py-2 px-6">
                     <div class="flex-grow min-w-0 w-full">
                       <div class="flex text-sm items-center justify-between w-full">

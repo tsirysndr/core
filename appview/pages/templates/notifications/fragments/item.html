@@ -76,11 +76,11 @@
 {{ define "notificationUrl" }}
   {{ $url := "" }}
   {{ if eq .Type "repo_starred" }}
-    {{$url = printf "/%s/%s" (resolve .Repo.Did) .Repo.Rkey}}
+    {{$url = printf "/%s/%s" (resolve .Repo.Did) .Repo.Slug}}
   {{ else if .Issue }}
-    {{$url = printf "/%s/%s/issues/%d" (resolve .Repo.Did) .Repo.Rkey .Issue.IssueId}}
+    {{$url = printf "/%s/%s/issues/%d" (resolve .Repo.Did) .Repo.Slug .Issue.IssueId}}
   {{ else if .Pull }}
-    {{$url = printf "/%s/%s/pulls/%d" (resolve .Repo.Did) .Repo.Rkey .Pull.PullId}}
+    {{$url = printf "/%s/%s/pulls/%d" (resolve .Repo.Did) .Repo.Slug .Pull.PullId}}
   {{ else if eq .Type "followed" }}
     {{$url = printf "/%s" (resolve .ActorDid)}}
   {{ else }}

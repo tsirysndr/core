@@ -130,11 +130,6 @@ func (s *State) UserRouter(mw *middleware.Middleware) http.Handler {
 
 		r.With(mw.ResolveRepo()).Route("/{repo}", func(r chi.Router) {
 			r.Use(mw.GoImport())
-			r.Mount("/", s.RepoRouter(mw))
-			r.Mount("/issues", s.IssuesRouter(mw))
-			r.Mount("/pulls", s.PullsRouter(mw))
-			r.Mount("/pipelines", s.PipelinesRouter(mw))
-			r.Mount("/labels", s.LabelsRouter())
 
 			// These routes get proxied to the knot
 			r.Get("/info/refs", s.InfoRefs)
@@ -142,6 +137,14 @@ func (s *State) UserRouter(mw *middleware.Middleware) http.Handler {
 			r.Post("/git-upload-pack", s.UploadPack)
 			r.Post("/git-receive-pack", s.ReceivePack)
 
+			r.Group(func(r chi.Router) {
+				r.Use(mw.CanonicalizeRepoURL())
+				r.Mount("/issues", s.IssuesRouter(mw))
+				r.Mount("/pulls", s.PullsRouter(mw))
+				r.Mount("/pipelines", s.PipelinesRouter(mw))
+				r.Mount("/labels", s.LabelsRouter())
+				r.Mount("/", s.RepoRouter(mw))
+			})
 		})
 	})
 

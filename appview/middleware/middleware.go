@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/appview/cache"
 	"tangled.org/core/appview/db"
+	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/pagination"
@@ -234,8 +235,7 @@ func (mw Middleware) ResolveRepo() middlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			l := mw.logger.With("middleware", "ResolveRepo")
-			repoName := chi.URLParam(req, "repo")
-			repoName = strings.TrimSuffix(repoName, ".git")
+			repoName := strings.TrimSuffix(chi.URLParam(req, "repo"), ".git")
 			rkey := strings.ToLower(repoName)
 
 			id, ok := req.Context().Value("resolvedId").(identity.Identity)
@@ -245,63 +245,84 @@ func (mw Middleware) ResolveRepo() middlewareFunc {
 				return
 			}
 
-			repo, err := db.GetRepo(
-				mw.db,
-				orm.FilterEq("did", id.DID.String()),
-				orm.FilterEq("rkey", rkey),
-			)
-			if err != nil {
-				if !errors.Is(err, sql.ErrNoRows) {
-					l.Error("failed to resolve repo", "err", err)
-					http.Error(w, "internal server error", http.StatusInternalServerError)
-					return
-				}
-				hint, hintErr := db.LookupRepoRename(mw.db, id.DID.String(), rkey)
-				if hintErr != nil && !errors.Is(hintErr, sql.ErrNoRows) {
-					l.Error("failed to lookup repo rename hint", "err", hintErr)
-				}
-				if hint != nil {
-					parts := strings.SplitN(strings.TrimPrefix(req.URL.Path, "/"), "/", 3)
-					target := "/" + parts[0] + "/" + hint.Rkey
-					if len(parts) == 3 {
-						target += "/" + parts[2]
-					}
-					if req.URL.RawQuery != "" {
-						target += "?" + req.URL.RawQuery
-					}
-					http.Redirect(w, req, target, http.StatusMovedPermanently)
-					return
-				}
-				nameRepos, nameErr := db.GetRepos(
-					mw.db,
-					orm.FilterEq("did", id.DID.String()),
-					orm.FilterEq("name", repoName),
-				)
-				if nameErr == nil && len(nameRepos) == 1 && nameRepos[0].RepoDid != "" {
-					nameRepo := &nameRepos[0]
-					if _, tidErr := syntax.ParseTID(nameRepo.Rkey); tidErr == nil {
-						ctx := context.WithValue(req.Context(), "repo", nameRepo)
-						next.ServeHTTP(w, req.WithContext(ctx))
-						return
-					}
-					parts := strings.SplitN(strings.TrimPrefix(req.URL.Path, "/"), "/", 3)
-					target := "/" + nameRepo.RepoDid
-					if len(parts) == 3 {
-						target += "/" + parts[2]
-					}
-					if req.URL.RawQuery != "" {
-						target += "?" + req.URL.RawQuery
-					}
-					http.Redirect(w, req, target, http.StatusFound)
-					return
-				}
+			repo, isRename := resolveRepoForOwner(mw.db, id.DID.String(), repoName, rkey, l)
+			if repo == nil {
 				w.WriteHeader(http.StatusNotFound)
 				mw.pages.ErrorKnot404(w)
+				return
+			}
+			if isRename {
+				handle := id.Handle.String()
+				if id.Handle.IsInvalidHandle() || handle == "" {
+					handle = id.DID.String()
+				}
+				target := reporesolver.CanonicalRedirectTarget(req, reporesolver.CanonicalRepoPath(handle, repo))
+				http.Redirect(w, req, target, http.StatusMovedPermanently)
 				return
 			}
 
 			ctx := context.WithValue(req.Context(), "repo", repo)
 			next.ServeHTTP(w, req.WithContext(ctx))
+		})
+	}
+}
+
+func resolveRepoForOwner(d db.Execer, ownerDid, repoName, rkey string, l *slog.Logger) (*models.Repo, bool) {
+	repo, err := db.GetRepo(d, orm.FilterEq("did", ownerDid), orm.FilterEq("rkey", rkey))
+	if err == nil {
+		return repo, false
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		l.Error("failed to resolve repo by rkey", "err", err)
+		return nil, false
+	}
+
+	hint, hintErr := db.LookupRepoRename(d, ownerDid, rkey)
+	if hintErr != nil && !errors.Is(hintErr, sql.ErrNoRows) {
+		l.Error("failed to lookup repo rename hint", "err", hintErr)
+	}
+	if hint != nil {
+		return hint, true
+	}
+
+	nameRepos, nameErr := db.GetRepos(d, orm.FilterEq("did", ownerDid), orm.FilterEq("name", repoName))
+	if nameErr != nil {
+		l.Error("failed to resolve repo by name", "err", nameErr)
+		return nil, false
+	}
+	if len(nameRepos) == 1 {
+		return &nameRepos[0], false
+	}
+	return nil, false
+}
+
+func (mw Middleware) CanonicalizeRepoURL() middlewareFunc {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if req.Method != http.MethodGet && req.Method != http.MethodHead {
+				next.ServeHTTP(w, req)
+				return
+			}
+			id, idOk := req.Context().Value("resolvedId").(identity.Identity)
+			repo, repoOk := req.Context().Value("repo").(*models.Repo)
+			if !idOk || !repoOk || id.Handle.IsInvalidHandle() {
+				next.ServeHTTP(w, req)
+				return
+			}
+			handle := id.Handle.String()
+			if handle == "" {
+				next.ServeHTTP(w, req)
+				return
+			}
+			canonical := reporesolver.CanonicalRepoPath(handle, repo)
+			urlUser := chi.URLParam(req, "user")
+			urlRepo := strings.TrimSuffix(chi.URLParam(req, "repo"), ".git")
+			if urlUser+"/"+urlRepo == canonical {
+				next.ServeHTTP(w, req)
+				return
+			}
+
+			http.Redirect(w, req, reporesolver.CanonicalRedirectTarget(req, canonical), http.StatusFound)
 		})
 	}
 }
@@ -408,14 +429,21 @@ func (mw Middleware) GoImport() middlewareFunc {
 					if strings.Contains(modulePath, ":") {
 						modulePath = userutil.FlattenDid(f.Did) + "/" + f.Rkey
 					}
-					html := fmt.Sprintf(
-						`<meta name="go-import" content="tangled.sh/%s git https://tangled.sh/%s"/>
-<meta name="go-import" content="tangled.org/%s git https://tangled.org/%s"/>`,
-						modulePath, fullName,
-						modulePath, fullName,
-					)
+					tags := []string{
+						fmt.Sprintf(`<meta name="go-import" content="tangled.sh/%s git https://tangled.sh/%s"/>`, modulePath, fullName),
+						fmt.Sprintf(`<meta name="go-import" content="tangled.org/%s git https://tangled.org/%s"/>`, modulePath, fullName),
+					}
+					if f.RepoDid != "" {
+						stable := userutil.FlattenDid(f.RepoDid)
+						if stable != modulePath {
+							tags = append(tags,
+								fmt.Sprintf(`<meta name="go-import" content="tangled.sh/%s git https://tangled.sh/%s"/>`, stable, f.RepoDid),
+								fmt.Sprintf(`<meta name="go-import" content="tangled.org/%s git https://tangled.org/%s"/>`, stable, f.RepoDid),
+							)
+						}
+					}
 					w.Header().Set("Content-Type", "text/html")
-					w.Write([]byte(html))
+					w.Write([]byte(strings.Join(tags, "\n")))
 					return
 				}
 			}

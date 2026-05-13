@@ -19,8 +19,15 @@ func (r RepoInfo) owner() string {
 	}
 }
 
+func (r RepoInfo) Slug() string {
+	if r.Name != "" {
+		return r.Name
+	}
+	return r.Rkey
+}
+
 func (r RepoInfo) FullName() string {
-	return path.Join(r.owner(), r.Rkey)
+	return path.Join(r.owner(), r.Slug())
 }
 
 func (r RepoInfo) RepoIdentifier() string {
@@ -39,7 +46,7 @@ func (r RepoInfo) ownerWithoutAt() string {
 }
 
 func (r RepoInfo) FullNameWithoutAt() string {
-	return path.Join(r.ownerWithoutAt(), r.Rkey)
+	return path.Join(r.ownerWithoutAt(), r.Slug())
 }
 
 func (r RepoInfo) GetTabs() [][]string {

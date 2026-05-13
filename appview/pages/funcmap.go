@@ -88,7 +88,7 @@ func (p *Pages) funcMap() template.FuncMap {
 			}
 			handle := ownerId.Handle
 			if handle != "" && !handle.IsInvalidHandle() {
-				return string(handle) + "/" + repo.Name
+				return string(handle) + "/" + repo.Slug()
 			}
 			return repo.RepoIdentifier()
 		},

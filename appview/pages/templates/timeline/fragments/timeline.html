@@ -39,14 +39,14 @@
       {{ with $source }}
         {{ $sourceDid := resolve .Did }}
         forked
-        <a href="/{{ $sourceDid }}/{{ .Rkey }}"class="no-underline hover:underline">
+        <a href="/{{ $sourceDid }}/{{ .Slug }}"class="no-underline hover:underline">
             {{ $sourceDid }}/{{ .Name }}
         </a>
         to
-        <a href="/{{ $userHandle }}/{{ $repo.Rkey }}" class="no-underline hover:underline">{{ $repo.Name }}</a>
+        <a href="/{{ $userHandle }}/{{ $repo.Slug }}" class="no-underline hover:underline">{{ $repo.Name }}</a>
       {{ else }}
         created
-        <a href="/{{ $userHandle }}/{{ $repo.Rkey }}" class="no-underline hover:underline">
+        <a href="/{{ $userHandle }}/{{ $repo.Slug }}" class="no-underline hover:underline">
           {{ $repo.Name }}
         </a>
       {{ end }}
@@ -74,7 +74,7 @@
         {{ else }}
           starred
         {{ end }}
-        <a href="/{{ $repoOwnerHandle }}/{{ .Repo.Rkey }}" class="no-underline hover:underline">
+        <a href="/{{ $repoOwnerHandle }}/{{ .Repo.Slug }}" class="no-underline hover:underline">
           {{ $repoOwnerHandle | truncateAt30 }}/{{ .Repo.Name }}
         </a>
         <span class="text-gray-700 dark:text-gray-400 text-xs">{{ template "repo/fragments/time" .Created }}</span>

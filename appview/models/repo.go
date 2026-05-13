@@ -80,6 +80,13 @@ func (r Repo) RepoAt() syntax.ATURI {
 	return syntax.ATURI(fmt.Sprintf("at://%s/%s/%s", r.Did, tangled.RepoNSID, r.Rkey))
 }
 
+func (r Repo) Slug() string {
+	if r.Name != "" {
+		return r.Name
+	}
+	return r.Rkey
+}
+
 func (r Repo) RepoIdentifier() string {
 	if r.RepoDid != "" {
 		return r.RepoDid
