@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -460,6 +461,11 @@ func (h *InternalHandle) emitPullRequestLink(
 		return err
 	}
 
+	remote, err := gr.Remote()
+	if err != nil {
+		return fmt.Errorf("checking for upstream remote: %w", err)
+	}
+
 	defaultBranch, err := gr.FindMainBranch()
 	if err != nil {
 		return err
@@ -478,16 +484,10 @@ func (h *InternalHandle) emitPullRequestLink(
 		user = userIdent.Handle.String()
 	}
 
-	query := url.Values{}
-	query.Set("source", "branch")
-	query.Set("sourceBranch", pushedBranch)
-	query.Set("targetBranch", defaultBranch)
-
-	basePath, err := url.JoinPath(h.c.AppViewEndpoint, user, repoName, "pulls", "new")
+	pullURL, err := h.createPullURL(h.c.AppViewEndpoint, remote, user, ownerDid, repoName, pushedBranch, defaultBranch)
 	if err != nil {
 		return err
 	}
-	pullURL := basePath + "?" + query.Encode()
 
 	ZWS := "\u200B"
 	*clientMsgs = append(*clientMsgs, ZWS)
@@ -495,6 +495,66 @@ func (h *InternalHandle) emitPullRequestLink(
 	*clientMsgs = append(*clientMsgs, "   "+pullURL)
 	*clientMsgs = append(*clientMsgs, ZWS)
 	return nil
+}
+
+func (h *InternalHandle) createPullURL(appviewURL, remote, user, ownerDID, repoName, pushedBranch, defaultBranch string) (string, error) {
+	if remote != "" {
+		return h.createForkPullURL(appviewURL, remote, ownerDID, repoName, pushedBranch, defaultBranch)
+	}
+
+	query := url.Values{}
+
+	query.Set("source", "branch")
+	query.Set("sourceBranch", pushedBranch)
+	query.Set("targetBranch", defaultBranch)
+
+	basePath, err := url.JoinPath(appviewURL, user, repoName, "pulls", "new")
+	if err != nil {
+		return "", err
+	}
+	pullURL := basePath + "?" + query.Encode()
+	return pullURL, nil
+}
+
+func (h *InternalHandle) createForkPullURL(appviewURL, remote, ownerDID, repoName, pushedBranch, defaultBranch string) (string, error) {
+	query := url.Values{}
+
+	query.Set("fork", fmt.Sprintf("%s/%s", ownerDID, repoName))
+	query.Set("source", "fork")
+	query.Set("sourceBranch", pushedBranch)
+	query.Set("targetBranch", defaultBranch)
+
+	repoPath, err := h.getRemoteOwnerRepoNamePath(remote)
+	if err != nil {
+		return "", err
+	}
+
+	basePath, err := url.JoinPath(appviewURL, repoPath, "pulls", "new")
+	if err != nil {
+		return "", err
+	}
+	pullURL := basePath + "?" + query.Encode()
+	return pullURL, nil
+}
+
+func (h *InternalHandle) getRemoteOwnerRepoNamePath(remote string) (string, error) {
+	u, err := url.Parse(remote)
+	if err != nil {
+		return "", fmt.Errorf("invalid remote: %w", err)
+	}
+
+	if u.Scheme != "file" {
+		return u.Path, nil
+	}
+
+	repoDid := path.Base(u.String())
+
+	owner, name, err := h.db.GetRepoKeyOwner(repoDid)
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("%s/%s", owner, name), nil
 }
 
 func Internal(ctx context.Context, c *config.Config, db *db.DB, e *rbac.Enforcer, n *notifier.Notifier, res *idresolver.Resolver) http.Handler {

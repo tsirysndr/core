@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5"
+	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -279,6 +280,27 @@ func (g *GitRepo) FindMainBranch() (string, error) {
 	}
 
 	return strings.TrimSpace(string(output)), nil
+}
+
+func (g *GitRepo) Remote() (string, error) {
+	remote, err := g.r.Remote("origin")
+	if errors.Is(err, gogit.ErrRemoteNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+
+	if remote == nil {
+		return "", nil
+	}
+
+	urls := remote.Config().URLs
+	if len(urls) == 0 {
+		return "", nil
+	}
+
+	return urls[0], nil
 }
 
 // WriteTar writes itself from a tree into a binary tar file format.
