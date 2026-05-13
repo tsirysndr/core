@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
+	"github.com/bluesky-social/indigo/util/ssrf"
 	"github.com/go-chi/chi/v5"
 	"github.com/redis/go-redis/v9"
 	"tangled.org/core/api/tangled"
@@ -30,17 +31,21 @@ type Xrpc struct {
 }
 
 func New(logger *slog.Logger, cfg *config.Config, db *sql.DB, rdb *redis.Client, resolver *idresolver.Resolver, ks *knotstream.KnotStream) *Xrpc {
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	if cfg.KnotSSRF {
+		httpClient.Transport = ssrf.PublicOnlyTransport()
+	}
 	return &Xrpc{
-		cfg:      cfg,
-		db:       db,
-		rdb:      rdb,
-		resolver: resolver,
-		ks:       ks,
-		logger:   log.SubLogger(logger, "xrpc"),
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-		inflight: newInflightTracker(),
+		cfg:        cfg,
+		db:         db,
+		rdb:        rdb,
+		resolver:   resolver,
+		ks:         ks,
+		logger:     log.SubLogger(logger, "xrpc"),
+		httpClient: httpClient,
+		inflight:   newInflightTracker(),
 	}
 }
 

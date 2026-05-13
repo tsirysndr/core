@@ -2,6 +2,7 @@ package xrpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -45,6 +46,30 @@ type knotInfo struct {
 	repoIdentifier string
 }
 
+// validateKnotURL ensures a knot base URL is safe to proxy to.
+// It rejects URLs with path components, query strings, or fragments
+// that could be used for path injection.
+func validateKnotURL(raw string) (string, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("invalid knot URL: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "", errors.New("knot URL must use http or https scheme")
+	}
+	if u.Path != "" && u.Path != "/" {
+		return "", fmt.Errorf("knot URL must not contain a path: %q", raw)
+	}
+	if u.RawQuery != "" || u.Fragment != "" {
+		return "", fmt.Errorf("knot URL must not contain query or fragment: %q", raw)
+	}
+	if u.User != nil {
+		return "", fmt.Errorf("knot URL must not contain userinfo: %q", raw)
+	}
+	// Strip trailing slash for consistent formatting
+	return strings.TrimRight(u.String(), "/"), nil
+}
+
 func (x *Xrpc) resolveKnot(ctx context.Context, repoAt syntax.ATURI) (*knotInfo, error) {
 	repo, err := db.GetRepoByAtUri(ctx, x.db, repoAt)
 	if err == nil && repo != nil {
@@ -60,6 +85,10 @@ func (x *Xrpc) resolveKnot(ctx context.Context, repoAt syntax.ATURI) (*knotInfo,
 					knotURL = "http://" + knotURL
 				}
 			}
+		}
+		knotURL, err = validateKnotURL(knotURL)
+		if err != nil {
+			return nil, err
 		}
 		return &knotInfo{baseURL: knotURL, repoIdentifier: repo.RepoIdentifier()}, nil
 	}
@@ -111,6 +140,10 @@ func (x *Xrpc) resolveKnot(ctx context.Context, repoAt syntax.ATURI) (*knotInfo,
 		}
 	}()
 
+	knotURL, err = validateKnotURL(knotURL)
+	if err != nil {
+		return nil, err
+	}
 	return &knotInfo{
 		baseURL:        knotURL,
 		repoIdentifier: repoDid.String(),

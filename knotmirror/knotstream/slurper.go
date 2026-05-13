@@ -25,16 +25,18 @@ type KnotSlurper struct {
 	logger *slog.Logger
 	db     *sql.DB
 	cfg    config.SlurperConfig
+	ssrf   bool
 
 	subsLk sync.Mutex
 	subs   map[string]*subscription
 }
 
-func NewKnotSlurper(l *slog.Logger, db *sql.DB, cfg config.SlurperConfig) *KnotSlurper {
+func NewKnotSlurper(l *slog.Logger, db *sql.DB, cfg *config.Config) *KnotSlurper {
 	return &KnotSlurper{
 		logger: log.SubLogger(l, "slurper"),
 		db:     db,
-		cfg:    cfg,
+		cfg:    cfg.Slurper,
+		ssrf:   cfg.KnotSSRF,
 		subs:   make(map[string]*subscription),
 	}
 }
@@ -132,7 +134,7 @@ func (s *KnotSlurper) subscribeWithRedialer(ctx context.Context, host models.Hos
 	}
 
 	// if this isn't a localhost / private connection, then we should enable SSRF protections
-	if !host.NoSSL {
+	if !host.NoSSL || s.ssrf {
 		netDialer := ssrf.PublicOnlyDialer()
 		dialer.NetDialContext = netDialer.DialContext
 	}

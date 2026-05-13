@@ -24,7 +24,7 @@ func NewKnotStream(l *slog.Logger, db *sql.DB, cfg *config.Config) *KnotStream {
 	return &KnotStream{
 		logger:  l,
 		db:      db,
-		slurper: NewKnotSlurper(l, db, cfg.Slurper),
+		slurper: NewKnotSlurper(l, db, cfg),
 	}
 }
 
