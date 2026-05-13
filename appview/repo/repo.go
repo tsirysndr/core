@@ -1511,18 +1511,21 @@ func (rp *Repo) Forks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var forks []models.Repo
+	totalCount := 0
 	page := pagination.FromContext(r.Context())
+	if f.RepoDid != "" {
+		forks, err = db.GetReposPaginated(rp.db, page, orm.FilterEq("source", f.RepoDid))
+		if err != nil {
+			l.Error("failed to fetch forks", "err", err, "repoAt", f.RepoAt())
+			return
+		}
 
-	forks, err := db.GetReposPaginated(rp.db, page, orm.FilterEq("source", f.RepoDid))
-	if err != nil {
-		l.Error("failed to fetch forks", "err", err, "repoAt", f.RepoAt())
-		return
-	}
-
-	totalCount, err := db.GetForkCount(rp.db, f.RepoDid)
-	if err != nil {
-		l.Error("failed to fetch fork count", "err", err, "repoAt", f.RepoAt())
-		return
+		totalCount, err = db.GetForkCount(rp.db, f.RepoDid)
+		if err != nil {
+			l.Error("failed to fetch fork count", "err", err, "repoAt", f.RepoAt())
+			return
+		}
 	}
 
 	err = rp.pages.RepoForks(w, pages.RepoForksParams{
