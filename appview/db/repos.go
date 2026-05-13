@@ -370,34 +370,44 @@ func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 		return nil, fmt.Errorf("failed to execute pulls-count query: %w", err)
 	}
 
-	// get forks
-	forksInClause := strings.TrimSuffix(strings.Repeat("?, ", len(repoMap)), ", ")
-
-	forksCountQuery := fmt.Sprintf(
-		`select source, count(1) from repos where source in (%s) group by source`,
-		forksInClause,
-	)
-
-	rows, err = e.Query(forksCountQuery, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute fork-count query: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var repodid string
-		var count int
-		if err := rows.Scan(&repodid, &count); err != nil {
-			log.Println("err", "err", err)
-			continue
-		}
-
-		if r, ok := repoMap[repodid]; ok {
-			r.RepoStats.ForkCount = count
+	// get forks — only query repos with a non-empty repo_did, since source
+	// stores the upstream's repo_did and an empty string would match all
+	var forksArgs []any
+	for _, r := range repoMap {
+		if r.RepoDid != "" {
+			forksArgs = append(forksArgs, r.RepoDid)
 		}
 	}
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to execute fork-count query: %w", err)
+
+	if len(forksArgs) > 0 {
+		forksInClause := strings.TrimSuffix(strings.Repeat("?, ", len(forksArgs)), ", ")
+
+		forksCountQuery := fmt.Sprintf(
+			`select source, count(1) from repos where source in (%s) group by source`,
+			forksInClause,
+		)
+
+		rows, err = e.Query(forksCountQuery, forksArgs...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute fork-count query: %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var repodid string
+			var count int
+			if err := rows.Scan(&repodid, &count); err != nil {
+				log.Println("failed to scan fork count", "err", err)
+				continue
+			}
+
+			if r, ok := repoMap[repodid]; ok {
+				r.RepoStats.ForkCount = count
+			}
+		}
+		if err = rows.Err(); err != nil {
+			return nil, fmt.Errorf("failed to execute fork-count query: %w", err)
+		}
 	}
 
 	var repos []models.Repo
