@@ -73,6 +73,7 @@ func (ss *setupSteps) addStep(step models.Step) {
 type addlFields struct {
 	image     string
 	container string
+	mounts    []mount.Mount
 }
 
 func (e *Engine) InitWorkflow(twf tangled.Pipeline_Workflow, tpl tangled.Pipeline) (*models.Workflow, error) {
@@ -105,6 +106,14 @@ func (e *Engine) InitWorkflow(twf tangled.Pipeline_Workflow, tpl tangled.Pipelin
 	swf.Environment = dwf.Environment
 	addl.image = workflowImage(dwf.Dependencies, e.cfg.NixeryPipelines.Nixery)
 
+	if sock := e.cfg.Server.DockerSocket; sock != "" {
+		addl.mounts = append(addl.mounts, mount.Mount{
+			Type:     mount.TypeBind,
+			Source:   sock,
+			Target:   sock,
+			ReadOnly: false,
+		})
+	}
 	setup := &setupSteps{}
 
 	setup.addStep(nixConfStep())
@@ -239,7 +248,7 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 		// TODO(winter): investigate whether environment variables passed here
 		// get propagated to ContainerExec processes
 	}, &container.HostConfig{
-		Mounts: []mount.Mount{
+		Mounts: append([]mount.Mount{
 			{
 				Type:     mount.TypeTmpfs,
 				Target:   "/tmp",
@@ -251,7 +260,7 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 					},
 				},
 			},
-		},
+		}, addl.mounts...),
 		ReadonlyRootfs: false,
 		CapDrop:        []string{"ALL"},
 		CapAdd:         []string{"CAP_DAC_OVERRIDE", "CAP_CHOWN", "CAP_FOWNER", "CAP_SETUID", "CAP_SETGID"},
@@ -360,6 +369,9 @@ func (e *Engine) RunStep(ctx context.Context, wid models.WorkflowId, w *models.W
 	envs.AddEnv("HOME", homeDir)
 	existingPath := "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 	envs.AddEnv("PATH", fmt.Sprintf("%s/.nix-profile/bin:/nix/var/nix/profiles/default/bin:%s", homeDir, existingPath))
+	if sock := e.cfg.Server.DockerSocket; sock != "" {
+		envs.AddEnv("DOCKER_HOST", fmt.Sprintf("unix://%s", sock))
+	}
 
 	mkExecResp, err := e.docker.ContainerExecCreate(ctx, addl.container, container.ExecOptions{
 		Cmd:          []string{"bash", "-c", step.Command()},
