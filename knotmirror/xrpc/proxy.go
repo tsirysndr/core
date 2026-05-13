@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"tangled.org/core/api/tangled"
@@ -70,9 +69,8 @@ func validateKnotURL(raw string) (string, error) {
 	return strings.TrimRight(u.String(), "/"), nil
 }
 
-func (x *Xrpc) resolveKnot(ctx context.Context, repoAt syntax.ATURI) (*knotInfo, error) {
-	repo, err := db.GetRepoByAtUri(ctx, x.db, repoAt)
-	if err == nil && repo != nil {
+func (x *Xrpc) resolveKnot(ctx context.Context, repoDid syntax.DID) (*knotInfo, error) {
+	if repo, err := db.GetRepoByRepoDid(ctx, x.db, repoDid); err == nil && repo != nil {
 		knotURL := repo.KnotDomain
 		if !strings.Contains(repo.KnotDomain, "://") {
 			if host, _ := db.GetHost(ctx, x.db, repo.KnotDomain); host != nil {
@@ -93,73 +91,60 @@ func (x *Xrpc) resolveKnot(ctx context.Context, repoAt syntax.ATURI) (*knotInfo,
 		return &knotInfo{baseURL: knotURL, repoIdentifier: repo.RepoIdentifier()}, nil
 	}
 
-	owner, err := x.resolver.ResolveIdent(ctx, repoAt.Authority().String())
+	ident, err := x.resolver.ResolveIdent(ctx, repoDid.String())
 	if err != nil {
-		return nil, fmt.Errorf("resolving repo owner: %w", err)
+		return nil, fmt.Errorf("resolving repoDid %s: %w", repoDid, err)
 	}
-
-	xrpcc := indigoxrpc.Client{Host: owner.PDSEndpoint()}
-	out, err := atproto.RepoGetRecord(ctx, &xrpcc, "", tangled.RepoNSID, repoAt.Authority().String(), repoAt.RecordKey().String())
+	knotURL, err := validateKnotURL(ident.GetServiceEndpoint("atproto_pds"))
 	if err != nil {
-		return nil, fmt.Errorf("fetching repo record from PDS: %w", err)
+		return nil, fmt.Errorf("repoDid %s: %w", repoDid, err)
 	}
 
-	record := out.Value.Val.(*tangled.Repo)
-	if record.RepoDid == nil || *record.RepoDid == "" {
-		return nil, fmt.Errorf("repo record has no repo_did")
+	xrpcc := &indigoxrpc.Client{Host: knotURL, Client: x.httpClient}
+	out, err := tangled.RepoDescribeRepo(ctx, xrpcc, repoDid.String())
+	if err != nil {
+		x.logger.Warn("describeRepo failed; serving without metadata upsert", "knot", knotURL, "repo", repoDid, "err", err)
+		return &knotInfo{baseURL: knotURL, repoIdentifier: repoDid.String()}, nil
 	}
-	knotURL := record.Knot
-	if !strings.Contains(record.Knot, "://") {
-		if host, _ := db.GetHost(ctx, x.db, record.Knot); host != nil {
-			knotURL = host.URL()
-		} else {
-			x.logger.Warn("repo is from unknown knot")
-			if x.cfg.KnotUseSSL {
-				knotURL = "https://" + knotURL
-			} else {
-				knotURL = "http://" + knotURL
-			}
-		}
+	if out.RepoDid != repoDid.String() {
+		return nil, fmt.Errorf("knot %s returned mismatched repoDid: got %q, want %q", knotURL, out.RepoDid, repoDid)
+	}
+	ownerDid, err := syntax.ParseDID(out.OwnerDid)
+	if err != nil {
+		return nil, fmt.Errorf("describeRepo on %s returned invalid ownerDid %q: %w", knotURL, out.OwnerDid, err)
+	}
+	rkey, err := syntax.ParseRecordKey(out.Rkey)
+	if err != nil {
+		return nil, fmt.Errorf("describeRepo on %s returned invalid rkey %q: %w", knotURL, out.Rkey, err)
 	}
 
-	rkey := repoAt.RecordKey().String()
-	repoDid := syntax.DID(*record.RepoDid)
 	go func() {
-		bgCtx := context.Background()
 		pending := &models.Repo{
-			Did:        owner.DID,
-			Rkey:       repoAt.RecordKey(),
-			Cid:        (*syntax.CID)(out.Cid),
-			Name:       rkey,
+			Did:        ownerDid,
+			Rkey:       rkey,
+			Name:       string(rkey),
 			KnotDomain: knotURL,
 			RepoDid:    repoDid,
 			State:      models.RepoStatePending,
 		}
-		if upsertErr := db.UpsertRepo(bgCtx, x.db, pending); upsertErr != nil {
-			x.logger.Error("failed to upsert repo after proxy resolution", "err", upsertErr)
+		if err := db.UpsertRepo(context.Background(), x.db, pending); err != nil {
+			x.logger.Error("failed to upsert repo after directory resolution", "err", err)
 		}
 	}()
 
-	knotURL, err = validateKnotURL(knotURL)
-	if err != nil {
-		return nil, err
-	}
-	return &knotInfo{
-		baseURL:        knotURL,
-		repoIdentifier: repoDid.String(),
-	}, nil
+	return &knotInfo{baseURL: knotURL, repoIdentifier: repoDid.String()}, nil
 }
 
-func (x *Xrpc) proxyToKnot(w http.ResponseWriter, r *http.Request, repoAt syntax.ATURI) bool {
+func (x *Xrpc) proxyToKnot(w http.ResponseWriter, r *http.Request, repoDid syntax.DID) bool {
 	mirrorNSID := strings.TrimPrefix(r.URL.Path, "/xrpc/")
 	knotNSID, ok := mirrorToKnotNSID[mirrorNSID]
 	if !ok {
 		return false
 	}
 
-	knot, err := x.resolveKnot(r.Context(), repoAt)
+	knot, err := x.resolveKnot(r.Context(), repoDid)
 	if err != nil {
-		x.logger.Warn("proxy: failed to resolve knot", "repo", repoAt, "err", err)
+		x.logger.Warn("proxy: failed to resolve knot", "repo", repoDid, "err", err)
 		return false
 	}
 
@@ -197,6 +182,6 @@ func (x *Xrpc) proxyToKnot(w http.ResponseWriter, r *http.Request, repoAt syntax
 		x.logger.Warn("proxy: response copy interrupted", "target", target, "err", err)
 	}
 
-	x.logger.Info("proxy: served from knot", "repo", repoAt, "knot", knot.baseURL, "status", resp.StatusCode)
+	x.logger.Info("proxy: served from knot", "repo", repoDid, "knot", knot.baseURL, "status", resp.StatusCode)
 	return true
 }

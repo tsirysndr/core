@@ -209,7 +209,7 @@ func (rp *Repo) createIssueItem(ctx context.Context, issue models.Issue, ownerSl
 func (rp *Repo) createCommitItems(ctx context.Context, repo *models.Repo, ownerSlashRepo string) ([]*feeds.Item, error) {
 	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
 
-	xrpcBytes, err := tangled.GitTempListCommits(ctx, xrpcc, "", 100, "", repo.RepoAt().String())
+	xrpcBytes, err := tangled.GitTempListCommits(ctx, xrpcc, "", 100, "", repo.RepoDid)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call XRPC repo.log: %w", err)
 	}
@@ -248,7 +248,7 @@ func (rp *Repo) createCommitItems(ctx context.Context, repo *models.Repo, ownerS
 func (rp *Repo) createTagItems(ctx context.Context, repo *models.Repo, ownerSlashRepo string) ([]*feeds.Item, error) {
 	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
 
-	tagBytes, err := tangled.GitTempListTags(ctx, xrpcc, "", 100, repo.RepoAt().String())
+	tagBytes, err := tangled.GitTempListTags(ctx, xrpcc, "", 100, repo.RepoDid)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call XRPC repo.tags: %w", err)
 	}

@@ -72,7 +72,7 @@ type GitTempGetTree_TreeEntry struct {
 //
 // path: Path within the repository tree
 // ref: Git reference (branch, tag, or commit SHA)
-// repo: AT-URI of the repository
+// repo: DID of the repository
 func GitTempGetTree(ctx context.Context, c util.LexClient, path string, ref string, repo string) (*GitTempGetTree_Output, error) {
 	var out GitTempGetTree_Output
 

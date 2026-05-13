@@ -23,8 +23,8 @@ func (x *Xrpc) GetArchive(w http.ResponseWriter, r *http.Request) {
 		prefix    = r.URL.Query().Get("prefix")
 	)
 
-	repo, err := syntax.ParseATURI(repoQuery)
-	if err != nil || repo.RecordKey() == "" {
+	repo, err := syntax.ParseDID(repoQuery)
+	if err != nil {
 		writeJson(w, http.StatusBadRequest, atclient.ErrorBody{Name: "BadRequest", Message: fmt.Sprintf("repo parameter invalid: %s", repoQuery)})
 		return
 	}
@@ -61,7 +61,7 @@ func (x *Xrpc) GetArchive(w http.ResponseWriter, r *http.Request) {
 	}
 
 	repoName, err := func() (string, error) {
-		r, err := db.GetRepoByAtUri(ctx, x.db, repo)
+		r, err := db.GetRepoByRepoDid(ctx, x.db, repo)
 		if err != nil {
 			return "", err
 		}

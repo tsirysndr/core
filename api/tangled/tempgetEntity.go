@@ -18,7 +18,7 @@ const (
 //
 // path: path of the entity
 // ref: Git reference (branch, tag, or commit SHA)
-// repo: AT-URI of the repository
+// repo: DID of the repository
 func GitTempGetEntity(ctx context.Context, c util.LexClient, path string, ref string, repo string) (*GitTempDefs_Blob, error) {
 	var out GitTempDefs_Blob
 

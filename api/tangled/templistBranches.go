@@ -19,7 +19,7 @@ const (
 //
 // cursor: Pagination cursor
 // limit: Maximum number of branches to return
-// repo: AT-URI of the repository
+// repo: DID of the repository
 func GitTempListBranches(ctx context.Context, c util.LexClient, cursor string, limit int64, repo string) ([]byte, error) {
 	buf := new(bytes.Buffer)
 

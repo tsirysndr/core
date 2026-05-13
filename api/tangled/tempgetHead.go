@@ -16,7 +16,7 @@ const (
 
 // GitTempGetHead calls the XRPC method "sh.tangled.git.temp.getHead".
 //
-// repo: AT-URI of the repository
+// repo: DID of the repository
 func GitTempGetHead(ctx context.Context, c util.LexClient, repo string) (*GitTempDefs_Branch, error) {
 	var out GitTempDefs_Branch
 

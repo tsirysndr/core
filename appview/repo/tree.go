@@ -35,7 +35,7 @@ func (rp *Repo) Tree(w http.ResponseWriter, r *http.Request) {
 	treePath = strings.TrimSuffix(treePath, "/")
 
 	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
-	xrpcResp, err := tangled.GitTempGetTree(r.Context(), xrpcc, treePath, ref, f.RepoAt().String())
+	xrpcResp, err := tangled.GitTempGetTree(r.Context(), xrpcc, treePath, ref, f.RepoDid)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		l.Error("failed to call XRPC repo.tree", "xrpcerr", xrpcerr, "err", err)
 		rp.pages.Error503(w)

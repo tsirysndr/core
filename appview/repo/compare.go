@@ -32,7 +32,7 @@ func (rp *Repo) CompareNew(w http.ResponseWriter, r *http.Request) {
 
 	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
 
-	branchBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
+	branchBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoDid)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		l.Error("failed to call XRPC repo.branches", "xrpcerr", xrpcerr, "err", err)
 		rp.pages.Error503(w)
@@ -69,7 +69,7 @@ func (rp *Repo) CompareNew(w http.ResponseWriter, r *http.Request) {
 		head = queryHead
 	}
 
-	tagBytes, err := tangled.GitTempListTags(r.Context(), xrpcc, "", 0, f.RepoAt().String())
+	tagBytes, err := tangled.GitTempListTags(r.Context(), xrpcc, "", 0, f.RepoDid)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		l.Error("failed to call XRPC repo.tags", "xrpcerr", xrpcerr, "err", err)
 		rp.pages.Error503(w)

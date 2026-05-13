@@ -111,7 +111,7 @@ func (rp *Repo) Log(w http.ResponseWriter, r *http.Request) {
 		cursor = strconv.Itoa(offset)
 	}
 
-	xrpcBytes, err := tangled.GitTempListCommits(r.Context(), xrpcc, cursor, limit, ref, f.RepoAt().String())
+	xrpcBytes, err := tangled.GitTempListCommits(r.Context(), xrpcc, cursor, limit, ref, f.RepoDid)
 	if err != nil {
 		l.Error("failed to call XRPC repo.log", "err", err)
 		rp.pages.Error503(w)
@@ -125,7 +125,7 @@ func (rp *Repo) Log(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tagBytes, err := tangled.GitTempListTags(r.Context(), xrpcc, "", 0, f.RepoAt().String())
+	tagBytes, err := tangled.GitTempListTags(r.Context(), xrpcc, "", 0, f.RepoDid)
 	if err != nil {
 		l.Error("failed to call XRPC repo.tags", "err", err)
 		rp.pages.Error503(w)
@@ -146,7 +146,7 @@ func (rp *Repo) Log(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	branchBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
+	branchBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoDid)
 	if err != nil {
 		l.Error("failed to call XRPC repo.branches", "err", err)
 		rp.pages.Error503(w)

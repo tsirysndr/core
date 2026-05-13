@@ -24,7 +24,7 @@ func (rp *Repo) DownloadArchive(w http.ResponseWriter, r *http.Request) {
 
 	// build the xrpc url
 	query := url.Values{}
-	query.Set("repo", f.RepoAt().String())
+	query.Set("repo", f.RepoDid)
 	query.Set("ref", ref)
 	query.Set("format", "tar.gz")
 	query.Set("prefix", r.URL.Query().Get("prefix"))

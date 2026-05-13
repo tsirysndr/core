@@ -24,8 +24,8 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 		path      = r.URL.Query().Get("path")
 	)
 
-	repo, err := syntax.ParseATURI(repoQuery)
-	if err != nil || repo.RecordKey() == "" {
+	repo, err := syntax.ParseDID(repoQuery)
+	if err != nil {
 		writeJson(w, http.StatusBadRequest, atclient.ErrorBody{Name: "BadRequest", Message: fmt.Sprintf("repo parameter invalid: %s", repoQuery)})
 		return
 	}
@@ -111,10 +111,10 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 	w.Write(contents)
 }
 
-func (x *Xrpc) getFile(ctx context.Context, repo syntax.ATURI, ref, path string) (*object.File, error) {
+func (x *Xrpc) getFile(ctx context.Context, repo syntax.DID, ref, path string) (*object.File, error) {
 	repoPath, err := x.makeRepoPath(ctx, repo)
 	if err != nil {
-		return nil, fmt.Errorf("resolving repo at-uri: %w", err)
+		return nil, fmt.Errorf("resolving repo did: %w", err)
 	}
 
 	gr, err := git.Open(repoPath, ref)

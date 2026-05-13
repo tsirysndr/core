@@ -17,7 +17,7 @@ const (
 
 // GitTempGetDiff calls the XRPC method "sh.tangled.git.temp.getDiff".
 //
-// repo: AT-URI of the repository
+// repo: DID of the repository
 // rev1: First revision (commit, branch, or tag)
 // rev2: Second revision (commit, branch, or tag)
 func GitTempGetDiff(ctx context.Context, c util.LexClient, repo string, rev1 string, rev2 string) ([]byte, error) {

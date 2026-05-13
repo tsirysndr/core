@@ -17,7 +17,7 @@ const (
 // GitTempGetCommit calls the XRPC method "sh.tangled.git.temp.getCommit".
 //
 // ref: reference name to resolve
-// repo: AT-URI of the repository
+// repo: DID of the repository
 func GitTempGetCommit(ctx context.Context, c util.LexClient, ref string, repo string) (*GitTempDefs_Commit, error) {
 	var out GitTempDefs_Commit
 

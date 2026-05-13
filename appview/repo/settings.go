@@ -381,7 +381,7 @@ func (rp *Repo) generalSettings(w http.ResponseWriter, r *http.Request) {
 
 	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
 
-	xrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
+	xrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoDid)
 	var result types.RepoBranchesResponse
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		l.Error("failed to call XRPC git.listBranches", "xrpcerr", xrpcerr, "err", err)

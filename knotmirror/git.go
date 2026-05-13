@@ -25,6 +25,7 @@ type GitMirrorManager interface {
 	Fetch(ctx context.Context, repo *models.Repo) error
 	// Sync mirrors the repository. It will clone the repository if repository doesn't exist.
 	Sync(ctx context.Context, repo *models.Repo) error
+	Delete(repo *models.Repo) error
 }
 
 type CliGitMirrorManager struct {
@@ -114,6 +115,10 @@ func (c *CliGitMirrorManager) Sync(ctx context.Context, repo *models.Repo) error
 		}
 	}
 	return nil
+}
+
+func (c *CliGitMirrorManager) Delete(repo *models.Repo) error {
+	return os.RemoveAll(c.makeRepoPath(repo))
 }
 
 var (
@@ -249,6 +254,10 @@ func (c *GoGitMirrorManager) Sync(ctx context.Context, repo *models.Repo) error 
 		}
 	}
 	return nil
+}
+
+func (c *GoGitMirrorManager) Delete(repo *models.Repo) error {
+	return os.RemoveAll(c.makeRepoPath(repo))
 }
 
 func makeRepoRemoteUrl(knot, repoIdentifier string, knotUseSSL bool) (string, error) {

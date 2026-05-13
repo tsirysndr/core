@@ -21,8 +21,8 @@ func (x *Xrpc) GetBranch(w http.ResponseWriter, r *http.Request) {
 		nameQuery = r.URL.Query().Get("name")
 	)
 
-	repo, err := syntax.ParseATURI(repoQuery)
-	if err != nil || repo.RecordKey() == "" {
+	repo, err := syntax.ParseDID(repoQuery)
+	if err != nil {
 		writeJson(w, http.StatusBadRequest, atclient.ErrorBody{Name: "BadRequest", Message: fmt.Sprintf("repo parameter invalid: %s", repoQuery)})
 		return
 	}
@@ -45,10 +45,10 @@ func (x *Xrpc) GetBranch(w http.ResponseWriter, r *http.Request) {
 	writeJson(w, http.StatusOK, out)
 }
 
-func (x *Xrpc) getBranch(ctx context.Context, repo syntax.ATURI, branchName string) (*tangled.GitTempGetBranch_Output, error) {
+func (x *Xrpc) getBranch(ctx context.Context, repo syntax.DID, branchName string) (*tangled.GitTempGetBranch_Output, error) {
 	repoPath, err := x.makeRepoPath(ctx, repo)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve repo at-uri: %w", err)
+		return nil, fmt.Errorf("failed to resolve repo did: %w", err)
 	}
 
 	gr, err := git.PlainOpen(repoPath)

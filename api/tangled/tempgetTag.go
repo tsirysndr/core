@@ -17,7 +17,7 @@ const (
 
 // GitTempGetTag calls the XRPC method "sh.tangled.git.temp.getTag".
 //
-// repo: AT-URI of the repository
+// repo: DID of the repository
 // tag: Name of tag, such as v1.3.0
 func GitTempGetTag(ctx context.Context, c util.LexClient, repo string, tag string) ([]byte, error) {
 	buf := new(bytes.Buffer)

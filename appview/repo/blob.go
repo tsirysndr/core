@@ -52,7 +52,7 @@ func (rp *Repo) Blob(w http.ResponseWriter, r *http.Request) {
 	filePath, _ = url.PathUnescape(filePath)
 
 	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
-	resp, err := tangled.RepoBlob(r.Context(), xrpcc, filePath, false, ref, f.RepoAt().String())
+	resp, err := tangled.RepoBlob(r.Context(), xrpcc, filePath, false, ref, f.RepoDid)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		l.Error("failed to call XRPC repo.blob", "xrpcerr", xrpcerr, "err", err)
 		rp.pages.Error503(w)
@@ -272,7 +272,7 @@ func NewBlobView(resp *tangled.RepoBlob_Output, config *config.Config, repo *mod
 
 func generateBlobURL(config *config.Config, repo *models.Repo, ref, filePath string) string {
 	query := url.Values{}
-	query.Set("repo", string(repo.RepoAt()))
+	query.Set("repo", repo.RepoDid)
 	query.Set("ref", ref)
 	query.Set("path", filePath)
 	query.Set("raw", "true")

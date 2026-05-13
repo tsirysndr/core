@@ -171,7 +171,7 @@ func (rp *Repo) getLanguageInfo(
 			Host:   rp.config.KnotMirror.Url,
 			Client: http.DefaultClient,
 		}
-		ls, err := tangled.GitTempListLanguages(ctx, xrpcc, currentRef, repo.RepoAt().String())
+		ls, err := tangled.GitTempListLanguages(ctx, xrpcc, currentRef, repo.RepoDid)
 		if err != nil {
 			return nil, fmt.Errorf("calling knotmirror git.listLanguages: %w", err)
 		}
@@ -254,7 +254,7 @@ func containsOtherLanguage(langs []models.RepoLanguage) bool {
 func (rp *Repo) buildIndexResponse(ctx context.Context, repo *models.Repo, ref string) (*types.RepoIndexResponse, error) {
 	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
 
-	branchesBytes, err := tangled.GitTempListBranches(ctx, xrpcc, "", 0, repo.RepoAt().String())
+	branchesBytes, err := tangled.GitTempListBranches(ctx, xrpcc, "", 0, repo.RepoDid)
 	if err != nil {
 		return nil, fmt.Errorf("calling knotmirror git.listBranches: %w", err)
 	}
@@ -296,7 +296,7 @@ func (rp *Repo) buildIndexResponse(ctx context.Context, repo *models.Repo, ref s
 
 	// tags
 	wg.Go(func() {
-		tagsBytes, err := tangled.GitTempListTags(ctx, xrpcc, "", 0, repo.RepoAt().String())
+		tagsBytes, err := tangled.GitTempListTags(ctx, xrpcc, "", 0, repo.RepoDid)
 		if err != nil {
 			errs = errors.Join(errs, fmt.Errorf("failed to call git.ListTags: %w", err))
 			return
@@ -309,7 +309,7 @@ func (rp *Repo) buildIndexResponse(ctx context.Context, repo *models.Repo, ref s
 
 	// tree/files
 	wg.Go(func() {
-		resp, err := tangled.GitTempGetTree(ctx, xrpcc, "", ref, repo.RepoAt().String())
+		resp, err := tangled.GitTempGetTree(ctx, xrpcc, "", ref, repo.RepoDid)
 		if err != nil {
 			errs = errors.Join(errs, fmt.Errorf("failed to call git.GetTree: %w", err))
 			return
@@ -319,7 +319,7 @@ func (rp *Repo) buildIndexResponse(ctx context.Context, repo *models.Repo, ref s
 
 	// commits
 	wg.Go(func() {
-		logBytes, err := tangled.GitTempListCommits(ctx, xrpcc, "", 50, ref, repo.RepoAt().String())
+		logBytes, err := tangled.GitTempListCommits(ctx, xrpcc, "", 50, ref, repo.RepoDid)
 		if err != nil {
 			errs = errors.Join(errs, fmt.Errorf("failed to call git.ListCommits: %w", err))
 			return

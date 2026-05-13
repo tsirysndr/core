@@ -334,7 +334,7 @@ func (s *Pulls) composeParams(r *http.Request, repo *models.Repo) (pages.RepoNew
 
 func (s *Pulls) listBranches(ctx context.Context, repo *models.Repo) ([]types.Branch, error) {
 	xrpcc := &indigoxrpc.Client{Host: s.config.KnotMirror.Url}
-	xrpcBytes, err := tangled.GitTempListBranches(ctx, xrpcc, "", 0, repo.RepoAt().String())
+	xrpcBytes, err := tangled.GitTempListBranches(ctx, xrpcc, "", 0, repo.RepoDid)
 	if err != nil {
 		return nil, err
 	}

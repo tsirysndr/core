@@ -19,7 +19,7 @@ const (
 //
 // path: Path within the repository tree
 // ref: Git reference (branch, tag, or commit SHA)
-// repo: AT-URI of the repository
+// repo: DID of the repository
 func GitTempGetBlob(ctx context.Context, c util.LexClient, path string, ref string, repo string) ([]byte, error) {
 	buf := new(bytes.Buffer)
 

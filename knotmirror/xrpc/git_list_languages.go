@@ -28,9 +28,9 @@ func (x *Xrpc) ListLanguages(w http.ResponseWriter, r *http.Request) {
 	l := x.logger.With("method", "git.listLanguages", "repo", repoQuery, "ref", ref)
 	l.Debug("request")
 
-	repo, err := syntax.ParseATURI(repoQuery)
-	if err != nil || repo.RecordKey() == "" {
-		l.Error("invalid repo at-uri", "err", err)
+	repo, err := syntax.ParseDID(repoQuery)
+	if err != nil {
+		l.Error("invalid repo did", "err", err)
 		writeJson(w, http.StatusBadRequest, atclient.ErrorBody{Name: "BadRequest", Message: fmt.Sprintf("repo parameter invalid: %s", repoQuery)})
 		return
 	}
@@ -64,10 +64,10 @@ func (x *Xrpc) ListLanguages(w http.ResponseWriter, r *http.Request) {
 	writeJson(w, http.StatusOK, out)
 }
 
-func (x *Xrpc) listLanguages(ctx context.Context, repo syntax.ATURI, ref string) (*tangled.GitTempListLanguages_Output, error) {
+func (x *Xrpc) listLanguages(ctx context.Context, repo syntax.DID, ref string) (*tangled.GitTempListLanguages_Output, error) {
 	repoPath, err := x.makeRepoPath(ctx, repo)
 	if err != nil {
-		return nil, fmt.Errorf("resolving repo at-uri: %w", err)
+		return nil, fmt.Errorf("resolving repo did: %w", err)
 	}
 
 	gr, err := git.Open(repoPath, ref)

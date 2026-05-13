@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	"tangled.org/core/knotmirror/db"
 	"tangled.org/core/knotserver/git"
 	"tangled.org/core/types"
 )
@@ -21,8 +21,8 @@ func (x *Xrpc) ListBranches(w http.ResponseWriter, r *http.Request) {
 		cursorQuery = r.URL.Query().Get("cursor")
 	)
 
-	repo, err := syntax.ParseATURI(repoQuery)
-	if err != nil || repo.RecordKey() == "" {
+	repo, err := syntax.ParseDID(repoQuery)
+	if err != nil {
 		writeJson(w, http.StatusBadRequest, atclient.ErrorBody{Name: "BadRequest", Message: fmt.Sprintf("repo parameter invalid: %s", repoQuery)})
 		return
 	}
@@ -57,10 +57,10 @@ func (x *Xrpc) ListBranches(w http.ResponseWriter, r *http.Request) {
 	writeJson(w, http.StatusOK, out)
 }
 
-func (x *Xrpc) listBranches(ctx context.Context, repo syntax.ATURI, limit int, cursor int64) (*types.RepoBranchesResponse, error) {
+func (x *Xrpc) listBranches(ctx context.Context, repo syntax.DID, limit int, cursor int64) (*types.RepoBranchesResponse, error) {
 	repoPath, err := x.makeRepoPath(ctx, repo)
 	if err != nil {
-		return nil, fmt.Errorf("resolving repo at-uri: %w", err)
+		return nil, fmt.Errorf("resolving repo did: %w", err)
 	}
 
 	gr, err := git.PlainOpen(repoPath)
@@ -82,16 +82,10 @@ func (x *Xrpc) listBranches(ctx context.Context, repo syntax.ATURI, limit int, c
 	}, nil
 }
 
-func (x *Xrpc) makeRepoPath(ctx context.Context, repo syntax.ATURI) (string, error) {
-	r, err := db.GetRepoByAtUri(ctx, x.db, repo)
-	if err != nil {
-		return "", fmt.Errorf("looking up repo: %w", err)
+func (x *Xrpc) makeRepoPath(ctx context.Context, repoDid syntax.DID) (string, error) {
+	path := filepath.Join(x.cfg.GitRepoBasePath, repoDid.String())
+	if _, err := os.Stat(path); err != nil {
+		return "", fmt.Errorf("repo %s not mirrored locally: %w", repoDid, err)
 	}
-	if r == nil {
-		return "", fmt.Errorf("repo not found: %s", repo)
-	}
-	if r.RepoDid == "" {
-		return "", fmt.Errorf("repo missing repo_did: %s", repo)
-	}
-	return filepath.Join(x.cfg.GitRepoBasePath, r.RepoDid.String()), nil
+	return path, nil
 }

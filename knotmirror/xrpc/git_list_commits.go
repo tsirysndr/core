@@ -20,8 +20,8 @@ func (x *Xrpc) ListCommits(w http.ResponseWriter, r *http.Request) {
 		cursorQuery = r.URL.Query().Get("cursor")
 	)
 
-	repo, err := syntax.ParseATURI(repoQuery)
-	if err != nil || repo.RecordKey() == "" {
+	repo, err := syntax.ParseDID(repoQuery)
+	if err != nil {
 		writeJson(w, http.StatusBadRequest, atclient.ErrorBody{Name: "BadRequest", Message: fmt.Sprintf("repo parameter invalid: %s", repoQuery)})
 		return
 	}
@@ -56,10 +56,10 @@ func (x *Xrpc) ListCommits(w http.ResponseWriter, r *http.Request) {
 	writeJson(w, http.StatusOK, out)
 }
 
-func (x *Xrpc) listCommits(ctx context.Context, repo syntax.ATURI, ref string, limit int, cursor int64) (*types.RepoLogResponse, error) {
+func (x *Xrpc) listCommits(ctx context.Context, repo syntax.DID, ref string, limit int, cursor int64) (*types.RepoLogResponse, error) {
 	repoPath, err := x.makeRepoPath(ctx, repo)
 	if err != nil {
-		return nil, fmt.Errorf("resolving repo at-uri: %w", err)
+		return nil, fmt.Errorf("resolving repo did: %w", err)
 	}
 
 	gr, err := git.Open(repoPath, ref)

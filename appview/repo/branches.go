@@ -23,7 +23,7 @@ func (rp *Repo) Branches(w http.ResponseWriter, r *http.Request) {
 	}
 	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
 
-	xrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoAt().String())
+	xrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoDid)
 	if err != nil {
 		l.Error("failed to call XRPC repo.branches", "err", err)
 		rp.pages.Error503(w)

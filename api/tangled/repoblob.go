@@ -72,7 +72,7 @@ type RepoBlob_Submodule struct {
 // path: Path to the file within the repository
 // raw: Return raw file content instead of JSON response
 // ref: Git reference (branch, tag, or commit SHA)
-// repo: Repository identifier in format 'did:plc:.../repoName'
+// repo: DID of the repository
 func RepoBlob(ctx context.Context, c util.LexClient, path string, raw bool, ref string, repo string) (*RepoBlob_Output, error) {
 	var out RepoBlob_Output
 

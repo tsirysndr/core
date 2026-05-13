@@ -310,7 +310,7 @@ func (rp *Repo) resolveTag(ctx context.Context, f *models.Repo, tagParam string)
 
 	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
 
-	xrpcBytes, err := tangled.GitTempListTags(ctx, xrpcc, "", 0, f.RepoAt().String())
+	xrpcBytes, err := tangled.GitTempListTags(ctx, xrpcc, "", 0, f.RepoDid)
 	if err != nil {
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 			l.Error("failed to call XRPC repo.tags", "xrpcerr", xrpcerr, "err", err)

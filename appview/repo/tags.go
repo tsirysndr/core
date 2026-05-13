@@ -28,7 +28,7 @@ func (rp *Repo) Tags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
-	xrpcBytes, err := tangled.GitTempListTags(r.Context(), xrpcc, "", 0, f.RepoAt().String())
+	xrpcBytes, err := tangled.GitTempListTags(r.Context(), xrpcc, "", 0, f.RepoDid)
 	if err != nil {
 		l.Error("failed to call XRPC repo.tags", "err", err)
 		rp.pages.Error503(w)
@@ -86,13 +86,13 @@ func (rp *Repo) Tag(w http.ResponseWriter, r *http.Request) {
 
 	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
 
-	xrpcBytes, err := tangled.GitTempGetTag(r.Context(), xrpcc, f.RepoAt().String(), tag)
+	xrpcBytes, err := tangled.GitTempGetTag(r.Context(), xrpcc, f.RepoDid, tag)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		// if we don't match an existing tag, and the tag we're trying
 		// to match is "latest", resolve to the most recent tag
 		l.Info("failed to call XRPC git.getTag", "xrpcerr", xrpcerr, "err", err, "tag", tag)
 		if tag == "latest" {
-			tagsBytes, err := tangled.GitTempListTags(r.Context(), xrpcc, "", 1, f.RepoAt().String())
+			tagsBytes, err := tangled.GitTempListTags(r.Context(), xrpcc, "", 1, f.RepoDid)
 			if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 				l.Error("failed to call XRPC git.ListTags for latest", "xrpcerr", xrpcerr, "err", err)
 				rp.pages.Error503(w)

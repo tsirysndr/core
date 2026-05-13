@@ -44,7 +44,7 @@ type GitTempListLanguages_Output struct {
 // GitTempListLanguages calls the XRPC method "sh.tangled.git.temp.listLanguages".
 //
 // ref: Git reference (branch, tag, or commit SHA)
-// repo: AT-URI of the repository
+// repo: DID of the repository
 func GitTempListLanguages(ctx context.Context, c util.LexClient, ref string, repo string) (*GitTempListLanguages_Output, error) {
 	var out GitTempListLanguages_Output
 

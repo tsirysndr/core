@@ -20,7 +20,7 @@ const (
 // cursor: Pagination cursor (commit SHA)
 // limit: Maximum number of commits to return
 // ref: Git reference (branch, tag, or commit SHA)
-// repo: AT-URI of the repository
+// repo: DID of the repository
 func GitTempListCommits(ctx context.Context, c util.LexClient, cursor string, limit int64, ref string, repo string) ([]byte, error) {
 	buf := new(bytes.Buffer)
 

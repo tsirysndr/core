@@ -30,7 +30,7 @@ type GitTempGetBranch_Output struct {
 // GitTempGetBranch calls the XRPC method "sh.tangled.git.temp.getBranch".
 //
 // name: Branch name to get information for
-// repo: AT-URI of the repository
+// repo: DID of the repository
 func GitTempGetBranch(ctx context.Context, c util.LexClient, name string, repo string) (*GitTempGetBranch_Output, error) {
 	var out GitTempGetBranch_Output
 

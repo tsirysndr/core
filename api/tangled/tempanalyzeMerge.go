@@ -34,7 +34,7 @@ type GitTempAnalyzeMerge_Output struct {
 //
 // branch: Target branch to merge into
 // patch: Patch or pull request to check for merge conflicts
-// repo: AT-URI of the repository
+// repo: DID of the repository
 func GitTempAnalyzeMerge(ctx context.Context, c util.LexClient, branch string, patch string, repo string) (*GitTempAnalyzeMerge_Output, error) {
 	var out GitTempAnalyzeMerge_Output
 

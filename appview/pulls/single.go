@@ -350,7 +350,7 @@ func (s *Pulls) branchDeleteStatus(r *http.Request, repo *models.Repo, pull *mod
 	}
 
 	xrpcc := &indigoxrpc.Client{Host: s.config.KnotMirror.Url}
-	resp, err := tangled.GitTempGetBranch(r.Context(), xrpcc, branch, repo.RepoAt().String())
+	resp, err := tangled.GitTempGetBranch(r.Context(), xrpcc, branch, repo.RepoDid)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		s.logger.Error("failed to get branch", "xrpcerr", xrpcerr, "err", err)
 		return nil

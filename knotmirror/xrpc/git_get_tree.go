@@ -26,8 +26,8 @@ func (x *Xrpc) GetTree(w http.ResponseWriter, r *http.Request) {
 	l := x.logger.With("method", "git.getTree", "repo", repoQuery, "ref", ref)
 	l.Debug("request")
 
-	repo, err := syntax.ParseATURI(repoQuery)
-	if err != nil || repo.RecordKey() == "" {
+	repo, err := syntax.ParseDID(repoQuery)
+	if err != nil {
 		writeJson(w, http.StatusBadRequest, atclient.ErrorBody{Name: "BadRequest", Message: fmt.Sprintf("repo parameter invalid: %s", repoQuery)})
 		return
 	}
@@ -47,10 +47,10 @@ func (x *Xrpc) GetTree(w http.ResponseWriter, r *http.Request) {
 	writeJson(w, http.StatusOK, out)
 }
 
-func (x *Xrpc) getTree(ctx context.Context, repo syntax.ATURI, ref, path string) (*tangled.GitTempGetTree_Output, error) {
+func (x *Xrpc) getTree(ctx context.Context, repo syntax.DID, ref, path string) (*tangled.GitTempGetTree_Output, error) {
 	repoPath, err := x.makeRepoPath(ctx, repo)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve repo at-uri: %w", err)
+		return nil, fmt.Errorf("failed to resolve repo did: %w", err)
 	}
 
 	gr, err := git.Open(repoPath, ref)

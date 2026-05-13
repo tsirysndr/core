@@ -20,7 +20,7 @@ const (
 // format: Archive format
 // prefix: Prefix for files in the archive
 // ref: Git reference (branch, tag, or commit SHA)
-// repo: AT-URI of the repository
+// repo: DID of the repository
 func GitTempGetArchive(ctx context.Context, c util.LexClient, format string, prefix string, ref string, repo string) ([]byte, error) {
 	buf := new(bytes.Buffer)
 

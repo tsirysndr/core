@@ -21,8 +21,8 @@ func (x *Xrpc) ListTags(w http.ResponseWriter, r *http.Request) {
 		cursorQuery = r.URL.Query().Get("cursor")
 	)
 
-	repo, err := syntax.ParseATURI(repoQuery)
-	if err != nil || repo.RecordKey() == "" {
+	repo, err := syntax.ParseDID(repoQuery)
+	if err != nil {
 		writeJson(w, http.StatusBadRequest, atclient.ErrorBody{Name: "BadRequest", Message: fmt.Sprintf("repo parameter invalid: %s", repoQuery)})
 		return
 	}
@@ -57,10 +57,10 @@ func (x *Xrpc) ListTags(w http.ResponseWriter, r *http.Request) {
 	writeJson(w, http.StatusOK, out)
 }
 
-func (x *Xrpc) listTags(ctx context.Context, repo syntax.ATURI, limit int, cursor int64) (*types.RepoTagsResponse, error) {
+func (x *Xrpc) listTags(ctx context.Context, repo syntax.DID, limit int, cursor int64) (*types.RepoTagsResponse, error) {
 	repoPath, err := x.makeRepoPath(ctx, repo)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve repo at-uri: %w", err)
+		return nil, fmt.Errorf("failed to resolve repo did: %w", err)
 	}
 
 	gr, err := git.PlainOpen(repoPath)
