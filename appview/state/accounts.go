@@ -34,7 +34,11 @@ func (s *State) SwitchAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	l.Info("switched account", "did", did)
-	s.pages.HxRefresh(w)
+	if returnUrl := r.FormValue("return_url"); returnUrl != "" {
+		s.pages.HxRedirect(w, returnUrl)
+	} else {
+		s.pages.HxRefresh(w)
+	}
 }
 
 func (s *State) RemoveAccount(w http.ResponseWriter, r *http.Request) {

@@ -22,10 +22,13 @@
               <button
                   type="button"
                   hx-post="/account/switch"
-                  hx-vals='{"did": "{{ .Did }}"}'
+                  hx-include="this"
                   hx-swap="none"
                   class="flex items-center gap-2 flex-1 text-left min-w-0"
               >
+                  {{ $returnUrl := (or $.ReturnUrl "/") }}
+                  <input type="hidden" name="did" value="{{ .Did }}">
+                  <input type="hidden" name="return_url" value="{{ $returnUrl }}">
                   {{ template "user/fragments/pic" (list .Did "size-8") }}
                   <div class="flex flex-col min-w-0">
                       <span class="text-sm font-medium dark:text-white truncate">{{ .Did | resolve | truncateAt30 }}</span>
