@@ -91,6 +91,38 @@ func (c *CliGitMirrorManager) fetch(ctx context.Context, path, url string) error
 		}
 		return fmt.Errorf("running 'git fetch': %w\n%s", err, string(out))
 	}
+
+	// TODO(boltless): make this dedicated event instead
+	lsRemoteCmd := exec.CommandContext(ctx, "git", "ls-remote", "--symref", url, "HEAD")
+	out, err := lsRemoteCmd.CombinedOutput()
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return fmt.Errorf("running 'git ls-remote --symref': %w\n%s", err, string(out))
+	}
+
+	var headRef string
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if !strings.HasPrefix(line, "ref: ") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) >= 2 {
+			headRef = fields[1]
+			break
+		}
+	}
+	if headRef != "" {
+		symrefCmd := exec.CommandContext(ctx, "git", "-C", path, "symbolic-ref", "HEAD", headRef)
+		if out, err := symrefCmd.CombinedOutput(); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return fmt.Errorf("running 'git symbolic-ref HEAD %s': %w\n%s", headRef, err, string(out))
+		}
+	}
+
 	return nil
 }
 
