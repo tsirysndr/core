@@ -106,9 +106,11 @@ func (s *AdminServer) handleRepos() http.HandlerFunc {
 			did   = r.URL.Query().Get("did")
 			knot  = r.URL.Query().Get("knot")
 			state = r.URL.Query().Get("state")
+			name     = r.URL.Query().Get("name")
 		)
 
 		repos, err := db.ListRepos(r.Context(), s.db, page, did, knot, state)
+		repos, err := db.ListRepos(r.Context(), s.db, page, did, knot, state, name)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -125,6 +127,7 @@ func (s *AdminServer) handleRepos() http.HandlerFunc {
 			"FilterByDid":   did,
 			"FilterByKnot":  knot,
 			"FilterByState": models.RepoState(state),
+			"FilterByName":  name,
 		})
 		if err != nil {
 			slog.Error("failed to render", "err", err)

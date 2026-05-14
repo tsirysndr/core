@@ -141,7 +141,7 @@ func GetRepoByAtUri(ctx context.Context, e *sql.DB, aturi syntax.ATURI) (*models
 	return repo, nil
 }
 
-func ListRepos(ctx context.Context, e *sql.DB, page pagination.Page, did, knot, state string) ([]models.Repo, error) {
+func ListRepos(ctx context.Context, e *sql.DB, page pagination.Page, did, knot, state, name string) ([]models.Repo, error) {
 	var conditions []string
 	var args []any
 
@@ -163,6 +163,10 @@ func ListRepos(ctx context.Context, e *sql.DB, page pagination.Page, did, knot, 
 	if state != "" {
 		conditions = append(conditions, fmt.Sprintf("state = $%d", len(args)+1))
 		args = append(args, state)
+	}
+	if name != "" {
+		conditions = append(conditions, fmt.Sprintf("name ilike $%d", len(args)+1))
+		args = append(args, "%"+name+"%")
 	}
 	if len(conditions) > 0 {
 		whereClause = "WHERE " + conditions[0]

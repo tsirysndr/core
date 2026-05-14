@@ -8,9 +8,10 @@
     hx-target="#table"
     hx-select="#table"
     hx-swap="outerHTML"
-    hx-trigger="every 10s"
+    hx-trigger="input delay:300ms from:input, change from:select, every 10s"
   >
     <input type="text" name="did" placeholder="DID" value="{{.FilterByDid}}">
+    <input type="text" name="name" placeholder="Name" value="{{.FilterByName}}">
     <input type="text" name="knot" placeholder="Knot Domain" value="{{.FilterByKnot}}">
     <select name="state">
       <option value="">-- State --</option>
@@ -78,9 +79,9 @@
 
 <div class="pagination">
   {{if gt .Page 1}}
-    <a href="?page={{sub .Page 1}}&did={{.FilterByDid}}&knot={{.FilterByKnot}}&state={{.FilterByState}}">« Previous</a>
+    <a href="?page={{sub .Page 1}}&did={{.FilterByDid}}&name={{.FilterByName}}&knot={{.FilterByKnot}}&state={{.FilterByState}}">« Previous</a>
   {{end}}
   <span>Page {{.Page}}</span>
-  <a href="?page={{add .Page 1}}&did={{.FilterByDid}}&knot={{.FilterByKnot}}&state={{.FilterByState}}">Next »</a>
+  <a href="?page={{add .Page 1}}&did={{.FilterByDid}}&name={{.FilterByName}}&knot={{.FilterByKnot}}&state={{.FilterByState}}">Next »</a>
 </div>
 {{end}}
