@@ -49,7 +49,7 @@
       {{range .Repos}}
       <tr>
         <td><code>{{.Did}}</code></td>
-        <td>{{.Name}}</td>
+        <td><a href="https://pdsls.dev/at://{{.Did}}/sh.tangled.repo/{{.Name}}" target="_blank" rel="noopener noreferrer">{{.Name}}</a></td>
         <td>{{.KnotDomain}}</td>
         <td><strong>{{.State}}</strong></td>
         <td>{{.RetryCount}}</td>
