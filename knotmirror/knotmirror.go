@@ -33,7 +33,11 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 	rdb := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
 
-	resolver := idresolver.DefaultResolver(cfg.PlcUrl)
+	resolver, err := idresolver.RedisResolver("redis://"+cfg.RedisAddr, cfg.PlcUrl)
+	if err != nil {
+		logger.Error("failed to create redis resolver for admin, falling back to default", "err", err)
+		resolver = idresolver.DefaultResolver(cfg.PlcUrl)
+	}
 
 	// NOTE: using plain git-cli for clone/fetch as go-git is too memory-intensive.
 	gitm := NewCliGitMirrorManager(cfg.GitRepoBasePath, cfg.KnotUseSSL)
@@ -56,7 +60,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	crawler := NewCrawler(logger, db)
 	resyncer := NewResyncer(logger, db, gitm, cfg)
 	xrpc := xrpc.New(logger, cfg, db, rdb, resolver, knotstream)
-	adminpage := NewAdminServer(logger, db, resyncer, xrpc)
+	adminpage := NewAdminServer(logger, db, resyncer, xrpc, resolver)
 
 	// maintain repository list with tap
 	// NOTE: this can be removed once we introduce did-for-repo because then we can just listen to KnotStream for #identity events.

@@ -15,6 +15,7 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/appview/pagination"
+	"tangled.org/core/idresolver"
 	"tangled.org/core/knotmirror/db"
 	"tangled.org/core/knotmirror/models"
 	"tangled.org/core/knotmirror/xrpc"
@@ -30,14 +31,16 @@ type AdminServer struct {
 	resyncer *Resyncer
 	xrpc     *xrpc.Xrpc
 	logger   *slog.Logger
+	resolver *idresolver.Resolver
 }
 
-func NewAdminServer(l *slog.Logger, database *sql.DB, resyncer *Resyncer, x *xrpc.Xrpc) *AdminServer {
+func NewAdminServer(l *slog.Logger, database *sql.DB, resyncer *Resyncer, x *xrpc.Xrpc, resolver *idresolver.Resolver) *AdminServer {
 	return &AdminServer{
 		db:       database,
 		resyncer: resyncer,
 		xrpc:     x,
 		logger:   l,
+		resolver: resolver,
 	}
 }
 
@@ -103,13 +106,30 @@ func (s *AdminServer) handleRepos() http.HandlerFunc {
 		}
 
 		var (
-			did   = r.URL.Query().Get("did")
-			knot  = r.URL.Query().Get("knot")
-			state = r.URL.Query().Get("state")
+			didInput = r.URL.Query().Get("did")
+			knot     = r.URL.Query().Get("knot")
+			state    = r.URL.Query().Get("state")
 			name     = r.URL.Query().Get("name")
 		)
 
-		repos, err := db.ListRepos(r.Context(), s.db, page, did, knot, state)
+		did := didInput
+		if didInput != "" {
+			if _, err := syntax.ParseDID(didInput); err != nil {
+				// treat as a handle and resolve to DID
+				handle, herr := syntax.ParseHandle(didInput)
+				if herr != nil {
+					http.Error(w, fmt.Sprintf("invalid DID or handle: %s", didInput), http.StatusBadRequest)
+					return
+				}
+				resolved, rerr := s.resolver.ResolveHandle(r.Context(), handle.Normalize())
+				if rerr != nil {
+					http.Error(w, fmt.Sprintf("could not resolve handle %q: %s", didInput, rerr), http.StatusBadRequest)
+					return
+				}
+				did = resolved.String()
+			}
+		}
+
 		repos, err := db.ListRepos(r.Context(), s.db, page, did, knot, state, name)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
