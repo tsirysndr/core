@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/pages"
+	"tangled.org/core/appview/pages/markup"
 	"tangled.org/core/appview/reporesolver"
 	xrpcclient "tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/types"
@@ -41,6 +43,7 @@ func (rp *Repo) Tree(w http.ResponseWriter, r *http.Request) {
 		rp.pages.Error503(w)
 		return
 	}
+	var readmeFile *tangled.GitTempGetTree_TreeEntry
 	// Convert XRPC response to internal types.RepoTreeResponse
 	files := make([]types.NiceTree, len(xrpcResp.Files))
 	for i, xrpcFile := range xrpcResp.Files {
@@ -59,6 +62,9 @@ func (rp *Repo) Tree(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		files[i] = file
+		if markup.IsReadmeFile(xrpcFile.Name) {
+			readmeFile = xrpcFile
+		}
 	}
 	result := types.RepoTreeResponse{
 		Ref:   xrpcResp.Ref,
@@ -70,9 +76,15 @@ func (rp *Repo) Tree(w http.ResponseWriter, r *http.Request) {
 	if xrpcResp.Dotdot != nil {
 		result.DotDot = *xrpcResp.Dotdot
 	}
-	if xrpcResp.Readme != nil {
-		result.ReadmeFileName = xrpcResp.Readme.Filename
-		result.Readme = xrpcResp.Readme.Contents
+	if readmeFile != nil {
+		bytes, err := tangled.GitTempGetBlob(r.Context(), xrpcc, path.Join(treePath, readmeFile.Name), ref, f.RepoAt().String())
+		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+			l.Error("failed to call XRPC git.getBlob", "xrpcerr", xrpcerr, "err", err)
+			rp.pages.Error503(w)
+			return
+		}
+		result.ReadmeFileName = readmeFile.Name
+		result.Readme = string(bytes)
 	}
 	ownerSlashRepo := reporesolver.GetBaseRepoPath(r, f)
 	// redirects tree paths trying to access a blob; in this case the result.Files is unpopulated,

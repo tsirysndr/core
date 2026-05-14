@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -149,10 +150,11 @@ func (x *Xrpc) proxyToKnot(w http.ResponseWriter, r *http.Request, repoDid synta
 	}
 
 	params := make(url.Values)
-	for k, v := range r.URL.Query() {
-		params[k] = v
-	}
+	maps.Copy(params, r.URL.Query())
 	params.Set("repo", knot.repoIdentifier)
+	if mirrorNSID == tangled.GitTempGetBlobNSID {
+		params.Set("raw", "true")
+	}
 
 	target := fmt.Sprintf("%s/xrpc/%s?%s", knot.baseURL, knotNSID, params.Encode())
 

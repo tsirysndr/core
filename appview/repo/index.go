@@ -23,6 +23,7 @@ import (
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pages"
+	"tangled.org/core/appview/pages/markup"
 	"tangled.org/core/orm"
 	"tangled.org/core/types"
 
@@ -317,6 +318,20 @@ func (rp *Repo) buildIndexResponse(ctx context.Context, repo *models.Repo, ref s
 			return
 		}
 		treeResp = resp
+
+		for _, file := range resp.Files {
+			if markup.IsReadmeFile(file.Name) {
+				readmeFileName = file.Name
+				break
+			}
+		}
+
+		bytes, err := tangled.GitTempGetBlob(ctx, xrpcc, readmeFileName, ref, repo.RepoDid)
+		if err != nil {
+			errs = errors.Join(errs, fmt.Errorf("failed to call git.getBlob: %w", err))
+			return
+		}
+		readmeContent = string(bytes)
 	})
 
 	// commits
@@ -357,11 +372,6 @@ func (rp *Repo) buildIndexResponse(ctx context.Context, repo *models.Repo, ref s
 			}
 			files = append(files, niceFile)
 		}
-	}
-
-	if treeResp != nil && treeResp.Readme != nil {
-		readmeFileName = treeResp.Readme.Filename
-		readmeContent = treeResp.Readme.Contents
 	}
 
 	result := &types.RepoIndexResponse{
