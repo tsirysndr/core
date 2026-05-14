@@ -49,8 +49,8 @@ func (g *GitRepo) makeNiceTree(ctx context.Context, subtree *object.Tree, parent
 	nts := []types.NiceTree{}
 
 	entries := make([]string, len(subtree.Entries))
-	for _, e := range subtree.Entries {
-		entries = append(entries, e.Name)
+	for i, e := range subtree.Entries {
+		entries[i] = e.Name
 	}
 
 	lastCommitDir := lastCommitDir{
