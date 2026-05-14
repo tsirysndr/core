@@ -1664,18 +1664,13 @@ and to register it in `nix.conf` as a builder for Linux
 with the same architecture as your Mac (`linux-aarch64` if
 you are using Apple Silicon).
 
-> IMPORTANT: You must build `darwin.linux-builder` somewhere other than inside
-> the Tangled repo so that it doesn't conflict with the other VM. For example,
-> you can do
->
-> ```shell
-> cd $(mktemp -d buildervm.XXXXX) && nix run nixpkgs#darwin.linux-builder
-> ```
->
-> to store the builder VM in a temporary dir.
->
-> You should read and follow [all the other instructions][darwin builder vm] to
-> avoid subtle problems.
+If you're on nix-darwin, you can simply add
+
+```
+nix.linux-builder.enable = true;
+```
+
+to your host's `configuration.nix`.
 
 Alternatively, you can use any other method to set up a
 Linux machine with Nix installed that you can `sudo ssh`
