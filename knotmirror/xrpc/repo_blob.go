@@ -30,7 +30,7 @@ func (x *Xrpc) RepoBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	l := x.logger.With("repo", repo, "ref", ref, "path", path)
+	l := x.logger.With("method", "repo.blob", "repo", repo, "ref", ref, "path", path)
 
 	if path == "" {
 		writeJson(w, http.StatusBadRequest, atclient.ErrorBody{Name: "BadRequest", Message: "missing path parameter"})
@@ -64,7 +64,7 @@ func (x *Xrpc) RepoBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, err := x.getFile(r.Context(), repo, ref, path)
+	size, reader, err := x.getFile(r.Context(), repo, ref, path)
 	if err != nil {
 		l.Warn("local mirror failed, trying proxy", "err", err)
 		if x.proxyToKnot(w, r, repo) {
@@ -73,24 +73,19 @@ func (x *Xrpc) RepoBlob(w http.ResponseWriter, r *http.Request) {
 		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to get blob"})
 		return
 	}
+	defer reader.Close()
 
-	if file.Size > 1000*1000 { // 1MB
+	if size > 1000*1000 { // 1MB
 		fileTooLarge := true
 		writeJson(w, http.StatusOK, tangled.RepoBlob_Output{
 			Ref:          ref,
 			Path:         path,
-			Size:         &file.Size,
+			Size:         &size,
 			FileTooLarge: &fileTooLarge,
 		})
 		return
 	}
 
-	reader, err := file.Reader()
-	if err != nil {
-		l.Error("failed to read blob", "err", err)
-		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to read the blob"})
-		return
-	}
 	contents, err := io.ReadAll(reader)
 	if err != nil {
 		l.Error("failed to read blob content", "err", err)
@@ -126,7 +121,7 @@ func (x *Xrpc) RepoBlob(w http.ResponseWriter, r *http.Request) {
 	response := tangled.RepoBlob_Output{
 		Ref:      ref,
 		Path:     path,
-		Size:     &file.Size,
+		Size:     &size,
 		IsBinary: &isBinary,
 		Content:  content,
 	}

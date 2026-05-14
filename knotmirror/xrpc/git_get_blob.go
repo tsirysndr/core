@@ -7,14 +7,13 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
-	"runtime/pprof"
 	"slices"
 	"strings"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"tangled.org/core/knotserver/git"
+	"tangled.org/core/knotmirror/xrpc/gitea"
 )
 
 func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
@@ -30,7 +29,7 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	l := x.logger.With("repo", repo, "ref", ref, "path", path)
+	l := x.logger.With("method", "git.getBlob", "repo", repo, "ref", ref, "path", path)
 	l.Debug("request")
 
 	if path == "" {
@@ -38,11 +37,8 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var file *object.File
-	pprof.Do(r.Context(), pprof.Labels("repo", repo.String()), func(ctx context.Context) {
-		file, err = x.getFile(ctx, repo, ref, path)
-	})
-	if err != nil || file.Size > 1000*1000 {
+	size, reader, err := x.getFile(r.Context(), repo, ref, path)
+	if err != nil {
 		l.Warn("local mirror failed, trying proxy", "err", err)
 		if x.proxyToKnot(w, r, repo) {
 			return
@@ -50,17 +46,10 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to get blob"})
 		return
 	}
-
-	reader, err := file.Reader()
-	if err != nil {
-		l.Error("failed to read blob", "err", err)
-		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to read the blob"})
-		return
-	}
 	defer reader.Close()
 
 	// default to octet-stream for large blobs
-	if file.Size > 1000*1000 { // 1MB
+	if size > 1000*1000 { // 1MB
 		w.Header().Set("Content-Type", "application/octet-stream")
 		if _, err := io.Copy(w, reader); err != nil {
 			l.Error("failed to serve the blob", "err", err)
@@ -111,18 +100,52 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 	w.Write(contents)
 }
 
-func (x *Xrpc) getFile(ctx context.Context, repo syntax.DID, ref, path string) (*object.File, error) {
+func (x *Xrpc) getFile(ctx context.Context, repo syntax.DID, ref, path string) (int64, io.ReadCloser, error) {
 	repoPath, err := x.makeRepoPath(ctx, repo)
 	if err != nil {
-		return nil, fmt.Errorf("resolving repo did: %w", err)
+		return 0, nil, fmt.Errorf("resolving repo did: %w", err)
 	}
 
-	gr, err := git.Open(repoPath, ref)
+	rev := ref
+	if rev == "" {
+		rev = "HEAD"
+	}
+
+	head, err := gitea.GetCommit(ctx, repoPath, rev)
 	if err != nil {
-		return nil, fmt.Errorf("opening git repo: %w", err)
+		return 0, nil, fmt.Errorf("get head commit: %w", err)
 	}
 
-	return gr.File(path)
+	treePath := filepath.Dir(path)
+	name := filepath.Base(path)
+
+	// find subTree
+	subRev := head.Hash.String() + "^{tree}"
+	if treePath != "." {
+		subRev = head.Hash.String() + ":" + treePath
+	}
+	subTree, err := gitea.GetTree(ctx, repoPath, subRev)
+	if err != nil {
+		return 0, nil, fmt.Errorf("get subtree %s: %w", subRev, err)
+	}
+
+	// find entry
+	entry, err := func(subTree *object.Tree) (*object.TreeEntry, error) {
+		for _, entry := range subTree.Entries {
+			if entry.Name == name {
+				return &entry, nil
+			}
+		}
+		return nil, fmt.Errorf("object doesn't exist")
+	}(subTree)
+	if err != nil {
+		return 0, nil, fmt.Errorf("get file: %w", err)
+	}
+
+	x.logger.Debug("ReadBlob", "name", entry.Name, "mode", entry.Mode.String(), "hash", entry.Hash.String())
+
+	// find blob
+	return gitea.ReadBlob(ctx, repoPath, entry.Hash)
 }
 
 var textualMimeTypes = []string{

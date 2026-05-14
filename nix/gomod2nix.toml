@@ -244,6 +244,12 @@ schema = 3
   [mod."github.com/distribution/reference"]
     version = "v0.6.0"
     hash = "sha256-gr4tL+qz4jKyAtl8LINcxMSanztdt+pybj1T+2ulQv4="
+  [mod."github.com/djherbis/buffer"]
+    version = "v1.2.0"
+    hash = "sha256-uHJQWcXwg4j2nOBK6epCm0gkv7KwriHZ1D7dgYqipp4="
+  [mod."github.com/djherbis/nio/v3"]
+    version = "v3.0.1"
+    hash = "sha256-KZmVhlUht9phMpRtjiEMLjlyBwHKj5tnNQ2SC6pI7Rs="
   [mod."github.com/dlclark/regexp2"]
     version = "v1.11.5"
     hash = "sha256-jN5+2ED+YbIoPIuyJ4Ou5pqJb2w1uNKzp5yTjKY6rEQ="

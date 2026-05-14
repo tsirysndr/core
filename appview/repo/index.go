@@ -116,7 +116,9 @@ func (rp *Repo) Index(w http.ResponseWriter, r *http.Request) {
 	var languageInfo []types.RepoLanguageDetails
 	if !result.IsEmpty {
 		// TODO: a bit dirty
-		languageInfo, err = rp.getLanguageInfo(r.Context(), l, f, result.Ref, ref == "")
+		langCtx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
+		defer cancel()
+		languageInfo, err = rp.getLanguageInfo(langCtx, l, f, result.Ref, ref == "")
 		if err != nil {
 			l.Warn("failed to compute language percentages", "err", err)
 			// non-fatal

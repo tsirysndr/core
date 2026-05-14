@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"runtime/pprof"
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
@@ -49,9 +48,7 @@ func (x *Xrpc) ListLanguages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var out *tangled.GitTempListLanguages_Output
-	pprof.Do(r.Context(), pprof.Labels("repo", repo.String()), func(ctx context.Context) {
-		out, err = x.listLanguages(ctx, repo, ref)
-	})
+	out, err = x.listLanguages(r.Context(), repo, ref)
 	if err != nil {
 		l.Warn("local mirror failed, trying proxy", "err", err)
 		if x.proxyToKnot(w, r, repo) {
@@ -60,6 +57,15 @@ func (x *Xrpc) ListLanguages(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+
+	go func() {
+		ctx := context.Background()
+		encoded, err := json.Marshal(out.Languages)
+		if err != nil {
+			return
+		}
+		x.rdb.Set(ctx, fmt.Sprintf(RepoLanguagesByDid, repo, ref), encoded, RepoLanguagesTTL)
+	}()
 
 	writeJson(w, http.StatusOK, out)
 }
@@ -82,17 +88,6 @@ func (x *Xrpc) listLanguages(ctx context.Context, repo syntax.DID, ref string) (
 	if err != nil {
 		return nil, fmt.Errorf("analyzing languages: %w", err)
 	}
-
-	langs := sizesToLanguages(sizes)
-
-	go func() {
-		ctx := context.Background()
-		encoded, err := json.Marshal(langs)
-		if err != nil {
-			return
-		}
-		x.rdb.Set(ctx, fmt.Sprintf(RepoLanguagesByDid, repo, ref), encoded, RepoLanguagesTTL)
-	}()
 
 	return &tangled.GitTempListLanguages_Output{
 		Ref:       ref,

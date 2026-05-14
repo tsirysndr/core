@@ -3,18 +3,23 @@ package xrpc
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"path/filepath"
-	"runtime/pprof"
 	"time"
-	"unicode/utf8"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
+
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"tangled.org/core/api/tangled"
-	"tangled.org/core/appview/pages/markup"
-	"tangled.org/core/knotserver/git"
-	"tangled.org/core/types"
+	"tangled.org/core/knotmirror/xrpc/gitea"
+)
+
+const (
+	LastCommitCache    = "last_commit:%s:%s"
+	LastCommitCacheTTL = 30 * 24 * time.Hour
 )
 
 func (x *Xrpc) GetTree(w http.ResponseWriter, r *http.Request) {
@@ -33,9 +38,7 @@ func (x *Xrpc) GetTree(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var out *tangled.GitTempGetTree_Output
-	pprof.Do(r.Context(), pprof.Labels("repo", repo.String()), func(ctx context.Context) {
-		out, err = x.getTree(ctx, repo, ref, path)
-	})
+	out, err = x.getTree(r.Context(), repo, ref, path)
 	if err != nil {
 		l.Warn("local mirror failed, trying proxy", "repo", repo, "err", err)
 		if x.proxyToKnot(w, r, repo) {
@@ -47,110 +50,171 @@ func (x *Xrpc) GetTree(w http.ResponseWriter, r *http.Request) {
 	writeJson(w, http.StatusOK, out)
 }
 
-func (x *Xrpc) getTree(ctx context.Context, repo syntax.DID, ref, path string) (*tangled.GitTempGetTree_Output, error) {
+func (x *Xrpc) getTree(ctx context.Context, repo syntax.DID, ref, treePath string) (*tangled.GitTempGetTree_Output, error) {
 	repoPath, err := x.makeRepoPath(ctx, repo)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve repo did: %w", err)
 	}
-
-	gr, err := git.Open(repoPath, ref)
-	if err != nil {
-		return nil, fmt.Errorf("opening git repo: %w", err)
+	rev := ref
+	if rev == "" {
+		rev = "HEAD"
 	}
 
-	files, err := gr.FileTree(ctx, path)
+	head, err := gitea.GetCommit(ctx, repoPath, rev)
 	if err != nil {
-		return nil, fmt.Errorf("reading file tree: %w", err)
+		return nil, fmt.Errorf("get head commit: %w", err)
 	}
 
-	// if any of these files are a readme candidate, pass along its blob contents too
-	var readmeFileName string
-	var readmeContents string
-	for _, file := range files {
-		if markup.IsReadmeFile(file.Name) {
-			contents, err := gr.RawContent(filepath.Join(path, file.Name))
+	subRev := head.Hash.String() + "^{tree}"
+	if treePath != "" {
+		subRev = head.Hash.String() + ":" + treePath
+	}
+	subTree, err := gitea.GetTree(ctx, repoPath, subRev)
+	if err != nil {
+		return nil, fmt.Errorf("get subtree %s: %w", subRev, err)
+	}
+
+	entryPaths := make([]string, len(subTree.Entries)+1)
+	entryPaths[0] = ""
+	for i, entry := range subTree.Entries {
+		entryPaths[i+1] = entry.Name
+	}
+
+	commits, lastCommit, err := func(ctx context.Context, commit *object.Commit, treePath string, paths []string) (map[string]*object.Commit, *object.Commit, error) {
+		headRef := commit.Hash.String()
+
+		revs := make(map[string]string, len(paths))
+		var unHitPaths []string
+
+		keys := make([]string, len(paths))
+		for i, path := range paths {
+			keys[i] = fmt.Sprintf(LastCommitCache, headRef, filepath.Join(treePath, path))
+		}
+		if cached, err := x.rdb.MGet(ctx, keys...).Result(); err == nil {
+			for i, v := range cached {
+				if s, ok := v.(string); ok && s != "" {
+					revs[paths[i]] = s
+				} else {
+					unHitPaths = append(unHitPaths, paths[i])
+				}
+			}
+		} else {
+			unHitPaths = paths
+		}
+
+		if len(unHitPaths) > 0 {
+			commits, err := gitea.WalkGitLog(ctx, repoPath, headRef, treePath, unHitPaths...)
 			if err != nil {
-				x.logger.Error("failed to read contents of file", "path", path, "file", file.Name)
+				return nil, nil, err
 			}
-
-			if utf8.Valid(contents) {
-				readmeFileName = file.Name
-				readmeContents = string(contents)
-				break
+			pipe := x.rdb.Pipeline()
+			for path, cid := range commits {
+				if cid == "" {
+					continue
+				}
+				revs[path] = cid
+				pipe.Set(ctx, fmt.Sprintf(LastCommitCache, headRef, filepath.Join(treePath, path)), cid, LastCommitCacheTTL)
 			}
-		}
-	}
-
-	// convert NiceTree -> tangled.RepoTempGetTree_TreeEntry
-	treeEntries := make([]*tangled.GitTempGetTree_TreeEntry, len(files))
-	for i, file := range files {
-		entry := &tangled.GitTempGetTree_TreeEntry{
-			Name: file.Name,
-			Mode: file.Mode,
-			Size: file.Size,
-		}
-		if file.LastCommit != nil {
-			entry.Last_commit = &tangled.GitTempGetTree_LastCommit{
-				Hash:    file.LastCommit.Hash.String(),
-				Message: file.LastCommit.Message,
-				When:    file.LastCommit.When.Format(time.RFC3339),
+			if _, err := pipe.Exec(ctx); err != nil {
+				x.logger.Warn("git last-commit cache write failed", "err", err)
 			}
 		}
-		treeEntries[i] = entry
-	}
 
-	var parentPtr *string
-	if path != "" {
-		parentPtr = &path
-	}
+		// start cat-file batch
+		batchWriter, batchReader, cancel := gitea.CatFileBatch(ctx, repoPath)
+		defer cancel()
 
-	var dotdotPtr *string
-	if path != "" {
-		dotdot := filepath.Dir(path)
-		if dotdot != "." {
-			dotdotPtr = &dotdot
-		}
-	}
-
-	// find the most recent commit across all entries for the directory-level last commit
-	var lastCommitInfo *types.LastCommitInfo
-	for _, file := range files {
-		if file.LastCommit == nil {
-			continue
-		}
-		if lastCommitInfo == nil {
-			lastCommitInfo = file.LastCommit
-			continue
-		}
-		if file.LastCommit.When.After(lastCommitInfo.When) {
-			lastCommitInfo = file.LastCommit
-		}
-	}
-
-	var lastCommit *tangled.GitTempGetTree_LastCommit
-	if lastCommitInfo != nil {
-		lastCommit = &tangled.GitTempGetTree_LastCommit{
-			Hash:    lastCommitInfo.Hash.String(),
-			Message: lastCommitInfo.Message,
-			When:    lastCommitInfo.When.Format(time.RFC3339),
-		}
-		if commit, err := gr.Commit(lastCommitInfo.Hash); err == nil {
-			lastCommit.Author = &tangled.GitTempGetTree_Signature{
-				Name:  commit.Author.Name,
-				Email: commit.Author.Email,
+		// path -> commit map
+		commitsMap := map[string]*object.Commit{}
+		for path, commitId := range revs {
+			if commitId == headRef {
+				commitsMap[path] = commit
+				continue
 			}
+
+			if commitId == "" { // invalid commit?
+				continue
+			}
+
+			_, err := batchWriter.Write([]byte(commitId + "\n"))
+			if err != nil {
+				return nil, nil, err
+			}
+			_, typ, size, err := gitea.ReadBatchLine(batchReader)
+			if err != nil {
+				return nil, nil, err
+			}
+			if typ != "commit" {
+				if err := gitea.DiscardFull(batchReader, size+1); err != nil {
+					return nil, nil, err
+				}
+				return nil, nil, fmt.Errorf("unexpected type: %s for commit id: %s", typ, commitId)
+			}
+			c, err := gitea.ReadCommit(plumbing.NewHash(commitId), io.LimitReader(batchReader, size))
+			if _, err := batchReader.Discard(1); err != nil {
+				return nil, nil, err
+			}
+			commitsMap[path] = c
+		}
+
+		var treeCommit *object.Commit
+		if treePath == "" {
+			treeCommit = commit
+		} else if c, ok := commitsMap[""]; ok {
+			treeCommit = c
+		}
+
+		return commitsMap, treeCommit, nil
+	}(ctx, head, treePath, entryPaths)
+	if err != nil {
+		return nil, err
+	}
+
+	outEntries := make([]*tangled.GitTempGetTree_TreeEntry, len(subTree.Entries))
+	for i, entry := range subTree.Entries {
+		var entryLastCommit *tangled.GitTempGetTree_LastCommit
+		if commit, ok := commits[entry.Name]; ok {
+			entryLastCommit = &tangled.GitTempGetTree_LastCommit{
+				Hash:    commit.Hash.String(),
+				Message: commit.Message,
+				When:    commit.Author.When.Format(time.RFC3339),
+			}
+		}
+		outEntries[i] = &tangled.GitTempGetTree_TreeEntry{
+			Name:        entry.Name,
+			Mode:        entry.Mode.String(),
+			Last_commit: entryLastCommit,
+		}
+	}
+
+	var parent *string
+	var dotdot *string
+	if treePath != "" {
+		parent = &treePath
+		if dir := filepath.Dir(treePath); dir != "" {
+			dotdot = &dir
+		}
+	}
+
+	var outLastCommit *tangled.GitTempGetTree_LastCommit
+	if lastCommit != nil {
+		outLastCommit = &tangled.GitTempGetTree_LastCommit{
+			Hash:    lastCommit.Hash.String(),
+			Message: lastCommit.Message,
+			When:    lastCommit.Committer.When.Format(time.RFC3339),
 		}
 	}
 
 	return &tangled.GitTempGetTree_Output{
 		Ref:        ref,
-		Parent:     parentPtr,
-		Dotdot:     dotdotPtr,
-		Files:      treeEntries,
-		LastCommit: lastCommit,
+		Parent:     parent,
+		Dotdot:     dotdot,
+		Files:      outEntries,
+		LastCommit: outLastCommit,
+		// TODO: remove this field entirely
 		Readme: &tangled.GitTempGetTree_Readme{
-			Filename: readmeFileName,
-			Contents: readmeContents,
+			Filename: "",
+			Contents: "",
 		},
 	}, nil
 }

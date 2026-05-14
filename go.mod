@@ -24,6 +24,8 @@ require (
 	github.com/cyphar/filepath-securejoin v0.4.1
 	github.com/dgraph-io/ristretto v0.2.0
 	github.com/did-method-plc/go-didplc v0.2.2
+	github.com/djherbis/buffer v1.2.0
+	github.com/djherbis/nio/v3 v3.0.1
 	github.com/docker/docker v28.2.2+incompatible
 	github.com/dustin/go-humanize v1.0.1
 	github.com/gliderlabs/ssh v0.3.8
