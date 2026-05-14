@@ -43,6 +43,7 @@ func NewAdminServer(l *slog.Logger, database *sql.DB, resyncer *Resyncer, x *xrp
 
 func (s *AdminServer) Router() http.Handler {
 	r := chi.NewRouter()
+	r.Get("/", s.handleIndex())
 	r.Get("/repos", s.handleRepos())
 	r.Get("/hosts", s.handleHosts())
 
@@ -76,6 +77,16 @@ func funcmap() template.FuncMap {
 				"AllHostStatuses": models.AllHostStatuses,
 			}
 		},
+	}
+}
+
+func (s *AdminServer) handleIndex() http.HandlerFunc {
+	tpl := template.Must(template.New("").Funcs(funcmap()).ParseFS(templateFS, "templates/base.html", "templates/index.html"))
+	return func(w http.ResponseWriter, r *http.Request) {
+		err := tpl.ExecuteTemplate(w, "base", nil)
+		if err != nil {
+			slog.Error("failed to render", "err", err)
+		}
 	}
 }
 
