@@ -2,12 +2,12 @@
     {{/* NOTE: this fragment is always replaced with hx-swap-oob */}}
     <div
         id="starBtn"
-        class="flex w-full min-h-[30px] items-stretch overflow-hidden rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm"
+        class="btn-group w-full"
         data-star-subject-at="{{ .SubjectAt }}"
         {{ if .HxSwapOob }}hx-swap-oob='outerHTML:#starBtn[data-star-subject-at="{{ .SubjectAt }}"]'{{ end }}
     >
         <button
-            class="flex flex-1 justify-center gap-2 items-center px-2 group disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700"
+            class="btn-group-item active flex-1 group"
             {{ if .IsStarred }}
                 hx-delete="/star?subject={{ .SubjectAt }}&countHint={{ .StarCount }}&repoName={{ .RepoName }}"
             {{ else }}
@@ -22,19 +22,19 @@
                 {{ i "star" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
             {{ end }}
             {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-            <span class="text-sm group-[.htmx-request]:hidden">{{ if .IsStarred }}unstar{{ else }}star{{ end }}</span>
+            <span class="group-[.htmx-request]:hidden">{{ if .IsStarred }}unstar{{ else }}star{{ end }}</span>
         </button>
         {{ if .RepoName }}
             {{ $did := .SubjectAt.Authority | string }}
             <a
                 href="/{{ resolve $did }}/{{ .RepoName }}/stars"
-                class="flex items-center px-2 text-sm no-underline hover:no-underline border-l border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
+                class="btn-group-item"
                 title="Starred by"
             >
                 {{ .StarCount }}
             </a>
         {{ else }}
-            <span class="flex items-center px-2 text-sm border-l border-gray-200 dark:border-gray-700">
+            <span class="btn-group-item cursor-default">
                 {{ .StarCount }}
             </span>
         {{ end }}

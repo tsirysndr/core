@@ -1,5 +1,5 @@
 {{ define "user/fragments/repoCard" }}
-  {{/* root, repo, fullName [,starButton [,starData]] */}}
+  {{/* root, repo, fullName [,starButton [,starData{IsStarred,SubjectAt,StarCount,RepoName} [,compact]]] */}}
   {{ $root := index . 0 }}
   {{ $repo := index . 1 }}
   {{ $fullName := index . 2 }}

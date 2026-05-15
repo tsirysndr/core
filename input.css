@@ -249,7 +249,7 @@
     }
 
     .btn-group {
-      @apply inline-flex items-center
+      @apply inline-flex items-stretch
           max-h-[32px]
           rounded border border-gray-200 dark:border-gray-700
           divide-x divide-gray-200 dark:divide-gray-700
@@ -260,6 +260,7 @@
       @apply btn-flat min-h-[30px] gap-1.5
           bg-gray-50 dark:bg-gray-900
           border-y-0
+          no-underline hover:no-underline
           hover:text-gray-600 dark:hover:text-gray-400;
     }
 

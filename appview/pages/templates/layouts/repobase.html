@@ -117,9 +117,9 @@
             "IsStarred" .RepoInfo.IsStarred
             "StarCount" .RepoInfo.Stats.StarCount
             "RepoName" .RepoInfo.Name) }}
-      <div class="flex w-full min-h-[30px] items-stretch overflow-hidden rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+      <div class="btn-group w-full">
         <a
-          class="flex flex-1 justify-center gap-2 items-center px-2 text-sm no-underline hover:no-underline group hover:bg-gray-50 dark:hover:bg-gray-700"
+          class="btn-group-item active flex-1 group"
           hx-boost="true"
           href="/{{ .RepoInfo.FullName }}/fork"
         >
@@ -129,7 +129,7 @@
         </a>
         <a
           href="/{{ .RepoInfo.FullName }}/forks"
-          class="flex items-center px-2 text-sm no-underline hover:no-underline border-l border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
+          class="btn-group-item"
           title="Forked by"
         >
           {{ .RepoInfo.Stats.ForkCount }}
