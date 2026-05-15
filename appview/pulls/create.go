@@ -94,18 +94,19 @@ func (s *Pulls) handlePatchBasedPull(w http.ResponseWriter, r *http.Request, rep
 	s.createPullRequest(w, r, repo, userDid, title, body, targetBranch, patch, "", "", nil, isStacked, stackTitles, stackBodies)
 }
 
-func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo *models.Repo, userDid syntax.DID, forkRepo string, title, body, targetBranch, sourceBranch string, isStacked bool, stackTitles, stackBodies map[string]string) {
-	l := s.logger.With("handler", "handleForkBasedPull", "user", userDid, "fork_repo", forkRepo, "target_branch", targetBranch, "source_branch", sourceBranch, "is_stacked", isStacked)
+func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo *models.Repo, userDid syntax.DID, forkRepoDid string, title, body, targetBranch, sourceBranch string, isStacked bool, stackTitles, stackBodies map[string]string) {
+	l := s.logger.With("handler", "handleForkBasedPull", "user", userDid, "fork_repo_did", forkRepoDid, "target_branch", targetBranch, "source_branch", sourceBranch, "is_stacked", isStacked)
 
-	repoString := strings.SplitN(forkRepo, "/", 2)
-	forkOwnerDid := repoString[0]
-	forkRkey := strings.ToLower(repoString[1])
-	fork, err := db.GetForkByDid(s.db, forkOwnerDid, forkRkey)
+	if forkRepoDid == "" {
+		s.pages.Notice(w, "pull", "No such fork.")
+		return
+	}
+	fork, err := db.GetForkByRepoDid(s.db, forkRepoDid)
 	if errors.Is(err, sql.ErrNoRows) {
 		s.pages.Notice(w, "pull", "No such fork.")
 		return
 	} else if err != nil {
-		l.Error("failed to fetch fork", "err", err, "fork_owner_did", forkOwnerDid, "fork_rkey", forkRkey)
+		l.Error("failed to fetch fork", "err", err, "fork_repo_did", forkRepoDid)
 		s.pages.Notice(w, "pull", "Failed to fetch fork.")
 		return
 	}

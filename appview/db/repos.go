@@ -636,58 +636,12 @@ func GetForksByDid(e Execer, did string) ([]models.Repo, error) {
 	return repos, nil
 }
 
-func GetForkByDid(e Execer, did string, rkey string) (*models.Repo, error) {
-	var repo models.Repo
-	var createdAt string
-	var nullableDescription sql.NullString
-	var nullableWebsite sql.NullString
-	var nullableTopicStr sql.NullString
-	var nullableSource sql.NullString
-	var nullableRepoDid sql.NullString
-
-	row := e.QueryRow(
-		`select id, did, name, knot, rkey, description, website, topics, created, source, repo_did
-		from repos
-		where did = ? and rkey = ? and source is not null and source != ''`,
-		did, rkey,
-	)
-
-	err := row.Scan(&repo.Id, &repo.Did, &repo.Name, &repo.Knot, &repo.Rkey, &nullableDescription, &nullableWebsite, &nullableTopicStr, &createdAt, &nullableSource, &nullableRepoDid)
-	if err != nil {
-		return nil, err
-	}
-
-	if nullableDescription.Valid {
-		repo.Description = nullableDescription.String
-	}
-
-	if nullableWebsite.Valid {
-		repo.Website = nullableWebsite.String
-	}
-
-	if nullableTopicStr.Valid {
-		repo.Topics = strings.Fields(nullableTopicStr.String)
-	}
-
-	if nullableSource.Valid {
-		repo.Source = nullableSource.String
-	}
-	if nullableRepoDid.Valid {
-		repo.RepoDid = nullableRepoDid.String
-	}
-
-	createdAtTime, err := time.Parse(time.RFC3339, createdAt)
-	if err != nil {
-		repo.Created = time.Now()
-	} else {
-		repo.Created = createdAtTime
-	}
-
-	return &repo, nil
-}
-
 func GetRepoByDid(e Execer, repoDid string) (*models.Repo, error) {
 	return GetRepo(e, orm.FilterEq("repo_did", repoDid))
+}
+
+func GetForkByRepoDid(e Execer, repoDid string) (*models.Repo, error) {
+	return GetRepo(e, orm.FilterEq("repo_did", repoDid), orm.FilterNotEq("source", ""))
 }
 
 // TODO: just queue every legacy records regardless of target repo has a DID or not.

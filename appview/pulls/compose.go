@@ -2,6 +2,7 @@ package pulls
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,7 +20,6 @@ import (
 	"tangled.org/core/appview/pages/markup"
 	"tangled.org/core/appview/pages/repoinfo"
 	"tangled.org/core/appview/xrpcclient"
-	"tangled.org/core/orm"
 	"tangled.org/core/patchutil"
 	"tangled.org/core/types"
 
@@ -222,6 +222,9 @@ func (s *Pulls) composeParams(r *http.Request, repo *models.Repo) (pages.RepoNew
 			l.Warn("failed to list user forks", "err", err, "user", user.Did)
 		}
 	}
+	forks = slices.DeleteFunc(forks, func(f models.Repo) bool {
+		return f.RepoDid == ""
+	})
 
 	repoInfo := s.repoResolver.GetRepoInfo(r, user)
 	source, ok := pages.ParseSource(r.FormValue("source"))
@@ -238,7 +241,7 @@ func (s *Pulls) composeParams(r *http.Request, repo *models.Repo) (pages.RepoNew
 	patch := r.FormValue("patch")
 
 	if source == pages.SourceFork && fork == "" && len(forks) == 1 {
-		fork = fmt.Sprintf("%s/%s", forks[0].Did, forks[0].Name)
+		fork = forks[0].RepoDid
 	}
 
 	var forkBranches []types.Branch
@@ -345,12 +348,14 @@ func (s *Pulls) listBranches(ctx context.Context, repo *models.Repo) ([]types.Br
 	return result.Branches, nil
 }
 
-func (s *Pulls) listForkBranches(ctx context.Context, forkIdent string) ([]types.Branch, error) {
-	parts := strings.SplitN(forkIdent, "/", 2)
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid fork identifier: %s", forkIdent)
+func (s *Pulls) listForkBranches(ctx context.Context, forkRepoDid string) ([]types.Branch, error) {
+	if forkRepoDid == "" {
+		return nil, fmt.Errorf("fork not found")
 	}
-	forkRepo, err := db.GetRepo(s.db, orm.FilterEq("did", parts[0]), orm.FilterEq("name", parts[1]))
+	forkRepo, err := db.GetForkByRepoDid(s.db, forkRepoDid)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("fork not found")
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -551,12 +556,14 @@ func (s *Pulls) fetchBranchComparison(ctx context.Context, repo *models.Repo, ta
 	return &comparison, nil
 }
 
-func (s *Pulls) fetchForkComparison(r *http.Request, forkIdent, targetBranch, sourceBranch string) (*types.RepoFormatPatchResponse, error) {
-	parts := strings.SplitN(forkIdent, "/", 2)
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid fork identifier: %s", forkIdent)
+func (s *Pulls) fetchForkComparison(r *http.Request, forkRepoDid, targetBranch, sourceBranch string) (*types.RepoFormatPatchResponse, error) {
+	if forkRepoDid == "" {
+		return nil, fmt.Errorf("fork not found")
 	}
-	fork, err := db.GetForkByDid(s.db, parts[0], parts[1])
+	fork, err := db.GetForkByRepoDid(s.db, forkRepoDid)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("fork not found")
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -202,11 +202,11 @@ func TestComposeCanonicalURL(t *testing.T) {
 			pages.RepoNewPullParams{
 				RepoInfo:     repo,
 				Source:       pages.SourceFork,
-				Fork:         "did:plc:other/repo",
+				Fork:         "did:plc:limpet",
 				SourceBranch: "feature",
 				TargetBranch: "main",
 			},
-			"/did:plc:abc/demo/pulls/new?fork=did%3Aplc%3Aother%2Frepo&source=fork&sourceBranch=feature&targetBranch=main",
+			"/did:plc:abc/demo/pulls/new?fork=did%3Aplc%3Alimpet&source=fork&sourceBranch=feature&targetBranch=main",
 		},
 		{
 			"branch with selection drops source param",
@@ -449,8 +449,8 @@ func TestPrefetchComparisonMissingInputs(t *testing.T) {
 		{"branch missing target", pages.SourceBranch, "", "", "feature"},
 		{"branch missing source", pages.SourceBranch, "", "main", ""},
 		{"fork missing fork", pages.SourceFork, "", "main", "feature"},
-		{"fork missing target", pages.SourceFork, "did/repo", "", "feature"},
-		{"fork missing source", pages.SourceFork, "did/repo", "main", ""},
+		{"fork missing target", pages.SourceFork, "did:plc:limpet", "", "feature"},
+		{"fork missing source", pages.SourceFork, "did:plc:limpet", "main", ""},
 		{"unknown source", pages.Source("bogus"), "", "", ""},
 	}
 	for _, c := range cases {

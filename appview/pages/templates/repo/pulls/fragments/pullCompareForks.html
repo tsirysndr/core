@@ -15,8 +15,7 @@
             >
                 <option disabled {{ if not $.Fork }}selected{{ end }}>Select a fork</option>
                 {{ range .Forks }}
-                    {{ $ident := printf "%s/%s" .Did .Name }}
-                    <option value="{{ $ident }}" {{ if eq $ident $.Fork }}selected{{ end }} class="py-1">
+                    <option value="{{ .RepoDid }}" {{ if eq .RepoDid $.Fork }}selected{{ end }} class="py-1">
                         {{ .Did | resolve }}/{{ .Name }}
                     </option>
                 {{ end }}
