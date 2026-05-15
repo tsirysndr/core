@@ -84,6 +84,28 @@ fn r2_key(did: &str, rkey: &str, site_path: &str) -> String {
     }
 }
 
+/// Returns true when a directory-like path is missing a trailing slash.
+///
+/// Examples:
+/// - "/docs" => true
+/// - "/docs/" => false
+/// - "/file.txt" => false
+/// - "/" => false
+fn needs_trailing_slash(path: &str) -> bool {
+    if path == "/" || path.ends_with('/') {
+        return false;
+    }
+    let last_segment = path.rsplit('/').next().unwrap_or(path);
+    !last_segment.contains('.')
+}
+
+/// Return the canonical URL with a trailing slash appended to the path.
+fn with_trailing_slash(url: &Url) -> String {
+    let mut url = url.clone();
+    url.set_path(&format!("{}/", url.path()));
+    url.to_string()
+}
+
 /// Fetch an object from R2, falling back to appending /index.html if the
 /// key looks like a directory (no file extension in the last segment).
 async fn fetch_from_r2(bucket: &Bucket, key: &str) -> Result<Option<Object>> {
@@ -142,6 +164,12 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
 
     if is_excluded(path) {
         return Fetch::Request(req).send().await;
+    }
+
+    // Canonical redirect for directory-like paths.
+    if needs_trailing_slash(path) {
+        let redirect_url = with_trailing_slash(&url);
+        return Response::redirect(redirect_url.parse()?, 308);
     }
 
     // Single KV lookup for the whole domain.
