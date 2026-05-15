@@ -264,6 +264,7 @@ in
           PermissionsStartOnly = true;
           WorkingDirectory = cfg.stateDir;
           Environment = [
+            "PATH=${lib.makeBinPath [pkgs.bash pkgs.git pkgs.coreutils]}:/run/current-system/sw/bin"
             "KNOT_REPO_SCAN_PATH=${cfg.repo.scanPath}"
             "KNOT_REPO_README=${concatStringsSep "," cfg.repo.readme}"
             "KNOT_REPO_MAIN_BRANCH=${cfg.repo.mainBranch}"
