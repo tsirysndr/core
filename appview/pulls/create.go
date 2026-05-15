@@ -335,7 +335,7 @@ func (s *Pulls) createPullRequest(
 	s.applyCreationLabels(r.Context(), client, userDid, []*models.Pull{pull}, r.Form, repo)
 
 	ownerSlashRepo := reporesolver.GetBaseRepoPath(r, repo)
-	s.pages.HxLocation(w, fmt.Sprintf("/%s/pulls/%d", ownerSlashRepo, pullId))
+	http.Redirect(w, r, fmt.Sprintf("/%s/pulls/%d", ownerSlashRepo, pullId), http.StatusFound)
 }
 
 func (s *Pulls) createStackedPullRequest(
@@ -452,7 +452,7 @@ func (s *Pulls) createStackedPullRequest(
 	s.applyCreationLabels(r.Context(), client, userDid, stack, r.Form, repo)
 
 	ownerSlashRepo := reporesolver.GetBaseRepoPath(r, repo)
-	s.pages.HxLocation(w, fmt.Sprintf("/%s/pulls", ownerSlashRepo))
+	http.Redirect(w, r, fmt.Sprintf("/%s/pulls", ownerSlashRepo), http.StatusFound)
 }
 
 func (s *Pulls) newStack(

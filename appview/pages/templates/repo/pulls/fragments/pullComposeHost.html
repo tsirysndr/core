@@ -16,7 +16,8 @@
             hx-post="/{{ .RepoInfo.FullName }}/pulls/new"
             hx-trigger="submit, keydown[(ctrlKey || metaKey) && key=='Enter'] from:(#patch,#title,#body)"
             hx-indicator="#create-pull-spinner"
-            hx-swap="none"
+            hx-target="body"
+            hx-swap="innerHTML show:top"
             class="flex flex-col gap-6"
         >
             <section class="relative flex flex-col gap-3">
