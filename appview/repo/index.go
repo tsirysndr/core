@@ -326,12 +326,14 @@ func (rp *Repo) buildIndexResponse(ctx context.Context, repo *models.Repo, ref s
 			}
 		}
 
-		bytes, err := tangled.GitTempGetBlob(ctx, xrpcc, readmeFileName, ref, repo.RepoDid)
-		if err != nil {
-			errs = errors.Join(errs, fmt.Errorf("failed to call git.getBlob: %w", err))
-			return
+		if readmeFileName != "" {
+			bytes, err := tangled.GitTempGetBlob(ctx, xrpcc, readmeFileName, ref, repo.RepoDid)
+			if err != nil {
+				errs = errors.Join(errs, fmt.Errorf("failed to call git.getBlob: %w", err))
+				return
+			}
+			readmeContent = string(bytes)
 		}
-		readmeContent = string(bytes)
 	})
 
 	// commits
