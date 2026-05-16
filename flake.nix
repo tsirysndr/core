@@ -182,14 +182,17 @@
     devShells = forAllSystems (system: let
       pkgs = nixpkgsFor.${system};
       packages' = self.packages.${system};
-      staticShell = args: (pkgs.mkShell.override {
-        stdenv = pkgs.pkgsStatic.stdenv;
-      }) (args // {
-        nativeBuildInputs = args.nativeBuildInputs
-          ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
-            pkgs.darwin.cctools
-          ];
-      });
+      staticShell = args:
+        (pkgs.mkShell.override {
+          stdenv = pkgs.pkgsStatic.stdenv;
+        }) (args
+          // {
+            nativeBuildInputs =
+              args.nativeBuildInputs
+              ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
+                pkgs.darwin.cctools
+              ];
+          });
     in {
       default = staticShell {
         nativeBuildInputs = [
