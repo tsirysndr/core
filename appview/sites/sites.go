@@ -35,6 +35,36 @@ type RepoEntry struct {
 	IsIndex bool   `json:"is_index"`
 }
 
+// UnmarshalJSON makes DomainMapping tolerant of the legacy KV shape where
+// repos was map[string]bool (keyed by rkey, value = is_index). For each
+// entry it tries the new {rkey, is_index} struct first; if that fails it
+// falls back to a bare bool, using the map key itself as the rkey.
+func (m *DomainMapping) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Did   string                     `json:"did"`
+		Repos map[string]json.RawMessage `json:"repos"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	m.Did = raw.Did
+	m.Repos = make(map[string]RepoEntry, len(raw.Repos))
+	for name, val := range raw.Repos {
+		var entry RepoEntry
+		if err := json.Unmarshal(val, &entry); err == nil {
+			m.Repos[name] = entry
+			continue
+		}
+		// legacy shape: value is a bare bool; map key is the rkey
+		var isIndex bool
+		if err := json.Unmarshal(val, &isIndex); err != nil {
+			return fmt.Errorf("unsupported repo entry for %q: %w", name, err)
+		}
+		m.Repos[name] = RepoEntry{Rkey: name, IsIndex: isIndex}
+	}
+	return nil
+}
+
 // getOrNewMapping fetches the existing KV entry for domain, or returns a
 // fresh empty mapping for the given did if none exists yet.
 func getOrNewMapping(ctx context.Context, cf *cloudflare.Client, domain, did string) (DomainMapping, error) {
