@@ -471,7 +471,7 @@ func (s *Spindle) resolvePipelineRepoDid(repo *tangled.Pipeline_TriggerRepo) (sy
 		return "", fmt.Errorf("parse repoDid %s: %w", *repo.RepoDid, err)
 	}
 	if _, err := s.db.GetRepoByDid(repoDid); err != nil {
-		s.l.Warn("accepting knot pipeline assertion for unknown repoDid", "repoDid", repoDid, "err", err)
+		return "", fmt.Errorf("unknown repoDid %s: %w", repoDid, err)
 	}
 	return repoDid, nil
 }
