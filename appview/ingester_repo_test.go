@@ -19,6 +19,7 @@ import (
 	"tangled.org/core/appview/notify"
 	"tangled.org/core/appview/repoverify"
 	"tangled.org/core/orm"
+	"tangled.org/core/rbac"
 )
 
 func mustKnotURL(t *testing.T, raw string) *url.URL {
@@ -69,10 +70,15 @@ func newTestIngester(t *testing.T) (*Ingester, *spyNotifier) {
 		t.Fatalf("db.Make: %v", err)
 	}
 	t.Cleanup(func() { d.Close() })
+	enforcer, err := rbac.NewEnforcer(path)
+	if err != nil {
+		t.Fatalf("rbac.NewEnforcer: %v", err)
+	}
 
 	spy := &spyNotifier{}
 	ing := &Ingester{
 		Db:       d,
+		Enforcer: enforcer,
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Notifier: spy,
 	}
@@ -156,6 +162,19 @@ func loadRepo(t *testing.T, ing *Ingester, did, rkey string) *models.Repo {
 	return r
 }
 
+func assertRepoOwnerPermissions(t *testing.T, ing *Ingester, owner, knot, repo string) {
+	t.Helper()
+	for _, perm := range []string{"repo:settings", "repo:push", "repo:owner"} {
+		ok, err := ing.Enforcer.E.Enforce(owner, knot, repo, perm)
+		if err != nil {
+			t.Fatalf("Enforce(%q): %v", perm, err)
+		}
+		if !ok {
+			t.Fatalf("owner missing %s permission for %s", perm, repo)
+		}
+	}
+}
+
 func TestIngestRepo_CreateInsertsNewRow(t *testing.T) {
 	ing, spy := newTestIngester(t)
 
@@ -183,6 +202,7 @@ func TestIngestRepo_CreateInsertsNewRow(t *testing.T) {
 	if spy.creates != 1 {
 		t.Errorf("NewRepo called %d times, want 1", spy.creates)
 	}
+	assertRepoOwnerPermissions(t, ing, "did:plc:akshay", "knot.example", "did:plc:repo1")
 }
 
 func TestIngestRepo_CreateSkipsIfRowExists(t *testing.T) {
@@ -201,6 +221,7 @@ func TestIngestRepo_CreateSkipsIfRowExists(t *testing.T) {
 	if spy.creates != 0 {
 		t.Errorf("row already exists, NewRepo should not be called but was called %d times", spy.creates)
 	}
+	assertRepoOwnerPermissions(t, ing, "did:plc:akshay", "knot.example", "did:plc:repo1")
 }
 
 func TestIngestRepo_CreateCascadesRename(t *testing.T) {

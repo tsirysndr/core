@@ -58,12 +58,15 @@ func (i *Ingester) ingestRepoCreate(ctx context.Context, e *jmodels.Event) error
 		return nil
 	}
 
-	_, err = db.GetRepo(i.Db,
+	existing, err := db.GetRepo(i.Db,
 		orm.FilterEq("did", e.Did),
 		orm.FilterEq("rkey", e.Commit.RKey),
 	)
 	if err == nil {
 		l.Info("repo row already exists, skipping create", "did", e.Did, "rkey", e.Commit.RKey)
+		if err := i.ensureRepoOwnerPermissions(e.Did, existing.Knot, existing.RepoIdentifier()); err != nil {
+			return fmt.Errorf("failed to ensure repo owner permissions: %w", err)
+		}
 		return nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -121,6 +124,9 @@ func (i *Ingester) ingestRepoCreate(ctx context.Context, e *jmodels.Event) error
 			l.Warn("failed to fetch repo after rename for notification", "err", err)
 			return nil
 		}
+		if err := i.ensureRepoOwnerPermissions(e.Did, newRepo.Knot, newRepo.RepoIdentifier()); err != nil {
+			return fmt.Errorf("failed to ensure repo owner permissions: %w", err)
+		}
 		i.Notifier.RenameRepo(ctx, syntax.DID(e.Did), &oldRepo, newRepo)
 		return nil
 	}
@@ -158,8 +164,22 @@ func (i *Ingester) ingestRepoCreate(ctx context.Context, e *jmodels.Event) error
 		return fmt.Errorf("failed to commit insert tx: %w", err)
 	}
 
+	if err := i.ensureRepoOwnerPermissions(e.Did, repo.Knot, repo.RepoIdentifier()); err != nil {
+		return fmt.Errorf("failed to ensure repo owner permissions: %w", err)
+	}
+
 	i.Notifier.NewRepo(ctx, repo)
 	return nil
+}
+
+func (i *Ingester) ensureRepoOwnerPermissions(ownerDid, knot, repo string) error {
+	if i.Enforcer == nil {
+		return fmt.Errorf("ingester has no RBAC enforcer configured")
+	}
+	if err := i.Enforcer.AddRepo(ownerDid, knot, repo); err != nil {
+		return err
+	}
+	return i.Enforcer.E.SavePolicy()
 }
 
 func (i *Ingester) ingestRepoUpdate(ctx context.Context, e *jmodels.Event) error {
