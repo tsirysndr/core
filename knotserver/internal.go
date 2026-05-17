@@ -275,23 +275,6 @@ func (h *InternalHandle) PostReceiveHook(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, ownerDid, repoDid string) error {
-	repoPath, _, _, resolveErr := h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
-	if resolveErr != nil {
-		return fmt.Errorf("failed to resolve repo on disk: %w", resolveErr)
-	}
-
-	gr, err := git.Open(repoPath, line.Ref)
-	if err != nil {
-		return fmt.Errorf("failed to open git repo at ref %s: %w", line.Ref, err)
-	}
-
-	meta, err := gr.RefUpdateMeta(line)
-	if err != nil {
-		return fmt.Errorf("failed to get ref update metadata: %w", err)
-	}
-
-	metaRecord := meta.AsRecord()
-
 	refUpdate := tangled.GitRefUpdate{
 		OldSha:       line.OldSha.String(),
 		NewSha:       line.NewSha.String(),
@@ -299,7 +282,27 @@ func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, o
 		CommitterDid: gitUserDid,
 		OwnerDid:     &ownerDid,
 		Repo:         repoDid,
-		Meta:         &metaRecord,
+		Meta:         nil,
+	}
+
+	if !line.NewSha.IsZero() {
+		repoPath, _, _, resolveErr := h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
+		if resolveErr != nil {
+			return fmt.Errorf("failed to resolve repo on disk: %w", resolveErr)
+		}
+
+		gr, err := git.Open(repoPath, line.Ref)
+		if err != nil {
+			return fmt.Errorf("failed to open git repo at ref %s: %w", line.Ref, err)
+		}
+
+		meta, err := gr.RefUpdateMeta(line)
+		if err != nil {
+			return fmt.Errorf("failed to get ref update metadata: %w", err)
+		}
+
+		refUpdate.Meta = new(tangled.GitRefUpdate_Meta)
+		*refUpdate.Meta = meta.AsRecord()
 	}
 
 	eventJson, err := json.Marshal(refUpdate)
