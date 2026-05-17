@@ -180,13 +180,13 @@ func (rp *Repo) RepoBlobRaw(w http.ResponseWriter, r *http.Request) {
 		// Serve all textual content as plain text so the browser never
 		// interprets knot-supplied markup or scripts.
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	case safeBinaryMIMEType(mediaType) || contentType == "application/octet-stream":
+	case safeBinaryMIMEType(mediaType):
 		// Use the normalized type, never the raw knot-supplied string.
 		w.Header().Set("Content-Type", mediaType)
 	default:
-		w.WriteHeader(http.StatusUnsupportedMediaType)
-		w.Write([]byte("unsupported content type"))
-		return
+		// If mediatype is unknown or it's unsafe (e.g. SVG which allows XSS,)
+		// fallback to octet-stream
+		w.Header().Set("Content-Type", "application/octet-stream")
 	}
 	if _, err := io.Copy(w, resp.Body); err != nil {
 		l.Error("error streaming knotmirror response", "err", err)
