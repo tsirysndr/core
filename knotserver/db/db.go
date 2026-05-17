@@ -193,38 +193,48 @@ func (d *DB) StoreRepoDidWeb(repoDid, ownerDid, repoName string) error {
 	return d.storeRepoKeyRow(repoDid, nil, ownerDid, repoName, "web")
 }
 
-func (d *DB) storeRepoKeyRow(repoDid string, signingKey []byte, ownerDid, repoName, keyType string) (err error) {
+func (d *DB) storeRepoKeyRow(repoDid string, signingKey []byte, ownerDid, repoName, keyType string) error {
 	tx, err := d.db.Begin()
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err != nil {
-			tx.Rollback()
-			return
-		}
-		err = tx.Commit()
-	}()
+	defer tx.Rollback()
 
-	if _, err = tx.Exec(
+	if _, err := tx.Exec(
 		`INSERT INTO repo_keys (repo_did, signing_key, owner_did, repo_name, key_type) VALUES (?, ?, ?, ?, ?)`,
 		repoDid, signingKey, ownerDid, repoName, keyType,
 	); err != nil {
 		return err
 	}
 
-	_, err = tx.Exec(
+	if _, err := tx.Exec(
 		`INSERT INTO repo_aliases (owner_did, rkey, repo_did, rev)
 		 VALUES (?, ?, ?, '0_' || strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 		 ON CONFLICT(owner_did, rkey) DO NOTHING`,
 		ownerDid, repoName, repoDid,
-	)
-	return err
+	); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (d *DB) DeleteRepoKey(repoDid string) error {
-	_, err := d.db.Exec(`DELETE FROM repo_keys WHERE repo_did = ?`, repoDid)
-	return err
+	tx, err := d.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM repo_aliases WHERE repo_did = ?`, repoDid); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(`DELETE FROM repo_keys WHERE repo_did = ?`, repoDid); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (d *DB) RepoDidExists(repoDid string) (bool, error) {
@@ -238,6 +248,15 @@ func (d *DB) GetRepoDid(ownerDid, rkey string) (string, error) {
 	err := d.db.QueryRow(
 		`SELECT repo_did FROM repo_aliases WHERE owner_did = ? AND rkey = ?`,
 		ownerDid, rkey,
+	).Scan(&repoDid)
+	return repoDid, err
+}
+
+func (d *DB) GetRepoDidByName(ownerDid, repoName string) (string, error) {
+	var repoDid string
+	err := d.db.QueryRow(
+		`SELECT repo_did FROM repo_keys WHERE owner_did = ? AND repo_name = ?`,
+		ownerDid, repoName,
 	).Scan(&repoDid)
 	return repoDid, err
 }

@@ -25,14 +25,6 @@ func (d *DB) UpsertRepoAlias(a RepoAlias) error {
 	return err
 }
 
-func (d *DB) DeleteRepoAlias(ownerDid, rkey string) error {
-	_, err := d.db.Exec(
-		`delete from repo_aliases where owner_did = ? and rkey = ?`,
-		ownerDid, rkey,
-	)
-	return err
-}
-
 func (d *DB) ResolveAlias(ownerDid, rkey string) (*RepoAlias, error) {
 	var a RepoAlias
 	err := d.db.QueryRow(

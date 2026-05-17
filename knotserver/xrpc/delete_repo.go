@@ -1,7 +1,9 @@
 package xrpc
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -9,6 +11,7 @@ import (
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/bluesky-social/indigo/xrpc"
+	securejoin "github.com/cyphar/filepath-securejoin"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/rbac"
 	xrpcerr "tangled.org/core/xrpc/errors"
@@ -60,13 +63,23 @@ func (x *Xrpc) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	repoDid, err := x.Db.GetRepoDid(did, name)
+	if errors.Is(err, sql.ErrNoRows) {
+		repoDid, err = x.Db.GetRepoDidByName(did, name)
+		if errors.Is(err, sql.ErrNoRows) {
+			l.Info("repo already torn down or not found", "did", did, "name", name)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+	}
 	if err != nil {
-		fail(xrpcerr.RepoNotFoundError)
+		l.Error("failed to look up repo", "error", err.Error())
+		writeError(w, xrpcerr.GenericError(err), http.StatusInternalServerError)
 		return
 	}
-	repoPath, _, _, err := x.Db.ResolveRepoDIDOnDisk(x.Config.Repo.ScanPath, repoDid)
-	if err != nil {
-		fail(xrpcerr.RepoNotFoundError)
+
+	repoPath, joinErr := securejoin.SecureJoin(x.Config.Repo.ScanPath, repoDid)
+	if joinErr != nil {
+		fail(xrpcerr.GenericError(joinErr))
 		return
 	}
 
@@ -80,22 +93,22 @@ func (x *Xrpc) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = os.RemoveAll(repoPath)
-	if err != nil {
-		l.Error("deleting repo", "error", err.Error())
-		writeError(w, xrpcerr.GenericError(err), http.StatusInternalServerError)
+	if rmErr := os.RemoveAll(repoPath); rmErr != nil {
+		l.Error("deleting repo", "error", rmErr.Error())
+		writeError(w, xrpcerr.GenericError(rmErr), http.StatusInternalServerError)
 		return
 	}
 
-	err = x.Enforcer.RemoveRepo(did, rbac.ThisServer, repoDid)
-	if err != nil {
-		l.Error("failed to delete repo from enforcer", "error", err.Error())
-		writeError(w, xrpcerr.GenericError(err), http.StatusInternalServerError)
+	if rbacErr := x.Enforcer.RemoveRepo(did, rbac.ThisServer, repoDid); rbacErr != nil {
+		l.Error("failed to delete repo from enforcer", "error", rbacErr.Error())
+		writeError(w, xrpcerr.GenericError(rbacErr), http.StatusInternalServerError)
 		return
 	}
 
-	if err := x.Db.DeleteRepoKey(repoDid); err != nil {
-		l.Error("failed to delete repo key", "error", err.Error())
+	if delErr := x.Db.DeleteRepoKey(repoDid); delErr != nil {
+		l.Error("failed to delete repo key", "error", delErr.Error())
+		writeError(w, xrpcerr.GenericError(delErr), http.StatusInternalServerError)
+		return
 	}
 
 	w.WriteHeader(http.StatusOK)

@@ -2,6 +2,7 @@ package xrpc
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -103,7 +104,23 @@ func (h *Xrpc) CreateRepo(w http.ResponseWriter, r *http.Request) {
 		return
 
 	default:
+		removeOrphan := func(orphanDid string) error {
+			orphanPath, _ := securejoin.SecureJoin(h.Config.Repo.ScanPath, orphanDid)
+			if rmErr := os.RemoveAll(orphanPath); rmErr != nil {
+				l.Warn("failed to remove orphan repo directory", "path", orphanPath, "error", rmErr.Error())
+			}
+			if rbacErr := h.Enforcer.RemoveRepo(actorDid.String(), rbac.ThisServer, orphanDid); rbacErr != nil {
+				l.Warn("failed to remove orphan rbac entry", "repoDid", orphanDid, "error", rbacErr.Error())
+			}
+			return h.Db.DeleteRepoKey(orphanDid)
+		}
+
 		existingDid, dbErr := h.Db.GetRepoDid(actorDid.String(), repoName)
+		if dbErr != nil && !errors.Is(dbErr, sql.ErrNoRows) {
+			l.Error("failed to look up repo alias", "error", dbErr.Error())
+			writeError(w, xrpcerr.GenericError(dbErr), http.StatusInternalServerError)
+			return
+		}
 		if dbErr == nil && existingDid != "" {
 			didRepoPath, _ := securejoin.SecureJoin(h.Config.Repo.ScanPath, existingDid)
 			if _, statErr := os.Stat(didRepoPath); statErr == nil {
@@ -113,10 +130,31 @@ func (h *Xrpc) CreateRepo(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			l.Warn("stale repo key found without directory, cleaning up", "repoDid", existingDid)
-			if delErr := h.Db.DeleteRepoKey(existingDid); delErr != nil {
+			if delErr := removeOrphan(existingDid); delErr != nil {
 				l.Error("failed to clean up stale repo key", "repoDid", existingDid, "error", delErr.Error())
 				writeError(w, xrpcerr.GenericError(fmt.Errorf("failed to clean up stale state, retry later")), http.StatusInternalServerError)
 				return
+			}
+		} else {
+			orphanDid, lookupErr := h.Db.GetRepoDidByName(actorDid.String(), repoName)
+			if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+				l.Error("failed to look up orphan repo key", "error", lookupErr.Error())
+				writeError(w, xrpcerr.GenericError(lookupErr), http.StatusInternalServerError)
+				return
+			}
+			if lookupErr == nil && orphanDid != "" {
+				orphanPath, _ := securejoin.SecureJoin(h.Config.Repo.ScanPath, orphanDid)
+				if _, statErr := os.Stat(orphanPath); statErr == nil {
+					l.Error("orphan repo_keys row but directory present, refusing to overwrite", "repoDid", orphanDid)
+					writeError(w, xrpcerr.GenericError(fmt.Errorf("repository %q is in an inconsistent state, contact a knot admin", repoName)), http.StatusConflict)
+					return
+				}
+				l.Warn("orphan repo_keys row without alias, cleaning up", "repoDid", orphanDid)
+				if delErr := removeOrphan(orphanDid); delErr != nil {
+					l.Error("failed to clean up orphan repo key", "repoDid", orphanDid, "error", delErr.Error())
+					writeError(w, xrpcerr.GenericError(fmt.Errorf("failed to clean up orphan state, retry later")), http.StatusInternalServerError)
+					return
+				}
 			}
 		}
 

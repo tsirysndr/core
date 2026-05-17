@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 
@@ -12,6 +14,7 @@ import (
 	"tangled.org/core/knotserver/config"
 	"tangled.org/core/knotserver/db"
 	"tangled.org/core/log"
+	"tangled.org/core/rbac"
 )
 
 type logRecord struct {
@@ -71,17 +74,33 @@ func (h *capturingHandler) snapshot() []logRecord {
 
 func newProcessRepoFixture(t *testing.T) (*Knot, context.Context, *capturingHandler) {
 	t.Helper()
-	d := newTestKnotDB(t)
+	scanPath := t.TempDir()
+	dbPath := filepath.Join(scanPath, "knot.db")
+	d, err := db.Setup(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("db.Setup: %v", err)
+	}
+
+	e, err := rbac.NewEnforcer(dbPath)
+	if err != nil {
+		t.Fatalf("rbac.NewEnforcer: %v", err)
+	}
+	if err := e.AddKnot(rbac.ThisServer); err != nil {
+		t.Fatalf("AddKnot: %v", err)
+	}
+
 	cap := newCapturingHandler()
 	l := slog.New(cap)
 	ctx := log.IntoContext(context.Background(), l)
 
 	c := &config.Config{
 		Server: config.Server{Hostname: "knot.example"},
+		Repo:   config.Repo{ScanPath: scanPath},
 	}
 	return &Knot{
 		c:  c,
 		db: d,
+		e:  e,
 		l:  l,
 	}, ctx, cap
 }
@@ -135,7 +154,7 @@ func TestProcessRepo_CreateRegistersAlias(t *testing.T) {
 	}
 }
 
-func TestProcessRepo_DeleteRemovesAlias(t *testing.T) {
+func TestProcessRepo_DeleteIsNoOp(t *testing.T) {
 	h, ctx, _ := newProcessRepoFixture(t)
 	if err := h.db.StoreRepoKey("did:plc:repo1", []byte("k"), "did:plc:akshay", "foo"); err != nil {
 		t.Fatalf("StoreRepoKey: %v", err)
@@ -145,19 +164,33 @@ func TestProcessRepo_DeleteRemovesAlias(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertRepoAlias: %v", err)
 	}
+	if err := h.e.AddRepo("did:plc:akshay", rbac.ThisServer, "did:plc:repo1"); err != nil {
+		t.Fatalf("AddRepo rbac: %v", err)
+	}
+	repoPath := filepath.Join(h.c.Repo.ScanPath, "did:plc:repo1")
+	if err := os.MkdirAll(repoPath, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
 
 	ev := repoEvent(t, "did:plc:akshay", "bar", "3laaaaaaaaaac", tangled.Repo{}, jsmodels.CommitOperationDelete)
 	if err := h.processRepo(ctx, ev); err != nil {
 		t.Fatalf("processRepo: %v", err)
 	}
 
-	if _, err := h.db.GetRepoDid("did:plc:akshay", "bar"); err == nil {
-		t.Errorf("bar alias should have been deleted")
+	if got, err := h.db.GetRepoDid("did:plc:akshay", "bar"); err != nil || got != "did:plc:repo1" {
+		t.Errorf("bar alias should be untouched by firehose delete: got (%q, %v)", got, err)
 	}
-
-	_, current, _ := h.db.CurrentRkey("did:plc:repo1")
-	if current != "foo" {
-		t.Errorf("current rkey after delete = %q, want foo", current)
+	if got, err := h.db.GetRepoDid("did:plc:akshay", "foo"); err != nil || got != "did:plc:repo1" {
+		t.Errorf("foo alias should be untouched by firehose delete: got (%q, %v)", got, err)
+	}
+	if exists, _ := h.db.RepoDidExists("did:plc:repo1"); !exists {
+		t.Errorf("repo_keys row should be untouched by firehose delete")
+	}
+	if _, err := os.Stat(repoPath); err != nil {
+		t.Errorf("repo dir should be untouched by firehose delete: %v", err)
+	}
+	if allowed, _ := h.e.IsRepoDeleteAllowed("did:plc:akshay", rbac.ThisServer, "did:plc:repo1"); !allowed {
+		t.Errorf("rbac policies should be untouched by firehose delete")
 	}
 }
 

@@ -499,9 +499,6 @@ func (h *Knot) processRepo(ctx context.Context, event *jmodels.Event) error {
 	}
 
 	if event.Commit.Operation == jmodels.CommitOperationDelete {
-		if err := h.db.DeleteRepoAlias(event.Did, rkey); err != nil {
-			l.Warn("failed to delete repo alias", "err", err)
-		}
 		return nil
 	}
 
