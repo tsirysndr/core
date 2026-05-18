@@ -3,7 +3,6 @@ package repo
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -24,7 +23,6 @@ import (
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/pages/markup"
-	"tangled.org/core/orm"
 	"tangled.org/core/types"
 
 	"github.com/go-chi/chi/v5"
@@ -116,10 +114,7 @@ func (rp *Repo) Index(w http.ResponseWriter, r *http.Request) {
 
 	var languageInfo []types.RepoLanguageDetails
 	if !result.IsEmpty {
-		// TODO: a bit dirty
-		langCtx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
-		defer cancel()
-		languageInfo, err = rp.getLanguageInfo(langCtx, l, f, result.Ref, ref == "")
+		languageInfo, err = rp.getLanguageInfo(r.Context(), syntax.DID(f.RepoDid), result.Ref)
 		if err != nil {
 			l.Warn("failed to compute language percentages", "err", err)
 			// non-fatal
@@ -154,67 +149,33 @@ func (rp *Repo) Index(w http.ResponseWriter, r *http.Request) {
 
 func (rp *Repo) getLanguageInfo(
 	ctx context.Context,
-	l *slog.Logger,
-	repo *models.Repo,
-	currentRef string,
-	isDefaultRef bool,
+	repoId syntax.DID,
+	ref string,
 ) ([]types.RepoLanguageDetails, error) {
-	// first attempt to fetch from db
-	langs, err := db.GetRepoLanguages(
-		rp.db,
-		orm.FilterEq("repo_did", repo.RepoDid),
-		orm.FilterEq("ref", currentRef),
-	)
+	var langs []models.RepoLanguage
+	// non-fatal, fetch langs from knotmirror via XRPC
+	xrpcc := &indigoxrpc.Client{
+		Host:   rp.config.KnotMirror.Url,
+		Client: http.DefaultClient,
+	}
+	ls, err := tangled.GitTempListLanguages(ctx, xrpcc, ref, repoId.String())
+	if err != nil {
+		return nil, fmt.Errorf("calling knotmirror git.listLanguages: %w", err)
+	}
 
-	if err != nil || langs == nil || containsOtherLanguage(langs) {
-		langs = nil
-
-		// non-fatal, fetch langs from ks via XRPC
-		xrpcc := &indigoxrpc.Client{
-			Host:   rp.config.KnotMirror.Url,
-			Client: http.DefaultClient,
-		}
-		ls, err := tangled.GitTempListLanguages(ctx, xrpcc, currentRef, repo.RepoDid)
-		if err != nil {
-			return nil, fmt.Errorf("calling knotmirror git.listLanguages: %w", err)
-		}
-
-		if ls == nil || ls.Languages == nil {
-			return nil, nil
-		}
-
-		for _, lang := range ls.Languages {
-			langs = append(langs, models.RepoLanguage{
-				RepoDid:      syntax.DID(repo.RepoDid),
-				Ref:          currentRef,
-				IsDefaultRef: isDefaultRef,
-				Language:     lang.Name,
-				Bytes:        lang.Size,
-			})
-		}
-
-		tx, err := rp.db.Begin()
-		if err != nil {
-			return nil, err
-		}
-		defer tx.Rollback()
-
-		// update appview's cache
-		err = db.UpdateRepoLanguages(tx, syntax.DID(repo.RepoDid), currentRef, langs)
-		if err != nil {
-			// non-fatal
-			l.Error("failed to cache lang results", "err", err)
-		}
-
-		err = tx.Commit()
-		if err != nil {
-			return nil, err
-		}
+	if ls == nil || ls.Languages == nil {
+		return nil, nil
 	}
 
 	var total int64
-	for _, l := range langs {
-		total += l.Bytes
+	for _, lang := range ls.Languages {
+		total += lang.Size
+		langs = append(langs, models.RepoLanguage{
+			RepoDid:      repoId,
+			Ref:          ref,
+			Language:     lang.Name,
+			Bytes:        lang.Size,
+		})
 	}
 
 	var languageStats []types.RepoLanguageDetails
@@ -242,15 +203,6 @@ func (rp *Repo) getLanguageInfo(
 	})
 
 	return languageStats, nil
-}
-
-func containsOtherLanguage(langs []models.RepoLanguage) bool {
-	for _, l := range langs {
-		if l.Language == enry.OtherLanguage {
-			return true
-		}
-	}
-	return false
 }
 
 // buildIndexResponse creates a RepoIndexResponse by combining multiple xrpc calls in parallel

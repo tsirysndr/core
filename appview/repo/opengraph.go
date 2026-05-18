@@ -3,15 +3,13 @@ package repo
 import (
 	"log"
 	"net/http"
-	"sort"
 	"time"
 
-	"github.com/go-enry/go-enry/v2"
-	"tangled.org/core/appview/db"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/ogre"
-	"tangled.org/core/orm"
-	"tangled.org/core/types"
 )
+
+const MaxOpengraphLanguageKinds = 4
 
 func (rp *Repo) Opengraph(w http.ResponseWriter, r *http.Request) {
 	f, err := rp.repoResolver.Resolve(r)
@@ -24,47 +22,14 @@ func (rp *Repo) Opengraph(w http.ResponseWriter, r *http.Request) {
 
 	avatarUrl := rp.pages.AvatarUrl(f.Did, "256")
 
-	var languageStats []types.RepoLanguageDetails
-	langs, err := db.GetRepoLanguages(
-		rp.db,
-		orm.FilterEq("repo_did", f.RepoDid),
-		orm.FilterEq("is_default_ref", 1),
-	)
+	languageStats, err := rp.getLanguageInfo(r.Context(), syntax.DID(f.RepoDid), "")
 	if err != nil {
-		log.Printf("failed to get language stats from db: %v", err)
-	} else if len(langs) > 0 {
-		var total int64
-		for _, l := range langs {
-			total += l.Bytes
-		}
-
-		for _, l := range langs {
-			percentage := float32(l.Bytes) / float32(total) * 100
-			color := enry.GetColor(l.Language)
-			languageStats = append(languageStats, types.RepoLanguageDetails{
-				Name:       l.Language,
-				Percentage: percentage,
-				Color:      color,
-			})
-		}
-
-		sort.Slice(languageStats, func(i, j int) bool {
-			if languageStats[i].Name == enry.OtherLanguage {
-				return false
-			}
-			if languageStats[j].Name == enry.OtherLanguage {
-				return true
-			}
-			if languageStats[i].Percentage != languageStats[j].Percentage {
-				return languageStats[i].Percentage > languageStats[j].Percentage
-			}
-			return languageStats[i].Name < languageStats[j].Name
-		})
+		log.Printf("failed to get language stats from knotmirror: %v", err)
 	}
 
 	ogLanguages := []ogre.LanguageData{}
 	for _, lang := range languageStats {
-		if len(ogLanguages) >= 5 {
+		if len(ogLanguages) > MaxOpengraphLanguageKinds {
 			break
 		}
 		ogLanguages = append(ogLanguages, ogre.LanguageData{
