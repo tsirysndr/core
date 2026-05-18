@@ -204,7 +204,7 @@
           rounded border border-gray-200 dark:border-gray-700
           bg-white dark:bg-gray-800
           text-sm text-gray-900 dark:text-gray-100
-          transition-all duration-150 ease-in-out
+          transition-colors duration-150 ease-in-out
           outline-transparent cursor-pointer
           focus-visible:outline focus-visible:outline-2 focus-visible:outline-gray-400 dark:focus-visible:outline-gray-600;
 
@@ -221,12 +221,14 @@
     .btn-flat {
       @apply inline-flex items-center justify-center
           min-h-7 px-2 py-[6px]
-          dark:bg-gray-800 dark:border-gray-700
+          rounded
           text-sm text-gray-900 dark:text-gray-100 cursor-pointer
+          transition-colors duration-150 ease-in-out
           focus:outline-none
           focus-visible:outline focus-visible:outline-2 focus-visible:outline-gray-400
-          dark:hover:text-gray-400
-          disabled:cursor-not-allowed disabled:opacity-50;
+          hover:bg-gray-100
+          dark:hover:text-gray-100 dark:hover:bg-gray-700
+          disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-inherit disabled:hover:bg-inherit;
     }
 
     .btn-create {
