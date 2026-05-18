@@ -234,6 +234,16 @@ func UpsertProfile(tx *sql.Tx, profile *models.Profile) error {
 	return tx.Commit()
 }
 
+func DeleteProfile(tx *sql.Tx, did string) error {
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`delete from profile where did = ?`, did); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
 func GetProfiles(e Execer, filters ...orm.Filter) (map[string]*models.Profile, error) {
 	var conditions []string
 	var args []any

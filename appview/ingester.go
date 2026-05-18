@@ -579,7 +579,7 @@ func (i *Ingester) ingestProfile(ctx context.Context, e *jmodels.Event) error {
 
 		tx, err := i.Db.Begin()
 		if err != nil {
-			return fmt.Errorf("failed to start transaction")
+			return fmt.Errorf("failed to start transaction: %w", err)
 		}
 
 		err = db.ValidateProfile(tx, &profile)
@@ -602,7 +602,27 @@ func (i *Ingester) ingestProfile(ctx context.Context, e *jmodels.Event) error {
 			}
 		}
 	case jmodels.CommitOperationDelete:
-		err = db.DeleteArtifact(i.Db, orm.FilterEq("did", did), orm.FilterEq("rkey", e.Commit.RKey))
+		tx, beginErr := i.Db.Begin()
+		if beginErr != nil {
+			return fmt.Errorf("failed to start transaction: %w", beginErr)
+		}
+
+		priorHandle, phErr := db.GetPreferredHandle(tx, did)
+		if phErr != nil && !errors.Is(phErr, sql.ErrNoRows) {
+			l.Warn("failed to read prior preferred handle", "err", phErr)
+		}
+
+		err = db.DeleteProfile(tx, did)
+		if err == nil && i.Cache != nil {
+			pipe := i.Cache.Pipeline()
+			pipe.Del(ctx, fmt.Sprintf(cache.PreferredHandleByDid, did))
+			if priorHandle != "" {
+				pipe.Del(ctx, fmt.Sprintf(cache.PreferredHandleByHandle, string(priorHandle)))
+			}
+			if _, execErr := pipe.Exec(ctx); execErr != nil {
+				l.Warn("failed to evict preferred handle cache", "err", execErr)
+			}
+		}
 	}
 
 	if err != nil {
