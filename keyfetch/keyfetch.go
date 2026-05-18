@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/urfave/cli/v3"
+	"golang.org/x/crypto/ssh"
 	"tangled.org/core/log"
 )
 
@@ -113,9 +114,15 @@ func Run(ctx context.Context, cmd *cli.Command) error {
 func formatKeyData(executablePath, gitDir, logPath, endpoint string, data []map[string]any) string {
 	var result string
 	for _, entry := range data {
+		raw, _ := entry["key"].(string)
+		key, _, _, _, err := ssh.ParseAuthorizedKey([]byte(raw))
+		if err != nil {
+			continue
+		}
 		result += fmt.Sprintf(
 			`command="%s guard -git-dir %s -user %s -log-path %s -internal-api %s",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty %s`+"\n",
-			executablePath, gitDir, entry["did"], logPath, endpoint, entry["key"])
+			executablePath, gitDir, entry["did"], logPath, endpoint, ssh.MarshalAuthorizedKey(key))
 	}
 	return result
 }
+
