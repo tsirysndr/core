@@ -125,4 +125,3 @@ func formatKeyData(executablePath, gitDir, logPath, endpoint string, data []map[
 	}
 	return result
 }
-
