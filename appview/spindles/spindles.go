@@ -170,29 +170,17 @@ func (s *Spindles) register(w http.ResponseWriter, r *http.Request) {
 		fail()
 		return
 	}
-	defer func() {
-		tx.Rollback()
-		s.Enforcer.E.LoadPolicy()
-	}()
+	defer tx.Rollback()
 
-	err = db.AddSpindle(tx, models.Spindle{
+	if err := db.AddSpindle(tx, models.Spindle{
 		Owner:    syntax.DID(user.Did),
 		Instance: instance,
-	})
-	if err != nil {
+	}); err != nil {
 		l.Error("failed to insert", "err", err)
 		fail()
 		return
 	}
 
-	err = s.Enforcer.AddSpindle(instance)
-	if err != nil {
-		l.Error("failed to create spindle", "err", err)
-		fail()
-		return
-	}
-
-	// create record on pds
 	client, err := s.OAuth.AuthorizedClient(r)
 	if err != nil {
 		l.Error("failed to authorize client", "err", err)
@@ -206,7 +194,6 @@ func (s *Spindles) register(w http.ResponseWriter, r *http.Request) {
 		exCid = ex.Cid
 	}
 
-	// re-announce by registering under same rkey
 	_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 		Collection: tangled.SpindleNSID,
 		Repo:       user.Did,
@@ -218,43 +205,18 @@ func (s *Spindles) register(w http.ResponseWriter, r *http.Request) {
 		},
 		SwapRecord: exCid,
 	})
-
 	if err != nil {
 		l.Error("failed to put record", "err", err)
 		fail()
 		return
 	}
 
-	err = tx.Commit()
-	if err != nil {
+	if err := tx.Commit(); err != nil {
 		l.Error("failed to commit transaction", "err", err)
 		fail()
 		return
 	}
 
-	err = s.Enforcer.E.SavePolicy()
-	if err != nil {
-		l.Error("failed to update ACL", "err", err)
-		s.Pages.HxRefresh(w)
-		return
-	}
-
-	// begin verification
-	err = serververify.RunVerification(r.Context(), instance, user.Did, s.Config.Core.Dev)
-	if err != nil {
-		l.Error("verification failed", "err", err)
-		s.Pages.HxRefresh(w)
-		return
-	}
-
-	_, err = serververify.MarkSpindleVerified(s.Db, s.Enforcer, instance, user.Did)
-	if err != nil {
-		l.Error("failed to mark verified", "err", err)
-		s.Pages.HxRefresh(w)
-		return
-	}
-
-	// ok
 	s.Pages.HxRefresh(w)
 }
 

@@ -175,6 +175,19 @@ func assertRepoOwnerPermissions(t *testing.T, ing *Ingester, owner, knot, repo s
 	}
 }
 
+func assertNoRepoPolicies(t *testing.T, ing *Ingester, knot, repo string) {
+	t.Helper()
+	for _, perm := range []string{"repo:settings", "repo:push", "repo:owner", "repo:delete", "repo:invite", "repo:collaborator"} {
+		policies, err := ing.Enforcer.E.GetFilteredPolicy(1, knot, repo, perm)
+		if err != nil {
+			t.Fatalf("GetFilteredPolicy(%q): %v", perm, err)
+		}
+		if len(policies) != 0 {
+			t.Fatalf("expected no %s policies for %s, got %v", perm, repo, policies)
+		}
+	}
+}
+
 func TestIngestRepo_CreateInsertsNewRow(t *testing.T) {
 	ing, spy := newTestIngester(t)
 
@@ -418,6 +431,28 @@ func TestIngestRepo_DeleteRemovesRow(t *testing.T) {
 	if !errors.Is(err, sql.ErrNoRows) {
 		t.Errorf("expected row to be deleted, got err = %v", err)
 	}
+}
+
+func TestIngestRepo_DeleteWipesRbac(t *testing.T) {
+	ing, _ := newTestIngester(t)
+	seedRepoRow(t, ing, "did:plc:akshay", "knot.example", "foo", "foo", "did:plc:repo1")
+	if err := ing.ensureRepoOwnerPermissions("did:plc:akshay", "knot.example", "did:plc:repo1"); err != nil {
+		t.Fatalf("ensureRepoOwnerPermissions: %v", err)
+	}
+	if err := ing.Enforcer.AddCollaborator("did:plc:boltless", "knot.example", "did:plc:repo1"); err != nil {
+		t.Fatalf("AddCollaborator: %v", err)
+	}
+	if err := ing.Enforcer.E.SavePolicy(); err != nil {
+		t.Fatalf("SavePolicy: %v", err)
+	}
+	assertRepoOwnerPermissions(t, ing, "did:plc:akshay", "knot.example", "did:plc:repo1")
+
+	e := makeDeleteEvent("did:plc:akshay", "foo")
+	if err := ingestAcceptingOwner(t, ing, e); err != nil {
+		t.Fatalf("ingestRepo: %v", err)
+	}
+
+	assertNoRepoPolicies(t, ing, "knot.example", "did:plc:repo1")
 }
 
 func TestIngestRepo_MalformedRecord(t *testing.T) {

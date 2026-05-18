@@ -1,6 +1,7 @@
 package knots
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -26,6 +27,7 @@ import (
 	"tangled.org/core/tid"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
+	"github.com/bluesky-social/indigo/atproto/atclient"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 )
 
@@ -165,26 +167,14 @@ func (k *Knots) register(w http.ResponseWriter, r *http.Request) {
 		fail()
 		return
 	}
-	defer func() {
-		tx.Rollback()
-		k.Enforcer.E.LoadPolicy()
-	}()
+	defer tx.Rollback()
 
-	err = db.AddKnot(tx, domain, user.Did)
-	if err != nil {
+	if err := db.AddKnot(tx, domain, user.Did); err != nil {
 		l.Error("failed to insert", "err", err)
 		fail()
 		return
 	}
 
-	err = k.Enforcer.AddKnot(domain)
-	if err != nil {
-		l.Error("failed to create knot", "err", err)
-		fail()
-		return
-	}
-
-	// create record on pds
 	client, err := k.OAuth.AuthorizedClient(r)
 	if err != nil {
 		l.Error("failed to authorize client", "err", err)
@@ -198,7 +188,6 @@ func (k *Knots) register(w http.ResponseWriter, r *http.Request) {
 		exCid = ex.Cid
 	}
 
-	// re-announce by registering under same rkey
 	_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 		Collection: tangled.KnotNSID,
 		Repo:       user.Did,
@@ -210,49 +199,20 @@ func (k *Knots) register(w http.ResponseWriter, r *http.Request) {
 		},
 		SwapRecord: exCid,
 	})
-
 	if err != nil {
 		l.Error("failed to put record", "err", err)
 		fail()
 		return
 	}
 
-	err = tx.Commit()
-	if err != nil {
+	if err := tx.Commit(); err != nil {
 		l.Error("failed to commit transaction", "err", err)
 		fail()
 		return
 	}
 
-	err = k.Enforcer.E.SavePolicy()
-	if err != nil {
-		l.Error("failed to update ACL", "err", err)
-		k.Pages.HxRefresh(w)
-		return
-	}
+	go k.Knotstream.AddSource(r.Context(), eventconsumer.NewKnotSource(domain))
 
-	// begin verification
-	err = serververify.RunVerification(r.Context(), domain, user.Did, k.Config.Core.Dev)
-	if err != nil {
-		l.Error("verification failed", "err", err)
-		k.Pages.HxRefresh(w)
-		return
-	}
-
-	err = serververify.MarkKnotVerified(k.Db, k.Enforcer, domain, user.Did)
-	if err != nil {
-		l.Error("failed to mark verified", "err", err)
-		k.Pages.HxRefresh(w)
-		return
-	}
-
-	// add this knot to knotstream
-	go k.Knotstream.AddSource(
-		r.Context(),
-		eventconsumer.NewKnotSource(domain),
-	)
-
-	// ok
 	k.Pages.HxRefresh(w)
 }
 
@@ -553,7 +513,6 @@ func (k *Knots) addMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// write to pds
 	client, err := k.OAuth.AuthorizedClient(r)
 	if err != nil {
 		l.Error("failed to authorize client", "err", err)
@@ -561,8 +520,20 @@ func (k *Knots) addMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rkey := tid.TID()
+	if err = k.Enforcer.AddKnotMember(domain, memberId.DID.String()); err != nil {
+		l.Error("failed to add member to ACLs", "err", err)
+		fail()
+		return
+	}
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		k.Enforcer.E.LoadPolicy()
+	}()
 
+	rkey := tid.TID()
 	_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 		Collection: tangled.KnotMemberNSID,
 		Repo:       user.Did,
@@ -581,21 +552,13 @@ func (k *Knots) addMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = k.Enforcer.AddKnotMember(domain, memberId.DID.String())
-	if err != nil {
-		l.Error("failed to add member to ACLs", "err", err)
-		fail()
-		return
-	}
-
-	err = k.Enforcer.E.SavePolicy()
-	if err != nil {
+	if err = k.Enforcer.E.SavePolicy(); err != nil {
 		l.Error("failed to save ACL policy", "err", err)
 		fail()
 		return
 	}
+	committed = true
 
-	// success
 	k.Pages.HxRedirect(w, fmt.Sprintf("/settings/knots/%s", domain))
 }
 
@@ -649,14 +612,6 @@ func (k *Knots) removeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// remove from enforcer
-	err = k.Enforcer.RemoveKnotMember(domain, memberId.DID.String())
-	if err != nil {
-		l.Error("failed to update ACLs", "err", err)
-		fail()
-		return
-	}
-
 	client, err := k.OAuth.AuthorizedClient(r)
 	if err != nil {
 		l.Error("failed to authorize client", "err", err)
@@ -664,18 +619,81 @@ func (k *Knots) removeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: We need to track the rkey for knot members to delete the record
-	// For now, just remove from ACLs
-	_ = client
-
-	// commit everything
-	err = k.Enforcer.E.SavePolicy()
+	rkey, err := lookupKnotMemberRkey(r.Context(), k.Db, client, user.Did, domain, memberId.DID.String())
 	if err != nil {
+		l.Warn("failed to look up member rkey", "err", err)
+	}
+
+	if err = k.Enforcer.RemoveKnotMember(domain, memberId.DID.String()); err != nil {
+		l.Error("failed to update ACLs", "err", err)
+		fail()
+		return
+	}
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		k.Enforcer.E.LoadPolicy()
+	}()
+
+	if rkey != "" {
+		_, err = comatproto.RepoDeleteRecord(r.Context(), client, &comatproto.RepoDeleteRecord_Input{
+			Collection: tangled.KnotMemberNSID,
+			Repo:       user.Did,
+			Rkey:       rkey,
+		})
+		if err != nil {
+			l.Error("failed to delete record from PDS", "err", err)
+			k.Pages.Notice(w, noticeId, "Failed to delete record from PDS, try again later.")
+			return
+		}
+	}
+
+	if err = k.Enforcer.E.SavePolicy(); err != nil {
 		l.Error("failed to save ACLs", "err", err)
 		fail()
 		return
 	}
+	committed = true
 
-	// ok
 	k.Pages.HxRefresh(w)
+}
+
+func lookupKnotMemberRkey(ctx context.Context, d *db.DB, client *atclient.APIClient, ownerDid, domain, subject string) (string, error) {
+	members, err := db.GetKnotMembers(
+		d,
+		orm.FilterEq("did", ownerDid),
+		orm.FilterEq("domain", domain),
+		orm.FilterEq("subject", subject),
+	)
+	if err != nil {
+		return "", fmt.Errorf("db lookup: %w", err)
+	}
+	if len(members) >= 1 {
+		return members[0].Rkey, nil
+	}
+	return findKnotMemberRkey(ctx, client, ownerDid, domain, subject, "")
+}
+
+func findKnotMemberRkey(ctx context.Context, client *atclient.APIClient, repo, domain, subject, cursor string) (string, error) {
+	out, err := comatproto.RepoListRecords(ctx, client, tangled.KnotMemberNSID, cursor, 100, repo, false)
+	if err != nil {
+		return "", err
+	}
+	for _, rec := range out.Records {
+		m, ok := rec.Value.Val.(*tangled.KnotMember)
+		if !ok {
+			continue
+		}
+		if m.Domain != domain || m.Subject != subject {
+			continue
+		}
+		parts := strings.Split(rec.Uri, "/")
+		return parts[len(parts)-1], nil
+	}
+	if out.Cursor == nil || *out.Cursor == "" || *out.Cursor == cursor {
+		return "", nil
+	}
+	return findKnotMemberRkey(ctx, client, repo, domain, subject, *out.Cursor)
 }

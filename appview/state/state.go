@@ -174,6 +174,7 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 	notifier = lognotify.NewLoggingNotifier(notifier, tlog.SubLogger(logger, "notify"))
 
 	ingester := appview.Ingester{
+		Ctx:        ctx,
 		Db:         d,
 		Enforcer:   enforcer,
 		IdResolver: res,
@@ -188,6 +189,8 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to start jetstream watcher: %w", err)
 	}
+
+	go ingester.SweepPendingVerifications()
 
 	var cfClient *cloudflare.Client
 	if config.Cloudflare.ApiToken != "" {

@@ -1961,6 +1961,22 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "add-knot-members-table", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			create table if not exists knot_members (
+				id integer primary key autoincrement,
+				did text not null,
+				rkey text not null,
+				domain text not null,
+				subject text not null,
+				created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				unique (did, domain, subject)
+			);
+			create index if not exists idx_knot_members_did_rkey on knot_members(did, rkey);
+		`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,

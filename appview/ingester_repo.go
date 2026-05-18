@@ -262,9 +262,39 @@ func (i *Ingester) ingestRepoDelete(ctx context.Context, e *jmodels.Event) error
 		return fmt.Errorf("failed to fetch repo for delete: %w", err)
 	}
 
-	if err := db.RemoveRepo(i.Db, e.Did, e.Commit.RKey); err != nil {
+	if i.Enforcer == nil {
+		return fmt.Errorf("ingester has no RBAC enforcer configured")
+	}
+
+	tx, err := i.Db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start txn: %w", err)
+	}
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		tx.Rollback()
+		i.Enforcer.E.LoadPolicy()
+	}()
+
+	if err := db.RemoveRepo(tx, e.Did, e.Commit.RKey); err != nil {
 		return fmt.Errorf("failed to delete repo: %w", err)
 	}
+
+	if err := i.Enforcer.WipeRepoPolicies(repo.Knot, repo.RepoIdentifier()); err != nil {
+		return fmt.Errorf("failed to wipe repo permissions: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit txn: %w", err)
+	}
+
+	if err := i.Enforcer.E.SavePolicy(); err != nil {
+		return fmt.Errorf("failed to save ACLs: %w", err)
+	}
+	committed = true
 
 	i.Notifier.DeleteRepo(ctx, repo)
 	l.Info("deleted repo row")

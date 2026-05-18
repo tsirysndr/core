@@ -38,6 +38,7 @@ import (
 )
 
 type Ingester struct {
+	Ctx        context.Context
 	Db         *db.DB
 	Enforcer   *rbac.Enforcer
 	IdResolver *idresolver.Resolver
@@ -87,9 +88,9 @@ func (i *Ingester) Ingest() processFunc {
 			case tangled.SpindleNSID:
 				err = i.ingestSpindle(ctx, e)
 			case tangled.KnotMemberNSID:
-				err = i.ingestKnotMember(e)
+				err = i.ingestKnotMember(ctx, e)
 			case tangled.KnotNSID:
-				err = i.ingestKnot(e)
+				err = i.ingestKnot(ctx, e)
 			case tangled.StringNSID:
 				err = i.ingestString(e)
 			case tangled.RepoIssueNSID:
@@ -640,7 +641,7 @@ func (i *Ingester) ingestSpindleMember(ctx context.Context, e *jmodels.Event) er
 	l = l.With("nsid", e.Commit.Collection)
 
 	switch e.Commit.Operation {
-	case jmodels.CommitOperationCreate:
+	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
 		raw := json.RawMessage(e.Commit.Record)
 		record := tangled.SpindleMember{}
 		err = json.Unmarshal(raw, &record)
@@ -651,8 +652,20 @@ func (i *Ingester) ingestSpindleMember(ctx context.Context, e *jmodels.Event) er
 
 		// only spindle owner can invite to spindles
 		ok, err := i.Enforcer.IsSpindleInviteAllowed(did, record.Instance)
-		if err != nil || !ok {
-			return fmt.Errorf("failed to enforce permissions: %w", err)
+		if err != nil {
+			return fmt.Errorf("failed to check invite permission: %w", err)
+		}
+		if !ok {
+			if verifyErr := i.verifySpindle(ctx, record.Instance, did); verifyErr != nil {
+				return fmt.Errorf("invite denied and verify failed: %w", verifyErr)
+			}
+			ok, err = i.Enforcer.IsSpindleInviteAllowed(did, record.Instance)
+			if err != nil {
+				return fmt.Errorf("failed to re-check invite permission: %w", err)
+			}
+			if !ok {
+				return fmt.Errorf("invite denied for did %s on spindle %s", did, record.Instance)
+			}
 		}
 
 		memberId, err := i.IdResolver.ResolveIdent(ctx, record.Subject)
@@ -661,25 +674,71 @@ func (i *Ingester) ingestSpindleMember(ctx context.Context, e *jmodels.Event) er
 		}
 
 		if memberId.Handle.IsInvalidHandle() {
-			return err
+			return fmt.Errorf("invalid handle for member %s", record.Subject)
 		}
 
-		err = db.AddSpindleMember(i.Db, models.SpindleMember{
+		existing, err := db.GetSpindleMembers(i.Db,
+			orm.FilterEq("did", did),
+			orm.FilterEq("rkey", e.Commit.RKey),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to look up existing member: %w", err)
+		}
+		if len(existing) > 1 {
+			return fmt.Errorf("multiple spindle members with rkey %s", e.Commit.RKey)
+		}
+
+		tx, err := i.Db.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to start txn: %w", err)
+		}
+		committed := false
+		defer func() {
+			if committed {
+				return
+			}
+			tx.Rollback()
+			i.Enforcer.E.LoadPolicy()
+		}()
+
+		if len(existing) == 1 {
+			prev := existing[0]
+			if prev.Instance != record.Instance || prev.Subject != memberId.DID {
+				if err = db.RemoveSpindleMember(tx,
+					orm.FilterEq("did", did),
+					orm.FilterEq("rkey", e.Commit.RKey),
+				); err != nil {
+					return fmt.Errorf("failed to remove stale row: %w", err)
+				}
+				if err = i.Enforcer.RemoveSpindleMember(prev.Instance, prev.Subject.String()); err != nil {
+					return fmt.Errorf("failed to remove stale ACL: %w", err)
+				}
+			}
+		}
+
+		if err = db.AddSpindleMember(tx, models.SpindleMember{
 			Did:      syntax.DID(did),
 			Rkey:     e.Commit.RKey,
 			Instance: record.Instance,
 			Subject:  memberId.DID,
-		})
-		if !ok {
+		}); err != nil {
 			return fmt.Errorf("failed to add to db: %w", err)
 		}
 
-		err = i.Enforcer.AddSpindleMember(record.Instance, memberId.DID.String())
-		if err != nil {
+		if err = i.Enforcer.AddSpindleMember(record.Instance, memberId.DID.String()); err != nil {
 			return fmt.Errorf("failed to update ACLs: %w", err)
 		}
 
-		l.Info("added spindle member")
+		if err = tx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit txn: %w", err)
+		}
+
+		if err = i.Enforcer.E.SavePolicy(); err != nil {
+			return fmt.Errorf("failed to save ACLs: %w", err)
+		}
+		committed = true
+
+		l.Info("upserted spindle member")
 	case jmodels.CommitOperationDelete:
 		rkey := e.Commit.RKey
 
@@ -698,6 +757,14 @@ func (i *Ingester) ingestSpindleMember(ctx context.Context, e *jmodels.Event) er
 		if err != nil {
 			return fmt.Errorf("failed to start txn: %w", err)
 		}
+		committed := false
+		defer func() {
+			if committed {
+				return
+			}
+			tx.Rollback()
+			i.Enforcer.E.LoadPolicy()
+		}()
 
 		// remove record by rkey && update enforcer
 		if err = db.RemoveSpindleMember(
@@ -721,6 +788,7 @@ func (i *Ingester) ingestSpindleMember(ctx context.Context, e *jmodels.Event) er
 		if err = i.Enforcer.E.SavePolicy(); err != nil {
 			return fmt.Errorf("failed to save ACLs: %w", err)
 		}
+		committed = true
 
 		l.Info("removed spindle member")
 	}
@@ -736,7 +804,7 @@ func (i *Ingester) ingestSpindle(ctx context.Context, e *jmodels.Event) error {
 	l = l.With("nsid", e.Commit.Collection)
 
 	switch e.Commit.Operation {
-	case jmodels.CommitOperationCreate:
+	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
 		raw := json.RawMessage(e.Commit.Record)
 		record := tangled.Spindle{}
 		err = json.Unmarshal(raw, &record)
@@ -756,19 +824,8 @@ func (i *Ingester) ingestSpindle(ctx context.Context, e *jmodels.Event) error {
 			return err
 		}
 
-		err = retry.Do(
-			func() error { return serververify.RunVerification(ctx, instance, did, i.Config.Core.Dev) },
-			retry.Attempts(5), retry.Delay(5*time.Second), retry.MaxDelay(80*time.Second),
-			retry.DelayType(retry.BackOffDelay), retry.LastErrorOnly(true),
-		)
-		if err != nil {
-			l.Error("failed to verify spindle after retries", "err", err, "instance", instance)
-			return err
-		}
-
-		_, err = serververify.MarkSpindleVerified(i.Db, i.Enforcer, instance, did)
-		if err != nil {
-			return fmt.Errorf("failed to mark verified: %w", err)
+		if err := i.verifySpindle(ctx, instance, did); err != nil {
+			l.Warn("failed to verify spindle", "instance", instance, "did", did, "err", err)
 		}
 
 		return nil
@@ -886,7 +943,7 @@ func (i *Ingester) ingestString(e *jmodels.Event) error {
 	return nil
 }
 
-func (i *Ingester) ingestKnotMember(e *jmodels.Event) error {
+func (i *Ingester) ingestKnotMember(ctx context.Context, e *jmodels.Event) error {
 	did := e.Did
 	var err error
 
@@ -894,7 +951,7 @@ func (i *Ingester) ingestKnotMember(e *jmodels.Event) error {
 	l = l.With("nsid", e.Commit.Collection)
 
 	switch e.Commit.Operation {
-	case jmodels.CommitOperationCreate:
+	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
 		raw := json.RawMessage(e.Commit.Record)
 		record := tangled.KnotMember{}
 		err = json.Unmarshal(raw, &record)
@@ -905,40 +962,154 @@ func (i *Ingester) ingestKnotMember(e *jmodels.Event) error {
 
 		// only knot owner can invite to knots
 		ok, err := i.Enforcer.IsKnotInviteAllowed(did, record.Domain)
-		if err != nil || !ok {
-			return fmt.Errorf("failed to enforce permissions: %w", err)
+		if err != nil {
+			return fmt.Errorf("failed to check invite permission: %w", err)
+		}
+		if !ok {
+			if verifyErr := i.verifyKnot(ctx, record.Domain, did); verifyErr != nil {
+				return fmt.Errorf("invite denied and verify failed: %w", verifyErr)
+			}
+			ok, err = i.Enforcer.IsKnotInviteAllowed(did, record.Domain)
+			if err != nil {
+				return fmt.Errorf("failed to re-check invite permission: %w", err)
+			}
+			if !ok {
+				return fmt.Errorf("invite denied for did %s on knot %s", did, record.Domain)
+			}
 		}
 
-		memberId, err := i.IdResolver.ResolveIdent(context.Background(), record.Subject)
+		memberId, err := i.IdResolver.ResolveIdent(ctx, record.Subject)
 		if err != nil {
 			return err
 		}
 
 		if memberId.Handle.IsInvalidHandle() {
-			return err
+			return fmt.Errorf("invalid handle for member %s", record.Subject)
 		}
 
-		err = i.Enforcer.AddKnotMember(record.Domain, memberId.DID.String())
+		existing, err := db.GetKnotMembers(i.Db,
+			orm.FilterEq("did", did),
+			orm.FilterEq("rkey", e.Commit.RKey),
+		)
 		if err != nil {
+			return fmt.Errorf("failed to look up existing member: %w", err)
+		}
+		if len(existing) > 1 {
+			return fmt.Errorf("multiple knot members with rkey %s", e.Commit.RKey)
+		}
+
+		tx, err := i.Db.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to start txn: %w", err)
+		}
+		committed := false
+		defer func() {
+			if committed {
+				return
+			}
+			tx.Rollback()
+			i.Enforcer.E.LoadPolicy()
+		}()
+
+		if len(existing) == 1 {
+			prev := existing[0]
+			if prev.Domain != record.Domain || prev.Subject != memberId.DID {
+				if err = db.RemoveKnotMember(tx,
+					orm.FilterEq("did", did),
+					orm.FilterEq("rkey", e.Commit.RKey),
+				); err != nil {
+					return fmt.Errorf("failed to remove stale row: %w", err)
+				}
+				if err = i.Enforcer.RemoveKnotMember(prev.Domain, prev.Subject.String()); err != nil {
+					return fmt.Errorf("failed to remove stale ACL: %w", err)
+				}
+			}
+		}
+
+		if err = db.AddKnotMember(tx, models.KnotMember{
+			Did:     syntax.DID(did),
+			Rkey:    e.Commit.RKey,
+			Domain:  record.Domain,
+			Subject: memberId.DID,
+		}); err != nil {
+			return fmt.Errorf("failed to add to db: %w", err)
+		}
+
+		if err = i.Enforcer.AddKnotMember(record.Domain, memberId.DID.String()); err != nil {
 			return fmt.Errorf("failed to update ACLs: %w", err)
 		}
 
-		l.Info("added knot member")
+		if err = tx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit txn: %w", err)
+		}
+
+		if err = i.Enforcer.E.SavePolicy(); err != nil {
+			return fmt.Errorf("failed to save ACLs: %w", err)
+		}
+		committed = true
+
+		l.Info("upserted knot member")
 	case jmodels.CommitOperationDelete:
-		// we don't store knot members in a table (like we do for spindle)
-		// and we can't remove this just yet. possibly fixed if we switch
-		// to either:
-		//   1. a knot_members table like with spindle and store the rkey
-		// 	 2. use the knot host as the rkey
-		//
-		// TODO: implement member deletion
-		l.Info("skipping knot member delete", "did", did, "rkey", e.Commit.RKey)
+		rkey := e.Commit.RKey
+
+		members, err := db.GetKnotMembers(
+			i.Db,
+			orm.FilterEq("did", did),
+			orm.FilterEq("rkey", rkey),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to look up knot member with rkey %s: %w", rkey, err)
+		}
+		if len(members) == 0 {
+			l.Info("knot member already removed", "rkey", rkey)
+			return nil
+		}
+		if len(members) > 1 {
+			return fmt.Errorf("multiple knot members with rkey %s", rkey)
+		}
+		member := members[0]
+
+		tx, err := i.Db.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to start txn: %w", err)
+		}
+		committed := false
+		defer func() {
+			if committed {
+				return
+			}
+			tx.Rollback()
+			i.Enforcer.E.LoadPolicy()
+		}()
+
+		if err = db.RemoveKnotMember(
+			tx,
+			orm.FilterEq("did", did),
+			orm.FilterEq("rkey", rkey),
+		); err != nil {
+			return fmt.Errorf("failed to remove from db: %w", err)
+		}
+
+		if err = i.Enforcer.RemoveKnotMember(member.Domain, member.Subject.String()); err != nil {
+			return fmt.Errorf("failed to update ACLs: %w", err)
+		}
+
+		if err = tx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit txn: %w", err)
+		}
+
+		if err = i.Enforcer.E.SavePolicy(); err != nil {
+			return fmt.Errorf("failed to save ACLs: %w", err)
+		}
+		committed = true
+
+		l.Info("removed knot member")
 	}
 
 	return nil
 }
 
-func (i *Ingester) ingestKnot(e *jmodels.Event) error {
+func (i *Ingester) ingestKnot(ctx context.Context, e *jmodels.Event) error {
 	did := e.Did
 	var err error
 
@@ -946,7 +1117,7 @@ func (i *Ingester) ingestKnot(e *jmodels.Event) error {
 	l = l.With("nsid", e.Commit.Collection)
 
 	switch e.Commit.Operation {
-	case jmodels.CommitOperationCreate:
+	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
 		raw := json.RawMessage(e.Commit.Record)
 		record := tangled.Knot{}
 		err = json.Unmarshal(raw, &record)
@@ -963,21 +1134,8 @@ func (i *Ingester) ingestKnot(e *jmodels.Event) error {
 			return err
 		}
 
-		err = retry.Do(
-			func() error {
-				return serververify.RunVerification(context.Background(), domain, did, i.Config.Core.Dev)
-			},
-			retry.Attempts(5), retry.Delay(5*time.Second), retry.MaxDelay(80*time.Second),
-			retry.DelayType(retry.BackOffDelay), retry.LastErrorOnly(true),
-		)
-		if err != nil {
-			l.Error("failed to verify knot after retries", "err", err, "domain", domain)
-			return err
-		}
-
-		err = serververify.MarkKnotVerified(i.Db, i.Enforcer, domain, did)
-		if err != nil {
-			return fmt.Errorf("failed to mark verified: %w", err)
+		if err := i.verifyKnot(ctx, domain, did); err != nil {
+			l.Warn("failed to verify knot", "domain", domain, "did", did, "err", err)
 		}
 
 		return nil
@@ -1008,6 +1166,15 @@ func (i *Ingester) ingestKnot(e *jmodels.Event) error {
 			i.Enforcer.E.LoadPolicy()
 		}()
 
+		err = db.RemoveKnotMember(
+			tx,
+			orm.FilterEq("did", did),
+			orm.FilterEq("domain", domain),
+		)
+		if err != nil {
+			return err
+		}
+
 		err = db.DeleteKnot(
 			tx,
 			orm.FilterEq("did", did),
@@ -1037,6 +1204,113 @@ func (i *Ingester) ingestKnot(e *jmodels.Event) error {
 
 	return nil
 }
+
+const (
+	verifyAttempts = 4
+	verifyMinDelay = 1 * time.Second
+	verifyMaxDelay = 5 * time.Second
+)
+
+func (i *Ingester) verifyKnot(ctx context.Context, domain, did string) error {
+	regs, err := db.GetRegistrations(i.Db,
+		orm.FilterEq("domain", domain),
+		orm.FilterEq("did", did),
+	)
+	if err != nil {
+		return fmt.Errorf("look up registration: %w", err)
+	}
+	if len(regs) != 1 {
+		return fmt.Errorf("no registration for %s by %s", domain, did)
+	}
+	if regs[0].Registered != nil {
+		return nil
+	}
+
+	err = retry.Do(
+		func() error { return serververify.RunVerification(ctx, domain, did, i.Config.Core.Dev) },
+		retry.Context(ctx),
+		retry.Attempts(verifyAttempts),
+		retry.Delay(verifyMinDelay),
+		retry.MaxDelay(verifyMaxDelay),
+		retry.DelayType(retry.BackOffDelay),
+		retry.LastErrorOnly(true),
+	)
+	if err != nil {
+		return fmt.Errorf("verify: %w", err)
+	}
+	return serververify.MarkKnotVerified(i.Db, i.Enforcer, domain, did)
+}
+
+func (i *Ingester) verifySpindle(ctx context.Context, instance, did string) error {
+	spindles, err := db.GetSpindles(ctx, i.Db,
+		orm.FilterEq("instance", instance),
+		orm.FilterEq("owner", did),
+	)
+	if err != nil {
+		return fmt.Errorf("look up spindle: %w", err)
+	}
+	if len(spindles) != 1 {
+		return fmt.Errorf("no spindle for %s by %s", instance, did)
+	}
+	if spindles[0].Verified != nil {
+		return nil
+	}
+
+	err = retry.Do(
+		func() error { return serververify.RunVerification(ctx, instance, did, i.Config.Core.Dev) },
+		retry.Context(ctx),
+		retry.Attempts(verifyAttempts),
+		retry.Delay(verifyMinDelay),
+		retry.MaxDelay(verifyMaxDelay),
+		retry.DelayType(retry.BackOffDelay),
+		retry.LastErrorOnly(true),
+	)
+	if err != nil {
+		return fmt.Errorf("verify: %w", err)
+	}
+	_, err = serververify.MarkSpindleVerified(i.Db, i.Enforcer, instance, did)
+	return err
+}
+
+const sweepConcurrency = 4
+
+func (i *Ingester) SweepPendingVerifications() {
+	l := i.Logger.With("handler", "SweepPendingVerifications")
+
+	var g errgroup.Group
+	g.SetLimit(sweepConcurrency)
+
+	regs, err := db.GetRegistrations(i.Db, orm.FilterIs("registered", nil))
+	if err != nil {
+		l.Error("failed to list unverified knots", "err", err)
+	} else {
+		for _, reg := range regs {
+			g.Go(func() error {
+				if err := i.verifyKnot(i.Ctx, reg.Domain, reg.ByDid); err != nil {
+					l.Warn("verify knot failed", "domain", reg.Domain, "did", reg.ByDid, "err", err)
+				}
+				return nil
+			})
+		}
+	}
+
+	spindles, err := db.GetSpindles(i.Ctx, i.Db, orm.FilterIs("verified", nil))
+	if err != nil {
+		l.Error("failed to list unverified spindles", "err", err)
+		g.Wait()
+		return
+	}
+	for _, s := range spindles {
+		g.Go(func() error {
+			if err := i.verifySpindle(i.Ctx, s.Instance, s.Owner.String()); err != nil {
+				l.Warn("verify spindle failed", "instance", s.Instance, "owner", s.Owner, "err", err)
+			}
+			return nil
+		})
+	}
+	g.Wait()
+}
+
 func (i *Ingester) ingestIssue(ctx context.Context, e *jmodels.Event) error {
 	did := e.Did
 	rkey := e.Commit.RKey

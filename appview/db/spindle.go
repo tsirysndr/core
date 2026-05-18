@@ -83,10 +83,10 @@ func GetSpindles(ctx context.Context, e Execer, filters ...orm.Filter) ([]models
 	return spindles, nil
 }
 
-// if there is an existing spindle with the same instance, this returns an error
 func AddSpindle(e Execer, spindle models.Spindle) error {
 	_, err := e.Exec(
-		`insert into spindles (owner, instance) values (?, ?)`,
+		`insert into spindles (owner, instance) values (?, ?)
+		 on conflict (owner, instance) do nothing`,
 		spindle.Owner,
 		spindle.Instance,
 	)
@@ -147,6 +147,10 @@ func AddSpindleMember(e Execer, member models.SpindleMember) error {
 }
 
 func RemoveSpindleMember(e Execer, filters ...orm.Filter) error {
+	if len(filters) == 0 {
+		return fmt.Errorf("RemoveSpindleMember requires at least one filter")
+	}
+
 	var conditions []string
 	var args []any
 	for _, filter := range filters {
@@ -154,12 +158,7 @@ func RemoveSpindleMember(e Execer, filters ...orm.Filter) error {
 		args = append(args, filter.Arg()...)
 	}
 
-	whereClause := ""
-	if conditions != nil {
-		whereClause = " where " + strings.Join(conditions, " and ")
-	}
-
-	query := fmt.Sprintf(`delete from spindle_members %s`, whereClause)
+	query := fmt.Sprintf(`delete from spindle_members where %s`, strings.Join(conditions, " and "))
 
 	_, err := e.Exec(query, args...)
 	return err

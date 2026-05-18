@@ -69,7 +69,11 @@ func MarkSpindleVerified(d *db.DB, e *rbac.Enforcer, instance, owner string) (in
 	if err != nil {
 		return 0, fmt.Errorf("failed to create txn: %w", err)
 	}
+	committed := false
 	defer func() {
+		if committed {
+			return
+		}
 		tx.Rollback()
 		e.E.LoadPolicy()
 	}()
@@ -98,6 +102,7 @@ func MarkSpindleVerified(d *db.DB, e *rbac.Enforcer, instance, owner string) (in
 	if err != nil {
 		return 0, fmt.Errorf("failed to update ACL: %w", err)
 	}
+	committed = true
 
 	return rowId, nil
 }
@@ -108,7 +113,11 @@ func MarkKnotVerified(d *db.DB, e *rbac.Enforcer, domain, owner string) error {
 	if err != nil {
 		return fmt.Errorf("failed to start tx: %w", err)
 	}
+	committed := false
 	defer func() {
+		if committed {
+			return
+		}
 		tx.Rollback()
 		e.E.LoadPolicy()
 	}()
@@ -144,6 +153,7 @@ func MarkKnotVerified(d *db.DB, e *rbac.Enforcer, domain, owner string) error {
 	if err != nil {
 		return fmt.Errorf("failed to update ACLs: %w", err)
 	}
+	committed = true
 
 	return nil
 }
