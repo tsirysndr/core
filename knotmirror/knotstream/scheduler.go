@@ -24,7 +24,7 @@ type ParallelScheduler struct {
 }
 
 type Task struct {
-	key     string
+	Key     string
 	message []byte
 }
 
@@ -46,13 +46,13 @@ func (s *ParallelScheduler) Start(ctx context.Context) {
 
 func (s *ParallelScheduler) AddTask(ctx context.Context, task *Task) {
 	s.lk.Lock()
-	if st, ok := s.scheduled[task.key]; ok {
+	if st, ok := s.scheduled[task.Key]; ok {
 		// schedule task
-		s.scheduled[task.key] = append(st, task)
+		s.scheduled[task.Key] = append(st, task)
 		s.lk.Unlock()
 		return
 	}
-	s.scheduled[task.key] = []*Task{}
+	s.scheduled[task.Key] = []*Task{}
 	s.lk.Unlock()
 
 	select {
@@ -77,16 +77,16 @@ func (s *ParallelScheduler) ForEach(ctx context.Context, fn func(context.Context
 
 			s.lk.Lock()
 			func() {
-				rem, ok := s.scheduled[task.key]
+				rem, ok := s.scheduled[task.Key]
 				if !ok {
 					s.logger.Error("should always have an 'active' entry if a worker is processing a job")
 				}
 				if len(rem) == 0 {
-					delete(s.scheduled, task.key)
+					delete(s.scheduled, task.Key)
 					task = nil
 				} else {
 					task = rem[0]
-					s.scheduled[task.key] = rem[1:]
+					s.scheduled[task.Key] = rem[1:]
 				}
 
 				// TODO: update seq from received message

@@ -98,6 +98,7 @@ func knotIngester(d *db.DB, enforcer *rbac.Enforcer, posthog posthog.Client, not
 	}
 }
 
+// TODO(boltless): remove this. knotmirror should do all sort of indexing
 func ingestRefUpdate(ctx context.Context, d *db.DB, enforcer *rbac.Enforcer, pc posthog.Client, notifier notify.Notifier, dev bool, c *config.Config, cfClient *cloudflare.Client, source ec.Source, msg ec.Message) error {
 	logger := log.FromContext(ctx)
 

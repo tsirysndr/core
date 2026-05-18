@@ -14,6 +14,7 @@ import (
 	"tangled.org/core/knotmirror/config"
 	"tangled.org/core/knotmirror/db"
 	"tangled.org/core/knotmirror/knotstream"
+	"tangled.org/core/knotmirror/repoindexer"
 	"tangled.org/core/knotmirror/models"
 	"tangled.org/core/knotmirror/xrpc"
 	"tangled.org/core/log"
@@ -56,10 +57,14 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	}
 	logger.Info(fmt.Sprintf("clearing resyning states: %d records updated", rows))
 
+	indexer := repoindexer.NewIndexer(logger, cfg, rdb)
+	indexScheduler := repoindexer.NewBackgroundIndexScheduler(logger, cfg, db, indexer)
+	indexScheduler.Start(ctx)
+
 	knotstream := knotstream.NewKnotStream(logger, db, cfg)
 	crawler := NewCrawler(logger, db)
-	resyncer := NewResyncer(logger, db, gitm, cfg)
-	xrpc := xrpc.New(logger, cfg, db, rdb, resolver, knotstream)
+	resyncer := NewResyncer(logger, db, gitm, indexScheduler, cfg)
+	xrpc := xrpc.New(logger, cfg, db, rdb, indexer, resolver, knotstream)
 	adminpage := NewAdminServer(logger, db, resyncer, xrpc, resolver)
 
 	// maintain repository list with tap

@@ -49,24 +49,28 @@ func GetCommit(ctx context.Context, repoPath, rev string) (*object.Commit, error
 }
 
 func GetTree(ctx context.Context, repoPath, rev string) (*object.Tree, error) {
-	wr, rd, cancel := CatFileBatch(ctx, repoPath)
+	bw, br, cancel := CatFileBatch(ctx, repoPath)
 	defer cancel()
 
-	if _, err := wr.Write([]byte(rev + "\n")); err != nil {
+	return BatchGetTree(bw, br, rev)
+}
+
+func BatchGetTree(bw io.WriteCloser, br *bufio.Reader, rev string) (*object.Tree, error) {
+	if _, err := bw.Write([]byte(rev + "\n")); err != nil {
 		return nil, fmt.Errorf("write rev: %w", err)
 	}
-	sha, typ, size, err := ReadBatchLine(rd)
+	sha, typ, size, err := ReadBatchLine(br)
 	if err != nil {
 		return nil, fmt.Errorf("resolve %s: %w", rev, err)
 	}
 	if typ != "tree" {
-		if err := DiscardFull(rd, size+1); err != nil {
+		if err := DiscardFull(br, size+1); err != nil {
 			return nil, err
 		}
 		return nil, fmt.Errorf("unexpected type: %s for tree: %s", typ, rev)
 	}
 
-	entries, err := catBatchParseTreeEntries(rd, size)
+	entries, err := catBatchParseTreeEntries(br, size)
 	if err != nil {
 		return nil, fmt.Errorf("read tree %s: %w", rev, err)
 	}

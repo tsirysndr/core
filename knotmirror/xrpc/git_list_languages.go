@@ -2,21 +2,14 @@ package xrpc
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"math"
 	"net/http"
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/api/tangled"
-	"tangled.org/core/knotserver/git"
-)
-
-const (
-	RepoLanguagesByDid = "git_list_languages:repo:%s:%s"
-	RepoLanguagesTTL   = 24 * time.Hour
+	"tangled.org/core/knotmirror/xrpc/gitea"
 )
 
 func (x *Xrpc) ListLanguages(w http.ResponseWriter, r *http.Request) {
@@ -34,86 +27,39 @@ func (x *Xrpc) ListLanguages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if val, err := x.rdb.Get(r.Context(), fmt.Sprintf(RepoLanguagesByDid, repo, ref)).Result(); err == nil {
-		l.Debug("served from cache")
-		var langs []*tangled.GitTempListLanguages_Language
-		err = json.Unmarshal([]byte(val), &langs)
-		if err == nil {
-			writeJson(w, http.StatusOK, &tangled.GitTempListLanguages_Output{
-				Ref:       ref,
-				Languages: langs,
-			})
-			return
-		}
-	}
+	ctx := r.Context()
 
-	var out *tangled.GitTempListLanguages_Output
-	out, err = x.listLanguages(r.Context(), repo, ref)
+	repoPath, err := x.makeRepoPath(ctx, repo)
 	if err != nil {
-		l.Warn("local mirror failed, trying proxy", "err", err)
-		if x.proxyToKnot(w, r, repo) {
-			return
-		}
-		writeErr(w, err)
+		l.Error("failed to make repo path", "err", err)
+		writeJson(w, http.StatusNotFound, atclient.ErrorBody{Name: "RepoNotFound", Message: fmt.Sprintf("unknown repository: %s", repo)})
 		return
 	}
 
-	go func() {
-		ctx := context.Background()
-		encoded, err := json.Marshal(out.Languages)
-		if err != nil {
-			return
-		}
-		x.rdb.Set(ctx, fmt.Sprintf(RepoLanguagesByDid, repo, ref), encoded, RepoLanguagesTTL)
-	}()
-
-	writeJson(w, http.StatusOK, out)
-}
-
-func (x *Xrpc) listLanguages(ctx context.Context, repo syntax.DID, ref string) (*tangled.GitTempListLanguages_Output, error) {
-	repoPath, err := x.makeRepoPath(ctx, repo)
+	commit, err := gitea.GetCommit(ctx, repoPath, ref)
 	if err != nil {
-		return nil, fmt.Errorf("resolving repo did: %w", err)
+		l.Error("failed to get commit", "err", err)
+		writeJson(w, http.StatusNotFound, atclient.ErrorBody{Name: "RefNotFound", Message: fmt.Sprintf("unknown git ref: %s", repo)})
+		return
 	}
 
-	gr, err := git.Open(repoPath, ref)
-	if err != nil {
-		return nil, &atclient.APIError{StatusCode: http.StatusNotFound, Name: "RepoNotFound", Message: "failed to find git repo"}
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+	indexCtx, cancel := context.WithTimeout(ctx, 1 * time.Second)
 	defer cancel()
-
-	sizes, err := gr.AnalyzeLanguages(ctx)
+	sizes, err := x.indexer.IndexLanguages(indexCtx, repo, commit.Hash)
 	if err != nil {
-		return nil, fmt.Errorf("analyzing languages: %w", err)
+		l.Error("failed to serve languages", "err", err)
+		writeJson(w, http.StatusNotFound, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to serve languages"})
+		return
 	}
 
-	return &tangled.GitTempListLanguages_Output{
-		Ref:       ref,
-		Languages: sizesToLanguages(sizes),
-	}, nil
-}
-
-func sizesToLanguages(sizes git.LangBreakdown) []*tangled.GitTempListLanguages_Language {
-	var apiLanguages []*tangled.GitTempListLanguages_Language
-	var totalSize int64
-	for _, size := range sizes {
-		totalSize += size
+	var out tangled.GitTempListLanguages_Output
+	for lang, size := range sizes {
+		out.Total += size
+		out.Languages = append(out.Languages, &tangled.GitTempListLanguages_Language{
+			Name: lang,
+			Size: size,
+		})
 	}
 
-	for name, size := range sizes {
-		percentagef64 := float64(size) / float64(totalSize) * 100
-		percentage := math.Round(percentagef64)
-
-		lang := &tangled.GitTempListLanguages_Language{
-			Name:       name,
-			Size:       size,
-			Percentage: int64(percentage),
-		}
-
-		apiLanguages = append(apiLanguages, lang)
-	}
-
-	return apiLanguages
+	writeJson(w, http.StatusOK, &out)
 }

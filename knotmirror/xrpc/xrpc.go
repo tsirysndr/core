@@ -15,6 +15,7 @@ import (
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/knotmirror/config"
+	"tangled.org/core/knotmirror/repoindexer"
 	"tangled.org/core/knotmirror/knotstream"
 	"tangled.org/core/log"
 )
@@ -23,6 +24,7 @@ type Xrpc struct {
 	cfg        *config.Config
 	db         *sql.DB
 	rdb        *redis.Client
+	indexer    *repoindexer.Indexer
 	resolver   *idresolver.Resolver
 	ks         *knotstream.KnotStream
 	logger     *slog.Logger
@@ -30,7 +32,7 @@ type Xrpc struct {
 	inflight   *inflightTracker
 }
 
-func New(logger *slog.Logger, cfg *config.Config, db *sql.DB, rdb *redis.Client, resolver *idresolver.Resolver, ks *knotstream.KnotStream) *Xrpc {
+func New(logger *slog.Logger, cfg *config.Config, db *sql.DB, rdb *redis.Client, indexer *repoindexer.Indexer, resolver *idresolver.Resolver, ks *knotstream.KnotStream) *Xrpc {
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second,
 	}
@@ -41,6 +43,7 @@ func New(logger *slog.Logger, cfg *config.Config, db *sql.DB, rdb *redis.Client,
 		cfg:        cfg,
 		db:         db,
 		rdb:        rdb,
+		indexer:    indexer,
 		resolver:   resolver,
 		ks:         ks,
 		logger:     log.SubLogger(logger, "xrpc"),

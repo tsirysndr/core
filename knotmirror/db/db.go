@@ -69,9 +69,23 @@ func Make(ctx context.Context, dbUrl string, maxConns int) (*sql.DB, error) {
 			constraint hosts_pkey primary key (hostname)
 		);
 
+		-- repo language stats at HEAD
+		create table if not exists repo_head_languages (
+			repo     text    not null, -- repo identifier (did)
+			commit   text    not null, -- commit id (oid)
+			language text    not null,
+			size     integer not null check (size >= 0),
+
+			constraint repo_head_languages_pkey
+				primary key (repo, commit, language)
+		);
+
 		create index if not exists idx_repos_aturi on repos (at_uri);
 		create index if not exists idx_repos_db_updated_at on repos (db_updated_at desc);
 		create index if not exists idx_hosts_db_updated_at on hosts (db_updated_at desc);
+
+		create index if not exists idx_repo_head_languages_repo_commit
+			on repo_head_languages (repo, commit);
 
 		create or replace function set_updated_at()
 		returns trigger as $$

@@ -257,7 +257,7 @@ func (s *KnotSlurper) handleConnection(ctx context.Context, conn *websocket.Conn
 		}
 
 		sub.scheduler.AddTask(ctx, &Task{
-			key:     sub.hostname, // TODO: replace to repository AT-URI for better concurrency
+			Key:     sub.hostname, // TODO: replace to repository AT-URI for better concurrency
 			message: msg,
 		})
 	}
@@ -281,7 +281,7 @@ func (s *KnotSlurper) ProcessEvent(ctx context.Context, task *Task) error {
 		return fmt.Errorf("unmarshaling message: %w", err)
 	}
 
-	if err := s.ProcessLegacyGitRefUpdate(ctx, task.key, &legacyMessage); err != nil {
+	if err := s.ProcessLegacyGitRefUpdate(ctx, task.Key, &legacyMessage); err != nil {
 		return fmt.Errorf("processing gitRefUpdate: %w", err)
 	}
 	return nil

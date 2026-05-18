@@ -16,15 +16,17 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/knotmirror/config"
 	"tangled.org/core/knotmirror/db"
+	"tangled.org/core/knotmirror/knotstream"
 	"tangled.org/core/knotmirror/models"
 	"tangled.org/core/log"
 )
 
 type Resyncer struct {
-	logger *slog.Logger
-	db     *sql.DB
-	gitm   GitMirrorManager
-	cfg    *config.Config
+	logger  *slog.Logger
+	db      *sql.DB
+	gitm    GitMirrorManager
+	cfg     *config.Config
+	indexer *knotstream.ParallelScheduler
 
 	claimJobMu sync.Mutex
 
@@ -41,12 +43,13 @@ type Resyncer struct {
 	httpClient *http.Client
 }
 
-func NewResyncer(l *slog.Logger, db *sql.DB, gitm GitMirrorManager, cfg *config.Config) *Resyncer {
+func NewResyncer(l *slog.Logger, db *sql.DB, gitm GitMirrorManager, indexer *knotstream.ParallelScheduler, cfg *config.Config) *Resyncer {
 	return &Resyncer{
-		logger: log.SubLogger(l, "resyncer"),
-		db:     db,
-		gitm:   gitm,
-		cfg:    cfg,
+		logger:  log.SubLogger(l, "resyncer"),
+		db:      db,
+		gitm:    gitm,
+		cfg:     cfg,
+		indexer: indexer,
 
 		runningJobs: make(map[syntax.ATURI]context.CancelFunc),
 
@@ -247,6 +250,9 @@ func (r *Resyncer) doResync(ctx context.Context, repoAt syntax.ATURI) (bool, err
 	if err := r.gitm.Sync(fetchCtx, repo); err != nil {
 		return false, err
 	}
+
+	// queue repo_stats_update job
+	r.indexer.AddTask(context.TODO(), &knotstream.Task{Key: repo.RepoDid.String()})
 
 	// repo.GitRev = <processed git.refUpdate revision>
 	// repo.RepoSha = <sha256 sum of git refs>
