@@ -1330,13 +1330,15 @@ func (rp *Repo) ForkRepo(w http.ResponseWriter, r *http.Request) {
 			forkSource = f.RepoDid
 		}
 
+		forkDescription := r.Form.Get("description")
+
 		repo := &models.Repo{
 			Did:         user.Did,
 			Name:        rkey,
 			Knot:        targetKnot,
 			Rkey:        rkey,
 			Source:      forkSource,
-			Description: f.Description,
+			Description: forkDescription,
 			Created:     time.Now(),
 			Labels:      rp.config.Label.DefaultLabelDefs,
 			RepoDid:     repoDid,
