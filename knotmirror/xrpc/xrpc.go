@@ -15,8 +15,8 @@ import (
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/knotmirror/config"
-	"tangled.org/core/knotmirror/repoindexer"
 	"tangled.org/core/knotmirror/knotstream"
+	"tangled.org/core/knotmirror/repoindexer"
 	"tangled.org/core/log"
 )
 

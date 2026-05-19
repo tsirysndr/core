@@ -171,10 +171,10 @@ func (rp *Repo) getLanguageInfo(
 	for _, lang := range ls.Languages {
 		total += lang.Size
 		langs = append(langs, models.RepoLanguage{
-			RepoDid:      repoId,
-			Ref:          ref,
-			Language:     lang.Name,
-			Bytes:        lang.Size,
+			RepoDid:  repoId,
+			Ref:      ref,
+			Language: lang.Name,
+			Bytes:    lang.Size,
 		})
 	}
 

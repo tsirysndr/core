@@ -43,7 +43,7 @@ func (x *Xrpc) ListLanguages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	indexCtx, cancel := context.WithTimeout(ctx, 1 * time.Second)
+	indexCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
 	defer cancel()
 	sizes, err := x.indexer.IndexLanguages(indexCtx, repo, commit.Hash)
 	if err != nil {

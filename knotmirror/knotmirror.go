@@ -14,8 +14,8 @@ import (
 	"tangled.org/core/knotmirror/config"
 	"tangled.org/core/knotmirror/db"
 	"tangled.org/core/knotmirror/knotstream"
-	"tangled.org/core/knotmirror/repoindexer"
 	"tangled.org/core/knotmirror/models"
+	"tangled.org/core/knotmirror/repoindexer"
 	"tangled.org/core/knotmirror/xrpc"
 	"tangled.org/core/log"
 )

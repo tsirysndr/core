@@ -22,7 +22,7 @@ type Server struct {
 	QueueSize              int     `env:"QUEUE_SIZE, default=100"`
 	MaxJobCount            int     `env:"MAX_JOB_COUNT, default=2"`            // max number of pipelines that run at a time
 	MaxConcurrentWorkflows int     `env:"MAX_CONCURRENT_WORKFLOWS, default=8"` // max number of workflow containers running at once (memory cap)
-	DockerSocket           string  `env:"DOCKER_SOCKET"`                        // path to a docker socket to expose to workflow containers
+	DockerSocket           string  `env:"DOCKER_SOCKET"`                       // path to a docker socket to expose to workflow containers
 }
 
 type Tap struct {
