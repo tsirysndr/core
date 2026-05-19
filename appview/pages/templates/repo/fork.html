@@ -49,7 +49,7 @@
                   name="repo_name"
                   value="{{ .RepoInfo.Name }}"
                   required
-                  class="flex-1 dark:bg-gray-700 dark:text-white dark:border-gray-600 border border-gray-300 rounded md:rounded-r md:rounded-l-none px-3 py-2"
+                  class="flex-1 md:rounded-r md:rounded-l-none py-2"
                 />
               </div>
             </div>
@@ -64,7 +64,7 @@
                 value="{{ .RepoInfo.Description }}"
                 maxlength="140"
                 oninput="document.getElementById('fork-desc-count').textContent = this.value.length + '/140 characters'"
-                class="w-full dark:bg-gray-800 dark:text-white dark:border-gray-700 border border-gray-300 rounded px-3 py-2"
+                class="w-full py-2"
                 placeholder="A brief description of your project..."
               />
               <p id="fork-desc-count" class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ len .RepoInfo.Description }}/140 characters</p>

@@ -34,7 +34,7 @@
 {{ define "cancel" }}
   <button
     type="button"
-    class="btn text-red-500 dark:text-red-400 flex gap-2 items-center group"
+    class="btn-flat text-red-500 dark:text-red-400 flex gap-2 items-center group"
     hx-get="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/round/{{ .RoundNumber }}/actions"
     hx-swap="outerHTML"
     hx-target="#actions-{{.RoundNumber}}"
@@ -48,10 +48,9 @@
   <button
     type="submit"
     id="reply-{{ .RoundNumber }}"
-    class="btn-create flex items-center gap-2">
+    class="btn-create-flat flex items-center gap-2">
       {{ i "reply" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
       {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
       reply
   </button>
 {{ end }}
-

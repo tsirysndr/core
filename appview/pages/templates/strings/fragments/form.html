@@ -16,7 +16,7 @@
         placeholder="Filename"
         required
         value="{{ .String.Filename }}"
-        class="md:max-w-64 dark:bg-gray-700 dark:text-white dark:border-gray-600 dark:placeholder-gray-400 px-3 py-2 border rounded"
+        class="md:max-w-64"
         >
       <input
         type="text"
@@ -24,14 +24,14 @@
         name="description"
         value="{{ .String.Description }}"
         placeholder="Description ..."
-        class="flex-1 dark:bg-gray-700 dark:text-white dark:border-gray-600 dark:placeholder-gray-400 px-3 py-2 border rounded"
+        class="flex-1"
       >
     </div>
     <textarea
       name="content" 
       id="content-textarea"
       wrap="off"
-      class="w-full dark:bg-gray-800 dark:text-white dark:border-gray-700 dark:placeholder-gray-400 font-mono"
+      class="w-full font-mono"
       rows="20"
       spellcheck="false"
       placeholder="Paste your string here!"
@@ -54,7 +54,7 @@
         <button
           type="submit"
           id="new-button"
-          class="w-fit btn-create rounded flex items-center py-0 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600 group"
+          class="w-fit btn-create group"
           >
           <span class="inline-flex items-center gap-2">
             {{ i "arrow-up" "w-4 h-4" }}

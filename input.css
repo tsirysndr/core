@@ -241,6 +241,13 @@
           hover:before:shadow-[inset_0_-2px_0_0_theme(colors.gray.900/25%)]
           active:before:shadow-[inset_0_2px_2px_0_theme(colors.gray.900/50%)];
     }
+    
+    .btn-create-flat {
+        @apply btn-create
+        before:shadow-none
+        hover:before:shadow-none
+        active:before:shadow-none;
+    }
 
     .btn-cancel {
       @apply btn text-white
@@ -248,6 +255,13 @@
           border border-red-700 hover:border-red-800
           focus-visible:outline-red-500
           disabled:bg-red-400 dark:disabled:bg-red-600;
+    }
+
+    .btn-cancel-flat {
+        @apply btn-cancel
+        before:shadow-none
+        hover:before:shadow-none
+        active:before:shadow-none;
     }
 
     .btn-group {
@@ -261,7 +275,7 @@
     .btn-group-item {
       @apply btn-flat min-h-[30px] gap-1.5
           bg-gray-50 dark:bg-gray-900
-          border-y-0
+          rounded-none border-y-0
           no-underline hover:no-underline
           hover:text-gray-600 dark:hover:text-gray-400;
     }
