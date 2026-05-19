@@ -24,6 +24,18 @@ type Querier interface {
 	Exec(query string, args ...any) (sql.Result, error)
 }
 
+func (d *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error) {
+	return d.db.BeginTx(ctx, opts)
+}
+
+func (d *DB) Exec(query string, args ...any) (sql.Result, error) {
+	return d.db.Exec(query, args...)
+}
+
+func (d *DB) QueryRow(query string, args ...any) *sql.Row {
+	return d.db.QueryRow(query, args...)
+}
+
 func Setup(ctx context.Context, dbPath string) (*DB, error) {
 	// https://github.com/mattn/go-sqlite3#connection-string
 	opts := []string{
@@ -173,6 +185,22 @@ func Setup(ctx context.Context, dbPath string) (*DB, error) {
 			alter table repo_keys_new rename to repo_keys;
 			create unique index if not exists idx_repo_keys_owner_repo
 				on repo_keys(owner_did, repo_name);
+		`)
+		return mErr
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := orm.RunMigration(conn, logger, "create-knot-members", func(tx *sql.Tx) error {
+		_, mErr := tx.ExecContext(ctx, `
+			create table if not exists knot_members (
+				id integer primary key autoincrement,
+				did text not null,
+				rkey text not null,
+				subject text not null,
+				created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				unique (did, rkey)
+			);
 		`)
 		return mErr
 	}); err != nil {

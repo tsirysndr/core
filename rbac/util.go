@@ -34,14 +34,12 @@ func (e *Enforcer) removeOwner(domain, owner string) error {
 	return err
 }
 
-func (e *Enforcer) addMember(domain, member string) error {
-	_, err := e.E.AddGroupingPolicy(member, "server:member", domain)
-	return err
+func (e *Enforcer) addMember(domain, member string) (bool, error) {
+	return e.E.AddGroupingPolicy(member, "server:member", domain)
 }
 
-func (e *Enforcer) removeMember(domain, member string) error {
-	_, err := e.E.RemoveGroupingPolicy(member, "server:member", domain)
-	return err
+func (e *Enforcer) removeMember(domain, member string) (bool, error) {
+	return e.E.RemoveGroupingPolicy(member, "server:member", domain)
 }
 
 func (e *Enforcer) isRole(user, role, domain string) (bool, error) {
@@ -57,6 +55,21 @@ func (e *Enforcer) isRole(user, role, domain string) (bool, error) {
 
 func (e *Enforcer) isInviteAllowed(user, domain string) (bool, error) {
 	return e.E.Enforce(user, domain, domain, "server:invite")
+}
+
+func (e *Enforcer) HasAnyPolicyForUser(user string) (bool, error) {
+	pPolicies, err := e.E.GetFilteredNamedPolicy("p", 0, user)
+	if err != nil {
+		return false, err
+	}
+	if len(pPolicies) > 0 {
+		return true, nil
+	}
+	gPolicies, err := e.E.GetFilteredNamedGroupingPolicy("g", 0, user)
+	if err != nil {
+		return false, err
+	}
+	return len(gPolicies) > 0, nil
 }
 
 func checkRepoFormat(repo string) error {

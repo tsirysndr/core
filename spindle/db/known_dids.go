@@ -1,12 +1,12 @@
 package db
 
-func (d *DB) AddDid(did string) error {
-	_, err := d.Exec(`insert or ignore into known_dids (did) values (?)`, did)
+func AddDid(q DBTX, did string) error {
+	_, err := q.Exec(`insert or ignore into known_dids (did) values (?)`, did)
 	return err
 }
 
-func (d *DB) RemoveDid(did string) error {
-	_, err := d.Exec(`delete from known_dids where did = ?`, did)
+func RemoveDid(q DBTX, did string) error {
+	_, err := q.Exec(`delete from known_dids where did = ?`, did)
 	return err
 }
 

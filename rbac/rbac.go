@@ -126,10 +126,20 @@ func (e *Enforcer) RemoveKnotOwner(domain, owner string) error {
 }
 
 func (e *Enforcer) AddKnotMember(domain, member string) error {
-	return e.addMember(domain, member)
+	_, err := e.addMember(domain, member)
+	return err
 }
 
 func (e *Enforcer) RemoveKnotMember(domain, member string) error {
+	_, err := e.removeMember(domain, member)
+	return err
+}
+
+func (e *Enforcer) TryAddKnotMember(domain, member string) (bool, error) {
+	return e.addMember(domain, member)
+}
+
+func (e *Enforcer) TryRemoveKnotMember(domain, member string) (bool, error) {
 	return e.removeMember(domain, member)
 }
 
@@ -142,10 +152,20 @@ func (e *Enforcer) RemoveSpindleOwner(domain, owner string) error {
 }
 
 func (e *Enforcer) AddSpindleMember(domain, member string) error {
-	return e.addMember(intoSpindle(domain), member)
+	_, err := e.addMember(intoSpindle(domain), member)
+	return err
 }
 
 func (e *Enforcer) RemoveSpindleMember(domain, member string) error {
+	_, err := e.removeMember(intoSpindle(domain), member)
+	return err
+}
+
+func (e *Enforcer) TryAddSpindleMember(domain, member string) (bool, error) {
+	return e.addMember(intoSpindle(domain), member)
+}
+
+func (e *Enforcer) TryRemoveSpindleMember(domain, member string) (bool, error) {
 	return e.removeMember(intoSpindle(domain), member)
 }
 

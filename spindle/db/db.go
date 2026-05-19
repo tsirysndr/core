@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"log/slog"
+	"slices"
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -13,6 +14,11 @@ import (
 
 type DB struct {
 	*sql.DB
+}
+
+type DBTX interface {
+	QueryRow(query string, args ...any) *sql.Row
+	Exec(query string, args ...any) (sql.Result, error)
 }
 
 func Make(ctx context.Context, dbPath string) (*DB, error) {
@@ -84,7 +90,7 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
 
 			-- constraints
-			unique (did, instance, subject)
+			unique (did, rkey)
 		);
 
 		-- status event for a single workflow
@@ -112,7 +118,7 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 }
 
 func runMigrations(_ context.Context, conn *sql.Conn, logger *slog.Logger) error {
-	return orm.RunMigration(conn, logger, "repos-to-repo-did", func(tx *sql.Tx) error {
+	if err := orm.RunMigration(conn, logger, "repos-to-repo-did", func(tx *sql.Tx) error {
 		var hasName int
 		if err := tx.QueryRow(
 			`select count(*) from pragma_table_info('repos') where name = 'name'`,
@@ -162,7 +168,105 @@ func runMigrations(_ context.Context, conn *sql.Conn, logger *slog.Logger) error
 				on repo_collaborators(repo_did);
 		`)
 		return err
+	}); err != nil {
+		return err
+	}
+
+	return orm.RunMigration(conn, logger, "spindle-members-unique-on-rkey", func(tx *sql.Tx) error {
+		hasTarget, err := hasUniqueIndex(tx, "spindle_members", []string{"did", "rkey"})
+		if err != nil {
+			return err
+		}
+		if hasTarget {
+			return nil
+		}
+
+		var totalRows, distinctRows int
+		if err := tx.QueryRow(`select count(*) from spindle_members`).Scan(&totalRows); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(`select count(*) from (select 1 from spindle_members group by did, rkey)`).Scan(&distinctRows); err != nil {
+			return err
+		}
+		if dropped := totalRows - distinctRows; dropped > 0 {
+			logger.Warn("dropping duplicate (did, rkey) rows during spindle_members rebuild", "dropped", dropped, "kept", distinctRows)
+		}
+
+		_, err = tx.Exec(`
+			create table spindle_members_new (
+				id integer primary key autoincrement,
+				did text not null,
+				rkey text not null,
+				instance text not null,
+				subject text not null,
+				created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				unique (did, rkey)
+			);
+
+			insert into spindle_members_new (id, did, rkey, instance, subject, created)
+			select id, did, rkey, instance, subject, created
+			from spindle_members sm
+			where id = (
+				select max(id) from spindle_members
+				where did = sm.did and rkey = sm.rkey
+			);
+
+			drop table spindle_members;
+			alter table spindle_members_new rename to spindle_members;
+		`)
+		return err
 	})
+}
+
+func hasUniqueIndex(tx *sql.Tx, table string, cols []string) (bool, error) {
+	rows, err := tx.Query(
+		`select name from pragma_index_list(?) where "unique" = 1`,
+		table,
+	)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+
+	var indexNames []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return false, err
+		}
+		indexNames = append(indexNames, name)
+	}
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+
+	wantSorted := slices.Clone(cols)
+	slices.Sort(wantSorted)
+
+	for _, name := range indexNames {
+		colRows, err := tx.Query(
+			`select name from pragma_index_info(?) order by seqno`,
+			name,
+		)
+		if err != nil {
+			return false, err
+		}
+		var got []string
+		for colRows.Next() {
+			var c string
+			if err := colRows.Scan(&c); err != nil {
+				colRows.Close()
+				return false, err
+			}
+			got = append(got, c)
+		}
+		colRows.Close()
+		slices.Sort(got)
+		if slices.Equal(got, wantSorted) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (d *DB) SaveLastTimeUs(lastTimeUs int64) error {

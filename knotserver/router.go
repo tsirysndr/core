@@ -194,7 +194,7 @@ func (h *Knot) configureOwner(ctx context.Context) error {
 		}
 
 		// remove existing owner
-		if err = h.db.RemoveDid(existingOwner); err != nil {
+		if err = db.RemoveDid(h.db, existingOwner); err != nil {
 			return err
 		}
 		if err = h.e.RemoveKnotOwner(rbacDomain, existingOwner); err != nil {
@@ -205,7 +205,7 @@ func (h *Knot) configureOwner(ctx context.Context) error {
 		return fmt.Errorf("more than one owner in DB, try deleting %q and starting over", h.c.Server.DBPath)
 	}
 
-	if err = h.db.AddDid(cfgOwner); err != nil {
+	if err = db.AddDid(h.db, cfgOwner); err != nil {
 		return fmt.Errorf("failed to add owner to DB: %w", err)
 	}
 	if err := h.e.AddKnotOwner(rbacDomain, cfgOwner); err != nil {
