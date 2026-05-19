@@ -19,7 +19,7 @@ type DB struct {
 	logger *slog.Logger
 }
 
-type Querier interface {
+type DBTX interface {
 	QueryRow(query string, args ...any) *sql.Row
 	Exec(query string, args ...any) (sql.Result, error)
 }
@@ -293,7 +293,7 @@ func (d *DB) GetRepoKeyOwner(repoDid string) (string, string, error) {
 	return GetRepoKeyOwner(d.db, repoDid)
 }
 
-func GetRepoKeyOwner(q Querier, repoDid string) (ownerDid string, repoName string, err error) {
+func GetRepoKeyOwner(q DBTX, repoDid string) (ownerDid string, repoName string, err error) {
 	err = q.QueryRow(
 		`SELECT owner_did, rkey FROM repo_aliases
 		 WHERE repo_did = ?

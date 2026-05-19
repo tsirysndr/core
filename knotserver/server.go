@@ -93,6 +93,10 @@ func Run(ctx context.Context, cmd *cli.Command) error {
 
 	resolver := idresolver.DefaultResolver(c.Server.PlcUrl)
 
+	if err := BackfillKnotMembers(ctx, db, e, resolver, c.Server.Hostname, logger); err != nil {
+		logger.Warn("knot members backfill failed, continuing", "err", err)
+	}
+
 	go migrateReposOnStartup(ctx, c, db, e, &notifier, log.SubLogger(logger, "migrate"))
 
 	mux, err := Setup(ctx, c, db, e, jc, &notifier, resolver)
