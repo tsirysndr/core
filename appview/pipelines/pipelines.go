@@ -110,7 +110,7 @@ func (p *Pipelines) Index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	total, err := db.GetTotalPipelineStatuses(p.db, filters...)
+	total, err := db.GetPipelineCount(p.db, filters...)
 	if err != nil {
 		l.Error("failed to query db", "err", err)
 		return

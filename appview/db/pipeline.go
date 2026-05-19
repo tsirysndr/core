@@ -391,7 +391,7 @@ func GetPipelineStatuses(e Execer, limit int, filters ...orm.Filter) ([]models.P
 
 // the pipelines table is aliased to `p`
 // the triggers table is aliased to `t`
-func GetTotalPipelineStatuses(e Execer, filters ...orm.Filter) (int64, error) {
+func GetPipelineCount(e Execer, filters ...orm.Filter) (int64, error) {
 	var conditions []string
 	var args []any
 	for _, filter := range filters {
