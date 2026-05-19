@@ -282,26 +282,38 @@ func GetPipelineStatuses(e Execer, limit int, filters ...orm.Filter) ([]models.P
 	// get all statuses
 	// the where clause here is of the form:
 	//
-	//     where (pipeline_knot = k1 and pipeline_rkey = r1)
-	//        or (pipeline_knot = k2 and pipeline_rkey = r2)
+	//     and (
+	//       (ps.pipeline_knot = k1 and ps.pipeline_rkey = r1)
+	//    or (ps.pipeline_knot = k2 and ps.pipeline_rkey = r2)
+	//     )
+	//
+	// the join on pipelines and repos enforces that the status was emitted
+	// by the spindle that is actually registered for the pipeline's repo.
 	conditions = nil
 	args = nil
 	for _, p := range pipelines {
-		knotFilter := orm.FilterEq("pipeline_knot", p.Knot)
-		rkeyFilter := orm.FilterEq("pipeline_rkey", p.Rkey)
+		knotFilter := orm.FilterEq("ps.pipeline_knot", p.Knot)
+		rkeyFilter := orm.FilterEq("ps.pipeline_rkey", p.Rkey)
 		conditions = append(conditions, fmt.Sprintf("(%s and %s)", knotFilter.Condition(), rkeyFilter.Condition()))
 		args = append(args, p.Knot)
 		args = append(args, p.Rkey)
 	}
 	whereClause = ""
 	if conditions != nil {
-		whereClause = "where " + strings.Join(conditions, " or ")
+		whereClause = "and (" + strings.Join(conditions, " or ") + ")"
 	}
 	query = fmt.Sprintf(`
 		select
-			id, spindle, rkey, pipeline_knot, pipeline_rkey, created, workflow, status, error, exit_code
+			ps.id, ps.spindle, ps.rkey, ps.pipeline_knot, ps.pipeline_rkey,
+			ps.created, ps.workflow, ps.status, ps.error, ps.exit_code
 		from
-			pipeline_statuses
+			pipeline_statuses ps
+		join
+			pipelines p on p.knot = ps.pipeline_knot and p.rkey = ps.pipeline_rkey
+		join
+			repos r on r.repo_did = p.repo_did
+		where
+			ps.spindle = r.spindle
 		%s
 	`, whereClause)
 
