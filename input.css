@@ -344,7 +344,7 @@
     }
 
     .prose input {
-      @apply inline-block my-0 mb-1 mx-1;
+      @apply inline-block my-0 mt-1 mx-1;
     }
 
     /* Mermaid diagrams */
