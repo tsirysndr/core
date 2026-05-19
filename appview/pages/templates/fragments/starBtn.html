@@ -7,7 +7,7 @@
         {{ if .HxSwapOob }}hx-swap-oob='outerHTML:#starBtn[data-star-subject-at="{{ .SubjectAt }}"]'{{ end }}
     >
         <button
-            class="btn-group-item active flex-1 group"
+            class="btn-group-item active flex-1 gap-1 group"
             {{ if .IsStarred }}
                 hx-delete="/star?subject={{ .SubjectAt }}&countHint={{ .StarCount }}&repoName={{ .RepoName }}"
             {{ else }}
@@ -17,11 +17,11 @@
             hx-disabled-elt="this"
         >
             {{ if .IsStarred }}
-                {{ i "star" "w-4 h-4 fill-current inline group-[.htmx-request]:hidden" }}
+                {{ i "star" "w-4 h-4 shrink-0 fill-current inline group-[.htmx-request]:hidden" }}
             {{ else }}
-                {{ i "star" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
+                {{ i "star" "w-4 h-4 shrink-0 inline group-[.htmx-request]:hidden" }}
             {{ end }}
-            {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+            {{ i "loader-circle" "w-4 h-4 shrink-0 animate-spin hidden group-[.htmx-request]:inline" }}
             <span class="group-[.htmx-request]:hidden">{{ if .IsStarred }}unstar{{ else }}star{{ end }}</span>
         </button>
         {{ if .RepoName }}
