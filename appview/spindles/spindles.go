@@ -489,36 +489,7 @@ func (s *Spindles) addMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := s.Db.Begin()
-	if err != nil {
-		l.Error("failed to start txn", "err", err)
-		fail()
-		return
-	}
-	defer func() {
-		tx.Rollback()
-		s.Enforcer.E.LoadPolicy()
-	}()
-
 	rkey := tid.TID()
-
-	// add member to db
-	if err = db.AddSpindleMember(tx, models.SpindleMember{
-		Did:      syntax.DID(user.Did),
-		Rkey:     rkey,
-		Instance: instance,
-		Subject:  memberId.DID,
-	}); err != nil {
-		l.Error("failed to add spindle member", "err", err)
-		fail()
-		return
-	}
-
-	if err = s.Enforcer.AddSpindleMember(instance, memberId.DID.String()); err != nil {
-		l.Error("failed to add member to ACLs")
-		fail()
-		return
-	}
 
 	_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 		Collection: tangled.SpindleMemberNSID,
@@ -535,18 +506,6 @@ func (s *Spindles) addMember(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		l.Error("failed to add record to PDS", "err", err)
 		s.Pages.Notice(w, noticeId, "Failed to add record to PDS, try again later.")
-		return
-	}
-
-	if err = tx.Commit(); err != nil {
-		l.Error("failed to commit txn", "err", err)
-		fail()
-		return
-	}
-
-	if err = s.Enforcer.E.SavePolicy(); err != nil {
-		l.Error("failed to add member to ACLs", "err", err)
-		fail()
 		return
 	}
 
@@ -607,18 +566,6 @@ func (s *Spindles) removeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := s.Db.Begin()
-	if err != nil {
-		l.Error("failed to start txn", "err", err)
-		fail()
-		return
-	}
-	defer func() {
-		tx.Rollback()
-		s.Enforcer.E.LoadPolicy()
-	}()
-
-	// get the record from the DB first:
 	members, err := db.GetSpindleMembers(
 		s.Db,
 		orm.FilterEq("did", user.Did),
@@ -631,25 +578,6 @@ func (s *Spindles) removeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// remove from db
-	if err = db.RemoveSpindleMember(
-		tx,
-		orm.FilterEq("did", user.Did),
-		orm.FilterEq("instance", instance),
-		orm.FilterEq("subject", memberId.DID),
-	); err != nil {
-		l.Error("failed to remove spindle member", "err", err)
-		fail()
-		return
-	}
-
-	// remove from enforcer
-	if err = s.Enforcer.RemoveSpindleMember(instance, memberId.DID.String()); err != nil {
-		l.Error("failed to update ACLs", "err", err)
-		fail()
-		return
-	}
-
 	client, err := s.OAuth.AuthorizedClient(r)
 	if err != nil {
 		l.Error("failed to authorize client", "err", err)
@@ -657,31 +585,16 @@ func (s *Spindles) removeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// remove from pds
 	_, err = comatproto.RepoDeleteRecord(r.Context(), client, &comatproto.RepoDeleteRecord_Input{
 		Collection: tangled.SpindleMemberNSID,
 		Repo:       user.Did,
 		Rkey:       members[0].Rkey,
 	})
 	if err != nil {
-		// non-fatal
 		l.Error("failed to delete record", "err", err)
-	}
-
-	// commit everything
-	if err = tx.Commit(); err != nil {
-		l.Error("failed to commit txn", "err", err)
 		fail()
 		return
 	}
 
-	// commit everything
-	if err = s.Enforcer.E.SavePolicy(); err != nil {
-		l.Error("failed to save ACLs", "err", err)
-		fail()
-		return
-	}
-
-	// ok
 	s.Pages.HxRefresh(w)
 }

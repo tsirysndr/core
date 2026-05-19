@@ -551,19 +551,6 @@ func (k *Knots) addMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = k.Enforcer.AddKnotMember(domain, memberId.DID.String()); err != nil {
-		l.Error("failed to add member to ACLs", "err", err)
-		fail()
-		return
-	}
-	committed := false
-	defer func() {
-		if committed {
-			return
-		}
-		k.Enforcer.E.LoadPolicy()
-	}()
-
 	rkey := tid.TID()
 	_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 		Collection: tangled.KnotMemberNSID,
@@ -582,13 +569,6 @@ func (k *Knots) addMember(w http.ResponseWriter, r *http.Request) {
 		k.Pages.Notice(w, noticeId, "Failed to add record to PDS, try again later.")
 		return
 	}
-
-	if err = k.Enforcer.E.SavePolicy(); err != nil {
-		l.Error("failed to save ACL policy", "err", err)
-		fail()
-		return
-	}
-	committed = true
 
 	k.Pages.HxRedirect(w, fmt.Sprintf("/settings/knots/%s", domain))
 }
@@ -655,38 +635,22 @@ func (k *Knots) removeMember(w http.ResponseWriter, r *http.Request) {
 		l.Warn("failed to look up member rkey", "err", err)
 	}
 
-	if err = k.Enforcer.RemoveKnotMember(domain, memberId.DID.String()); err != nil {
-		l.Error("failed to update ACLs", "err", err)
+	if rkey == "" {
+		l.Error("no member record found to remove")
 		fail()
 		return
 	}
-	committed := false
-	defer func() {
-		if committed {
-			return
-		}
-		k.Enforcer.E.LoadPolicy()
-	}()
 
-	if rkey != "" {
-		_, err = comatproto.RepoDeleteRecord(r.Context(), client, &comatproto.RepoDeleteRecord_Input{
-			Collection: tangled.KnotMemberNSID,
-			Repo:       user.Did,
-			Rkey:       rkey,
-		})
-		if err != nil {
-			l.Error("failed to delete record from PDS", "err", err)
-			k.Pages.Notice(w, noticeId, "Failed to delete record from PDS, try again later.")
-			return
-		}
-	}
-
-	if err = k.Enforcer.E.SavePolicy(); err != nil {
-		l.Error("failed to save ACLs", "err", err)
-		fail()
+	_, err = comatproto.RepoDeleteRecord(r.Context(), client, &comatproto.RepoDeleteRecord_Input{
+		Collection: tangled.KnotMemberNSID,
+		Repo:       user.Did,
+		Rkey:       rkey,
+	})
+	if err != nil {
+		l.Error("failed to delete record from PDS", "err", err)
+		k.Pages.Notice(w, noticeId, "Failed to delete record from PDS, try again later.")
 		return
 	}
-	committed = true
 
 	k.Pages.HxRefresh(w)
 }

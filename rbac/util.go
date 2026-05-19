@@ -72,6 +72,37 @@ func (e *Enforcer) HasAnyPolicyForUser(user string) (bool, error) {
 	return len(gPolicies) > 0, nil
 }
 
+func (e *Enforcer) wouldHaveAnyPolicyExcludingGrouping(user, role, domain string) (bool, error) {
+	pPolicies, err := e.E.GetFilteredNamedPolicy("p", 0, user)
+	if err != nil {
+		return false, err
+	}
+	if len(pPolicies) > 0 {
+		return true, nil
+	}
+	gPolicies, err := e.E.GetFilteredNamedGroupingPolicy("g", 0, user)
+	if err != nil {
+		return false, err
+	}
+	for _, gp := range gPolicies {
+		if len(gp) < 3 {
+			return true, nil
+		}
+		if gp[1] != role || gp[2] != domain {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (e *Enforcer) WouldHaveAnyPolicyExcludingKnotMember(user, domain string) (bool, error) {
+	return e.wouldHaveAnyPolicyExcludingGrouping(user, "server:member", domain)
+}
+
+func (e *Enforcer) WouldHaveAnyPolicyExcludingSpindleMember(user, domain string) (bool, error) {
+	return e.wouldHaveAnyPolicyExcludingGrouping(user, "server:member", intoSpindle(domain))
+}
+
 func checkRepoFormat(repo string) error {
 	// sanity check, repo must be of the form ownerDid/repo
 	if parts := strings.SplitN(repo, "/", 2); !strings.HasPrefix(parts[0], "did:") {

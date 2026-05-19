@@ -2,7 +2,9 @@ package knotserver
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -49,40 +51,183 @@ func (h *Knot) processPublicKey(ctx context.Context, event *jmodels.Event) error
 }
 
 func (h *Knot) processKnotMember(ctx context.Context, event *jmodels.Event) error {
-	l := log.FromContext(ctx)
-	raw := json.RawMessage(event.Commit.Record)
 	did := event.Did
+	rkey := event.Commit.RKey
+	l := log.FromContext(ctx).With("handler", "processKnotMember", "did", did, "rkey", rkey)
 
-	var record tangled.KnotMember
-	if err := json.Unmarshal(raw, &record); err != nil {
-		return fmt.Errorf("failed to unmarshal record: %w", err)
-	}
+	switch event.Commit.Operation {
+	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
+		raw := json.RawMessage(event.Commit.Record)
+		var record tangled.KnotMember
+		if err := json.Unmarshal(raw, &record); err != nil {
+			return fmt.Errorf("failed to unmarshal record: %w", err)
+		}
 
-	if record.Domain != h.c.Server.Hostname {
-		l.Error("domain mismatch", "domain", record.Domain, "expected", h.c.Server.Hostname)
-		return fmt.Errorf("domain mismatch: %s != %s", record.Domain, h.c.Server.Hostname)
-	}
+		if record.Domain != h.c.Server.Hostname {
+			return fmt.Errorf("domain mismatch: %s != %s", record.Domain, h.c.Server.Hostname)
+		}
 
-	ok, err := h.e.E.Enforce(did, rbac.ThisServer, rbac.ThisServer, "server:invite")
-	if err != nil || !ok {
-		l.Error("failed to add member", "did", did)
-		return fmt.Errorf("failed to enforce permissions: %w", err)
-	}
+		subject, err := syntax.ParseDID(record.Subject)
+		if err != nil {
+			return fmt.Errorf("invalid subject DID %q: %w", record.Subject, err)
+		}
 
-	if err := h.e.AddKnotMember(rbac.ThisServer, record.Subject); err != nil {
-		l.Error("failed to add member", "error", err)
-		return fmt.Errorf("failed to add member: %w", err)
-	}
-	l.Info("added member from firehose", "member", record.Subject)
+		ok, err := h.e.E.Enforce(did, rbac.ThisServer, rbac.ThisServer, "server:invite")
+		if err != nil {
+			return fmt.Errorf("failed to enforce permissions: %w", err)
+		}
+		if !ok {
+			return fmt.Errorf("permission denied for %s", did)
+		}
 
-	if err := h.db.AddDid(record.Subject); err != nil {
-		l.Error("failed to add did", "error", err)
-		return fmt.Errorf("failed to add did: %w", err)
-	}
-	h.jc.AddDid(record.Subject)
+		sqlTx, err := h.db.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("failed to start txn: %w", err)
+		}
+		committed := false
+		defer func() {
+			if !committed {
+				sqlTx.Rollback()
+			}
+		}()
 
-	if err := h.fetchAndAddKeys(ctx, record.Subject); err != nil {
-		return fmt.Errorf("failed to fetch and add keys: %w", err)
+		existing, err := db.GetKnotMember(sqlTx, did, rkey)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("failed to look up existing member: %w", err)
+		}
+
+		var staleSubject string
+		if existing != nil && existing.Subject != subject {
+			staleSubject = existing.Subject.String()
+			if err := db.RemoveKnotMember(sqlTx, did, rkey); err != nil {
+				return fmt.Errorf("failed to remove stale member row: %w", err)
+			}
+		}
+
+		if err := db.AddKnotMember(sqlTx, db.KnotMember{
+			Did:     syntax.DID(did),
+			Rkey:    rkey,
+			Subject: subject,
+		}); err != nil {
+			return fmt.Errorf("failed to persist member row: %w", err)
+		}
+
+		if err := db.AddDid(sqlTx, subject.String()); err != nil {
+			return fmt.Errorf("failed to add did: %w", err)
+		}
+
+		dropStaleAcl := false
+		var staleDidDropped bool
+		if staleSubject != "" {
+			remaining, err := db.CountKnotMembersBySubject(sqlTx, staleSubject)
+			if err != nil {
+				return fmt.Errorf("failed to count stale subject rows: %w", err)
+			}
+			if remaining == 0 {
+				dropStaleAcl = true
+				stillNeeded, err := h.e.WouldHaveAnyPolicyExcludingKnotMember(staleSubject, rbac.ThisServer)
+				if err != nil {
+					return fmt.Errorf("failed to check residual policies for stale subject: %w", err)
+				}
+				if !stillNeeded {
+					if err := db.RemoveDid(sqlTx, staleSubject); err != nil {
+						return fmt.Errorf("failed to remove stale did: %w", err)
+					}
+					staleDidDropped = true
+				}
+			}
+			l.Info("replaced stale knot member", "old_subject", staleSubject, "new_subject", subject, "stale_did_dropped", staleDidDropped)
+		}
+
+		if err := sqlTx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit txn: %w", err)
+		}
+		committed = true
+
+		if dropStaleAcl {
+			if _, err := h.e.TryRemoveKnotMember(rbac.ThisServer, staleSubject); err != nil {
+				l.Error("post-commit: failed to remove stale ACL", "subject", staleSubject, "err", err)
+			}
+		}
+		if _, err := h.e.TryAddKnotMember(rbac.ThisServer, subject.String()); err != nil {
+			l.Error("post-commit: failed to add member ACL", "subject", subject, "err", err)
+		}
+
+		if staleDidDropped {
+			h.jc.RemoveDid(staleSubject)
+		}
+		h.jc.AddDid(subject.String())
+		l.Info("added member from firehose", "member", subject)
+
+		if err := h.fetchAndAddKeys(ctx, subject.String()); err != nil {
+			return fmt.Errorf("failed to fetch and add keys: %w", err)
+		}
+		return nil
+
+	case jmodels.CommitOperationDelete:
+		sqlTx, err := h.db.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("failed to start txn: %w", err)
+		}
+		committed := false
+		defer func() {
+			if !committed {
+				sqlTx.Rollback()
+			}
+		}()
+
+		member, err := db.GetKnotMember(sqlTx, did, rkey)
+		if errors.Is(err, sql.ErrNoRows) {
+			l.Info("knot member already removed")
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("failed to look up knot member: %w", err)
+		}
+
+		staleSubject := member.Subject.String()
+
+		if err := db.RemoveKnotMember(sqlTx, did, rkey); err != nil {
+			return fmt.Errorf("failed to remove member row: %w", err)
+		}
+
+		remaining, err := db.CountKnotMembersBySubject(sqlTx, staleSubject)
+		if err != nil {
+			return fmt.Errorf("failed to count remaining member rows: %w", err)
+		}
+
+		dropAcl := false
+		var staleDidDropped bool
+		if remaining == 0 {
+			dropAcl = true
+			stillNeeded, err := h.e.WouldHaveAnyPolicyExcludingKnotMember(staleSubject, rbac.ThisServer)
+			if err != nil {
+				return fmt.Errorf("failed to check residual policies: %w", err)
+			}
+			if !stillNeeded {
+				if err := db.RemoveDid(sqlTx, staleSubject); err != nil {
+					return fmt.Errorf("failed to remove did: %w", err)
+				}
+				staleDidDropped = true
+			}
+		}
+
+		if err := sqlTx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit txn: %w", err)
+		}
+		committed = true
+
+		if dropAcl {
+			if _, err := h.e.TryRemoveKnotMember(rbac.ThisServer, staleSubject); err != nil {
+				l.Error("post-commit: failed to remove ACL", "subject", staleSubject, "err", err)
+			}
+		}
+
+		if staleDidDropped {
+			h.jc.RemoveDid(staleSubject)
+		}
+		l.Info("removed knot member from firehose", "member", member.Subject, "remaining_rows", remaining, "stale_did_dropped", staleDidDropped)
+		return nil
 	}
 
 	return nil
@@ -437,7 +582,7 @@ func (h *Knot) processCollaborator(ctx context.Context, event *jmodels.Event) er
 		return fmt.Errorf("insufficient permissions: %s, %s, %s", did, "IsCollaboratorInviteAllowed", rbacResource)
 	}
 
-	if err := h.db.AddDid(subjectId.DID.String()); err != nil {
+	if err := db.AddDid(h.db, subjectId.DID.String()); err != nil {
 		return err
 	}
 	h.jc.AddDid(subjectId.DID.String())
@@ -575,7 +720,7 @@ func (h *Knot) processMessages(ctx context.Context, event *jmodels.Event) error 
 	if err != nil {
 		args := []any{"kind", event.Kind, "err", err}
 		if event.Kind == jmodels.EventKindCommit {
-			args = append(args, "nsid", event.Commit.Collection)
+			args = append(args, "nsid", event.Commit.Collection, "did", event.Did, "rkey", event.Commit.RKey)
 		}
 		h.l.Warn("failed to process event, skipping", args...)
 	}

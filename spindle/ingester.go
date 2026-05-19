@@ -2,9 +2,10 @@ package spindle
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"time"
 
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/spindle/db"
@@ -33,7 +34,7 @@ func (s *Spindle) ingest() Ingester {
 		}
 
 		if err != nil {
-			s.l.Warn("failed to process message, skipping", "nsid", e.Commit.Collection, "err", err)
+			s.l.Warn("failed to process message, skipping", "nsid", e.Commit.Collection, "did", e.Did, "rkey", e.Commit.RKey, "err", err)
 		}
 
 		lastTimeUs := e.TimeUS + 1
@@ -76,86 +77,183 @@ func jetstreamToTapEvent(e *models.Event) (tapc.Event, bool) {
 	}, true
 }
 
-func (s *Spindle) ingestMember(_ context.Context, e *models.Event) error {
-	var err error
+func (s *Spindle) ingestMember(ctx context.Context, e *models.Event) error {
 	did := e.Did
 	rkey := e.Commit.RKey
-
-	l := s.l.With("component", "ingester", "record", tangled.SpindleMemberNSID)
+	l := s.l.With("component", "ingester", "record", tangled.SpindleMemberNSID, "did", did, "rkey", rkey)
 
 	switch e.Commit.Operation {
 	case models.CommitOperationCreate, models.CommitOperationUpdate:
 		raw := e.Commit.Record
 		record := tangled.SpindleMember{}
-		err = json.Unmarshal(raw, &record)
-		if err != nil {
-			l.Error("invalid record", "error", err)
-			return err
+		if err := json.Unmarshal(raw, &record); err != nil {
+			return fmt.Errorf("invalid record: %w", err)
 		}
 
 		domain := s.cfg.Server.Hostname
 		recordInstance := record.Instance
 
 		if recordInstance != domain {
-			l.Error("domain mismatch", "domain", recordInstance, "expected", domain)
 			return fmt.Errorf("domain mismatch: %s != %s", record.Instance, domain)
 		}
 
-		ok, err := s.e.IsSpindleInviteAllowed(did, rbacDomain)
-		if err != nil || !ok {
-			l.Error("failed to add member", "did", did, "error", err)
-			return fmt.Errorf("failed to enforce permissions: %w", err)
+		subject, err := syntax.ParseDID(record.Subject)
+		if err != nil {
+			return fmt.Errorf("invalid subject DID %q: %w", record.Subject, err)
 		}
 
-		if err := db.AddSpindleMember(s.db, db.SpindleMember{
+		ok, err := s.e.IsSpindleInviteAllowed(did, rbacDomain)
+		if err != nil {
+			return fmt.Errorf("failed to enforce permissions: %w", err)
+		}
+		if !ok {
+			return fmt.Errorf("permission denied for %s", did)
+		}
+
+		sqlTx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("failed to start txn: %w", err)
+		}
+		committed := false
+		defer func() {
+			if !committed {
+				sqlTx.Rollback()
+			}
+		}()
+
+		existing, err := db.GetSpindleMember(sqlTx, did, rkey)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("failed to look up existing member: %w", err)
+		}
+
+		var staleSubject string
+		if existing != nil && existing.Subject != subject {
+			staleSubject = existing.Subject.String()
+			if err := db.RemoveSpindleMember(sqlTx, did, rkey); err != nil {
+				return fmt.Errorf("failed to remove stale member row: %w", err)
+			}
+		}
+
+		if err := db.AddSpindleMember(sqlTx, db.SpindleMember{
 			Did:      syntax.DID(did),
 			Rkey:     rkey,
 			Instance: recordInstance,
-			Subject:  syntax.DID(record.Subject),
-			Created:  time.Now(),
+			Subject:  subject,
 		}); err != nil {
-			l.Error("failed to add member", "error", err)
 			return fmt.Errorf("failed to add member: %w", err)
 		}
 
-		if err := s.e.AddSpindleMember(rbacDomain, record.Subject); err != nil {
-			l.Error("failed to add member", "error", err)
-			return fmt.Errorf("failed to add member: %w", err)
-		}
-		l.Info("added member from firehose", "member", record.Subject)
-
-		if err := s.db.AddDid(record.Subject); err != nil {
-			l.Error("failed to add did", "error", err)
+		if err := db.AddDid(sqlTx, subject.String()); err != nil {
 			return fmt.Errorf("failed to add did: %w", err)
 		}
-		s.jc.AddDid(record.Subject)
 
+		dropStaleAcl := false
+		var staleDidDropped bool
+		if staleSubject != "" {
+			remaining, err := db.CountSpindleMembersBySubject(sqlTx, staleSubject)
+			if err != nil {
+				return fmt.Errorf("failed to count stale subject rows: %w", err)
+			}
+			if remaining == 0 {
+				dropStaleAcl = true
+				stillNeeded, err := s.e.WouldHaveAnyPolicyExcludingSpindleMember(staleSubject, rbacDomain)
+				if err != nil {
+					return fmt.Errorf("failed to check residual policies for stale subject: %w", err)
+				}
+				if !stillNeeded {
+					if err := db.RemoveDid(sqlTx, staleSubject); err != nil {
+						return fmt.Errorf("failed to remove stale did: %w", err)
+					}
+					staleDidDropped = true
+				}
+			}
+			l.Info("replaced stale spindle member", "old_subject", staleSubject, "new_subject", subject, "stale_did_dropped", staleDidDropped)
+		}
+
+		if err := sqlTx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit txn: %w", err)
+		}
+		committed = true
+
+		if dropStaleAcl {
+			if _, err := s.e.TryRemoveSpindleMember(rbacDomain, staleSubject); err != nil {
+				l.Error("post-commit: failed to remove stale ACL", "subject", staleSubject, "err", err)
+			}
+		}
+		if _, err := s.e.TryAddSpindleMember(rbacDomain, subject.String()); err != nil {
+			l.Error("post-commit: failed to add member ACL", "subject", subject, "err", err)
+		}
+
+		if staleDidDropped {
+			s.jc.RemoveDid(staleSubject)
+		}
+		s.jc.AddDid(subject.String())
+		l.Info("added member from firehose", "member", subject)
 		return nil
 
 	case models.CommitOperationDelete:
-		record, err := db.GetSpindleMember(s.db, did, rkey)
+		sqlTx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
-			l.Error("failed to find member", "error", err)
+			return fmt.Errorf("failed to start txn: %w", err)
+		}
+		committed := false
+		defer func() {
+			if !committed {
+				sqlTx.Rollback()
+			}
+		}()
+
+		record, err := db.GetSpindleMember(sqlTx, did, rkey)
+		if errors.Is(err, sql.ErrNoRows) {
+			l.Info("spindle member already removed")
+			return nil
+		}
+		if err != nil {
 			return fmt.Errorf("failed to find member: %w", err)
 		}
 
-		if err := db.RemoveSpindleMember(s.db, did, rkey); err != nil {
-			l.Error("failed to remove member", "error", err)
+		staleSubject := record.Subject.String()
+
+		if err := db.RemoveSpindleMember(sqlTx, did, rkey); err != nil {
 			return fmt.Errorf("failed to remove member: %w", err)
 		}
 
-		if err := s.e.RemoveSpindleMember(rbacDomain, record.Subject.String()); err != nil {
-			l.Error("failed to add member", "error", err)
-			return fmt.Errorf("failed to add member: %w", err)
+		remaining, err := db.CountSpindleMembersBySubject(sqlTx, staleSubject)
+		if err != nil {
+			return fmt.Errorf("failed to count remaining member rows: %w", err)
 		}
-		l.Info("added member from firehose", "member", record.Subject)
 
-		if err := s.db.RemoveDid(record.Subject.String()); err != nil {
-			l.Error("failed to add did", "error", err)
-			return fmt.Errorf("failed to add did: %w", err)
+		dropAcl := false
+		var staleDidDropped bool
+		if remaining == 0 {
+			dropAcl = true
+			stillNeeded, err := s.e.WouldHaveAnyPolicyExcludingSpindleMember(staleSubject, rbacDomain)
+			if err != nil {
+				return fmt.Errorf("failed to check residual policies: %w", err)
+			}
+			if !stillNeeded {
+				if err := db.RemoveDid(sqlTx, staleSubject); err != nil {
+					return fmt.Errorf("failed to remove did: %w", err)
+				}
+				staleDidDropped = true
+			}
 		}
-		s.jc.RemoveDid(record.Subject.String())
 
+		if err := sqlTx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit txn: %w", err)
+		}
+		committed = true
+
+		if dropAcl {
+			if _, err := s.e.TryRemoveSpindleMember(rbacDomain, staleSubject); err != nil {
+				l.Error("post-commit: failed to remove member ACL", "subject", staleSubject, "err", err)
+			}
+		}
+
+		if staleDidDropped {
+			s.jc.RemoveDid(staleSubject)
+		}
+		l.Info("removed member from firehose", "member", record.Subject, "remaining_rows", remaining, "stale_did_dropped", staleDidDropped)
 	}
 	return nil
 }
