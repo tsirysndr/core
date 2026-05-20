@@ -178,6 +178,10 @@ func (x *Xrpc) getTree(ctx context.Context, repo syntax.DID, ref, treePath strin
 				Hash:    commit.Hash.String(),
 				Message: commit.Message,
 				When:    commit.Author.When.Format(time.RFC3339),
+				Author: &tangled.GitTempGetTree_Signature{
+					Email: commit.Author.Email,
+					Name:  commit.Author.Name,
+				},
 			}
 		}
 		outEntries[i] = &tangled.GitTempGetTree_TreeEntry{
@@ -201,7 +205,11 @@ func (x *Xrpc) getTree(ctx context.Context, repo syntax.DID, ref, treePath strin
 		outLastCommit = &tangled.GitTempGetTree_LastCommit{
 			Hash:    lastCommit.Hash.String(),
 			Message: lastCommit.Message,
-			When:    lastCommit.Committer.When.Format(time.RFC3339),
+			When:    lastCommit.Author.When.Format(time.RFC3339),
+			Author: &tangled.GitTempGetTree_Signature{
+				Email: lastCommit.Author.Email,
+				Name:  lastCommit.Author.Name,
+			},
 		}
 	}
 
