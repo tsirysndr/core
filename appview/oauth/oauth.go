@@ -128,6 +128,9 @@ func New(config *config.Config, ph posthog.Client, db *db.DB, enforcer *rbac.Enf
 	}
 
 	sessStore := sessions.NewCookieStore([]byte(config.Core.CookieSecret))
+	sessStore.Options.SameSite = http.SameSiteLaxMode
+	sessStore.Options.HttpOnly = true
+	sessStore.Options.Secure = !config.Core.Dev
 
 	clientApp := oauth.NewClientApp(&oauthConfig, authStore)
 	clientApp.Dir = res.Directory()
