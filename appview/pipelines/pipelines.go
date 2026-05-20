@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"tangled.org/core/api/tangled"
@@ -223,12 +222,7 @@ func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	scheme := "wss"
-	if p.config.Core.Dev {
-		scheme = "ws"
-	}
-
-	url := scheme + "://" + strings.Join([]string{spindle, "logs", knot, rkey, workflow}, "/")
+	url := SpindleURL(p.config.Core.Dev, spindle, knot, rkey, workflow)
 	l = l.With("url", url)
 
 	clientConn, err := upgrader.Upgrade(w, r, nil)
@@ -258,9 +252,9 @@ func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 	defer spindleConn.Close()
 
 	// create a channel for incoming messages
-	evChan := make(chan logEvent, 100)
+	evChan := make(chan LogEvent, 100)
 	// start a goroutine to read from spindle
-	go readLogs(spindleConn, evChan)
+	go ReadLogs(spindleConn, evChan)
 
 	stepStartTimes := make(map[int]time.Time)
 	var fragment bytes.Buffer
@@ -275,17 +269,17 @@ func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			if ev.err != nil && ev.isCloseError() {
+			if ev.Err != nil && ev.IsCloseError() {
 				l.Debug("graceful shutdown, tail complete", "err", err)
 				return
 			}
-			if ev.err != nil {
+			if ev.Err != nil {
 				l.Error("error reading from spindle", "err", err)
 				return
 			}
 
 			var logLine spindlemodel.LogLine
-			if err = json.Unmarshal(ev.msg, &logLine); err != nil {
+			if err = json.Unmarshal(ev.Msg, &logLine); err != nil {
 				l.Error("failed to parse logline", "err", err)
 				continue
 			}
@@ -446,37 +440,4 @@ func (p *Pipelines) Cancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	l.Debug("canceled pipeline", "uri", pipeline.AtUri())
-}
-
-// either a message or an error
-type logEvent struct {
-	msg []byte
-	err error
-}
-
-func (ev *logEvent) isCloseError() bool {
-	return websocket.IsCloseError(
-		ev.err,
-		websocket.CloseNormalClosure,
-		websocket.CloseGoingAway,
-		websocket.CloseAbnormalClosure,
-	)
-}
-
-// read logs from spindle and pass through to chan
-func readLogs(conn *websocket.Conn, ch chan logEvent) {
-	defer close(ch)
-
-	for {
-		if conn == nil {
-			return
-		}
-
-		_, msg, err := conn.ReadMessage()
-		if err != nil {
-			ch <- logEvent{err: err}
-			return
-		}
-		ch <- logEvent{msg: msg}
-	}
 }
