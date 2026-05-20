@@ -1,5 +1,5 @@
 {{ define "repo/pipelines/fragments/workflowSymbolOOB" }}
-<div id="workflow-symbol-{{ normalizeForHtmlId .Name }}" class="flex-shrink-0" hx-swap-oob="outerHTML:#workflow-symbol-{{ normalizeForHtmlId .Name }}">
-  {{ template "repo/pipelines/fragments/workflowSymbol" .Statuses }}
-</div>
+  <div id="workflow-symbol-{{ normalizeForHtmlId .Name }}" class="flex-shrink-0" hx-swap-oob="outerHTML:#workflow-symbol-{{ normalizeForHtmlId .Name }}">
+    {{ template "repo/pipelines/fragments/workflowSymbol" .Statuses }}
+  </div>
 {{ end }}

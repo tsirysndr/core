@@ -254,6 +254,10 @@ func (s *State) Close() error {
 	return s.db.Close()
 }
 
+func (s *State) NewSSHServer() *pipelinessh.Server {
+	return pipelinessh.New(s.db, s.config, s.pipelineNotifier, log.SubLogger(s.logger, "pipelinessh"))
+}
+
 func (s *State) SecurityTxt(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("Cache-Control", "public, max-age=86400") // one day

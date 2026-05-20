@@ -150,6 +150,12 @@ type OgreConfig struct {
 	Host string `env:"HOST, default=https://ogre.tangled.network"`
 }
 
+type SSHConfig struct {
+	Enabled     bool   `env:"ENABLED, default=false"`
+	ListenAddr  string `env:"LISTEN_ADDR, default=0.0.0.0:3333"`
+	HostKeyPath string `env:"HOST_KEY_PATH"`
+}
+
 func (cfg RedisConfig) ToURL() string {
 	u := &url.URL{
 		Scheme: "redis",
@@ -183,6 +189,7 @@ type Config struct {
 	Sites         SitesConfig      `env:",prefix=TANGLED_SITES_"`
 	KnotMirror    KnotMirrorConfig `env:",prefix=TANGLED_KNOTMIRROR_"`
 	Ogre          OgreConfig       `env:",prefix=TANGLED_OGRE_"`
+	SSH           SSHConfig        `env:",prefix=TANGLED_SSH_"`
 }
 
 func LoadConfig(ctx context.Context) (*Config, error) {

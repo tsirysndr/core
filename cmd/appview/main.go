@@ -44,6 +44,15 @@ func main() {
 		}
 	}()
 
+	if c.SSH.Enabled {
+		sshServer := state.NewSSHServer()
+		go func() {
+			if err := sshServer.ListenAndServe(ctx); err != nil {
+				logger.Error("SSH server stopped", "err", err)
+			}
+		}()
+	}
+
 	if err := http.ListenAndServe(c.Core.ListenAddr, state.Router()); err != nil {
 		logger.Error("failed to start appview", "err", err)
 	}
