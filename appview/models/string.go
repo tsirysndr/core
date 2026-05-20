@@ -36,7 +36,7 @@ func (s *String) AsRecord() tangled.String {
 }
 
 func StringFromRecord(did, rkey string, record tangled.String) String {
-	created, err := time.Parse(record.CreatedAt, time.RFC3339)
+	created, err := time.Parse(time.RFC3339, record.CreatedAt)
 	if err != nil {
 		created = time.Now()
 	}
