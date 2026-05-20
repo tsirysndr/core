@@ -47,7 +47,7 @@
                                 {{ i $icon "w-4 h-4 mr-2" }}
                                 {{ $key }}
                                 {{ if $meta }}
-                                  <span class="bg-gray-200 dark:bg-gray-700 rounded py-1/2 px-1 text-sm ml-1">{{  $meta }}</span>
+                                  <span class="bg-gray-200 dark:bg-gray-700 rounded py-1/2 px-1 text-sm ml-1">{{ scaleFmt $meta }}</span>
                                 {{ end }}
                             </span>
                         </div>
@@ -132,7 +132,7 @@
           class="btn-group-item"
           title="Forked by"
         >
-          {{ .RepoInfo.Stats.ForkCount }}
+          {{ scaleFmt .RepoInfo.Stats.ForkCount }}
         </a>
       </div>
     {{ template "repo/fragments/feedDropdown" . }}

@@ -62,25 +62,25 @@
     {{ with .StarCount }}
       <div class="flex gap-1 items-center text-sm">
         {{ i "star" "w-3 h-3 fill-current" }}
-        <span>{{ . }}</span>
+        <span>{{ scaleFmt . }}</span>
       </div>
     {{ end }}
     {{ with .ForkCount }}
       <div class="flex gap-1 items-center text-sm">
         {{ i "git-fork" "w-3 h-3" }}
-        <span>{{ . }}</span>
+        <span>{{ scaleFmt . }}</span>
       </div>
     {{ end }}
     {{ with .IssueCount.Open }}
       <div class="flex gap-1 items-center text-sm">
         {{ i "circle-dot" "w-3 h-3" }}
-        <span>{{ . }}</span>
+        <span>{{ scaleFmt . }}</span>
       </div>
     {{ end }}
     {{ with .PullCount.Open }}
       <div class="flex gap-1 items-center text-sm">
         {{ i "git-pull-request" "w-3 h-3" }}
-        <span>{{ . }}</span>
+        <span>{{ scaleFmt . }}</span>
       </div>
     {{ end }}
   </div>

@@ -31,11 +31,11 @@
                 class="btn-group-item"
                 title="Starred by"
             >
-                {{ .StarCount }}
+                {{ scaleFmt .StarCount }}
             </a>
         {{ else }}
             <span class="btn-group-item cursor-default">
-                {{ .StarCount }}
+                {{ scaleFmt .StarCount }}
             </span>
         {{ end }}
     </div>

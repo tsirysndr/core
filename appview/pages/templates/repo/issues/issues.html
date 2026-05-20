@@ -15,13 +15,13 @@
        "Key" "open"
        "Value" "open"
        "Icon" "circle-dot"
-       "Meta" (string .RepoInfo.Stats.IssueCount.Open)) }}
+       "Meta" (scaleFmt .RepoInfo.Stats.IssueCount.Open)) }}
   {{ $closed :=
      (dict
        "Key" "closed"
        "Value" "closed"
        "Icon" "ban"
-       "Meta" (string .RepoInfo.Stats.IssueCount.Closed)) }}
+       "Meta" (scaleFmt .RepoInfo.Stats.IssueCount.Closed)) }}
   {{ $values := list $open $closed }}
 
   <div class="grid gap-2 grid-cols-[auto_1fr_auto] grid-row-2">

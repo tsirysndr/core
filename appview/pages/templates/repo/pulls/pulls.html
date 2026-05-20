@@ -14,19 +14,19 @@
        "Key" "open"
        "Value" "open"
        "Icon" "git-pull-request"
-       "Meta" (string .RepoInfo.Stats.PullCount.Open)) }}
+       "Meta" (scaleFmt .RepoInfo.Stats.PullCount.Open)) }}
   {{ $merged :=
      (dict
        "Key" "merged"
        "Value" "merged"
        "Icon" "git-merge"
-       "Meta" (string .RepoInfo.Stats.PullCount.Merged)) }}
+       "Meta" (scaleFmt .RepoInfo.Stats.PullCount.Merged)) }}
   {{ $closed :=
      (dict
        "Key" "closed"
        "Value" "closed"
        "Icon" "ban"
-       "Meta" (string .RepoInfo.Stats.PullCount.Closed)) }}
+       "Meta" (scaleFmt .RepoInfo.Stats.PullCount.Closed)) }}
   {{ $values := list $open $merged $closed }}
   <div class="grid gap-2 grid-cols-[auto_1fr_auto] grid-row-2">
     <form id="search-form" class="flex relative col-span-3 sm:col-span-1 sm:col-start-2" method="GET">

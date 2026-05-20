@@ -178,6 +178,30 @@ func (p *Pages) funcMap() template.FuncMap {
 			s = append(s, values...)
 			return s
 		},
+		// scale numerics over 1000 to 1k
+		"scaleFmt": func(n any) string {
+			var v float64
+			switch x := n.(type) {
+			case int:
+				v = float64(x)
+			case int32:
+				v = float64(x)
+			case int64:
+				v = float64(x)
+			case float64:
+				v = x
+			default:
+				return fmt.Sprintf("%v", n)
+			}
+			if v < 1000 {
+				return fmt.Sprintf("%d", int(v))
+			}
+			k := v / 1000
+			if k < 10 {
+				return fmt.Sprintf("%.1fk", k)
+			}
+			return fmt.Sprintf("%dk", int(k))
+		},
 		"commaFmt":   humanize.Comma,
 		"plural":     english.Plural,
 		"relTimeFmt": humanize.Time,
