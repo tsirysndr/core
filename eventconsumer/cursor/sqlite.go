@@ -2,7 +2,9 @@ package cursor
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"log/slog"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -46,35 +48,33 @@ func (s *SqliteStore) init() error {
 	createTable := fmt.Sprintf(`
 	create table if not exists %s (
 		knot text primary key,
-		cursor text
+		cursor integer
 	);`, s.tableName)
 	_, err := s.db.Exec(createTable)
 	return err
 }
 
-func (s *SqliteStore) Set(knot string, cursor int64) {
+func (s *SqliteStore) Set(key string, cursor int64) {
 	query := fmt.Sprintf(`
 		insert into %s (knot, cursor)
 		values (?, ?)
 		on conflict(knot) do update set cursor=excluded.cursor;
 	`, s.tableName)
 
-	_, err := s.db.Exec(query, knot, cursor)
-
-	if err != nil {
-		// TODO: log here
+	if _, err := s.db.Exec(query, key, cursor); err != nil {
+		slog.Default().Error("cursor sqlite set failed", "key", key, "cursor", cursor, "err", err)
 	}
 }
 
-func (s *SqliteStore) Get(knot string) (cursor int64) {
+func (s *SqliteStore) Get(key string) (cursor int64) {
 	query := fmt.Sprintf(`
 		select cursor from %s where knot = ?;
 	`, s.tableName)
-	err := s.db.QueryRow(query, knot).Scan(&cursor)
+	err := s.db.QueryRow(query, key).Scan(&cursor)
 
 	if err != nil {
-		if err != sql.ErrNoRows {
-			// TODO: log here
+		if !errors.Is(err, sql.ErrNoRows) {
+			slog.Default().Error("cursor sqlite get failed", "key", key, "err", err)
 		}
 		return 0
 	}

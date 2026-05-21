@@ -4,26 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"math/rand"
+	"net/http"
 	"net/url"
 	"sync"
 	"time"
 
 	"tangled.org/core/eventconsumer/cursor"
+	"tangled.org/core/eventstream"
 	"tangled.org/core/log"
 
 	"github.com/avast/retry-go/v4"
 	"github.com/gorilla/websocket"
 )
 
-type ProcessFunc func(ctx context.Context, source Source, message Message) error
-
-type Message struct {
-	Rkey      string
-	Nsid      string
-	Created   int64           `json:"created"`
-	EventJson json.RawMessage `json:"event"`
-}
+type ProcessFunc func(ctx context.Context, source Source, event eventstream.Event) error
 
 type ConsumerConfig struct {
 	Sources           map[Source]struct{}
@@ -34,8 +28,13 @@ type ConsumerConfig struct {
 	WorkerCount       int
 	QueueSize         int
 	Logger            *slog.Logger
-	Dev               bool
 	CursorStore       cursor.Store
+	URLFunc           func(Source, int64) (*url.URL, error)
+
+	Dialer            *websocket.Dialer
+	RequestHeader     http.Header
+	MaxRetryAttempts  uint
+	OnConnectExceeded func(Source, error)
 }
 
 func NewConsumerConfig() *ConsumerConfig {
@@ -44,19 +43,12 @@ func NewConsumerConfig() *ConsumerConfig {
 	}
 }
 
-type Source interface {
-	// url to start streaming events from
-	Url(cursor int64, dev bool) (*url.URL, error)
-	// cache key for cursor storage
-	Key() string
-}
-
 type Consumer struct {
-	wg         sync.WaitGroup
-	dialer     *websocket.Dialer
-	jobQueue   chan job
-	logger     *slog.Logger
-	randSource *rand.Rand
+	sourceWg sync.WaitGroup
+	workerWg sync.WaitGroup
+	dialer   *websocket.Dialer
+	jobQueue chan job
+	logger   *slog.Logger
 
 	// sourcesMu guards sources. It must only be held for short, non-blocking
 	// map operations; never across a blocking call (dial, read, close).
@@ -69,6 +61,9 @@ type Consumer struct {
 type sourceState struct {
 	cancel context.CancelFunc
 	conn   *websocket.Conn
+
+	cursorMu  sync.Mutex
+	cursorMax int64
 }
 
 type job struct {
@@ -98,48 +93,60 @@ func NewConsumer(cfg ConsumerConfig) *Consumer {
 	if cfg.CursorStore == nil {
 		cfg.CursorStore = &cursor.MemoryStore{}
 	}
+	if cfg.URLFunc == nil {
+		cfg.URLFunc = DefaultURL(false)
+	}
+	dialer := cfg.Dialer
+	if dialer == nil {
+		dialer = websocket.DefaultDialer
+	}
 	return &Consumer{
-		cfg:        cfg,
-		dialer:     websocket.DefaultDialer,
-		jobQueue:   make(chan job, cfg.QueueSize), // buffered job queue
-		logger:     cfg.Logger,
-		randSource: rand.New(rand.NewSource(time.Now().UnixNano())),
-		sources:    make(map[Source]*sourceState),
+		cfg:      cfg,
+		dialer:   dialer,
+		jobQueue: make(chan job, cfg.QueueSize),
+		logger:   cfg.Logger,
+		sources:  make(map[Source]*sourceState),
 	}
 }
 
 func (c *Consumer) Start(ctx context.Context) {
 	c.cfg.Logger.Info("starting consumer", "config", c.cfg)
 
-	// start workers
 	for range c.cfg.WorkerCount {
-		c.wg.Add(1)
+		c.workerWg.Add(1)
 		go c.worker(ctx)
 	}
 
-	// start streaming
 	for source := range c.cfg.Sources {
 		c.AddSource(ctx, source)
 	}
 }
 
 func (c *Consumer) Stop() {
-	// snapshot conns under lock so we don't hold sourcesMu across Close
+	// snapshot cancels and conns under lock so we don't hold sourcesMu across Close
 	c.sourcesMu.Lock()
+	cancels := make([]context.CancelFunc, 0, len(c.sources))
 	conns := make([]*websocket.Conn, 0, len(c.sources))
 	for _, st := range c.sources {
+		if st.cancel != nil {
+			cancels = append(cancels, st.cancel)
+		}
 		if st.conn != nil {
 			conns = append(conns, st.conn)
 		}
 	}
 	c.sourcesMu.Unlock()
 
+	for _, cancel := range cancels {
+		cancel()
+	}
 	for _, conn := range conns {
 		conn.Close()
 	}
 
-	c.wg.Wait()
+	c.sourceWg.Wait()
 	close(c.jobQueue)
+	c.workerWg.Wait()
 }
 
 func (c *Consumer) AddSource(ctx context.Context, s Source) {
@@ -153,7 +160,7 @@ func (c *Consumer) AddSource(ctx context.Context, s Source) {
 	c.sources[s] = &sourceState{cancel: cancel}
 	c.sourcesMu.Unlock()
 
-	c.wg.Add(1)
+	c.sourceWg.Add(1)
 	go c.startConnectionLoop(srcCtx, s)
 }
 
@@ -180,7 +187,7 @@ func (c *Consumer) RemoveSource(s Source) {
 }
 
 func (c *Consumer) worker(ctx context.Context) {
-	defer c.wg.Done()
+	defer c.workerWg.Done()
 	for {
 		select {
 		case <-ctx.Done():
@@ -190,28 +197,44 @@ func (c *Consumer) worker(ctx context.Context) {
 				return
 			}
 
-			var msg Message
-			err := json.Unmarshal(j.message, &msg)
+			var ev eventstream.Event
+			err := json.Unmarshal(j.message, &ev)
 			if err != nil {
 				c.logger.Error("error deserializing message", "source", j.source.Key(), "err", err)
-				return
+				continue
 			}
 
-			if err := c.cfg.ProcessFunc(ctx, j.source, msg); err != nil {
+			if err := c.cfg.ProcessFunc(ctx, j.source, ev); err != nil {
 				c.logger.Error("error processing message", "source", j.source, "err", err)
 			}
 
-			cursorVal := msg.Created
-			if cursorVal == 0 {
-				cursorVal = time.Now().UnixNano()
-			}
-			c.cfg.CursorStore.Set(j.source.Key(), cursorVal)
+			c.advanceCursor(j.source, ev.Created)
 		}
 	}
 }
 
+func (c *Consumer) advanceCursor(s Source, newCursor int64) {
+	if newCursor == 0 {
+		return
+	}
+	c.sourcesMu.Lock()
+	st, ok := c.sources[s]
+	c.sourcesMu.Unlock()
+	if !ok {
+		return
+	}
+
+	st.cursorMu.Lock()
+	defer st.cursorMu.Unlock()
+	if newCursor <= st.cursorMax {
+		return
+	}
+	st.cursorMax = newCursor
+	c.cfg.CursorStore.Set(s.Key(), newCursor)
+}
+
 func (c *Consumer) startConnectionLoop(ctx context.Context, source Source) {
-	defer c.wg.Done()
+	defer c.sourceWg.Done()
 
 	// attempt connection initially
 	err := c.runConnection(ctx, source)
@@ -240,7 +263,7 @@ func (c *Consumer) startConnectionLoop(ctx context.Context, source Source) {
 func (c *Consumer) runConnection(ctx context.Context, source Source) error {
 	cursor := c.cfg.CursorStore.Get(source.Key())
 
-	u, err := source.Url(cursor, c.cfg.Dev)
+	u, err := c.cfg.URLFunc(source, cursor)
 	if err != nil {
 		return err
 	}
@@ -248,7 +271,7 @@ func (c *Consumer) runConnection(ctx context.Context, source Source) error {
 	c.logger.Info("connecting", "url", u.String())
 
 	retryOpts := []retry.Option{
-		retry.Attempts(0), // infinite attempts
+		retry.Attempts(c.cfg.MaxRetryAttempts),
 		retry.DelayType(retry.BackOffDelay),
 		retry.Delay(c.cfg.RetryInterval),
 		retry.MaxDelay(c.cfg.MaxRetryInterval),
@@ -269,10 +292,13 @@ func (c *Consumer) runConnection(ctx context.Context, source Source) error {
 	err = retry.Do(func() error {
 		connCtx, cancel := context.WithTimeout(ctx, c.cfg.ConnectionTimeout)
 		defer cancel()
-		conn, _, err = c.dialer.DialContext(connCtx, u.String(), nil)
+		conn, _, err = c.dialer.DialContext(connCtx, u.String(), c.cfg.RequestHeader)
 		return err
 	}, retryOpts...)
 	if err != nil {
+		if c.cfg.OnConnectExceeded != nil {
+			c.cfg.OnConnectExceeded(source, err)
+		}
 		return err
 	}
 
