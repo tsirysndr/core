@@ -4,75 +4,51 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/api/tangled"
-	"tangled.org/core/appview/cache"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pipelines"
 	ec "tangled.org/core/eventconsumer"
-	"tangled.org/core/eventconsumer/cursor"
-	"tangled.org/core/log"
+	"tangled.org/core/eventstream"
 	"tangled.org/core/orm"
 	"tangled.org/core/rbac"
 	spindle "tangled.org/core/spindle/models"
 )
 
 func Spindlestream(ctx context.Context, c *config.Config, d *db.DB, enforcer *rbac.Enforcer, pn *pipelines.StatusNotifier) (*ec.Consumer, error) {
-	logger := log.FromContext(ctx)
-	logger = log.SubLogger(logger, "spindlestream")
-
-	spindles, err := db.GetSpindles(
-		ctx,
-		d,
-		orm.FilterIsNot("verified", "null"),
-	)
+	spindles, err := db.GetSpindles(ctx, d, orm.FilterIsNot("verified", "null"))
 	if err != nil {
 		return nil, err
 	}
 
-	srcs := make(map[ec.Source]struct{})
-	for _, s := range spindles {
-		src := ec.NewSpindleSource(s.Instance)
-		srcs[src] = struct{}{}
+	hosts := make([]string, len(spindles))
+	for i, s := range spindles {
+		hosts[i] = s.Instance
 	}
 
-	cache := cache.New(c.Redis.Addr)
-	cursorStore := cursor.NewRedisCursorStore(cache)
-
-	cfg := ec.ConsumerConfig{
-		Sources:           srcs,
-		ProcessFunc:       spindleIngester(ctx, logger, d, pn),
-		RetryInterval:     c.Spindlestream.RetryInterval,
-		MaxRetryInterval:  c.Spindlestream.MaxRetryInterval,
-		ConnectionTimeout: c.Spindlestream.ConnectionTimeout,
-		WorkerCount:       c.Spindlestream.WorkerCount,
-		QueueSize:         c.Spindlestream.QueueSize,
-		Logger:            logger,
-		Dev:               c.Core.Dev,
-		CursorStore:       &cursorStore,
-	}
-
-	return ec.NewConsumer(cfg), nil
+	return bootstrapStream(
+		ctx, "spindlestream", ec.KindSpindle, hosts, c.Redis.Addr,
+		c.Spindlestream, c.Core.Dev,
+		spindleIngester(d, pn),
+	), nil
 }
 
-func spindleIngester(ctx context.Context, logger *slog.Logger, d *db.DB, pn *pipelines.StatusNotifier) ec.ProcessFunc {
-	return func(ctx context.Context, source ec.Source, msg ec.Message) error {
+func spindleIngester(d *db.DB, pn *pipelines.StatusNotifier) ec.ProcessFunc {
+	return func(ctx context.Context, source ec.Source, msg eventstream.Event) error {
 		switch msg.Nsid {
 		case tangled.PipelineStatusNSID:
-			return ingestPipelineStatus(ctx, logger, d, pn, source, msg)
+			return ingestPipelineStatus(ctx, d, pn, source, msg)
 		}
-
 		return nil
 	}
 }
 
-func ingestPipelineStatus(ctx context.Context, logger *slog.Logger, d *db.DB, pn *pipelines.StatusNotifier, source ec.Source, msg ec.Message) error {
+func ingestPipelineStatus(ctx context.Context, d *db.DB, pn *pipelines.StatusNotifier, source ec.Source, msg eventstream.Event) error {
 	var record tangled.PipelineStatus
 	err := json.Unmarshal(msg.EventJson, &record)
 	if err != nil {
@@ -96,7 +72,7 @@ func ingestPipelineStatus(ctx context.Context, logger *slog.Logger, d *db.DB, pn
 	}
 
 	status := models.PipelineStatus{
-		Spindle:      source.Key(),
+		Spindle:      source.Host,
 		Rkey:         msg.Rkey,
 		PipelineKnot: strings.TrimPrefix(pipelineUri.Authority().String(), "did:web:"),
 		PipelineRkey: pipelineUri.RecordKey().String(),

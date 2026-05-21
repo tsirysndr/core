@@ -337,6 +337,18 @@ func (k *Knots) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if registration.Registered != nil {
+		remaining, rErr := db.GetRegistrations(k.Db,
+			orm.FilterEq("domain", domain),
+			orm.FilterIsNot("registered", "null"),
+		)
+		if rErr != nil {
+			l.Warn("failed to check remaining registrations after delete", "err", rErr)
+		} else if len(remaining) == 0 {
+			go k.Knotstream.RemoveSource(eventconsumer.NewKnotSource(domain))
+		}
+	}
+
 	shouldRedirect := r.Header.Get("shouldRedirect")
 	if shouldRedirect == "true" {
 		k.Pages.HxRedirect(w, "/knots")

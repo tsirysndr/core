@@ -168,8 +168,17 @@ func (rp *Repo) EditSpindle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	oldSpindle := f.Spindle
+	if oldSpindle != "" && oldSpindle != newSpindle {
+		remaining, qErr := db.GetRepos(rp.db, orm.FilterEq("spindle", oldSpindle))
+		if qErr != nil {
+			l.Warn("failed to count repos using old spindle", "err", qErr)
+		} else if len(remaining) == 0 {
+			rp.spindlestream.RemoveSource(eventconsumer.NewSpindleSource(oldSpindle))
+		}
+	}
+
 	if !removingSpindle {
-		// add this spindle to spindle stream
 		rp.spindlestream.AddSource(
 			context.Background(),
 			eventconsumer.NewSpindleSource(newSpindle),

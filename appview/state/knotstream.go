@@ -14,13 +14,12 @@ import (
 	"tangled.org/core/appview/notify"
 
 	"tangled.org/core/api/tangled"
-	"tangled.org/core/appview/cache"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/sites"
 	ec "tangled.org/core/eventconsumer"
-	"tangled.org/core/eventconsumer/cursor"
+	"tangled.org/core/eventstream"
 	knotdb "tangled.org/core/knotserver/db"
 	"tangled.org/core/log"
 	"tangled.org/core/orm"
@@ -33,40 +32,21 @@ import (
 )
 
 func Knotstream(ctx context.Context, c *config.Config, d *db.DB, enforcer *rbac.Enforcer, posthog posthog.Client, notifier notify.Notifier, cfClient *cloudflare.Client) (*ec.Consumer, error) {
-	logger := log.FromContext(ctx)
-	logger = log.SubLogger(logger, "knotstream")
-
-	knots, err := db.GetRegistrations(
-		d,
-		orm.FilterIsNot("registered", "null"),
-	)
+	knots, err := db.GetRegistrations(d, orm.FilterIsNot("registered", "null"))
 	if err != nil {
 		return nil, err
 	}
 
-	srcs := make(map[ec.Source]struct{})
-	for _, k := range knots {
-		s := ec.NewKnotSource(k.Domain)
-		srcs[s] = struct{}{}
+	hosts := make([]string, len(knots))
+	for i, k := range knots {
+		hosts[i] = k.Domain
 	}
 
-	cache := cache.New(c.Redis.Addr)
-	cursorStore := cursor.NewRedisCursorStore(cache)
-
-	cfg := ec.ConsumerConfig{
-		Sources:           srcs,
-		ProcessFunc:       knotIngester(d, enforcer, posthog, notifier, c.Core.Dev, c, cfClient),
-		RetryInterval:     c.Knotstream.RetryInterval,
-		MaxRetryInterval:  c.Knotstream.MaxRetryInterval,
-		ConnectionTimeout: c.Knotstream.ConnectionTimeout,
-		WorkerCount:       c.Knotstream.WorkerCount,
-		QueueSize:         c.Knotstream.QueueSize,
-		Logger:            logger,
-		Dev:               c.Core.Dev,
-		CursorStore:       &cursorStore,
-	}
-
-	return ec.NewConsumer(cfg), nil
+	return bootstrapStream(
+		ctx, "knotstream", ec.KindKnot, hosts, c.Redis.Addr,
+		c.Knotstream, c.Core.Dev,
+		knotIngester(d, enforcer, posthog, notifier, c.Core.Dev, c, cfClient),
+	), nil
 }
 
 func resolveRepo(d *db.DB, repoDid *string, ownerDid, repoName string) (*models.Repo, error) {
@@ -84,7 +64,7 @@ func resolveRepo(d *db.DB, repoDid *string, ownerDid, repoName string) (*models.
 }
 
 func knotIngester(d *db.DB, enforcer *rbac.Enforcer, posthog posthog.Client, notifier notify.Notifier, dev bool, c *config.Config, cfClient *cloudflare.Client) ec.ProcessFunc {
-	return func(ctx context.Context, source ec.Source, msg ec.Message) error {
+	return func(ctx context.Context, source ec.Source, msg eventstream.Event) error {
 		switch msg.Nsid {
 		case tangled.GitRefUpdateNSID:
 			return ingestRefUpdate(ctx, d, enforcer, posthog, notifier, dev, c, cfClient, source, msg)
@@ -99,7 +79,7 @@ func knotIngester(d *db.DB, enforcer *rbac.Enforcer, posthog posthog.Client, not
 }
 
 // TODO(boltless): remove this. knotmirror should do all sort of indexing
-func ingestRefUpdate(ctx context.Context, d *db.DB, enforcer *rbac.Enforcer, pc posthog.Client, notifier notify.Notifier, dev bool, c *config.Config, cfClient *cloudflare.Client, source ec.Source, msg ec.Message) error {
+func ingestRefUpdate(ctx context.Context, d *db.DB, enforcer *rbac.Enforcer, pc posthog.Client, notifier notify.Notifier, dev bool, c *config.Config, cfClient *cloudflare.Client, source ec.Source, msg eventstream.Event) error {
 	logger := log.FromContext(ctx)
 
 	var record tangled.GitRefUpdate
@@ -112,12 +92,12 @@ func ingestRefUpdate(ctx context.Context, d *db.DB, enforcer *rbac.Enforcer, pc 
 	if err != nil {
 		return err
 	}
-	if !slices.Contains(knownKnots, source.Key()) {
-		return fmt.Errorf("%s does not belong to %s, something is fishy", record.CommitterDid, source.Key())
+	if !slices.Contains(knownKnots, source.Host) {
+		return fmt.Errorf("%s does not belong to %s, something is fishy", record.CommitterDid, source.Host)
 	}
 
 	if record.Repo == "" {
-		return fmt.Errorf("gitRefUpdate from %s missing repo", source.Key())
+		return fmt.Errorf("gitRefUpdate from %s missing repo", source.Host)
 	}
 
 	repo, lookupErr := db.GetRepoByDid(d, record.Repo)
@@ -285,7 +265,7 @@ func updateRepoLanguages(d *db.DB, record tangled.GitRefUpdate) error {
 	return tx.Commit()
 }
 
-func ingestPipeline(d *db.DB, source ec.Source, msg ec.Message) error {
+func ingestPipeline(d *db.DB, source ec.Source, msg eventstream.Event) error {
 	var record tangled.Pipeline
 	err := json.Unmarshal(msg.EventJson, &record)
 	if err != nil {
@@ -343,7 +323,7 @@ func ingestPipeline(d *db.DB, source ec.Source, msg ec.Message) error {
 
 	pipeline := models.Pipeline{
 		Rkey:      msg.Rkey,
-		Knot:      source.Key(),
+		Knot:      source.Host,
 		RepoOwner: syntax.DID(record.TriggerMetadata.Repo.Did),
 		RepoName:  repoName,
 		RepoDid:   repo.RepoDid,
@@ -364,7 +344,7 @@ func ingestPipeline(d *db.DB, source ec.Source, msg ec.Message) error {
 	return nil
 }
 
-func ingestDIDAssign(d *db.DB, enforcer *rbac.Enforcer, source ec.Source, msg ec.Message, ctx context.Context) error {
+func ingestDIDAssign(d *db.DB, enforcer *rbac.Enforcer, source ec.Source, msg eventstream.Event, ctx context.Context) error {
 	logger := log.FromContext(ctx)
 
 	var record knotdb.RepoDIDAssign
@@ -393,7 +373,7 @@ func ingestDIDAssign(d *db.DB, enforcer *rbac.Enforcer, source ec.Source, msg ec
 		return nil
 	}
 	repo := repos[0]
-	knot := source.Key()
+	knot := source.Host
 
 	if repo.Knot != knot {
 		return fmt.Errorf("didAssign from %s for repo hosted on %s, rejecting", knot, repo.Knot)
