@@ -19,6 +19,7 @@ import (
 	jmodels "github.com/bluesky-social/jetstream/pkg/models"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/models"
+	"tangled.org/core/eventstream"
 	"tangled.org/core/knotserver/db"
 	"tangled.org/core/knotserver/git"
 	knotxrpc "tangled.org/core/knotserver/xrpc"
@@ -502,10 +503,10 @@ func (h *Knot) processPull(ctx context.Context, event *jmodels.Event) error {
 		return fmt.Errorf("failed to marshal pipeline event: %w", err)
 	}
 
-	ev := db.Event{
+	ev := eventstream.Event{
 		Rkey:      tid.TID(),
 		Nsid:      tangled.PipelineNSID,
-		EventJson: string(eventJson),
+		EventJson: eventJson,
 	}
 
 	l.Info("inserting pipeline event")

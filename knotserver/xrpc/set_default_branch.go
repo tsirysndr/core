@@ -9,7 +9,7 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/bluesky-social/indigo/xrpc"
 	"tangled.org/core/api/tangled"
-	"tangled.org/core/knotserver/db"
+	"tangled.org/core/eventstream"
 	"tangled.org/core/knotserver/git"
 	"tangled.org/core/rbac"
 	"tangled.org/core/tid"
@@ -101,14 +101,19 @@ func (x *Xrpc) SetDefaultBranch(w http.ResponseWriter, r *http.Request) {
 	}
 	eventJson, err := json.Marshal(refUpdate)
 	if err != nil {
+		fail(xrpcerr.GenericError(err))
 		return
 	}
 
-	x.Db.InsertEvent(db.Event{
+	if err := x.Db.InsertEvent(eventstream.Event{
 		Rkey:      tid.TID(),
 		Nsid:      tangled.GitRefUpdateNSID,
-		EventJson: string(eventJson),
-	}, x.Notifier)
+		EventJson: eventJson,
+	}, x.Notifier); err != nil {
+		l.Error("failed to insert event", "error", err)
+		writeError(w, xrpcerr.GenericError(err), http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
 }

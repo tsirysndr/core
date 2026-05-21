@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-git/go-git/v5/plumbing"
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/eventstream"
 	"tangled.org/core/hook"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/knotserver/config"
@@ -313,10 +314,10 @@ func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, o
 		return err
 	}
 
-	event := db.Event{
+	event := eventstream.Event{
 		Rkey:      tid.TID(),
 		Nsid:      tangled.GitRefUpdateNSID,
-		EventJson: string(eventJson),
+		EventJson: eventJson,
 	}
 
 	return h.db.InsertEvent(event, h.n)
@@ -417,10 +418,10 @@ func (h *InternalHandle) triggerPipeline(
 		return nil
 	}
 
-	event := db.Event{
+	event := eventstream.Event{
 		Rkey:      tid.TID(),
 		Nsid:      tangled.PipelineNSID,
-		EventJson: string(eventJson),
+		EventJson: eventJson,
 	}
 
 	if h.c.LogsAddr != "" {

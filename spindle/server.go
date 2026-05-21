@@ -15,6 +15,7 @@ import (
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/eventconsumer"
 	"tangled.org/core/eventconsumer/cursor"
+	"tangled.org/core/eventstream"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/jetstream"
 	"tangled.org/core/log"
@@ -183,7 +184,7 @@ func New(ctx context.Context, cfg *config.Config, engines map[string]models.Engi
 	// job in the above registered queue.
 	ccfg := eventconsumer.NewConsumerConfig()
 	ccfg.Logger = log.SubLogger(logger, "eventconsumer")
-	ccfg.Dev = cfg.Server.Dev
+	ccfg.URLFunc = eventconsumer.DefaultURL(cfg.Server.Dev)
 	ccfg.ProcessFunc = spindle.processPipeline
 	ccfg.CursorStore = cursorStore
 	knownKnots, err := d.Knots()
@@ -374,7 +375,7 @@ func (s *Spindle) XrpcRouter() http.Handler {
 	return x.Router()
 }
 
-func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source, msg eventconsumer.Message) error {
+func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source, msg eventstream.Event) error {
 	if msg.Nsid == tangled.PipelineNSID {
 		tpl := tangled.Pipeline{}
 		err := json.Unmarshal(msg.EventJson, &tpl)
@@ -391,8 +392,8 @@ func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source,
 			return fmt.Errorf("no repo data found")
 		}
 
-		if src.Key() != tpl.TriggerMetadata.Repo.Knot {
-			return fmt.Errorf("repo knot does not match event source: %s != %s", src.Key(), tpl.TriggerMetadata.Repo.Knot)
+		if src.Host != tpl.TriggerMetadata.Repo.Knot {
+			return fmt.Errorf("repo knot does not match event source: %s != %s", src.Host, tpl.TriggerMetadata.Repo.Knot)
 		}
 
 		repoDid, err := s.resolvePipelineRepoDid(tpl.TriggerMetadata.Repo)
@@ -401,7 +402,7 @@ func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source,
 		}
 
 		pipelineId := models.PipelineId{
-			Knot: src.Key(),
+			Knot: src.Host,
 			Rkey: msg.Rkey,
 		}
 
