@@ -28,6 +28,8 @@ import (
 	whnotify "tangled.org/core/appview/notify/webhook"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
+	"tangled.org/core/appview/pipelines"
+	pipelinessh "tangled.org/core/appview/pipelines/ssh"
 	"tangled.org/core/appview/reporesolver"
 	"tangled.org/core/appview/repoverify"
 	"tangled.org/core/appview/validator"
@@ -67,6 +69,7 @@ type State struct {
 	repoResolver     *reporesolver.RepoResolver
 	knotstream       *eventconsumer.Consumer
 	spindlestream    *eventconsumer.Consumer
+	pipelineNotifier *pipelines.StatusNotifier
 	logger           *slog.Logger
 	validator        *validator.Validator
 	cfClient         *cloudflare.Client
@@ -210,7 +213,9 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 	}
 	knotstream.Start(ctx)
 
-	spindlestream, err := Spindlestream(ctx, config, d, enforcer)
+	pipelineNotifier := pipelines.NewStatusNotifier()
+
+	spindlestream, err := Spindlestream(ctx, config, d, enforcer, pipelineNotifier)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start spindlestream consumer: %w", err)
 	}
@@ -232,6 +237,7 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 		repoResolver:     repoResolver,
 		knotstream:       knotstream,
 		spindlestream:    spindlestream,
+		pipelineNotifier: pipelineNotifier,
 		logger:           logger,
 		validator:        validator,
 		cfClient:         cfClient,

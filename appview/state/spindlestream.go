@@ -14,6 +14,7 @@ import (
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
+	"tangled.org/core/appview/pipelines"
 	ec "tangled.org/core/eventconsumer"
 	"tangled.org/core/eventconsumer/cursor"
 	"tangled.org/core/log"
@@ -22,7 +23,7 @@ import (
 	spindle "tangled.org/core/spindle/models"
 )
 
-func Spindlestream(ctx context.Context, c *config.Config, d *db.DB, enforcer *rbac.Enforcer) (*ec.Consumer, error) {
+func Spindlestream(ctx context.Context, c *config.Config, d *db.DB, enforcer *rbac.Enforcer, pn *pipelines.StatusNotifier) (*ec.Consumer, error) {
 	logger := log.FromContext(ctx)
 	logger = log.SubLogger(logger, "spindlestream")
 
@@ -46,7 +47,7 @@ func Spindlestream(ctx context.Context, c *config.Config, d *db.DB, enforcer *rb
 
 	cfg := ec.ConsumerConfig{
 		Sources:           srcs,
-		ProcessFunc:       spindleIngester(ctx, logger, d),
+		ProcessFunc:       spindleIngester(ctx, logger, d, pn),
 		RetryInterval:     c.Spindlestream.RetryInterval,
 		MaxRetryInterval:  c.Spindlestream.MaxRetryInterval,
 		ConnectionTimeout: c.Spindlestream.ConnectionTimeout,
@@ -60,18 +61,18 @@ func Spindlestream(ctx context.Context, c *config.Config, d *db.DB, enforcer *rb
 	return ec.NewConsumer(cfg), nil
 }
 
-func spindleIngester(ctx context.Context, logger *slog.Logger, d *db.DB) ec.ProcessFunc {
+func spindleIngester(ctx context.Context, logger *slog.Logger, d *db.DB, pn *pipelines.StatusNotifier) ec.ProcessFunc {
 	return func(ctx context.Context, source ec.Source, msg ec.Message) error {
 		switch msg.Nsid {
 		case tangled.PipelineStatusNSID:
-			return ingestPipelineStatus(ctx, logger, d, source, msg)
+			return ingestPipelineStatus(ctx, logger, d, pn, source, msg)
 		}
 
 		return nil
 	}
 }
 
-func ingestPipelineStatus(ctx context.Context, logger *slog.Logger, d *db.DB, source ec.Source, msg ec.Message) error {
+func ingestPipelineStatus(ctx context.Context, logger *slog.Logger, d *db.DB, pn *pipelines.StatusNotifier, source ec.Source, msg ec.Message) error {
 	var record tangled.PipelineStatus
 	err := json.Unmarshal(msg.EventJson, &record)
 	if err != nil {
@@ -110,6 +111,8 @@ func ingestPipelineStatus(ctx context.Context, logger *slog.Logger, d *db.DB, so
 	if err != nil {
 		return fmt.Errorf("failed to add pipeline status: %w", err)
 	}
+
+	pn.Publish(pipelineUri)
 
 	return nil
 }
