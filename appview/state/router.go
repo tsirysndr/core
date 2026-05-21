@@ -394,6 +394,7 @@ func (s *State) PipelinesRouter(mw *middleware.Middleware) http.Handler {
 		s.repoResolver,
 		s.pages,
 		s.spindlestream,
+		s.pipelineNotifier,
 		s.idResolver,
 		s.db,
 		s.config,

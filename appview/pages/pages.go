@@ -1543,6 +1543,15 @@ func (p *Pages) LogLine(w io.Writer, params LogLineParams) error {
 	return p.executePlain("repo/pipelines/fragments/logLine", w, params)
 }
 
+type WorkflowSymbolOOBParams struct {
+	Name     string
+	Statuses models.WorkflowStatus
+}
+
+func (p *Pages) WorkflowSymbolOOB(w io.Writer, params WorkflowSymbolOOBParams) error {
+	return p.executePlain("repo/pipelines/fragments/workflowSymbolOOB", w, params)
+}
+
 type WorkflowParams struct {
 	LoggedInUser *oauth.MultiAccountUser
 	RepoInfo     repoinfo.RepoInfo

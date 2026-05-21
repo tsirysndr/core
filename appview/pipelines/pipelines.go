@@ -29,15 +29,16 @@ import (
 )
 
 type Pipelines struct {
-	repoResolver  *reporesolver.RepoResolver
-	idResolver    *idresolver.Resolver
-	config        *config.Config
-	oauth         *oauth.OAuth
-	pages         *pages.Pages
-	spindlestream *eventconsumer.Consumer
-	db            *db.DB
-	enforcer      *rbac.Enforcer
-	logger        *slog.Logger
+	repoResolver     *reporesolver.RepoResolver
+	idResolver       *idresolver.Resolver
+	config           *config.Config
+	oauth            *oauth.OAuth
+	pages            *pages.Pages
+	spindlestream    *eventconsumer.Consumer
+	pipelineNotifier *StatusNotifier
+	db               *db.DB
+	enforcer         *rbac.Enforcer
+	logger           *slog.Logger
 }
 
 func (p *Pipelines) Router(mw *middleware.Middleware) http.Handler {
@@ -57,6 +58,7 @@ func New(
 	repoResolver *reporesolver.RepoResolver,
 	pages *pages.Pages,
 	spindlestream *eventconsumer.Consumer,
+	pipelineNotifier *StatusNotifier,
 	idResolver *idresolver.Resolver,
 	db *db.DB,
 	config *config.Config,
@@ -64,15 +66,16 @@ func New(
 	logger *slog.Logger,
 ) *Pipelines {
 	return &Pipelines{
-		oauth:         oauth,
-		repoResolver:  repoResolver,
-		pages:         pages,
-		idResolver:    idResolver,
-		config:        config,
-		spindlestream: spindlestream,
-		db:            db,
-		enforcer:      enforcer,
-		logger:        logger,
+		oauth:            oauth,
+		repoResolver:     repoResolver,
+		pages:            pages,
+		idResolver:       idResolver,
+		config:           config,
+		spindlestream:    spindlestream,
+		pipelineNotifier: pipelineNotifier,
+		db:               db,
+		enforcer:         enforcer,
+		logger:           logger,
 	}
 }
 
@@ -212,6 +215,9 @@ func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 	knot := f.Knot
 	rkey := singlePipeline.Rkey
 
+	statusCh := p.pipelineNotifier.Subscribe(singlePipeline.AtUri())
+	defer p.pipelineNotifier.Unsubscribe(singlePipeline.AtUri(), statusCh)
+
 	if spindle == "" || knot == "" || rkey == "" {
 		http.Error(w, "invalid repo info", http.StatusBadRequest)
 		return
@@ -327,6 +333,34 @@ func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 			if err = clientConn.WriteMessage(websocket.TextMessage, fragment.Bytes()); err != nil {
 				l.Error("error writing to client", "err", err)
 				return
+			}
+
+		case _, ok := <-statusCh:
+			if !ok {
+				continue
+			}
+			fresh, err := db.GetPipelineStatuses(
+				p.db,
+				1,
+				orm.FilterEq("p.repo_did", f.RepoDid),
+				orm.FilterEq("p.id", pipelineId),
+			)
+			if err != nil || len(fresh) == 0 {
+				continue
+			}
+			for name, ws := range fresh[0].Statuses {
+				fragment.Reset()
+				if err = p.pages.WorkflowSymbolOOB(&fragment, pages.WorkflowSymbolOOBParams{
+					Name:     name,
+					Statuses: ws,
+				}); err != nil {
+					l.Error("failed to render workflow symbol OOB", "err", err)
+					continue
+				}
+				if err = clientConn.WriteMessage(websocket.TextMessage, fragment.Bytes()); err != nil {
+					l.Error("error writing workflow symbol to client", "err", err)
+					return
+				}
 			}
 
 		case <-time.After(30 * time.Second):
