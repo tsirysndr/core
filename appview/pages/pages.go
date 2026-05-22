@@ -27,7 +27,6 @@ import (
 	"tangled.org/core/appview/pages/repoinfo"
 	"tangled.org/core/appview/pagination"
 	"tangled.org/core/idresolver"
-	"tangled.org/core/patchutil"
 	"tangled.org/core/types"
 
 	"github.com/bluesky-social/indigo/atproto/identity"
@@ -1350,36 +1349,6 @@ type RepoSinglePullParams struct {
 func (p *Pages) RepoSinglePull(w io.Writer, params RepoSinglePullParams) error {
 	params.Active = "pulls"
 	return p.executeRepo("repo/pulls/pull", w, params)
-}
-
-type RepoPullPatchParams struct {
-	LoggedInUser *oauth.MultiAccountUser
-	RepoInfo     repoinfo.RepoInfo
-	Pull         *models.Pull
-	Stack        models.Stack
-	Diff         *types.NiceDiff
-	Round        int
-	Submission   *models.PullSubmission
-	DiffOpts     types.DiffOpts
-}
-
-// this name is a mouthful
-func (p *Pages) RepoPullPatchPage(w io.Writer, params RepoPullPatchParams) error {
-	return p.execute("repo/pulls/patch", w, params)
-}
-
-type RepoPullInterdiffParams struct {
-	LoggedInUser *oauth.MultiAccountUser
-	RepoInfo     repoinfo.RepoInfo
-	Pull         *models.Pull
-	Round        int
-	Interdiff    *patchutil.InterdiffResult
-	DiffOpts     types.DiffOpts
-}
-
-// this name is a mouthful
-func (p *Pages) RepoPullInterdiffPage(w io.Writer, params RepoPullInterdiffParams) error {
-	return p.execute("repo/pulls/interdiff", w, params)
 }
 
 type PullResubmitParams struct {

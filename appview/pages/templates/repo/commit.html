@@ -111,12 +111,6 @@
   {{ end }}
 {{ end }}
 
-{{ define "topbarLayout" }}
-  <header class="col-span-full" style="z-index: 20;">
-    {{ template "layouts/fragments/topbar" . }}
-  </header>
-{{ end }}
-
 {{ define "mainLayout" }}
   <div class="px-1 flex-grow col-span-full flex flex-col gap-4">
     {{ block "contentLayout" . }}
