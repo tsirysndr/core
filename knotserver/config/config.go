@@ -44,6 +44,7 @@ type Config struct {
 	Server          Server   `env:",prefix=KNOT_SERVER_"`
 	Git             Git      `env:",prefix=KNOT_GIT_"`
 	AppViewEndpoint string   `env:"APPVIEW_ENDPOINT, default=https://tangled.org"`
+	LogsHostname    string   `env:"LOGS_HOSTNAME, default=logs.tangled.org"`
 	KnotMirrors     []string `env:"KNOT_MIRRORS, default=https://mirror.tangled.network"`
 }
 

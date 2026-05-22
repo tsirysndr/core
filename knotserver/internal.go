@@ -422,6 +422,11 @@ func (h *InternalHandle) triggerPipeline(
 		EventJson: string(eventJson),
 	}
 
+	if h.c.LogsHostname != "" {
+		*clientMsgs = append(*clientMsgs, "→  Browse CI logs in your terminal:")
+		*clientMsgs = append(*clientMsgs, fmt.Sprintf("   ssh -t %s at://did:web:%s/sh.tangled.pipeline/%s", h.c.LogsHostname, h.c.Server.Hostname, event.Rkey))
+	}
+
 	return h.db.InsertEvent(event, h.n)
 }
 
