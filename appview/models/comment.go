@@ -36,6 +36,11 @@ func (c Comment) AtUri() syntax.ATURI {
 	return syntax.ATURI(fmt.Sprintf("at://%s/%s/%s", c.Did, c.Collection, c.Rkey))
 }
 
+// force-return the feed.comment NSID
+func (c Comment) FeedCommentAtUri() syntax.ATURI {
+	return syntax.ATURI(fmt.Sprintf("at://%s/%s/%s", c.Did, tangled.FeedCommentNSID, c.Rkey))
+}
+
 func (c Comment) StrongRef() comatproto.RepoStrongRef {
 	return comatproto.RepoStrongRef{
 		Uri: c.AtUri().String(),

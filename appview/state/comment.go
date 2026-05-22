@@ -34,13 +34,13 @@ func (s *State) CommentBodyFragment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reactions, err := db.GetReactionMap(s.db, 20, comment.AtUri())
+	reactions, err := db.GetReactionMap(s.db, 20, comment.FeedCommentAtUri())
 	if err != nil {
 		l.Error("failed to get reactions", "err", err)
 	}
 	var userReactions map[models.ReactionKind]bool
 	if user != nil {
-		userReactions, err = db.GetReactionStatusMap(s.db, syntax.DID(user.Did), comment.AtUri())
+		userReactions, err = db.GetReactionStatusMap(s.db, syntax.DID(user.Did), comment.FeedCommentAtUri())
 		if err != nil {
 			l.Error("failed to get user reactions", "err", err)
 		}
@@ -102,7 +102,7 @@ func (s *State) NewComment(w http.ResponseWriter, r *http.Request) {
 
 	// TODO(boltless): normalize markdown body
 	normalizedBody := body
-	_, references := s.mentionsResolver.Resolve(ctx, body)
+	mentions, references := s.mentionsResolver.Resolve(ctx, body)
 
 	markdownBody := tangled.MarkupMarkdown{
 		Text:     normalizedBody,
@@ -293,6 +293,8 @@ func (s *State) NewComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.notifier.NewComment(ctx, &comment, mentions)
+
 	// TODO: return comment or reply-comment fragment
 	// onattach, htmx-callback to focus on comment.
 	s.pages.HxRefresh(w)
@@ -390,11 +392,11 @@ func (s *State) EditComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reactions, err := db.GetReactionMap(s.db, 20, comment.AtUri())
+	reactions, err := db.GetReactionMap(s.db, 20, comment.FeedCommentAtUri())
 	if err != nil {
 		l.Error("failed to get reactions", "err", err)
 	}
-	userReactions, err := db.GetReactionStatusMap(s.db, syntax.DID(user.Did), comment.AtUri())
+	userReactions, err := db.GetReactionStatusMap(s.db, syntax.DID(user.Did), comment.FeedCommentAtUri())
 	if err != nil {
 		l.Error("failed to get user reactions", "err", err)
 	}

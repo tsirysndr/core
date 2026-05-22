@@ -1,6 +1,7 @@
 package state
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -29,6 +30,12 @@ func (s *State) React(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		l.Warn("invalid form", "subject", subject, "err", err)
 		return
+	}
+
+	// override collection NSID to new one
+	switch subjectUri.Collection() {
+	case tangled.RepoIssueCommentNSID, tangled.RepoPullCommentNSID:
+		subjectUri = syntax.ATURI(fmt.Sprintf("at://%s/%s/%s", subjectUri.Authority(), tangled.FeedCommentNSID, subjectUri.RecordKey()))
 	}
 
 	reactionKind, ok := models.ParseReactionKind(r.URL.Query().Get("kind"))

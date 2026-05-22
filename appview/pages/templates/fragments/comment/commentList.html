@@ -14,8 +14,8 @@
     {{ template "topLevelComment"
       (dict
         "LoggedInUser"      $root.LoggedInUser
-        "Reactions"         (index (asReactionMapMap $root.Reactions) $item.Self.AtUri)
-        "UserReacted"       (index (asReactionStatusMapMap $root.UserReacted) $item.Self.AtUri)
+        "Reactions"         (index (asReactionMapMap $root.Reactions) $item.Self.FeedCommentAtUri)
+        "UserReacted"       (index (asReactionStatusMapMap $root.UserReacted) $item.Self.FeedCommentAtUri)
         "VouchRelationship" (index $root.VouchRelationships $item.Self.Did)
         "Comment"           $item.Self) }}
 
@@ -25,8 +25,8 @@
           {{ template "replyComment"
             (dict
               "LoggedInUser"      $root.LoggedInUser
-              "Reactions"         (index (asReactionMapMap $root.Reactions) $reply.AtUri)
-              "UserReacted"       (index (asReactionStatusMapMap $root.UserReacted) $reply.AtUri)
+              "Reactions"         (index (asReactionMapMap $root.Reactions) $reply.FeedCommentAtUri)
+              "UserReacted"       (index (asReactionStatusMapMap $root.UserReacted) $reply.FeedCommentAtUri)
               "VouchRelationship" (index $root.VouchRelationships $reply.Did)
               "Comment"           $reply) }}
         </div>

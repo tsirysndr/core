@@ -5,7 +5,7 @@
     {{ template "repo/fragments/reactions"
       (dict "Reactions"   .Reactions
             "UserReacted" .UserReacted
-            "ThreadAt"    .Comment.AtUri) }}
+            "ThreadAt"    .Comment.FeedCommentAtUri) }}
   {{ else }}
     <div class="prose dark:prose-invert italic text-gray-500 dark:text-gray-400">[deleted by author]</div>
   {{ end }}

@@ -163,7 +163,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 	entities := []syntax.ATURI{pull.AtUri()}
 	for _, s := range pull.Submissions {
 		for _, c := range s.Comments {
-			entities = append(entities, c.AtUri())
+			entities = append(entities, c.FeedCommentAtUri())
 		}
 	}
 	reactions, err := db.ListReactionDisplayDataMap(s.db, entities, 20)

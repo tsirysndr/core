@@ -598,8 +598,8 @@
         {{/* template "submissionComment" . */}}
         {{ template "comment"
           (dict "LoggedInUser"      $root.LoggedInUser
-                "Reactions"         (index (asReactionMapMap $root.Reactions) .AtUri)
-                "UserReacted"       (index (asReactionStatusMapMap $root.UserReacted) .AtUri)
+                "Reactions"         (index (asReactionMapMap $root.Reactions) .FeedCommentAtUri)
+                "UserReacted"       (index (asReactionStatusMapMap $root.UserReacted) .FeedCommentAtUri)
                 "VouchRelationship" (index $root.VouchRelationships .Did)
                 "Comment"           .) }}
       {{ end }}
