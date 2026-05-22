@@ -44,7 +44,7 @@ func TestCreatePullURL(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			database, err := db.Setup(t.Context(), ":memory:")
 			require.NoError(t, err)
-			err = database.StoreRepoKey("did:plc:ixran6dpypl5lslliiqceshs", []byte{}, "did:plc:dadhhalkfcq3gucaq25hjqon", "knot-testing", "at://uri")
+			err = database.StoreRepoKey("did:plc:ixran6dpypl5lslliiqceshs", []byte{}, "did:plc:dadhhalkfcq3gucaq25hjqon", "knot-testing")
 			require.NoError(t, err)
 
 			h := InternalHandle{
