@@ -28,7 +28,7 @@ func (s *State) Search(w http.ResponseWriter, r *http.Request) {
 	sortField, sortDesc := parseSortParam(sortParam)
 
 	var language string
-	if lang := query.Get("language"); lang != nil {
+	if lang := cmp.Or(query.Get("language"), query.Get("lang")); lang != nil {
 		language = *lang
 	}
 
