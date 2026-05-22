@@ -232,6 +232,33 @@ in
           };
         };
 
+        # ssh log server configuration
+        ssh = {
+          enable = mkOption {
+            type = types.bool;
+            default = false;
+            description = "Enable the SSH pipeline log server";
+          };
+
+          listenAddr = mkOption {
+            type = types.str;
+            default = "0.0.0.0:3333";
+            description = "Listen address for the SSH log server";
+          };
+
+          hostKeyPath = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            example = "/var/lib/appview/ssh_host_key";
+            description = ''
+              Path to the SSH host key file. If null, an ephemeral key is
+              generated on each startup. generate with:
+
+                ssh-keygen -t ed25519 -N "" -f /var/lib/appview/ssh_host_key
+            '';
+          };
+        };
+
         environmentFile = mkOption {
           type = with types; nullOr path;
           default = null;
@@ -285,7 +312,9 @@ in
           PrivateTmp = true;
           ProtectSystem = "strict";
           ProtectHome = true;
-          ReadWritePaths = ["/var/lib/appview"];
+          ReadWritePaths =
+            ["/var/lib/appview"]
+            ++ optionals (cfg.ssh.enable && cfg.ssh.hostKeyPath != null) [cfg.ssh.hostKeyPath];
         };
 
         environment =
@@ -335,6 +364,13 @@ in
 
             TANGLED_LABEL_DEFAULTS = concatStringsSep "," cfg.label.defaults;
             TANGLED_LABEL_GFI = cfg.label.goodFirstIssue;
+          }
+          // optionalAttrs cfg.ssh.enable {
+            TANGLED_SSH_ENABLED = "true";
+            TANGLED_SSH_LISTEN_ADDR = cfg.ssh.listenAddr;
+          }
+          // optionalAttrs (cfg.ssh.enable && cfg.ssh.hostKeyPath != null) {
+            TANGLED_SSH_HOST_KEY_PATH = cfg.ssh.hostKeyPath;
           };
       };
     };
