@@ -1,14 +1,19 @@
 package xrpc
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"os/exec"
 	"strconv"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	"tangled.org/core/knotserver/git"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"tangled.org/core/knotmirror/xrpc/gitea"
 	"tangled.org/core/types"
 )
 
@@ -61,33 +66,90 @@ func (x *Xrpc) listCommits(ctx context.Context, repo syntax.DID, ref string, lim
 	if err != nil {
 		return nil, fmt.Errorf("resolving repo did: %w", err)
 	}
-
-	gr, err := git.Open(repoPath, ref)
-	if err != nil {
-		return nil, fmt.Errorf("opening git repo: %w", err)
+	rev := ref
+	if rev == "" {
+		rev = "HEAD"
 	}
 
-	offset := int(cursor)
-
-	commits, err := gr.Commits(offset, limit)
+	// -> []hash
+	logs, err := func(repoPath, rev string) ([]byte, error) {
+		out, err := exec.Command(
+			"git",
+			"rev-list",
+			rev,
+			fmt.Sprintf("--skip=%d", cursor),
+			fmt.Sprintf("--max-count=%d", limit),
+		).Output()
+		if err != nil {
+			return nil, err
+		}
+		return bytes.TrimSpace(out), nil
+	}(repoPath, rev)
 	if err != nil {
-		return nil, fmt.Errorf("listing git commits: %w", err)
+		return nil, fmt.Errorf("reading rev-list: %w", err)
+	}
+
+	commits, err := func(repoPath string, logs []byte) ([]*object.Commit, error) {
+		bw, br, cancel := gitea.CatFileBatch(ctx, repoPath)
+		defer cancel()
+		var commits []*object.Commit
+		for commitId := range bytes.SplitSeq(logs, []byte{'\n'}) {
+			_, err := bw.Write([]byte(string(commitId) + "\n"))
+			if err != nil {
+				return nil, err
+			}
+			_, typ, size, err := gitea.ReadBatchLine(br)
+			if err != nil {
+				return nil, err
+			}
+			if typ != "commit" {
+				if err := gitea.DiscardFull(br, size+1); err != nil {
+					return nil, err
+				}
+				return nil, fmt.Errorf("unexpected type: %s for commit id: %s", typ, commitId)
+			}
+			c, err := gitea.ReadCommit(plumbing.NewHash(string(commitId)), io.LimitReader(br, size))
+			if _, err := br.Discard(1); err != nil {
+				return nil, err
+			}
+			commits = append(commits, c)
+		}
+		return commits, nil
+	}(repoPath, logs)
+	if err != nil {
+		return nil, fmt.Errorf("parsing commits: %w", err)
+	}
+
+	// -> total
+	total, err := func(repoPath, rev string) (int, error) {
+		out, err := exec.Command(
+			"git",
+			"rev-list",
+			rev,
+			"--count",
+		).Output()
+		if err != nil {
+			return 0, err
+		}
+		count, err := strconv.Atoi(string(bytes.TrimSpace(out)))
+		if err != nil {
+			return 0, err
+		}
+		return count, nil
+	}(repoPath, rev)
+	if err != nil {
+		return nil, fmt.Errorf("parsing total commits: %w", err)
 	}
 
 	tcommits := make([]types.Commit, len(commits))
-	for i, c := range commits {
-		tcommits[i].FromGoGitCommit(c)
-	}
-
-	total, err := gr.TotalCommits()
-	if err != nil {
-		return nil, fmt.Errorf("counting total commits: %w", err)
+	for i, commit := range commits {
+		tcommits[i].FromGoGitCommit(commit)
 	}
 
 	return &types.RepoLogResponse{
 		Commits: tcommits,
 		Ref:     ref,
-		Page:    (offset / limit) + 1,
+		Page:    (int(cursor) / limit) + 1,
 		PerPage: limit,
 		Total:   total,
 		Log:     true,
