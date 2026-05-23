@@ -867,9 +867,8 @@ func (p *Pages) RepoIndexPage(w io.Writer, params RepoIndexParams) error {
 	rctx.RendererType = markup.RendererTypeRepoMarkdown
 
 	if params.ReadmeFileName != "" {
-		ext := strings.ToLower(filepath.Ext(params.ReadmeFileName))
-		switch ext {
-		case ".md", ".markdown", ".mdown", ".mkdn", ".mkd":
+		switch markup.GetFormat(params.ReadmeFileName) {
+		case markup.FormatMarkdown:
 			params.Raw = false
 			htmlString := rctx.RenderMarkdown(params.Readme)
 			sanitized := rctx.SanitizeDefault(htmlString)
@@ -961,9 +960,8 @@ func (p *Pages) RepoTree(w io.Writer, params RepoTreeParams) error {
 	rctx.RendererType = markup.RendererTypeRepoMarkdown
 
 	if params.ReadmeFileName != "" {
-		ext := strings.ToLower(filepath.Ext(params.ReadmeFileName))
-		switch ext {
-		case ".md", ".markdown", ".mdown", ".mkdn", ".mkd":
+		switch markup.GetFormat(params.ReadmeFileName) {
+		case markup.FormatMarkdown:
 			params.Raw = false
 			htmlString := rctx.RenderMarkdown(params.Readme)
 			sanitized := rctx.SanitizeDefault(htmlString)

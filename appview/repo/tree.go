@@ -62,7 +62,7 @@ func (rp *Repo) Tree(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		files[i] = file
-		if markup.IsReadmeFile(xrpcFile.Name) {
+		if markup.IsReadmeFile(xrpcFile.Name, xrpcFile.Mode) {
 			readmeFile = xrpcFile
 		}
 	}

@@ -272,7 +272,7 @@ func (rp *Repo) buildIndexResponse(ctx context.Context, repo *models.Repo, ref s
 		treeResp = resp
 
 		for _, file := range resp.Files {
-			if markup.IsReadmeFile(file.Name) {
+			if markup.IsReadmeFile(file.Name, file.Mode) {
 				readmeFileName = file.Name
 				break
 			}
