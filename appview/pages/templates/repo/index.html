@@ -16,13 +16,13 @@
           {{ block "branchSelector" . }}{{ end }}
           <div class="flex items-center gap-3">
             <a href="/{{ .RepoInfo.FullName }}/commits/{{ .Ref | urlquery }}" class="inline-flex md:hidden items-center text-sm gap-1 font-bold">
-              {{ i "git-commit-horizontal" "w-4" "h-4" }} {{ .TotalCommits }}
+              {{ i "git-commit-horizontal" "w-4" "h-4" }} {{ scaleFmt .TotalCommits }}
             </a>
             <a href="/{{ .RepoInfo.FullName }}/branches" class="inline-flex md:hidden items-center text-sm gap-1 font-bold">
-              {{ i "git-branch" "w-4" "h-4" }} {{ len .Branches }}
+              {{ i "git-branch" "w-4" "h-4" }} {{ scaleFmt (len .Branches) }}
             </a>
             <a href="/{{ .RepoInfo.FullName }}/tags" class="inline-flex md:hidden items-center text-sm gap-1 font-bold">
-              {{ i "tags" "w-4" "h-4" }} {{ len .Tags }}
+              {{ i "tags" "w-4" "h-4" }} {{ scaleFmt (len .Tags) }}
             </a>
             {{ template "repo/fragments/cloneDropdown" . }}
           </div>
@@ -167,7 +167,7 @@
   <div class="flex justify-between items-center">
     <a href="/{{ .RepoInfo.FullName }}/commits/{{ .Ref | urlquery }}" class="flex items-center gap-2 pb-2 cursor-pointer font-bold hover:text-gray-600 dark:hover:text-gray-300 hover:no-underline">
       {{ i "logs" "w-4 h-4" }} commits
-      <span class="bg-gray-100 dark:bg-gray-700 font-normal rounded py-1/2 px-1 text-sm">{{ .TotalCommits }}</span>
+      <span class="bg-gray-100 dark:bg-gray-700 font-normal rounded py-1/2 px-1 text-sm">{{ scaleFmt .TotalCommits }}</span>
     </a>
   </div>
   <div class="flex flex-col gap-6">
@@ -287,7 +287,7 @@
     <div id="branches" class="md:col-span-1 px-2 py-4 border-t border-gray-200 dark:border-gray-700">
       <a href="/{{ .RepoInfo.FullName }}/branches" class="flex items-center gap-2 pb-2 cursor-pointer font-bold hover:text-gray-600 dark:hover:text-gray-300 hover:no-underline">
         {{ i "git-branch" "w-4 h-4" }} branches
-        <span class="bg-gray-100 dark:bg-gray-700 font-normal rounded py-1/2 px-1 text-sm">{{ len .Branches }}</span>
+        <span class="bg-gray-100 dark:bg-gray-700 font-normal rounded py-1/2 px-1 text-sm">{{ scaleFmt (len .Branches) }}</span>
       </a>
       <div class="flex flex-col gap-1">
         {{ range .BranchesTrunc }}
@@ -326,7 +326,7 @@
       <div class="flex justify-between items-center">
         <a href="/{{ .RepoInfo.FullName }}/tags" class="flex items-center gap-2 pb-2 cursor-pointer font-bold hover:text-gray-600 dark:hover:text-gray-300 hover:no-underline">
           {{ i "tags" "w-4 h-4" }} tags
-          <span class="bg-gray-100 dark:bg-gray-700 font-normal rounded py-1/2 px-1 text-sm">{{ len .Tags }}</span>
+          <span class="bg-gray-100 dark:bg-gray-700 font-normal rounded py-1/2 px-1 text-sm">{{ scaleFmt (len .Tags) }}</span>
         </a>
       </div>
       <div class="flex flex-col gap-1">

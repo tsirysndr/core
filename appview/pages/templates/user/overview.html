@@ -54,7 +54,7 @@
   {{ if . }}
     <div class="flex flex-wrap items-center gap-1">
       {{ i "git-commit-horizontal" "size-5" }}
-      created {{ . }} commits
+      created {{ scaleFmt . }} commits
     </div>
   {{ end }}
 {{ end }}
@@ -65,7 +65,7 @@
       <summary class="list-none cursor-pointer hover:text-gray-500 hover:dark:text-gray-400">
         <div class="flex flex-wrap items-center gap-2">
           {{ i "book-plus" "w-4 h-4" }}
-          created {{ len . }} {{if eq (len .) 1 }}repository{{else}}repositories{{end}}
+          created {{ scaleFmt (len .) }} {{if eq (len .) 1 }}repository{{else}}repositories{{end}}
         </div>
       </summary>
       <div class="py-2 text-sm flex flex-col gap-3 mb-2">
@@ -110,18 +110,18 @@
           {{ i "circle-dot" "w-4 h-4" }}
 
           <div>
-            created {{ len $items }} {{if eq (len $items) 1 }}issue{{else}}issues{{end}} 
+            created {{ scaleFmt (len $items) }} {{if eq (len $items) 1 }}issue{{else}}issues{{end}} 
           </div>
 
           {{ if gt $stats.Open 0 }}
             <span class="px-2 py-1/2 text-sm rounded text-white bg-green-600 dark:bg-green-700">
-              {{$stats.Open}} open
+              {{scaleFmt $stats.Open}} open
             </span>
           {{ end }}
 
           {{ if gt $stats.Closed 0 }}
           <span class="px-2 py-1/2 text-sm rounded text-white bg-gray-800 dark:bg-gray-700">
-            {{$stats.Closed}} closed
+            {{scaleFmt $stats.Closed}} closed
           </span>
           {{ end }}
 
@@ -146,25 +146,25 @@
           {{ i "git-pull-request" "w-4 h-4" }}
 
           <div>
-            created {{ len $items }} {{if eq (len $items) 1 }}pull request{{else}}pull requests{{end}} 
+            created {{ scaleFmt (len $items) }} {{if eq (len $items) 1 }}pull request{{else}}pull requests{{end}} 
           </div>
 
           {{ if gt $stats.Open 0 }}
             <span class="px-2 py-1/2 text-sm rounded text-white bg-green-600 dark:bg-green-700">
-              {{$stats.Open}} open
+              {{scaleFmt $stats.Open}} open
             </span>
           {{ end }}
 
           {{ if gt $stats.Merged 0 }}
             <span class="px-2 py-1/2 text-sm rounded text-white bg-purple-600 dark:bg-purple-700">
-              {{$stats.Merged}} merged
+              {{scaleFmt $stats.Merged}} merged
             </span>
           {{ end }}
 
 
           {{ if gt $stats.Closed 0 }}
           <span class="px-2 py-1/2 text-sm rounded text-white bg-gray-800 dark:bg-gray-700">
-            {{$stats.Closed}} closed
+            {{scaleFmt $stats.Closed}} closed
           </span>
           {{ end }}
 
