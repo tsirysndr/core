@@ -22,7 +22,7 @@
     {{ $rhs = printf "%s" $v }}
   {{ end }}
 
-  {{ $chipClasses := "w-fit flex items-center gap-2 font-normal normal-case rounded py-1 px-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-inherit" }}
+  {{ $chipClasses := "w-fit flex items-center gap-2 font-normal normal-case rounded py-1 px-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-inherit text-sm hover:no-underline" }}
 
   {{ if $basePath }}
     {{ $filterToken := printf "label:%s" $d.Name }}
