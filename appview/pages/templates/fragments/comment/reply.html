@@ -5,7 +5,6 @@
     hx-swap="none"
     hx-trigger="submit, keydown[(ctrlKey || metaKey) && key=='Enter'] from:find textarea"
     hx-on::before-request="this.querySelector('#comment-error').innerHTML = ''"
-    hx-on::after-request="if(event.detail.successful) this.reset()"
     hx-disabled-elt="find button[type='submit']"
   >
     {{ template "user/fragments/picHandleLink" .LoggedInUser.Did }}
