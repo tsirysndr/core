@@ -388,22 +388,23 @@ func GetVouchSuggestions(e Execer, did string, limit int) ([]models.VouchSuggest
 
 			union all
 
-			select pc.owner_did as did, 5 as priority, pc.created,
+			select c.did as did, 5 as priority, c.created,
 				'This user commented on a pull request on your repository' as reason
-			from pull_comments pc
-			join repos r on r.repo_did = pc.repo_did
+			from comments c
+			join pulls p on p.at_uri = c.subject_uri
+			join repos r on r.repo_did = p.repo_did
 			where r.did = ?
-				and pc.owner_did != ?
+				and c.did != ?
 
 			union all
 
-			select ic.did as did, 6 as priority, ic.created,
+			select c.did as did, 6 as priority, c.created,
 				'This user commented on an issue on your repository' as reason
-			from issue_comments ic
-			join issues i on i.at_uri = ic.issue_at
+			from comments c
+			join issues i on i.at_uri = c.subject_uri
 			join repos r on r.repo_did = i.repo_did
 			where r.did = ?
-				and ic.did != ?
+				and c.did != ?
 
 			union all
 
