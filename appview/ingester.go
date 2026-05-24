@@ -1735,6 +1735,12 @@ func (i *Ingester) ingestLabelOp(e *jmodels.Event) error {
 				return fmt.Errorf("failed to find subject: %w || subject count %d", err, len(i))
 			}
 			repo = i[0].Repo
+		case tangled.RepoPullNSID:
+			p, err := db.GetPulls(i.Db, orm.FilterEq("at_uri", subject))
+			if err != nil || len(p) != 1 {
+				return fmt.Errorf("failed to find subject: %w || subject count %d", err, len(p))
+			}
+			repo = p[0].Repo
 		default:
 			return fmt.Errorf("unsupported label subject: %s", collection)
 		}
