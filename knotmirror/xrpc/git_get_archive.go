@@ -1,10 +1,10 @@
 package xrpc
 
 import (
-	"compress/gzip"
 	"fmt"
 	"net/http"
 	"net/url"
+	"os/exec"
 	"strings"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
@@ -12,7 +12,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/knotmirror/db"
-	"tangled.org/core/knotserver/git"
+	"tangled.org/core/knotmirror/xrpc/gitea"
 )
 
 func (x *Xrpc) GetArchive(w http.ResponseWriter, r *http.Request) {
@@ -38,6 +38,8 @@ func (x *Xrpc) GetArchive(w http.ResponseWriter, r *http.Request) {
 	}
 
 	l := x.logger.With("repo", repo, "ref", ref, "format", format, "prefix", prefix)
+	l.Debug("request")
+
 	ctx := r.Context()
 
 	repoPath, err := x.makeRepoPath(ctx, repo)
@@ -50,15 +52,11 @@ func (x *Xrpc) GetArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gr, err := git.Open(repoPath, ref)
-	if err != nil {
-		l.Warn("local mirror failed, trying proxy", "err", err)
-		if x.proxyToKnot(w, r, repo) {
-			return
-		}
-		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to open git repo"})
-		return
+	rev := ref
+	if rev == "" {
+		rev = "HEAD"
 	}
+	commit, err := gitea.GetCommit(ctx, repoPath, rev)
 
 	repoName, err := func() (string, error) {
 		r, err := db.GetRepoByRepoDid(ctx, x.db, repo)
@@ -83,7 +81,7 @@ func (x *Xrpc) GetArchive(w http.ResponseWriter, r *http.Request) {
 	immutableLink := func() string {
 		params := url.Values{}
 		params.Set("repo", repo.String())
-		params.Set("ref", gr.Hash().String())
+		params.Set("ref", commit.Hash.String())
 		params.Set("format", format)
 		params.Set("prefix", prefix)
 		return fmt.Sprintf("%s/xrpc/%s?%s", x.cfg.BaseUrl(), tangled.GitTempGetArchiveNSID, params.Encode())
@@ -94,22 +92,22 @@ func (x *Xrpc) GetArchive(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/gzip")
 	w.Header().Set("Link", fmt.Sprintf("<%s>; rel=\"immutable\"", immutableLink))
 
-	gw := gzip.NewWriter(w)
-	defer gw.Close()
+	cmd := exec.Command(
+		"git",
+		"archive",
+		fmt.Sprintf("--prefix=%s", prefix),
+		"--format=tar.gz",
+		commit.Hash.String(),
+	)
 
-	if err := gr.WriteTar(gw, prefix); err != nil {
-		// once we start writing to the body we can't report error anymore
-		// so we are only left with logging the error
-		l.Error("writing tar file", "err", err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+	var stderr strings.Builder
+	cmd.Dir = repoPath
+	cmd.Stdout = w
+	cmd.Stderr = &stderr
 
-	if err := gw.Flush(); err != nil {
-		// once we start writing to the body we can't report error anymore
-		// so we are only left with logging the error
-		l.Error("flushing", "err", err.Error())
+	if err := cmd.Run(); err != nil {
+		err = fmt.Errorf("%w\n%s", err, stderr.String())
+		l.Error("failed to archive", "err", err)
 		w.WriteHeader(http.StatusInternalServerError)
-		return
 	}
 }
