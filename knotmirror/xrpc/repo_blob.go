@@ -12,7 +12,9 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	"github.com/go-git/go-git/v5/plumbing/filemode"
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/knotmirror/xrpc/gitea"
 	"tangled.org/core/knotserver/git"
 )
 
@@ -47,11 +49,31 @@ func (x *Xrpc) RepoBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// first check if this path is a submodule
-	submodule, err := gr.Submodule(path)
+	ctx := r.Context()
+
+	repoPath, err := x.makeRepoPath(ctx, repo)
 	if err != nil {
-		// this is okay, continue and try to treat it as a regular file
-	} else {
+		writeJson(w, http.StatusNotFound, atclient.ErrorBody{Name: "RepoNotFound", Message: fmt.Sprintf("unknown repository: %s", repo)})
+		return
+	}
+
+	entry, err := x.getFile(ctx, repoPath, ref, path)
+	if err != nil {
+		l.Warn("local mirror failed, trying proxy", "err", err)
+		if x.proxyToKnot(w, r, repo) {
+			return
+		}
+		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to get blob"})
+		return
+	}
+
+	if entry.Mode == filemode.Submodule {
+		submodule, err := gr.Submodule(path)
+		if err != nil {
+			l.Warn("failed to load submodule", "err", err)
+			writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to load submodule"})
+			return
+		}
 		writeJson(w, http.StatusOK, tangled.RepoBlob_Output{
 			Ref:  ref,
 			Path: path,
@@ -64,7 +86,7 @@ func (x *Xrpc) RepoBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	size, reader, err := x.getFile(r.Context(), repo, ref, path)
+	size, reader, err := gitea.ReadBlob(ctx, repoPath, entry.Hash)
 	if err != nil {
 		l.Warn("local mirror failed, trying proxy", "err", err)
 		if x.proxyToKnot(w, r, repo) {

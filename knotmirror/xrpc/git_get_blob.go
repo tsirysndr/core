@@ -37,7 +37,24 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	size, reader, err := x.getFile(r.Context(), repo, ref, path)
+	ctx := r.Context()
+
+	repoPath, err := x.makeRepoPath(ctx, repo)
+	if err != nil {
+		writeJson(w, http.StatusNotFound, atclient.ErrorBody{Name: "RepoNotFound", Message: fmt.Sprintf("unknown repository: %s", repo)})
+		return
+	}
+
+	entry, err := x.getFile(ctx, repoPath, ref, path)
+	if err != nil {
+		l.Warn("local mirror failed, trying proxy", "err", err)
+		if x.proxyToKnot(w, r, repo) {
+			return
+		}
+		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to get blob"})
+		return
+	}
+	size, reader, err := gitea.ReadBlob(ctx, repoPath, entry.Hash)
 	if err != nil {
 		l.Warn("local mirror failed, trying proxy", "err", err)
 		if x.proxyToKnot(w, r, repo) {
@@ -100,12 +117,7 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 	w.Write(contents)
 }
 
-func (x *Xrpc) getFile(ctx context.Context, repo syntax.DID, ref, path string) (int64, io.ReadCloser, error) {
-	repoPath, err := x.makeRepoPath(ctx, repo)
-	if err != nil {
-		return 0, nil, fmt.Errorf("resolving repo did: %w", err)
-	}
-
+func (x *Xrpc) getFile(ctx context.Context, repoPath, ref, path string) (*object.TreeEntry, error) {
 	rev := ref
 	if rev == "" {
 		rev = "HEAD"
@@ -113,7 +125,7 @@ func (x *Xrpc) getFile(ctx context.Context, repo syntax.DID, ref, path string) (
 
 	head, err := gitea.GetCommit(ctx, repoPath, rev)
 	if err != nil {
-		return 0, nil, fmt.Errorf("get head commit: %w", err)
+		return nil, fmt.Errorf("get head commit: %w", err)
 	}
 
 	treePath := filepath.Dir(path)
@@ -126,7 +138,7 @@ func (x *Xrpc) getFile(ctx context.Context, repo syntax.DID, ref, path string) (
 	}
 	subTree, err := gitea.GetTree(ctx, repoPath, subRev)
 	if err != nil {
-		return 0, nil, fmt.Errorf("get subtree %s: %w", subRev, err)
+		return nil, fmt.Errorf("get subtree %s: %w", subRev, err)
 	}
 
 	// find entry
@@ -139,13 +151,10 @@ func (x *Xrpc) getFile(ctx context.Context, repo syntax.DID, ref, path string) (
 		return nil, fmt.Errorf("object doesn't exist")
 	}(subTree)
 	if err != nil {
-		return 0, nil, fmt.Errorf("get file: %w", err)
+		return nil, fmt.Errorf("get file: %w", err)
 	}
 
-	x.logger.Debug("ReadBlob", "name", entry.Name, "mode", entry.Mode.String(), "hash", entry.Hash.String())
-
-	// find blob
-	return gitea.ReadBlob(ctx, repoPath, entry.Hash)
+	return entry, nil
 }
 
 var textualMimeTypes = []string{
