@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"strings"
 )
 
 // Notice performs a hx-oob-swap to replace the content of an element with a message.
@@ -23,6 +24,18 @@ func (s *Pages) NoticeHTML(w http.ResponseWriter, id string, trustedHTML string)
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(markup))
+}
+
+func (s *Pages) NoticeHTMLWithClears(w http.ResponseWriter, id string, trustedHTML string, clearIDs ...string) {
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf(`<span id="%s" hx-swap-oob="innerHTML">%s</span>`, id, trustedHTML))
+	for _, clearID := range clearIDs {
+		b.WriteString(fmt.Sprintf(`<span id="%s" hx-swap-oob="innerHTML"></span>`, clearID))
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(b.String()))
 }
 
 // HxRefresh is a client-side full refresh of the page.
