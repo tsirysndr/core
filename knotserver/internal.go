@@ -25,6 +25,7 @@ import (
 	"tangled.org/core/log"
 	"tangled.org/core/notifier"
 	"tangled.org/core/rbac"
+	"tangled.org/core/tid"
 	"tangled.org/core/workflow"
 )
 
@@ -312,7 +313,7 @@ func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, o
 	}
 
 	event := db.Event{
-		Rkey:      TID(),
+		Rkey:      tid.TID(),
 		Nsid:      tangled.GitRefUpdateNSID,
 		EventJson: string(eventJson),
 	}
@@ -416,7 +417,7 @@ func (h *InternalHandle) triggerPipeline(
 	}
 
 	event := db.Event{
-		Rkey:      TID(),
+		Rkey:      tid.TID(),
 		Nsid:      tangled.PipelineNSID,
 		EventJson: string(eventJson),
 	}

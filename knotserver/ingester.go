@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"strings"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
@@ -21,6 +22,7 @@ import (
 	knotxrpc "tangled.org/core/knotserver/xrpc"
 	"tangled.org/core/log"
 	"tangled.org/core/rbac"
+	"tangled.org/core/tid"
 	"tangled.org/core/workflow"
 )
 
@@ -356,7 +358,7 @@ func (h *Knot) processPull(ctx context.Context, event *jmodels.Event) error {
 	}
 
 	ev := db.Event{
-		Rkey:      TID(),
+		Rkey:      tid.TID(),
 		Nsid:      tangled.PipelineNSID,
 		EventJson: string(eventJson),
 	}
