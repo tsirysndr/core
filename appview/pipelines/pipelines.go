@@ -257,6 +257,7 @@ func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 	go ReadLogs(spindleConn, evChan)
 
 	stepStartTimes := make(map[int]time.Time)
+	stepAnsi := make(map[int]*ansiState)
 	var fragment bytes.Buffer
 	for {
 		select {
@@ -313,10 +314,14 @@ func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 				}
 
 			case spindlemodel.LogKindData:
-				// data messages simply insert new log lines into current step
+				ansi, ok := stepAnsi[logLine.StepId]
+				if !ok {
+					ansi = NewAnsiState()
+					stepAnsi[logLine.StepId] = ansi
+				}
 				err = p.pages.LogLine(&fragment, pages.LogLineParams{
 					Id:      logLine.StepId,
-					Content: logLine.Content,
+					Content: ansi.Render(logLine.Content),
 				})
 			}
 			if err != nil {

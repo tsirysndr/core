@@ -14,22 +14,26 @@ import (
 var (
 	sharedDefaultPolicy     *bluemonday.Policy
 	sharedDescriptionPolicy *bluemonday.Policy
+	sharedLogsPolicy        *bluemonday.Policy
 )
 
 func init() {
 	sharedDefaultPolicy = buildDefaultPolicy()
 	sharedDescriptionPolicy = buildDescriptionPolicy()
+	sharedLogsPolicy = buildLogsPolicy()
 }
 
 type Sanitizer struct {
 	defaultPolicy     *bluemonday.Policy
 	descriptionPolicy *bluemonday.Policy
+	logsPolicy        *bluemonday.Policy
 }
 
 func NewSanitizer() Sanitizer {
 	return Sanitizer{
 		defaultPolicy:     sharedDefaultPolicy,
 		descriptionPolicy: sharedDescriptionPolicy,
+		logsPolicy:        sharedLogsPolicy,
 	}
 }
 
@@ -38,6 +42,9 @@ func (s *Sanitizer) SanitizeDefault(html string) string {
 }
 func (s *Sanitizer) SanitizeDescription(html string) string {
 	return s.descriptionPolicy.Sanitize(html)
+}
+func (s *Sanitizer) SanitizeLogs(html string) string {
+	return s.logsPolicy.Sanitize(html)
 }
 
 func buildDefaultPolicy() *bluemonday.Policy {
@@ -150,6 +157,20 @@ func buildDescriptionPolicy() *bluemonday.Policy {
 
 	// allow links
 	policy.AllowAttrs("href", "target", "rel").OnElements("a")
+
+	return policy
+}
+
+func buildLogsPolicy() *bluemonday.Policy {
+	policy := bluemonday.NewPolicy()
+
+	policy.AllowElements("p", "span")
+
+	// allow italics and bold
+	policy.AllowElements("i", "b", "em", "strong")
+
+	// allow fg/bg classes from terminal-to-html
+	policy.AllowAttrs("class").Matching(regexp.MustCompile(`term-*`)).OnElements("span")
 
 	return policy
 }

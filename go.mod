@@ -17,6 +17,7 @@ require (
 	github.com/bluesky-social/indigo v0.0.0-20260220055544-bf41e2ee75ab
 	github.com/bluesky-social/jetstream v0.0.0-20260226214936-e0274250f654
 	github.com/bmatcuk/doublestar/v4 v4.9.1
+	github.com/buildkite/terminal-to-html/v3 v3.16.8
 	github.com/carlmjohnson/versioninfo v0.22.5
 	github.com/casbin/casbin/v2 v2.103.0
 	github.com/charmbracelet/bubbles v1.0.0

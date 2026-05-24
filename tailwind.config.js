@@ -2,6 +2,9 @@
 const colors = require("tailwindcss/colors");
 
 module.exports = {
+  safelist: [
+    { pattern: /^term-/ },
+  ],
   content: [
     "./appview/pages/templates/**/*.html",
     "./appview/pages/chroma.go",

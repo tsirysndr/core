@@ -1536,7 +1536,7 @@ func (p *Pages) LogBlockEnd(w io.Writer, params LogBlockEndParams) error {
 
 type LogLineParams struct {
 	Id      int
-	Content string
+	Content template.HTML
 }
 
 func (p *Pages) LogLine(w io.Writer, params LogLineParams) error {

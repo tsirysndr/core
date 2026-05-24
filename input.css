@@ -1442,4 +1442,62 @@ actor-typeahead::part(menu) {
     --hit-area-t: -3rem;
     --hit-area-b: -3rem;
   }
+
+  /* terminal-to-html: catpuccin colors */
+  .term-fg30 { color: #6c6f85; } /* black */
+  .term-fg31 { color: #d20f39; } /* red */
+  .term-fg32 { color: #40a02b; } /* green */
+  .term-fg33 { color: #df8e1d; } /* yellow */
+  .term-fg34 { color: #1e66f5; } /* blue */
+  .term-fg35 { color: #8839ef; } /* magenta */
+  .term-fg36 { color: #179299; } /* cyan */
+  .term-fg37 { color: #4c4f69; } /* white */
+  .term-fgi90 { color: #8c8fa1; } /* bright-black */
+  .term-fgi91 { color: #e64553; } /* bright-red */
+  .term-fgi92 { color: #40a02b; } /* bright-green */
+  .term-fgi93 { color: #e5c890; } /* bright-yellow */
+  .term-fgi94 { color: #209fb5; } /* bright-blue */
+  .term-fgi95 { color: #ea76cb; } /* bright-magenta */
+  .term-fgi96 { color: #04a5e5; } /* bright-cyan */
+  .term-fgi97 { color: #bcc0cc; } /* bright-white */
+  .term-bg40 { background-color: #6c6f85; } /* black */
+  .term-bg41 { background-color: #d20f39; } /* red */
+  .term-bg42 { background-color: #40a02b; } /* green */
+  .term-bg43 { background-color: #df8e1d; } /* yellow */
+  .term-bg44 { background-color: #1e66f5; } /* blue */
+  .term-bg45 { background-color: #8839ef; } /* magenta */
+  .term-bg46 { background-color: #179299; } /* cyan */
+  .term-bg47 { background-color: #dce0e8; } /* white */
+  .term-fg1 { @apply font-bold; }
+  .term-fg2 { @apply opacity-60; }
+  .term-fg3 { @apply italic; }
+  .term-fg4 { @apply underline; }
+  .term-fg9 { @apply line-through; }
+
+  @media (prefers-color-scheme: dark) {
+    .term-fg30 { color: #a5adcb; } /* black */
+    .term-fg31 { color: #ed8796; } /* red */
+    .term-fg32 { color: #a6da95; } /* green */
+    .term-fg33 { color: #eed49f; } /* yellow */
+    .term-fg34 { color: #8aadf4; } /* blue */
+    .term-fg35 { color: #c6a0f6; } /* magenta */
+    .term-fg36 { color: #8bd5ca; } /* cyan */
+    .term-fg37 { color: #cad3f5; } /* white */
+    .term-fgi90 { color: #8087a2; } /* bright-black */
+    .term-fgi91 { color: #f5bde6; } /* bright-red */
+    .term-fgi92 { color: #a6da95; } /* bright-green */
+    .term-fgi93 { color: #f5a97f; } /* bright-yellow */
+    .term-fgi94 { color: #7dc4e4; } /* bright-blue */
+    .term-fgi95 { color: #f4dbd6; } /* bright-magenta */
+    .term-fgi96 { color: #91d7e3; } /* bright-cyan */
+    .term-fgi97 { color: #f0c6c6; } /* bright-white */
+    .term-bg40 { background-color: #a5adcb; } /* black */
+    .term-bg41 { background-color: #ed8796; } /* red */
+    .term-bg42 { background-color: #a6da95; } /* green */
+    .term-bg43 { background-color: #eed49f; } /* yellow */
+    .term-bg44 { background-color: #8aadf4; } /* blue */
+    .term-bg45 { background-color: #c6a0f6; } /* magenta */
+    .term-bg46 { background-color: #8bd5ca; } /* cyan */
+    .term-bg47 { background-color: #494d64; } /* white */
+  }
 }
