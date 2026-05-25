@@ -263,6 +263,7 @@ func (s *State) reposPage(w http.ResponseWriter, r *http.Request) {
 
 	var repos []models.Repo
 	var totalRepos int64
+	loggedInUser := s.oauth.GetMultiAccountUser(r)
 
 	if searchOpts.HasSearchFilters() {
 		res, err := s.indexer.Repos.Search(r.Context(), searchOpts)
@@ -316,9 +317,27 @@ func (s *State) reposPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	starStatuses := map[string]bool{}
+	if loggedInUser != nil {
+		repoDids := make([]string, 0, len(repos))
+		for _, repo := range repos {
+			if repo.RepoDid != "" {
+				repoDids = append(repoDids, repo.RepoDid)
+			}
+		}
+
+		starStatuses, err = db.GetStarStatuses(s.db, loggedInUser.Did, repoDids)
+		if err != nil {
+			l.Error("failed to get repo star statuses", "err", err)
+			s.pages.Error500(w)
+			return
+		}
+	}
+
 	err = s.pages.ProfileRepos(w, pages.ProfileReposParams{
-		LoggedInUser: s.oauth.GetMultiAccountUser(r),
+		LoggedInUser: loggedInUser,
 		Repos:        repos,
+		StarStatuses: starStatuses,
 		Card:         profile,
 		Page:         page,
 		RepoCount:    int(totalRepos),

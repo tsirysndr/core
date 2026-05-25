@@ -48,7 +48,11 @@
   <div id="repos" class="grid grid-cols-1 gap-4 mb-6">
     {{ range .Repos }}
       <div class="border border-gray-200 dark:border-gray-700 rounded-sm">
-         {{ template "user/fragments/repoCard" (list $ . false) }}
+         {{ template "user/fragments/repoCard" (list $ . false true (dict
+              "SubjectAt" .RepoAt
+              "IsStarred" (index $.StarStatuses .RepoDid)
+              "StarCount" .RepoStats.StarCount
+              "RepoName" .Slug)) }}
       </div>
     {{ else }}
         <div class="text-base text-gray-500 flex items-center justify-center italic p-12 border border-gray-200 dark:border-gray-700 rounded">

@@ -672,6 +672,7 @@ func (p *Pages) ProfileOverview(w io.Writer, params ProfileOverviewParams) error
 type ProfileReposParams struct {
 	LoggedInUser *oauth.MultiAccountUser
 	Repos        []models.Repo
+	StarStatuses map[string]bool
 	Card         *ProfileCard
 	Active       string
 	Page         pagination.Page
