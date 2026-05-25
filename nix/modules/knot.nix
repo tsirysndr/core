@@ -228,7 +228,8 @@ in
 
       systemd.services.knot = {
         description = "knot service";
-        after = ["network.target" "sshd.service"];
+        after = ["network-online.target" "sshd.service"];
+        wants = ["network-online.target"];
         wantedBy = ["multi-user.target"];
         enableStrictShellChecks = true;
 
