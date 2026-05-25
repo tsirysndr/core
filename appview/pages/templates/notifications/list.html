@@ -12,7 +12,7 @@
   </div>
 
   {{if .Notifications}}
-    <div class="flex flex-col gap-2" id="notifications-list">
+    <div class="rounded border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700" id="notifications-list">
       {{range .Notifications}}
         {{template "notifications/fragments/item" .}}
       {{end}}
