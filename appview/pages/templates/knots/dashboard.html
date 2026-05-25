@@ -43,7 +43,7 @@
       {{ end }}
 
       {{ if $isOwner }}
-        {{ block "deleteButton" .Registration }} {{ end }}
+        {{ block "deleteButton" (dict "Domain" .Registration.Domain "RepoCount" .RepoCount) }} {{ end }}
       {{ end }}
     </div>
   </div>
@@ -97,7 +97,7 @@
     title="Delete knot"
     hx-delete="/settings/knots/{{ .Domain }}"
     hx-swap="outerHTML"
-    hx-confirm="Are you sure you want to delete the knot '{{ .Domain }}'?"
+    hx-confirm="{{ template "knots/fragments/deleteConfirm" . }}"
     hx-headers='{"shouldRedirect": "true"}'
   >
     {{ i "trash-2" "w-5 h-5" }}

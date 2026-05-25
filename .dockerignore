@@ -11,8 +11,8 @@ build/
 .wrangler/
 localinfra/certs/root.key
 
-appview/pages/static/*
-!appview/pages/static/topbar-search.js
+appview/pages/static/tw.css
+appview/pages/static/x
 
 sites/target
 sites/.wrangler

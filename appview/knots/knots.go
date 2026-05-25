@@ -70,9 +70,24 @@ func (k *Knots) knots(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	knots := make([]pages.KnotListingParams, 0, len(registrations))
+	for i := range registrations {
+		registration := &registrations[i]
+		count, err := db.CountRepos(k.Db, orm.FilterEq("knot", registration.Domain))
+		if err != nil {
+			k.Logger.Error("failed to count knot repos", "err", err, "domain", registration.Domain)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		knots = append(knots, pages.KnotListingParams{
+			Registration: registration,
+			RepoCount:    int(count),
+		})
+	}
+
 	k.Pages.Knots(w, pages.KnotsParams{
-		LoggedInUser:  user,
-		Registrations: registrations,
+		LoggedInUser: user,
+		Knots:        knots,
 	})
 }
 
@@ -134,6 +149,7 @@ func (k *Knots) dashboard(w http.ResponseWriter, r *http.Request) {
 		Members:      members,
 		Repos:        repoMap,
 		IsOwner:      true,
+		RepoCount:    len(repos),
 	})
 }
 
@@ -269,6 +285,13 @@ func (k *Knots) delete(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		l.Error("failed to delete registration", "err", err)
+		fail()
+		return
+	}
+
+	err = db.RemoveReposByKnot(tx, domain)
+	if err != nil {
+		l.Error("failed to delete repos", "err", err)
 		fail()
 		return
 	}
@@ -451,9 +474,17 @@ func (k *Knots) retry(w http.ResponseWriter, r *http.Request) {
 	}
 	updatedRegistration := registrations[0]
 
+	count, err := db.CountRepos(k.Db, orm.FilterEq("knot", domain))
+	if err != nil {
+		l.Error("failed to count knot repos", "err", err)
+		fail()
+		return
+	}
+
 	w.Header().Set("HX-Reswap", "outerHTML")
 	k.Pages.KnotListing(w, pages.KnotListingParams{
 		Registration: &updatedRegistration,
+		RepoCount:    int(count),
 	})
 }
 

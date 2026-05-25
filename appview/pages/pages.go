@@ -541,9 +541,9 @@ func (p *Pages) NewsletterResponse(w io.Writer, params NewsletterResponseParams)
 }
 
 type KnotsParams struct {
-	LoggedInUser  *oauth.MultiAccountUser
-	Registrations []models.Registration
-	Tab           string
+	LoggedInUser *oauth.MultiAccountUser
+	Knots        []KnotListingParams
+	Tab          string
 }
 
 func (p *Pages) Knots(w io.Writer, params KnotsParams) error {
@@ -557,6 +557,7 @@ type KnotParams struct {
 	Members      []string
 	Repos        map[string][]models.Repo
 	IsOwner      bool
+	RepoCount    int
 	Tab          string
 }
 
@@ -566,6 +567,7 @@ func (p *Pages) Knot(w io.Writer, params KnotParams) error {
 
 type KnotListingParams struct {
 	*models.Registration
+	RepoCount int
 }
 
 func (p *Pages) KnotListing(w io.Writer, params KnotListingParams) error {

@@ -1190,6 +1190,11 @@ func (i *Ingester) ingestKnot(ctx context.Context, e *jmodels.Event) error {
 			return err
 		}
 
+		err = db.RemoveReposByKnot(tx, domain)
+		if err != nil {
+			return err
+		}
+
 		if registration.Registered != nil {
 			err = i.Enforcer.RemoveKnot(domain)
 			if err != nil {

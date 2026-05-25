@@ -2099,6 +2099,34 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	conn.ExecContext(ctx, "pragma foreign_keys = off;")
+	orm.RunMigration(conn, logger, "cascade-notification-entity-fks", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			CREATE TABLE notifications_new (
+				id            INTEGER PRIMARY KEY AUTOINCREMENT,
+				recipient_did TEXT NOT NULL,
+				actor_did     TEXT NOT NULL,
+				type          TEXT NOT NULL,
+				entity_type   TEXT NOT NULL,
+				entity_id     TEXT NOT NULL,
+				read          INTEGER NOT NULL DEFAULT 0,
+				created       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				repo_id       INTEGER REFERENCES repos(id) ON DELETE CASCADE,
+				issue_id      INTEGER REFERENCES issues(id) ON DELETE CASCADE,
+				pull_id       INTEGER REFERENCES pulls(id) ON DELETE CASCADE
+			);
+			INSERT INTO notifications_new (id, recipient_did, actor_did, type, entity_type, entity_id, read, created, repo_id, issue_id, pull_id)
+			SELECT id, recipient_did, actor_did, type, entity_type, entity_id, read, created, repo_id, issue_id, pull_id
+			FROM notifications;
+			DROP TABLE notifications;
+			ALTER TABLE notifications_new RENAME TO notifications;
+			CREATE INDEX idx_notifications_recipient_created ON notifications(recipient_did, created DESC);
+			CREATE INDEX idx_notifications_recipient_read ON notifications(recipient_did, read);
+		`)
+		return err
+	})
+	conn.ExecContext(ctx, "pragma foreign_keys = on;")
+
 	return &DB{
 		db,
 		logger,

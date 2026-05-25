@@ -362,6 +362,34 @@ func TestRemoveKnotMember(t *testing.T) {
 	assert.Empty(t, knots)
 }
 
+func TestRemoveKnotRemovesRepoPolicies(t *testing.T) {
+	e := setup(t)
+
+	knot := "kelp.example"
+	owner := "did:plc:akshay"
+	collaborator := "did:plc:boltless"
+	repo := "did:plc:akshay/anemone"
+
+	assert.NoError(t, e.AddKnot(knot))
+	assert.NoError(t, e.AddKnotOwner(knot, owner))
+	assert.NoError(t, e.AddRepo(owner, knot, repo))
+	assert.NoError(t, e.AddCollaborator(collaborator, knot, repo))
+
+	isOwner, err := e.IsKnotOwner(owner, knot)
+	assert.NoError(t, err)
+	assert.True(t, isOwner)
+
+	err = e.RemoveKnot(knot)
+	assert.NoError(t, err)
+
+	isOwner, err = e.IsKnotOwner(owner, knot)
+	assert.NoError(t, err)
+	assert.False(t, isOwner)
+
+	assert.Empty(t, e.GetPermissionsInRepo(owner, knot, repo))
+	assert.Empty(t, e.GetPermissionsInRepo(collaborator, knot, repo))
+}
+
 func TestRemoveSpindleOwner(t *testing.T) {
 	e := setup(t)
 
