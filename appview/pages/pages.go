@@ -445,12 +445,42 @@ func (p *Pages) UserProfileSettings(w io.Writer, params UserProfileSettingsParam
 	return p.execute("user/settings/profile", w, params)
 }
 
+type GroupedNotifications struct {
+	Today    []*models.NotificationWithEntity
+	ThisWeek []*models.NotificationWithEntity
+	Older    []*models.NotificationWithEntity
+}
+
+func GroupNotificationsByDate(notifs []*models.NotificationWithEntity) GroupedNotifications {
+	now := time.Now()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	weekStart := todayStart.AddDate(0, 0, -6)
+
+	var g GroupedNotifications
+	for _, n := range notifs {
+		switch {
+		case !n.Created.Before(todayStart):
+			g.Today = append(g.Today, n)
+		case !n.Created.Before(weekStart):
+			g.ThisWeek = append(g.ThisWeek, n)
+		default:
+			g.Older = append(g.Older, n)
+		}
+	}
+	return g
+}
+
 type NotificationsParams struct {
-	LoggedInUser  *oauth.MultiAccountUser
-	Notifications []*models.NotificationWithEntity
-	UnreadCount   int
-	Page          pagination.Page
-	Total         int64
+	LoggedInUser      *oauth.MultiAccountUser
+	WorkGroups        GroupedNotifications
+	SocialGroups      GroupedNotifications
+	MobileGroups      GroupedNotifications
+	WorkUnreadCount   int64
+	SocialUnreadCount int64
+	Page              pagination.Page
+	Total             int
+	ReadFilter        string // "inbox" or "unread"
+	CategoryFilter    string // "all", "work", "social"
 }
 
 func (p *Pages) Notifications(w io.Writer, params NotificationsParams) error {
@@ -474,8 +504,10 @@ func (p *Pages) NotificationCount(w io.Writer, params NotificationCountParams) e
 }
 
 type NotificationPreviewParams struct {
-	LoggedInUser  *oauth.MultiAccountUser
-	Notifications []*models.NotificationWithEntity
+	LoggedInUser   *oauth.MultiAccountUser
+	Notifications  []*models.NotificationWithEntity
+	ReadFilter     string
+	CategoryFilter string
 }
 
 func (p *Pages) NotificationPreview(w io.Writer, params NotificationPreviewParams) error {

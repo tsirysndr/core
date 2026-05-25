@@ -23,6 +23,24 @@ const (
 	NotificationTypeUserMentioned  NotificationType = "user_mentioned"
 )
 
+var SocialNotificationTypes = []NotificationType{
+	NotificationTypeRepoStarred,
+	NotificationTypeFollowed,
+}
+
+var WorkNotificationTypes = []NotificationType{
+	NotificationTypeIssueCreated,
+	NotificationTypeIssueCommented,
+	NotificationTypeIssueClosed,
+	NotificationTypeIssueReopen,
+	NotificationTypePullCreated,
+	NotificationTypePullCommented,
+	NotificationTypePullMerged,
+	NotificationTypePullClosed,
+	NotificationTypePullReopen,
+	NotificationTypeUserMentioned,
+}
+
 type Notification struct {
 	ID           int64
 	RecipientDid string

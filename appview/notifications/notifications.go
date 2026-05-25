@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/middleware"
+	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/pagination"
@@ -47,57 +48,136 @@ func (n *Notifications) Router(mw *middleware.Middleware) http.Handler {
 	return r
 }
 
+func notificationFilters(r *http.Request, userDid string) (filters []orm.Filter, readFilter, categoryFilter string) {
+	filters = []orm.Filter{orm.FilterEq("recipient_did", userDid)}
+
+	readFilter = r.URL.Query().Get("read")
+	if readFilter != "unread" {
+		readFilter = "inbox"
+	}
+	if readFilter == "unread" {
+		filters = append(filters, orm.FilterEq("read", 0))
+	}
+
+	categoryFilter = r.URL.Query().Get("category")
+	switch categoryFilter {
+	case "social":
+		filters = append(filters, orm.FilterIn("type", models.SocialNotificationTypes))
+	case "work":
+		filters = append(filters, orm.FilterIn("type", models.WorkNotificationTypes))
+	default:
+		categoryFilter = "all"
+	}
+
+	return filters, readFilter, categoryFilter
+}
+
 func (n *Notifications) notificationsPage(w http.ResponseWriter, r *http.Request) {
 	l := n.logger.With("handler", "notificationsPage")
 	user := n.oauth.GetMultiAccountUser(r)
 
 	page := pagination.FromContext(r.Context())
+	filters, readFilter, categoryFilter := notificationFilters(r, user.Did)
 
-	total, err := db.CountNotifications(
-		n.db,
-		orm.FilterEq("recipient_did", user.Did),
-	)
+	// mobile: respects category filter
+	mobileTotal, err := db.CountNotifications(n.db, filters...)
 	if err != nil {
 		l.Error("failed to get total notifications", "err", err)
 		n.pages.Error500(w)
 		return
 	}
-
-	notifications, err := db.GetNotificationsWithEntities(
-		n.db,
-		page,
-		orm.FilterEq("recipient_did", user.Did),
-	)
+	notifications, err := db.GetNotificationsWithEntities(n.db, page, filters...)
 	if err != nil {
 		l.Error("failed to get notifications", "err", err)
 		n.pages.Error500(w)
 		return
 	}
 
-	err = db.MarkAllNotificationsRead(n.db, user.Did)
+	// desktop columns: category is fixed, only read filter applies
+	readFilters := []orm.Filter{orm.FilterEq("recipient_did", user.Did)}
+	if readFilter == "unread" {
+		readFilters = append(readFilters, orm.FilterEq("read", 0))
+	}
+	workTotal, err := db.CountNotifications(n.db,
+		append(readFilters, orm.FilterIn("type", models.WorkNotificationTypes))...,
+	)
 	if err != nil {
-		l.Error("failed to mark notifications as read", "err", err)
+		l.Error("failed to count work notifications", "err", err)
+		n.pages.Error500(w)
+		return
+	}
+	workNotifications, err := db.GetNotificationsWithEntities(n.db, page,
+		append(readFilters, orm.FilterIn("type", models.WorkNotificationTypes))...,
+	)
+	if err != nil {
+		l.Error("failed to get work notifications", "err", err)
+		n.pages.Error500(w)
+		return
+	}
+	socialTotal, err := db.CountNotifications(n.db,
+		append(readFilters, orm.FilterIn("type", models.SocialNotificationTypes))...,
+	)
+	if err != nil {
+		l.Error("failed to count social notifications", "err", err)
+		n.pages.Error500(w)
+		return
+	}
+	socialNotifications, err := db.GetNotificationsWithEntities(n.db, page,
+		append(readFilters, orm.FilterIn("type", models.SocialNotificationTypes))...,
+	)
+	if err != nil {
+		l.Error("failed to get social notifications", "err", err)
+		n.pages.Error500(w)
+		return
 	}
 
-	unreadCount := 0
+	// shared pagination total: max of all relevant counts
+	total := int(max(socialTotal, max(workTotal, mobileTotal)))
 
-	n.pages.Notifications(w, pages.NotificationsParams{
-		LoggedInUser:  user,
-		Notifications: notifications,
-		UnreadCount:   unreadCount,
-		Page:          page,
-		Total:         total,
+	unreadBase := []orm.Filter{
+		orm.FilterEq("recipient_did", user.Did),
+		orm.FilterEq("read", 0),
+	}
+	workUnreadCount, err := db.CountNotifications(n.db,
+		append(unreadBase, orm.FilterIn("type", models.WorkNotificationTypes))...,
+	)
+	if err != nil {
+		l.Error("failed to count work unread", "err", err)
+	}
+	socialUnreadCount, err := db.CountNotifications(n.db,
+		append(unreadBase, orm.FilterIn("type", models.SocialNotificationTypes))...,
+	)
+	if err != nil {
+		l.Error("failed to count social unread", "err", err)
+	}
+
+	err = n.pages.Notifications(w, pages.NotificationsParams{
+		LoggedInUser:      user,
+		MobileGroups:      pages.GroupNotificationsByDate(notifications),
+		WorkGroups:        pages.GroupNotificationsByDate(workNotifications),
+		SocialGroups:      pages.GroupNotificationsByDate(socialNotifications),
+		WorkUnreadCount:   workUnreadCount,
+		SocialUnreadCount: socialUnreadCount,
+		Page:              page,
+		Total:             total,
+		ReadFilter:        readFilter,
+		CategoryFilter:    categoryFilter,
 	})
+	if err != nil {
+		l.Error("failed to render page", "err", err)
+	}
 }
 
 func (n *Notifications) previewHandler(w http.ResponseWriter, r *http.Request) {
 	l := n.logger.With("handler", "previewHandler")
 	user := n.oauth.GetMultiAccountUser(r)
 
+	filters, readFilter, categoryFilter := notificationFilters(r, user.Did)
+
 	notifications, err := db.GetNotificationsWithEntities(
 		n.db,
 		pagination.Page{Limit: 5, Offset: 0},
-		orm.FilterEq("recipient_did", user.Did),
+		filters...,
 	)
 	if err != nil {
 		l.Error("failed to get notifications", "err", err)
@@ -106,8 +186,10 @@ func (n *Notifications) previewHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = n.pages.NotificationPreview(w, pages.NotificationPreviewParams{
-		LoggedInUser:  user,
-		Notifications: notifications,
+		LoggedInUser:   user,
+		Notifications:  notifications,
+		ReadFilter:     readFilter,
+		CategoryFilter: categoryFilter,
 	})
 	if err != nil {
 		l.Error("failed to render notification preview", "err", err)
