@@ -38,6 +38,7 @@ func (n *Notifications) Router(mw *middleware.Middleware) http.Handler {
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.AuthMiddleware(n.oauth))
 		r.With(middleware.Paginate).Get("/", n.notificationsPage)
+		r.Get("/preview", n.previewHandler)
 		r.Post("/{id}/read", n.markRead)
 		r.Post("/read-all", n.markAllRead)
 		r.Delete("/{id}", n.deleteNotification)
@@ -87,6 +88,30 @@ func (n *Notifications) notificationsPage(w http.ResponseWriter, r *http.Request
 		Page:          page,
 		Total:         total,
 	})
+}
+
+func (n *Notifications) previewHandler(w http.ResponseWriter, r *http.Request) {
+	l := n.logger.With("handler", "previewHandler")
+	user := n.oauth.GetMultiAccountUser(r)
+
+	notifications, err := db.GetNotificationsWithEntities(
+		n.db,
+		pagination.Page{Limit: 5, Offset: 0},
+		orm.FilterEq("recipient_did", user.Did),
+	)
+	if err != nil {
+		l.Error("failed to get notifications", "err", err)
+		n.pages.Error500(w)
+		return
+	}
+
+	err = n.pages.NotificationPreview(w, pages.NotificationPreviewParams{
+		LoggedInUser:  user,
+		Notifications: notifications,
+	})
+	if err != nil {
+		l.Error("failed to render notification preview", "err", err)
+	}
 }
 
 func (n *Notifications) getUnreadCount(w http.ResponseWriter, r *http.Request) {

@@ -1,0 +1,19 @@
+{{ define "notifications/fragments/preview" }}
+  {{ if .Notifications }}
+    <div class="divide-y divide-gray-200 dark:divide-gray-700 bg-slate-100 dark:bg-gray-900">
+      {{ range .Notifications }}
+        {{ template "notifications/fragments/item" . }}
+      {{ end }}
+    </div>
+  {{ else }}
+    <div class="px-4 py-8 text-sm text-center text-gray-400 dark:text-gray-500">
+      No notifications
+    </div>
+  {{ end }}
+  <div class="flex items-center justify-end px-4 py-2 border-t border-gray-200 dark:border-gray-700 text-sm">
+    <a href="/notifications" 
+       class="flex items-center gap-1 hover:text-gray-600 dark:hover:text-gray-300 no-underline hover:no-underline">
+      view all {{ i "arrow-right" "size-4" }}
+    </a>
+  </div>
+{{ end }}

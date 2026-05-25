@@ -473,6 +473,15 @@ func (p *Pages) NotificationCount(w io.Writer, params NotificationCountParams) e
 	return p.executePlain("notifications/fragments/count", w, params)
 }
 
+type NotificationPreviewParams struct {
+	LoggedInUser  *oauth.MultiAccountUser
+	Notifications []*models.NotificationWithEntity
+}
+
+func (p *Pages) NotificationPreview(w io.Writer, params NotificationPreviewParams) error {
+	return p.executePlain("notifications/fragments/preview", w, params)
+}
+
 type UserKeysSettingsParams struct {
 	LoggedInUser *oauth.MultiAccountUser
 	PubKeys      []models.PublicKey

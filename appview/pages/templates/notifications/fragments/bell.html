@@ -1,11 +1,45 @@
 {{define "notifications/fragments/bell"}}
-<div class="relative"
+<style>
+  #notif-bell-btn {
+    anchor-name: --notif-bell;
+  }
+  #notif-popup {
+    position-anchor: --notif-bell;
+    position-area: bottom span-left;
+  }
+</style>
+  {{/* mobile - lnik to notifications page */}}
+  <a href="/notifications"
+     class="md:hidden relative text-gray-500 dark:text-gray-400 flex gap-1 items-end"
      hx-get="/notifications/count"
-     hx-target="#notification-count"
+     hx-target="#notification-count-mobile"
      hx-trigger="load, every 30s">
-  <a href="/notifications" class="text-gray-500 dark:text-gray-400 flex gap-1 items-end group">
     {{ i "bell" "size-5" }}
-    <span id="notification-count"></span>
+    <span id="notification-count-mobile"></span>
   </a>
-</div>
+
+  {{/* desktop popover button */}}
+  <button
+    id="notif-bell-btn"
+    popovertarget="notif-popup"
+    popovertargetaction="toggle"
+    class="hidden md:flex relative text-gray-500 dark:text-gray-400 gap-1 items-end cursor-pointer"
+    hx-get="/notifications/count"
+    hx-target="#notification-count-desktop"
+    hx-trigger="load, every 30s">
+    {{ i "bell" "size-5" }}
+    <span id="notification-count-desktop"></span>
+  </button>
+
+  <div
+    popover
+    id="notif-popup"
+    hx-get="/notifications/preview?read=unread"
+    hx-trigger="toggle[newState=='open'] once"
+    hx-swap="innerHTML"
+    class="mt-1 w-[36rem] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded drop-shadow-lg dark:text-white p-0 overflow-hidden">
+    <div class="px-4 py-8 text-sm text-center text-gray-400 dark:text-gray-500">
+      {{ i "loader-circle" "size-4 animate-spin mx-auto" }}
+    </div>
+  </div>
 {{end}}
