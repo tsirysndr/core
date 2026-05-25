@@ -1,65 +1,110 @@
 {{ define "title" }}Notifications &middot; Tangled{{ end }}
 
 {{ define "content" }}
-  <div class="px-6 py-4">
-    <div class="flex items-center justify-between">
-      <p class="text-xl font-bold dark:text-white">Notifications</p>
-      <a href="/settings/notifications" class="flex items-center gap-2">
-        {{ i "settings" "w-4 h-4" }}
-        Preferences
-      </a>
+  <div class="flex items-center justify-between p-4 md:px-0">
+    <p class="text-xl font-bold dark:text-white">Notifications</p>
+  </div>
+
+  {{ $readVals := list
+    (dict "Key" "inbox"  "Value" "Inbox" "Icon" "inbox")
+    (dict "Key" "unread" "Value" "Unread" "Icon" "glasses")
+  }}
+
+  {{/* Mobile controls: single row */}}
+  <div class="md:hidden px-4 pb-4 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      {{ template "fragments/tabSelector" (dict "Name" "read" "Values" $readVals "Active" .ReadFilter) }}
+      <button
+        hx-post="/notifications/read-all"
+        hx-swap="none"
+        hx-on::after-request="window.location.reload()"
+        class="btn-flat flex items-center gap-2 text-sm">
+        {{ i "check-check" "size-4" }} Mark all read
+      </button>
+    </div>
+    <a href="/settings/notifications" class="btn-flat">
+      {{ i "cog" "size-4" }}
+    </a>
+  </div>
+
+  {{/* Desktop controls: single row */}}
+  <div class="hidden md:flex md:px-0 pb-4 items-center justify-between gap-4">
+    <div class="flex items-center gap-2">
+      {{ template "fragments/tabSelector" (dict "Name" "read" "Values" $readVals "Active" .ReadFilter) }}
+      <button
+        hx-post="/notifications/read-all"
+        hx-swap="none"
+        hx-on::after-request="window.location.reload()"
+        class="btn-flat flex items-center gap-2 text-sm">
+        {{ i "check-check" "size-4" }} Mark all read
+      </button>
+    </div>
+    <a href="/settings/notifications" class="flex items-center gap-2 text-sm">
+      {{ i "cog" "w-4 h-4" }} Preferences
+    </a>
+  </div>
+
+  {{/* Mobile: single filtered list */}}
+  <div class="md:hidden">
+    {{ template "notifications/fragments/notifList" (dict "Groups" .MobileGroups "ReadFilter" .ReadFilter "CategoryFilter" "") }}
+  </div>
+
+  {{/* Desktop: two columns */}}
+  <div class="hidden md:grid md:grid-cols-2 md:gap-6">
+    <div>
+      {{ template "notifications/fragments/notifList" (dict "Groups" .WorkGroups "UnreadCount" .WorkUnreadCount "ReadFilter" .ReadFilter "CategoryFilter" "work") }}
+    </div>
+    <div>
+      {{ template "notifications/fragments/notifList" (dict "Groups" .SocialGroups "UnreadCount" .SocialUnreadCount "ReadFilter" .ReadFilter "CategoryFilter" "social") }}
     </div>
   </div>
 
-  {{if .Notifications}}
-    <div class="rounded border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700" id="notifications-list">
-      {{range .Notifications}}
-        {{template "notifications/fragments/item" .}}
-      {{end}}
-    </div>
+  {{ if gt .Total .Page.Limit }}
+    {{ template "fragments/pagination" (dict
+        "Page" .Page
+        "TotalCount" .Total
+        "BasePath" "/notifications"
+        "QueryParams" (queryParams "read" .ReadFilter "category" .CategoryFilter)
+    ) }}
+  {{ end }}
+{{ end }}
 
-  {{else}}
-    <div class="bg-white dark:bg-gray-800 p-6 rounded relative w-full mx-auto drop-shadow-sm dark:text-white">
-      <div class="text-center py-12">
-        <div class="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600">
-          {{ i "bell-off" "w-16 h-16" }}
+{{ define "notifications/fragments/notifList" }}
+  {{ $readFilter := .ReadFilter }}
+  {{ $hasAny := or .Groups.Today .Groups.ThisWeek .Groups.Older }}
+  <div class="rounded-sm border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700">
+    {{ if or .CategoryFilter .UnreadCount }}
+    <div class="flex items-center justify-between px-2 md:px-6 py-2 bg-white dark:bg-gray-800">
+      <h2 class="capitalize text-sm font-medium dark:text-white">{{ .CategoryFilter }}</h2>
+      {{ with .UnreadCount }}
+        <span class="min-w-[20px] h-6 px-1 bg-indigo-600 dark:bg-indigo-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+          {{ . }}
+        </span>
+      {{ end }}
+    </div>
+    {{ end }}
+    {{ if $hasAny }}
+      {{ $groupStyle := "px-2 md:px-6 py-2 bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 text-sm" }}
+      {{ if .Groups.Today }}
+        <div class="{{ $groupStyle }}">Today</div>
+        {{ range .Groups.Today }}{{ template "notifications/fragments/item" . }}{{ end }}
+      {{ end }}
+      {{ if .Groups.ThisWeek }}
+        <div class="{{ $groupStyle }}">This week</div>
+        {{ range .Groups.ThisWeek }}{{ template "notifications/fragments/item" . }}{{ end }}
+      {{ end }}
+      {{ if .Groups.Older }}
+        <div class="{{ $groupStyle }}">Older</div>
+        {{ range .Groups.Older }}{{ template "notifications/fragments/item" . }}{{ end }}
+      {{ end }}
+    {{ else }}
+      <div class="bg-white dark:bg-gray-800 p-6 dark:text-white flex flex-col items-center">
+        <div class="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600">
+          {{ if eq $readFilter "unread" }}{{ i "inbox" "w-12 h-12" }}{{ else }}{{ i "bell-off" "w-12 h-12" }}{{ end }}
         </div>
-        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">No notifications</h3>
-        <p class="text-gray-600 dark:text-gray-400">When you receive notifications, they'll appear here.</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400">{{ if eq $readFilter "unread" }}All caught up!{{ else }}No notifications{{ end }}</p>
       </div>
-    </div>
-  {{end}}
-
-  {{ template "pagination" . }}
-{{ end }}
-
-{{ define "pagination" }}
-  <div class="flex justify-end mt-4 gap-2">
-      {{ if gt .Page.Offset 0 }}
-         {{ $prev := .Page.Previous }}
-          <a
-              class="btn flex items-center gap-2 no-underline hover:no-underline dark:text-white dark:hover:bg-gray-700"
-              hx-boost="true"
-              href = "/notifications?offset={{ $prev.Offset }}&limit={{ $prev.Limit }}"
-          >
-              {{ i "chevron-left" "w-4 h-4" }}
-              Previous
-          </a>
-      {{ else }}
-          <div></div>
-      {{ end }}
-
-      {{ $next := .Page.Next }}
-      {{ if lt $next.Offset .Total }}
-         {{ $next := .Page.Next }}
-          <a
-              class="btn flex items-center gap-2 no-underline hover:no-underline dark:text-white dark:hover:bg-gray-700"
-              hx-boost="true"
-              href = "/notifications?offset={{ $next.Offset }}&limit={{ $next.Limit }}"
-          >
-              Next
-              {{ i "chevron-right" "w-4 h-4" }}
-          </a>
-      {{ end }}
+    {{ end }}
   </div>
 {{ end }}
+

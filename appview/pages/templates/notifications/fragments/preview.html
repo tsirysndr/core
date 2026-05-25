@@ -1,4 +1,49 @@
 {{ define "notifications/fragments/preview" }}
+  <div class="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex-wrap gap-2">
+    {{ $read := .ReadFilter }}
+    {{ $cat := .CategoryFilter }}
+
+    <div class="flex items-center gap-2 flex-wrap">
+      <div class="btn-group">
+        <a href="#"
+           hx-get="/notifications/preview?read=inbox&category={{ $cat }}"
+           hx-target="#notif-popup"
+           hx-swap="innerHTML"
+           class="btn-group-item {{ if eq $read "inbox" }}active{{ end }}">
+          {{ i "inbox" "size-4" }} Inbox
+        </a>
+        <a href="#"
+           hx-get="/notifications/preview?read=unread&category={{ $cat }}"
+           hx-target="#notif-popup"
+           hx-swap="innerHTML"
+           class="btn-group-item {{ if eq $read "unread" }}active{{ end }}">
+          {{ i "glasses" "size-4" }} Unread
+        </a>
+      </div>
+      <button
+        hx-post="/notifications/read-all"
+        hx-swap="none"
+        hx-on::after-request="htmx.ajax('GET', '/notifications/preview?read=unread&category={{ $cat }}', {target:'#notif-popup', swap:'innerHTML'}); htmx.ajax('GET', '/notifications/count', {target:'#notification-count-desktop', swap:'innerHTML'})"
+        class="btn-flat text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center gap-2 text-sm"
+        title="Mark all read">
+        {{ i "check-check" "size-4" }} Mark all read
+      </button>
+    </div>
+
+    <div class="btn-group">
+      {{ range $k, $label := list "all" "work" "social" }}
+        <a href="#"
+           hx-get="/notifications/preview?read={{ $read }}&category={{ $label }}"
+           hx-target="#notif-popup"
+           hx-swap="innerHTML"
+           class="btn-group-item {{ if eq $label $cat }}active{{ end }} capitalize">
+          {{ $label }}
+        </a>
+      {{ end }}
+    </div>
+
+  </div>
+
   {{ if .Notifications }}
     <div class="divide-y divide-gray-200 dark:divide-gray-700 bg-slate-100 dark:bg-gray-900">
       {{ range .Notifications }}
@@ -6,14 +51,16 @@
       {{ end }}
     </div>
   {{ else }}
-    <div class="px-4 py-8 text-sm text-center text-gray-400 dark:text-gray-500">
-      No notifications
+    <div class="px-4 py-24 text-sm text-center text-gray-400 dark:text-gray-500">
+      <div class="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600">
+        {{ if eq $read "unread" }}{{ i "inbox" "w-12 h-12" }}{{ else }}{{ i "bell-off" "w-12 h-12" }}{{ end }}
+      </div>
+      <p class="text-sm text-gray-500 dark:text-gray-400">{{ if eq $read "unread" }}All caught up!{{ else }}No notifications{{ end }}</p>
     </div>
   {{ end }}
-  <div class="flex items-center justify-end px-4 py-2 border-t border-gray-200 dark:border-gray-700 text-sm">
-    <a href="/notifications" 
-       class="flex items-center gap-1 hover:text-gray-600 dark:hover:text-gray-300 no-underline hover:no-underline">
-      view all {{ i "arrow-right" "size-4" }}
-    </a>
-  </div>
+
+  <a href="/notifications?read={{ .ReadFilter }}&category={{ .CategoryFilter }}"
+     class="flex items-center justify-end gap-1 px-4 py-2 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 no-underline hover:no-underline transition-colors duration-150">
+    View all {{ i "arrow-right" "size-4" }}
+  </a>
 {{ end }}

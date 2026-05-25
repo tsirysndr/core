@@ -1,17 +1,21 @@
 {{define "notifications/fragments/item"}}
-  <a href="{{ template "notificationUrl" . }}" class="block no-underline hover:no-underline">
+  <a href="{{ template "notificationUrl" . }}"
+     onclick="navigator.sendBeacon('/notifications/{{ .ID }}/read')"
+     class="block no-underline hover:no-underline">
     <div
       class="
-        w-full mx-auto dark:text-white bg-white dark:bg-gray-800 px-2 md:px-6 py-4
-        grid grid-cols-[auto_1fr_auto] gap-x-3 gap-y-1 items-center
+        w-full mx-auto dark:text-white px-2 md:px-6 py-4
+        {{ if not .Read }}bg-indigo-50/50 dark:bg-indigo-950/20 hover:bg-indigo-50 dark:hover:bg-indigo-950/50{{ else }}bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700/30{{ end }}
+        transition-colors duration-150
+        grid grid-cols-[auto_1fr_auto] gap-x-4 gap-y-1 items-center
         ">
       {{/* row 1, col 1: icon */}}
       <div class="row-start-1 {{ template "notificationIconColor" . }}">{{ i (.Icon) "size-4" }}</div>
       {{/* row 1, col 2: header */}}
       <div class="row-start-1 flex items-center gap-1.5 text-sm min-w-0 overflow-hidden">
         {{- if not .Read }}
-          {{ template "repo/fragments/colorBall" (dict "color" "#1e40af" "classes" "shrink-0 dark:hidden") }}
-          {{ template "repo/fragments/colorBall" (dict "color" "#3b82f6" "classes" "shrink-0 hidden dark:block") }}
+          {{ template "repo/fragments/colorBall" (dict "color" "#4338ca" "classes" "shrink-0 dark:hidden") }}
+          {{ template "repo/fragments/colorBall" (dict "color" "#6366f1" "classes" "shrink-0 hidden dark:block") }}
         {{- end -}}
         {{- template "notificationHeader" . -}}
       </div>
@@ -25,7 +29,15 @@
   </a>
 {{end}}
 
-{{ define "notificationIconColor" }}{{ if eq .Type "issue_created" }}text-green-600 dark:text-green-500{{ else if eq .Type "issue_reopen" }}text-green-600 dark:text-green-500{{ else if eq .Type "pull_created" }}text-green-600 dark:text-green-500{{ else if eq .Type "pull_reopen" }}text-green-600 dark:text-green-500{{ else if eq .Type "pull_merged" }}text-purple-600 dark:text-purple-500{{ else if eq .Type "pull_closed" }}text-red-600 dark:text-red-500{{ else }}text-gray-500 dark:text-gray-400{{ end }}{{ end }}
+{{ define "notificationIconColor" }}
+  {{ if or (eq .Type "issue_created") (eq .Type "issue_reopen") }}text-green-600 dark:text-green-500
+  {{ else if or (eq .Type "pull_created") (eq .Type "pull_reopen") }}text-green-600 dark:text-green-500
+  {{ else if eq .Type "pull_merged" }}text-purple-600 dark:text-purple-500
+  {{ else if eq .Type "pull_closed" }}text-red-600 dark:text-red-500
+  {{ else if eq .Type "user_mentioned" }}text-blue-600 dark:text-blue-500
+  {{ else }}text-gray-500 dark:text-gray-400
+  {{ end }}
+{{ end }}
 
 {{ define "notificationNumber" }}
   {{ if .Issue }}
