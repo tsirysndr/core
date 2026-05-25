@@ -36,10 +36,14 @@ func (x *Xrpc) ListLanguages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if ref == "" {
+		ref = "HEAD"
+	}
+
 	commit, err := gitea.GetCommit(ctx, repoPath, ref)
 	if err != nil {
 		l.Error("failed to get commit", "err", err)
-		writeJson(w, http.StatusNotFound, atclient.ErrorBody{Name: "RefNotFound", Message: fmt.Sprintf("unknown git ref: %s", repo)})
+		writeJson(w, http.StatusNotFound, atclient.ErrorBody{Name: "RefNotFound", Message: fmt.Sprintf("unknown git ref: %s", ref)})
 		return
 	}
 
