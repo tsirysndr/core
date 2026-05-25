@@ -53,12 +53,12 @@ func (t *Tap) AddOwnerDIDs(ctx context.Context, dids []syntax.DID) error {
 	return t.tap.AddRepos(ctx, dids)
 }
 
-func (t *Tap) Start(ctx context.Context) {
-	go t.tap.Connect(ctx, &tapc.SimpleIndexer{
+func (t *Tap) Start(connCtx context.Context) {
+	go t.tap.Connect(connCtx, &tapc.SimpleIndexer{
 		EventHandler:   t.processEvent,
 		ConnectHandler: t.onConnect,
 	})
-	go t.purgePendingCollabsLoop(ctx)
+	go t.purgePendingCollabsLoop(t.spindle.rootCtx)
 }
 
 func (t *Tap) onConnect(ctx context.Context) {
@@ -146,9 +146,12 @@ func (t *Tap) processRepo(ctx context.Context, evt *tapc.RecordEventData) error 
 			l.Info("collapsed rename leftovers", "owner", ownerDid, "repo_did", repoDid, "removed", removed)
 		}
 
-		if err := t.tap.AddRepos(ctx, []syntax.DID{ownerDid}); err != nil {
-			l.Warn("tap AddRepos rejected", "did", ownerDid, "err", err)
+		if e := t.spindle.embedTap; e == nil || !e.closed.Load() {
+			if err := t.tap.AddRepos(ctx, []syntax.DID{ownerDid}); err != nil {
+				l.Warn("tap AddRepos rejected", "did", ownerDid, "err", err)
+			}
 		}
+		t.spindle.jc.AddDid(ownerDid.String())
 
 		t.drainPendingCollabs(ctx, repoDid)
 

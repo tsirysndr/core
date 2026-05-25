@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/bluesky-social/indigo/service/tap"
@@ -46,6 +47,7 @@ func assertLoopbackBind(bind string) error {
 type embeddedTap struct {
 	tap    *tap.Tap
 	logger *slog.Logger
+	closed atomic.Bool
 }
 
 func startEmbeddedTap(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*embeddedTap, error) {
@@ -114,6 +116,9 @@ func waitForListener(ctx context.Context, addr string, deadline time.Time) error
 
 func (e *embeddedTap) Shutdown() {
 	if e == nil || e.tap == nil {
+		return
+	}
+	if e.closed.Swap(true) {
 		return
 	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

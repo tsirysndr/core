@@ -112,6 +112,8 @@ func New(ctx context.Context, cfg *config.Config, engines map[string]models.Engi
 
 	collections := []string{
 		tangled.SpindleMemberNSID,
+		tangled.RepoNSID,
+		tangled.RepoCollaboratorNSID,
 	}
 	jc, err := jetstream.NewJetstreamClient(cfg.Server.JetstreamEndpoint, "spindle", collections, nil, log.SubLogger(logger, "jetstream"), d, true, true)
 	if err != nil {
@@ -126,6 +128,16 @@ func New(ctx context.Context, cfg *config.Config, engines map[string]models.Engi
 	}
 	for _, d := range dids {
 		jc.AddDid(d)
+	}
+
+	knownRepos, err := d.AllRepos()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get known repos: %w", err)
+	}
+	for _, r := range knownRepos {
+		if r.Owner != "" {
+			jc.AddDid(r.Owner.String())
+		}
 	}
 
 	resolver := idresolver.DefaultResolver(cfg.Server.PlcUrl)
@@ -252,13 +264,23 @@ func (s *Spindle) Start(ctx context.Context) error {
 		defer stopper.Stop()
 	}
 
+	tapCtx, tapCancel := context.WithCancel(ctx)
+
 	if s.cfg.Server.Tap.Embed {
-		emb, err := startEmbeddedTap(ctx, s.cfg, log.SubLogger(s.l, "embedtap"))
+		emb, err := startEmbeddedTap(tapCtx, s.cfg, log.SubLogger(s.l, "embedtap"))
 		if err != nil {
+			tapCancel()
 			return fmt.Errorf("starting embedded tap: %w", err)
 		}
 		s.embedTap = emb
-		defer s.embedTap.Shutdown()
+		defer func() {
+			tapCancel()
+			s.embedTap.Shutdown()
+		}()
+
+		go s.watchTapDrain(tapCtx, tapCancel)
+	} else {
+		defer tapCancel()
 	}
 
 	go func() {
@@ -267,7 +289,7 @@ func (s *Spindle) Start(ctx context.Context) error {
 	}()
 
 	s.l.Info("starting tap client", "url", s.cfg.Server.Tap.Url)
-	s.tap.Start(ctx)
+	s.tap.Start(tapCtx)
 
 	s.l.Info("starting spindle server", "address", s.cfg.Server.ListenAddr)
 	return http.ListenAndServe(s.cfg.Server.ListenAddr, s.Router())

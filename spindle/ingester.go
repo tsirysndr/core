@@ -8,6 +8,7 @@ import (
 
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/spindle/db"
+	"tangled.org/core/tapc"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/bluesky-social/jetstream/pkg/models"
@@ -25,6 +26,10 @@ func (s *Spindle) ingest() Ingester {
 		switch e.Commit.Collection {
 		case tangled.SpindleMemberNSID:
 			err = s.ingestMember(ctx, e)
+		case tangled.RepoNSID, tangled.RepoCollaboratorNSID:
+			if evt, ok := jetstreamToTapEvent(e); ok {
+				err = s.tap.processEvent(ctx, evt)
+			}
 		}
 
 		if err != nil {
@@ -38,6 +43,37 @@ func (s *Spindle) ingest() Ingester {
 
 		return nil
 	}
+}
+
+func jetstreamToTapEvent(e *models.Event) (tapc.Event, bool) {
+	if e.Commit == nil {
+		return tapc.Event{}, false
+	}
+	did, err := syntax.ParseDID(e.Did)
+	if err != nil {
+		return tapc.Event{}, false
+	}
+	var action tapc.RecordAction
+	switch e.Commit.Operation {
+	case models.CommitOperationCreate:
+		action = tapc.RecordCreateAction
+	case models.CommitOperationUpdate:
+		action = tapc.RecordUpdateAction
+	case models.CommitOperationDelete:
+		action = tapc.RecordDeleteAction
+	default:
+		return tapc.Event{}, false
+	}
+	return tapc.Event{
+		Type: tapc.EvtRecord,
+		Record: &tapc.RecordEventData{
+			Did:        did,
+			Rkey:       syntax.RecordKey(e.Commit.RKey),
+			Collection: syntax.NSID(e.Commit.Collection),
+			Action:     action,
+			Record:     e.Commit.Record,
+		},
+	}, true
 }
 
 func (s *Spindle) ingestMember(_ context.Context, e *models.Event) error {
