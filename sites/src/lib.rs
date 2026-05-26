@@ -169,7 +169,7 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     // Canonical redirect for directory-like paths.
     if needs_trailing_slash(path) {
         let redirect_url = with_trailing_slash(&url);
-        return Response::redirect(redirect_url.parse()?, 308);
+        return Response::redirect_with_status(redirect_url.parse()?, 308);
     }
 
     // Single KV lookup for the whole domain.
