@@ -302,8 +302,7 @@ func applyLogLine(wl *workflowLogs, line spindlemodel.LogLine) {
 // renderLogs builds the full log content string for a workflow, used as viewport content.
 func renderLogs(r *lipgloss.Renderer, wl *workflowLogs, width int) string {
 	headerStyle := r.NewStyle().Foreground(colorWhite).Background(colorBrightBlack).Bold(true)
-	cmdStyle := r.NewStyle().Foreground(colorBlue).Background(colorDarkGrey).Width(width)
-	lineStyle := r.NewStyle().Foreground(colorWhite).Background(colorDarkGrey).Width(width)
+	cmdStyle := r.NewStyle().Foreground(colorBlue).Width(width)
 	now := time.Now()
 	var sb strings.Builder
 	for i := range wl.steps {
@@ -322,7 +321,7 @@ func renderLogs(r *lipgloss.Renderer, wl *workflowLogs, width int) string {
 			sb.WriteString(cmdStyle.Render(st.command) + "\n")
 		}
 		for _, l := range st.lines {
-			sb.WriteString(lineStyle.Render(l) + "\n")
+			sb.WriteString(l + "\n")
 		}
 		sb.WriteString("\n")
 	}
