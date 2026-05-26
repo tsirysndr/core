@@ -108,8 +108,8 @@ schema = 3
     version = "v1.0.1"
     hash = "sha256-h75GUqfwJKngCJQVE5Ao5wnO3cfKD9lSIteoLp/3xJ4="
   [mod."github.com/bits-and-blooms/bitset"]
-    version = "v1.22.0"
-    hash = "sha256-lY1K29h4vlAmJVvwKgbTG8BTACYGjFaginCszN+ST6w="
+    version = "v1.24.4"
+    hash = "sha256-Kjo3ZJKHxyJ8+59Zt/Z6ai0S4DTfbzpFZ5ArFIqfxmM="
   [mod."github.com/blevesearch/bleve/v2"]
     version = "v2.5.3"
     hash = "sha256-DkpX43WMpB8+9KCibdNjyf6N/1a51xJTfGF97xdoCAQ="
@@ -178,6 +178,9 @@ schema = 3
   [mod."github.com/bmatcuk/doublestar/v4"]
     version = "v4.9.1"
     hash = "sha256-0iyHjyTAsfhgYSsE+NKxSNGBuM3Id615VWeQhssTShE="
+  [mod."github.com/buildkite/terminal-to-html/v3"]
+    version = "v3.16.8"
+    hash = "sha256-dZlUFIe/oU1mBwDM99olhuwDPAlrmVC0CEv7pm0/si0="
   [mod."github.com/carlmjohnson/versioninfo"]
     version = "v0.22.5"
     hash = "sha256-tf7yKVFTUPmGKBLK43bjyIRQUboCYduh3I5HXE5+LPw="
@@ -193,24 +196,63 @@ schema = 3
   [mod."github.com/cespare/xxhash/v2"]
     version = "v2.3.0"
     hash = "sha256-7hRlwSR+fos1kx4VZmJ/7snR7zHh8ZFKX+qqqqGcQpY="
+  [mod."github.com/charmbracelet/bubbles"]
+    version = "v1.0.0"
+    hash = "sha256-Vz9QgctlzJqggPwfi48Lbn38ZJXu3Y71byp5uuuzUvU="
+  [mod."github.com/charmbracelet/bubbletea"]
+    version = "v1.3.10"
+    hash = "sha256-7wr85TLszu1CHNEMv+o4w+r24Z0xdzCgecPv+ZtRX/A="
   [mod."github.com/charmbracelet/colorprofile"]
-    version = "v0.2.3-0.20250311203215-f60798e515dc"
-    hash = "sha256-D9E/bMOyLXAUVOHA1/6o3i+vVmLfwIMOWib6sU7A6+Q="
+    version = "v0.4.1"
+    hash = "sha256-d/NjM/ybG+bGRRRMMcjbPCFGFS5noZRMaL05Ix5r/II="
+  [mod."github.com/charmbracelet/keygen"]
+    version = "v0.5.3"
+    hash = "sha256-VUVU4BSanfpoKlESxjd8jm/pKBvekDnjP3mUqULjd+g="
   [mod."github.com/charmbracelet/lipgloss"]
     version = "v1.1.0"
     hash = "sha256-RHsRT2EZ1nDOElxAK+6/DC9XAaGVjDTgPvRh3pyCfY4="
   [mod."github.com/charmbracelet/log"]
     version = "v0.4.2"
     hash = "sha256-3w1PCM/c4JvVEh2d0sMfv4C77Xs1bPa1Ea84zdynC7I="
+  [mod."github.com/charmbracelet/ssh"]
+    version = "v0.0.0-20250128164007-98fd5ae11894"
+    hash = "sha256-8myFnKBoSjTwoj7IjJy2IU2ZrngAB3tC3XVU7qrD3Mo="
+  [mod."github.com/charmbracelet/wish"]
+    version = "v1.4.7"
+    hash = "sha256-wNg6APevKC8pi7aAt9fc81Wad1rMy/BgzVAsAu9Vo3U="
   [mod."github.com/charmbracelet/x/ansi"]
-    version = "v0.8.0"
-    hash = "sha256-/YyDkGrULV2BtnNk3ojeSl0nUWQwIfIdW7WJuGbAZas="
+    version = "v0.11.6"
+    hash = "sha256-UToZIkqXl9MEppcRgbeBqaaMeAzRkGa0w3lVUs6sxWI="
   [mod."github.com/charmbracelet/x/cellbuf"]
-    version = "v0.0.13-0.20250311204145-2c3ea96c31dd"
-    hash = "sha256-XAhCOt8qJ2vR77lH1ez0IVU1/2CaLTq9jSmrHVg5HHU="
+    version = "v0.0.15"
+    hash = "sha256-0S60XaWhKZG+TB3Kqe1oMn2Okwdq53nym8XayVSHHiM="
+  [mod."github.com/charmbracelet/x/conpty"]
+    version = "v0.1.0"
+    hash = "sha256-VvqJl1WVm7ozO+Dmgl4e/iM9Z9FVrQLrLuA0Sr50KAM="
+  [mod."github.com/charmbracelet/x/errors"]
+    version = "v0.0.0-20240508181413-e8d8b6e2de86"
+    hash = "sha256-GO8hf0lhVtl00C+xoTzvBtPU2cO0PymSLc2szBRUNtE="
+  [mod."github.com/charmbracelet/x/input"]
+    version = "v0.3.4"
+    hash = "sha256-QdpH3Pfu04qMdQEnT80bJRJZIfMe4Cw8/HbM2OETZdM="
   [mod."github.com/charmbracelet/x/term"]
-    version = "v0.2.1"
-    hash = "sha256-VBkCZLI90PhMasftGw3403IqoV7d3E5WEGAIVrN5xQM="
+    version = "v0.2.2"
+    hash = "sha256-KF7IU1Luxl/sZP6XjomWB2e3lxSUS4/5AahhapGir/4="
+  [mod."github.com/charmbracelet/x/termios"]
+    version = "v0.1.0"
+    hash = "sha256-cvyxWoAf3gDv17Bupd6X4fRkPPF87QU8F4vmsFw97QA="
+  [mod."github.com/charmbracelet/x/windows"]
+    version = "v0.2.0"
+    hash = "sha256-pDAd1E5w66E/d3vuTyzgnW+W/KegZ2sxQQMfoEn7S1A="
+  [mod."github.com/clipperhouse/displaywidth"]
+    version = "v0.9.0"
+    hash = "sha256-9CNyTZPSncKQ7Y0my9DR4WYXDjtDHYNL512D691WDAM="
+  [mod."github.com/clipperhouse/stringish"]
+    version = "v0.1.1"
+    hash = "sha256-Mp8M1CRbwr6dcJ4BD9tXD5I78ZgCFEm0GDxJv0GYReg="
+  [mod."github.com/clipperhouse/uax29/v2"]
+    version = "v2.5.0"
+    hash = "sha256-Men4JLhiuEtAx8ZSzId5ciRWhud68o3k/B48ppwyxkM="
   [mod."github.com/cloudflare/circl"]
     version = "v1.6.2-0.20250618153321-aa837fd1539d"
     hash = "sha256-0s/i/XmMcuvPQ+qK9OIU5KxwYZyLVXRtdlYvIXRJT3Y="
@@ -226,6 +268,9 @@ schema = 3
   [mod."github.com/containerd/log"]
     version = "v0.1.0"
     hash = "sha256-vuE6Mie2gSxiN3jTKTZovjcbdBd1YEExb7IBe3GM+9s="
+  [mod."github.com/creack/pty"]
+    version = "v1.1.21"
+    hash = "sha256-pjGw6wQlrVhN65XaIxZueNJqnXThGu00u24rKOLzxS0="
   [mod."github.com/cyphar/filepath-securejoin"]
     version = "v0.4.1"
     hash = "sha256-NOV6MfbkcQbfhNmfADQw2SJmZ6q1nw0wwg8Pm2tf2DM="
@@ -271,6 +316,9 @@ schema = 3
   [mod."github.com/emirpasic/gods"]
     version = "v1.18.1"
     hash = "sha256-hGDKddjLj+5dn2woHtXKUdd49/3xdsqnhx7VEdCu1m4="
+  [mod."github.com/erikgeiser/coninput"]
+    version = "v0.0.0-20211004153227-1c3628e74d0f"
+    hash = "sha256-OWSqN1+IoL73rWXWdbbcahZu8n2al90Y3eT5Z0vgHvU="
   [mod."github.com/felixge/httpsnoop"]
     version = "v1.0.4"
     hash = "sha256-c1JKoRSndwwOyOxq9ddCe+8qn7mG9uRq2o/822x5O/c="
@@ -501,17 +549,20 @@ schema = 3
     version = "v0.4.1"
     hash = "sha256-qfjV9jmtR8I7gC7/Hm02XDbuVLX8UkRNi3wPer8Jkm4="
   [mod."github.com/lucasb-eyer/go-colorful"]
-    version = "v1.2.0"
-    hash = "sha256-Gg9dDJFCTaHrKHRR1SrJgZ8fWieJkybljybkI9x0gyE="
+    version = "v1.3.0"
+    hash = "sha256-6BKrJsfmxie+YFAWzTYVPQfrwjQEXRo+J8LY+50C1BU="
   [mod."github.com/mattn/go-colorable"]
     version = "v0.1.14"
     hash = "sha256-JC60PjKj7MvhZmUHTZ9p372FV72I9Mxvli3fivTbxuA="
   [mod."github.com/mattn/go-isatty"]
     version = "v0.0.20"
     hash = "sha256-qhw9hWtU5wnyFyuMbKx+7RB8ckQaFQ8D+8GKPkN3HHQ="
+  [mod."github.com/mattn/go-localereader"]
+    version = "v0.0.1"
+    hash = "sha256-JlWckeGaWG+bXK8l8WEdZqmSiTwCA8b1qbmBKa/Fj3E="
   [mod."github.com/mattn/go-runewidth"]
-    version = "v0.0.16"
-    hash = "sha256-NC+ntvwIpqDNmXb7aixcg09il80ygq6JAnW0Gb5b/DQ="
+    version = "v0.0.19"
+    hash = "sha256-GpnbKplhX410Q/eIdknvWbYZgdav1keN+7wNUeOSMHE="
   [mod."github.com/mattn/go-sqlite3"]
     version = "v1.14.34"
     hash = "sha256-PGOevTQb3gNdGu4H2bhvXJlntkMkDt+UhuiK1IpuorQ="
@@ -548,6 +599,12 @@ schema = 3
   [mod."github.com/mschoch/smat"]
     version = "v0.2.0"
     hash = "sha256-DZvUJXjIcta3U+zxzgU3wpoGn/V4lpBY7Xme8aQUi+E="
+  [mod."github.com/muesli/ansi"]
+    version = "v0.0.0-20230316100256-276c6243b2f6"
+    hash = "sha256-qRKn0Bh2yvP0QxeEMeZe11Vz0BPFIkVcleKsPeybKMs="
+  [mod."github.com/muesli/cancelreader"]
+    version = "v0.2.2"
+    hash = "sha256-uEPpzwRJBJsQWBw6M71FDfgJuR7n55d/7IV8MO+rpwQ="
   [mod."github.com/muesli/termenv"]
     version = "v0.16.0"
     hash = "sha256-hGo275DJlyLtcifSLpWnk8jardOksdeX9lH4lBeE3gI="
