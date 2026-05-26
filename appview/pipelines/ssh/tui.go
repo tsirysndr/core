@@ -19,10 +19,9 @@ import (
 )
 
 var (
-	colorWhite       lipgloss.ANSIColor = 7
+	colorFg          lipgloss.NoColor   = lipgloss.NoColor{}
 	colorBlue        lipgloss.ANSIColor = 4
 	colorBrightBlack lipgloss.ANSIColor = 8
-	colorDarkGrey    lipgloss.ANSIColor = 0
 )
 
 type tickMsg time.Time
@@ -126,7 +125,7 @@ func (m *pipelineModel) connectCmd(workflow string) tea.Cmd {
 }
 
 func (m *pipelineModel) vpHeight() int {
-	return max(m.height-2, 1) // topbar + divider take 2 lines
+	return max(m.height-2, 1) // topbar + empty line take 2 lines
 }
 
 // resizeViewports updates all viewport dimensions and re-renders their content after a terminal resize.
@@ -301,8 +300,9 @@ func applyLogLine(wl *workflowLogs, line spindlemodel.LogLine) {
 
 // renderLogs builds the full log content string for a workflow, used as viewport content.
 func renderLogs(r *lipgloss.Renderer, wl *workflowLogs, width int) string {
-	headerStyle := r.NewStyle().Foreground(colorWhite).Background(colorBrightBlack).Bold(true)
+	headerStyle := r.NewStyle().Foreground(colorFg).Bold(true)
 	cmdStyle := r.NewStyle().Foreground(colorBlue).Width(width)
+	dimStyle := r.NewStyle().Faint(true)
 	now := time.Now()
 	var sb strings.Builder
 	for i := range wl.steps {
@@ -313,10 +313,15 @@ func renderLogs(r *lipgloss.Renderer, wl *workflowLogs, width int) string {
 		} else if !st.startTime.IsZero() {
 			dur = now.Sub(st.startTime).Round(time.Second).String()
 		}
-		durRendered := headerStyle.Render(dur)
-		nameWidth := max(width-lipgloss.Width(dur)-1, 1)
-		header := fmt.Sprintf("%-*s ", nameWidth, st.name) + durRendered
-		sb.WriteString(headerStyle.Width(width).Render(header) + "\n")
+		// build overlay: "── name ──...── dur ──"
+		nameStr := headerStyle.Render(st.name + " ")
+		durStr := headerStyle.Render(" " + dur + " ")
+		nameW := lipgloss.Width(nameStr)
+		durW := lipgloss.Width(durStr)
+		fillW := max(width-nameW-durW, 0)
+		fill := dimStyle.Render(strings.Repeat("─", fillW))
+		header := nameStr + fill + durStr
+		sb.WriteString(header + "\n")
 		if st.command != "" {
 			sb.WriteString(cmdStyle.Render(st.command) + "\n")
 		}
@@ -332,19 +337,17 @@ func renderLogs(r *lipgloss.Renderer, wl *workflowLogs, width int) string {
 }
 
 func (m *pipelineModel) View() string {
-	r := m.renderer
-	divider := r.NewStyle().Foreground(colorBrightBlack).Render(strings.Repeat("─", m.width))
 	body := ""
 	if wl := m.selectedLogs(); wl != nil && wl.ready {
 		body = wl.vp.View()
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, m.topbarView(), divider, body)
+	return lipgloss.JoinVertical(lipgloss.Left, m.topbarView(), "", body)
 }
 
 // topbarView renders the single-line tab bar with workflow tabs left and trigger info + help right.
 func (m *pipelineModel) topbarView() string {
 	r := m.renderer
-	activeStyle := r.NewStyle().Background(colorBlue).Foreground(colorWhite)
+	activeStyle := r.NewStyle().Background(colorBlue).Foreground(colorFg).Bold(true)
 
 	now := time.Now()
 
@@ -388,7 +391,7 @@ func (m *pipelineModel) topbarView() string {
 }
 
 func helpText(r *lipgloss.Renderer) string {
-	key := r.NewStyle().Foreground(colorWhite)
+	key := r.NewStyle().Foreground(colorFg)
 	action := r.NewStyle().Faint(true)
 	sep := action.Render(" · ")
 
