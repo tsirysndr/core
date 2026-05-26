@@ -1,0 +1,9 @@
+{{ define "repo/fragments/copyFileButton" }}
+<button type="button"
+    class="btn-flat gap-1.5"
+    onclick="copyRawFile(this, '{{ .Url }}')">
+    <span class="copy-check hidden">{{ i "check" "size-3.5" }}</span>
+    <span class="copy-label">copy to clipboard</span>
+    <span class="copy-spinner hidden">{{ i "loader-circle" "size-3.5 animate-spin" }}</span>
+</button>
+{{ end }}

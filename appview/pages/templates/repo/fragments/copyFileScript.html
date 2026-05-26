@@ -1,0 +1,38 @@
+{{ define "repo/fragments/copyFileScript" }}
+<script>
+async function copyRawFile(btn, url) {
+    const label = btn.querySelector('.copy-label');
+    const spinner = btn.querySelector('.copy-spinner');
+    label.textContent = 'copying';
+    spinner.classList.remove('hidden');
+    btn.disabled = true;
+    try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error();
+        const contentType = res.headers.get('Content-Type') || '';
+        if (contentType.startsWith('image/')) {
+            const blob = await res.blob();
+            await navigator.clipboard.write([
+                new ClipboardItem({ [contentType]: blob })
+            ]);
+        } else {
+            const text = await res.text();
+            await navigator.clipboard.writeText(text);
+        }
+        spinner.classList.add('hidden');
+        label.textContent = 'copied';
+        btn.querySelector('.copy-check').classList.remove('hidden');
+        btn.disabled = false;
+        setTimeout(() => {
+            label.textContent = 'copy to clipboard';
+            btn.querySelector('.copy-check').classList.add('hidden');
+        }, 2500);
+    } catch {
+        spinner.classList.add('hidden');
+        label.textContent = 'error';
+        btn.disabled = false;
+        setTimeout(() => { label.textContent = 'copy to clipboard'; }, 2500);
+    }
+}
+</script>
+{{ end }}

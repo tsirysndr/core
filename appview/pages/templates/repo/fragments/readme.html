@@ -1,9 +1,12 @@
 {{ define "repo/fragments/readme" }}
 <div class="mt-4 rounded bg-white dark:bg-gray-800 drop-shadow-sm w-full mx-auto overflow-hidden">
     {{- if .ReadmeFileName -}}
-    <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-600 flex items-center gap-2">
+    <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-600 flex justify-between">
+      <span class="flex items-center gap-2">
         {{ i "file-text" "w-4 h-4" "text-gray-600 dark:text-gray-400" }}
         <span class="font-mono text-sm text-gray-800 dark:text-gray-200">{{ .ReadmeFileName }}</span>
+      </span>
+      {{ template "repo/fragments/copyFileButton" (dict "Url" (printf "/%s/raw/%s/%s" .RepoInfo.FullName (pathEscape .Ref) .ReadmeFileName)) }}
     </div>
     {{- end -}}
     <section
@@ -21,4 +24,5 @@
         {{- end -}}</article>
     </section>
 </div>
+{{ template "repo/fragments/copyFileScript" }}
 {{ end }}

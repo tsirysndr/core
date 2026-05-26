@@ -236,3 +236,7 @@ func (b BlobView) IsUnsupported() bool {
 func (b BlobView) ShowingText() bool {
 	return !b.ShowingRendered
 }
+
+func (b BlobView) ShowCopy() bool {
+	return b.ContentType.IsCode() || b.ContentType.IsMarkup() || b.ContentType.IsSvg() || b.ContentType.IsImage()
+}

@@ -48,6 +48,11 @@
                   <a href="/{{ .RepoInfo.FullName }}/raw/{{ pathEscape .Ref }}/{{ .Path }}">View raw</a>
                 {{ end }}
 
+                {{ if .BlobView.ShowCopy }}
+                  <span class="select-none px-1 md:px-2 [&:before]:content-['·']"></span>
+                  {{ template "repo/fragments/copyFileButton" (dict "Url" (printf "/%s/raw/%s/%s" .RepoInfo.FullName (pathEscape .Ref) .Path)) }}
+                {{ end }}
+
                 {{ if .BlobView.ShowToggle }}
                   <span class="select-none px-1 md:px-2 [&:before]:content-['·']"></span>
                   <a href="/{{ .RepoInfo.FullName }}/blob/{{ pathEscape .Ref }}/{{ .Path }}?code={{ .BlobView.ShowingRendered }}" hx-boost="true">
@@ -58,7 +63,7 @@
                 {{ if .BlobView.ShowingText }}
                   <div id="toggle-wrap-content" class="flex items-center">
                     <span class="select-none px-1 md:px-2 [&:before]:content-['·']"></span>
-                    <label class="flex lowercase font-normal px-1 py-0 gap-1 text-xs md:text-sm">
+                    <label class="flex items-center lowercase font-normal px-1 py-0 gap-1 text-xs md:text-sm">
                       <input id="toggle-wrap-content-checkbox" type="checkbox" name="wrap"/>
                       wrap content
                     </label>
@@ -125,6 +130,7 @@
       </div>
     {{ end }}
     {{ template "fragments/multiline-select" }}
+    {{ template "repo/fragments/copyFileScript" }}
     <script>
       (() => {
         const abortController = new AbortController();
