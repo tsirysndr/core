@@ -3,7 +3,6 @@ package ssh
 import (
 	"fmt"
 
-	"github.com/bluesky-social/indigo/atproto/syntax"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/ssh"
 	wishtea "github.com/charmbracelet/wish/bubbletea"
@@ -20,36 +19,23 @@ func (s *Server) teaHandler(sess ssh.Session) (tea.Model, []tea.ProgramOption) {
 
 	renderer := wishtea.MakeRenderer(sess)
 
-	if len(args) != 1 {
+	if len(args) != 2 {
 		l.Warn("bad invocation", "args", args)
-		return newErrorModel(renderer, "usage: ssh -t <host> -p 2222 <at-uri>\nexample: ssh -t host -p 2222 at://did:web:knot.example/sh.tangled.pipeline/abc123"), wishtea.MakeOptions(sess)
+		return newErrorModel(renderer, "usage: ssh -t -p <port> <host> <repoDID> <sha>"), wishtea.MakeOptions(sess)
 	}
 
-	rawURI := args[0]
-	aturi, err := syntax.ParseATURI(rawURI)
-	if err != nil {
-		l.Warn("invalid AT URI", "uri", rawURI, "err", err)
-		return newErrorModel(renderer, fmt.Sprintf("invalid AT URI %q: %v", rawURI, err)), wishtea.MakeOptions(sess)
-	}
+	repoDID := args[0]
+	sha := args[1]
 
-	did := aturi.Authority().String()
-	const didWebPrefix = "did:web:"
-	if len(did) <= len(didWebPrefix) {
-		l.Warn("unsupported DID format", "did", did)
-		return newErrorModel(renderer, fmt.Sprintf("unsupported DID format %q (expected did:web:...)", did)), wishtea.MakeOptions(sess)
-	}
-	knot := did[len(didWebPrefix):]
-	rkey := aturi.RecordKey().String()
-
-	l = l.With("knot", knot, "rkey", rkey)
+	l = l.With("repoDID", repoDID, "sha", sha)
 
 	pipelines, err := db.GetPipelineStatuses(s.db, 1,
-		orm.FilterEq("p.knot", knot),
-		orm.FilterEq("p.rkey", rkey),
+		orm.FilterEq("p.repo_did", repoDID),
+		orm.FilterEq("p.sha", sha),
 	)
 	if err != nil || len(pipelines) == 0 {
 		l.Warn("pipeline not found", "err", err)
-		return newErrorModel(renderer, fmt.Sprintf("pipeline not found: %s", rawURI)), wishtea.MakeOptions(sess)
+		return newErrorModel(renderer, fmt.Sprintf("pipeline not found for repo %s @ %s", repoDID, sha)), wishtea.MakeOptions(sess)
 	}
 
 	pipeline := pipelines[0]

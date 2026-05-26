@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -422,9 +423,12 @@ func (h *InternalHandle) triggerPipeline(
 		EventJson: string(eventJson),
 	}
 
-	if h.c.LogsHostname != "" {
-		*clientMsgs = append(*clientMsgs, "→  Browse CI logs in your terminal:")
-		*clientMsgs = append(*clientMsgs, fmt.Sprintf("   ssh -t %s at://did:web:%s/sh.tangled.pipeline/%s", h.c.LogsHostname, h.c.Server.Hostname, event.Rkey))
+	if h.c.LogsAddr != "" {
+		host, port, err := net.SplitHostPort(h.c.LogsAddr)
+		if err == nil {
+			*clientMsgs = append(*clientMsgs, "→  Browse CI logs in your terminal:")
+			*clientMsgs = append(*clientMsgs, fmt.Sprintf("   ssh -t -p %s %s %s %s", port, host, repoDid, line.NewSha))
+		}
 	}
 
 	return h.db.InsertEvent(event, h.n)
