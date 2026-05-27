@@ -164,6 +164,12 @@
             includes = ["*.go"];
           };
 
+          rustfmt = {
+            command = pkgs.lib.getExe' fenix.packages.${system}.stable.rustfmt "rustfmt";
+            options = ["--edition" "2024"];
+            includes = ["*.rs"];
+          };
+
           # prettier = let
           #   wrapper = pkgs.runCommandLocal "prettier-wrapper" {nativeBuildInputs = [pkgs.makeWrapper];} ''
           #     makeWrapper ${pkgs.prettier}/bin/prettier "$out" --add-flags "--plugin=${pkgs.prettier-plugin-go-template}/lib/node_modules/prettier-plugin-go-template/lib/index.js"

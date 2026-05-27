@@ -19,6 +19,8 @@ patches
 **/*.bleve
 sites/target/
 sites/.wrangler/
+/target
+**/src/_lex/
 # Created if following hacking.md
 genjwks.out
 /nix/vm-data

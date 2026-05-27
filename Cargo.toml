@@ -1,0 +1,42 @@
+[workspace]
+resolver = "2"
+members = []
+exclude = ["sites"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+authors = [
+    "Lewis <lewis@tangled.org>",
+    "Seongmin Lee <git@boltless.me>",
+    "oppiliappan <me@oppi.li>",
+    "Anirudh Oppiliappan <anirudh@tangled.org>",
+    "eti <eti@eti.tf>",
+]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+print_stdout = "deny"
+print_stderr = "warn"
+
+[profile.release]
+lto = "fat"
+strip = true
+codegen-units = 1
+panic = "abort"
+
+[profile.bench]
+debug = 1
+strip = false
+
+[profile.profiling]
+inherits = "release"
+debug = 1
+strip = false
+lto = "thin"

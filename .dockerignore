@@ -16,6 +16,7 @@ appview/pages/static/x
 
 sites/target
 sites/.wrangler
+target
 
 result
 result-*
