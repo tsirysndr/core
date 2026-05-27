@@ -32,7 +32,7 @@
     {{ if .Comment.Deleted }}
       {{ template "repo/fragments/shortTimeAgo" .Comment.Deleted }}
     {{ else if .Comment.Edited }}
-      edited {{ template "repo/fragments/shortTimeAgo" .Comment.Edited }}
+      Edited {{ template "repo/fragments/shortTimeAgo" .Comment.Edited }}
     {{ else }}
       {{ template "repo/fragments/shortTimeAgo" .Comment.Created }}
     {{ end }}

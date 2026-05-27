@@ -1,7 +1,7 @@
-{{ define "title" }}good first issues{{ end }}
+{{ define "title" }}Good first issues &middot; Tangled{{ end }}
 
 {{ define "extrameta" }}
-    <meta property="og:title" content="good first issues · tangled" />
+    <meta property="og:title" content="Good first issues · Tangled" />
     <meta property="og:type" content="object" />
     <meta property="og:url" content="https://tangled.org/goodfirstissues" />
     <meta property="og:description" content="Find good first issues to contribute to open source projects" />
@@ -141,7 +141,7 @@
                   href="/goodfirstissues?offset={{ $prev.Offset }}&limit={{ $prev.Limit }}"
               >
                   {{ i "chevron-left" "w-4 h-4" }}
-                  previous
+                  Previous
               </a>
           {{ else }}
               <div></div>
@@ -154,7 +154,7 @@
                   hx-boost="true"
                   href="/goodfirstissues?offset={{ $next.Offset }}&limit={{ $next.Limit }}"
               >
-                  next
+                  Next
                   {{ i "chevron-right" "w-4 h-4" }}
               </a>
           {{ end }}

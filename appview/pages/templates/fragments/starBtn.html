@@ -22,7 +22,7 @@
                 {{ i "star" "w-4 h-4 shrink-0 inline group-[.htmx-request]:hidden" }}
             {{ end }}
             {{ i "loader-circle" "w-4 h-4 shrink-0 animate-spin hidden group-[.htmx-request]:inline" }}
-            <span class="group-[.htmx-request]:hidden">{{ if .IsStarred }}unstar{{ else }}star{{ end }}</span>
+            <span class="group-[.htmx-request]:hidden">{{ if .IsStarred }}Unstar{{ else }}Star{{ end }}</span>
         </button>
         {{ if .RepoName }}
             {{ $did := .SubjectAt.Authority | string }}

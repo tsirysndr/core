@@ -1,4 +1,4 @@
-{{ define "title" }}{{ .Tab }} settings{{ end }}
+{{ define "title" }}{{ .Tab | capitalize }} settings &middot; Tangled{{ end }}
 
 {{ define "content" }}
   <div class="p-6">
@@ -19,7 +19,7 @@
 {{ define "sshKeysSettings" }}
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
     <div class="col-span-1 md:col-span-2">
-      <h2 class="text-sm pb-2 uppercase font-bold">SSH Keys</h2>
+      <h2 class="text-lg pb-2 font-medium">SSH keys</h2>
       <p class="text-gray-500 dark:text-gray-400">
         SSH public keys added here will be broadcasted to knots that you are a member of,
         allowing you to push to repositories there.
@@ -34,7 +34,7 @@
       {{ template "user/settings/fragments/keyListing" (list $ .) }}
     {{ else }}
       <div class="flex items-center justify-center p-2 text-gray-500">
-        no keys added yet
+        No keys added yet
       </div>
     {{ end }}
   </div>
@@ -46,7 +46,7 @@
     popovertarget="add-key-modal"
     popovertargetaction="toggle">
     {{ i "plus" "size-4" }}
-    add key
+    Add key
   </button>
   <div
     id="add-key-modal"
@@ -63,16 +63,16 @@
   hx-swap="none"
   class="flex flex-col gap-2"
 >
-  <label for="key-name" class="uppercase p-0">
-      add ssh key
-    </label>
+  <label for="key-name" class="text-lg font-medium p-0">
+    Add SSH key
+  </label>
   <p class="text-sm text-gray-500 dark:text-gray-400">SSH keys allow you to push to repositories in knots you're a member of.</p>
   <input
     type="text"
     id="key-name"
     name="name"
     required
-    placeholder="key name"
+    placeholder="Key name"
     class="w-full dark:bg-gray-800 dark:text-white dark:border-gray-700 dark:placeholder-gray-400"
   />
   <textarea
@@ -89,10 +89,10 @@
       popovertargetaction="hide"
       class="btn w-1/2 flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
       >
-      {{ i "x" "size-4" }} cancel
+      {{ i "x" "size-4" }} Cancel
     </button>
     <button type="submit" class="btn w-1/2 flex items-center">
-      <span class="inline-flex gap-2 items-center">{{ i "plus" "size-4" }} add</span>
+      <span class="inline-flex gap-2 items-center">{{ i "plus" "size-4" }} Add</span>
       <span id="spinner" class="group">
         {{ i "loader-circle" "ml-2 w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
       </span>

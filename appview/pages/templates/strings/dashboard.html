@@ -1,4 +1,4 @@
-{{ define "title" }}strings by {{ resolve .Card.UserDid  }}{{ end }}
+{{ define "title" }}Strings by {{ resolve .Card.UserDid  }} &middot; Tangled{{ end }}
 
 {{ define "extrameta" }}
     {{ $handle := resolve .Card.UserDid }}
@@ -21,7 +21,7 @@
 {{ end }}
 
 {{ define "allStrings" }}
-  <p class="text-sm font-bold p-2 dark:text-white">ALL STRINGS</p>
+  <p class="text-base font-medium p-2 dark:text-white">All strings</p>
   <div id="strings" class="grid grid-cols-1 gap-4 mb-6">
     {{ range .Strings }}
       {{ template "singleString" (list $ .) }}

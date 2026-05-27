@@ -1,4 +1,4 @@
-{{ define "title" }}{{ .Tab }} settings{{ end }}
+{{ define "title" }}{{ .Tab | capitalize }} &middot; Tangled{{ end }}
 
 {{ define "content" }}
   <div class="p-6">
@@ -19,7 +19,7 @@
 {{ define "knotsList" }}
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
     <div class="col-span-1 md:col-span-2">
-      <h2 class="text-sm pb-2 uppercase font-bold">Knots</h2>
+      <h2 class="text-lg pb-2 font-medium">Knots</h2>
       {{ block "about" . }} {{ end }}
     </div>
     <div class="col-span-1 md:col-span-1 md:justify-self-end">
@@ -48,13 +48,13 @@
 
 {{ define "list" }}
   <section class="rounded w-full flex flex-col gap-2">
-    <h2 class="text-sm font-bold py-2 uppercase dark:text-gray-300">your knots</h2>
+    <h2 class="text-lg font-medium py-2 dark:text-gray-300">Your knots</h2>
     <div class="flex flex-col rounded border border-gray-200 dark:border-gray-700 w-full">
       {{ range .Knots }}
         {{ template "knots/fragments/knotListing" . }}
       {{ else }}
         <div class="flex items-center justify-center p-2 border-b border-gray-200 dark:border-gray-700 text-gray-500">
-          no knots registered yet
+          No knots registered yet
         </div>
       {{ end }}
     </div>
@@ -64,7 +64,7 @@
 
 {{ define "register" }}
   <section class="rounded w-full lg:w-fit flex flex-col gap-2">
-    <h2 class="text-sm font-bold py-2 uppercase dark:text-gray-300">register a knot</h2>
+    <h2 class="text-lg font-medium py-2 dark:text-gray-300">Register a knot</h2>
     <p class="mb-2 dark:text-gray-300">Enter the hostname of your knot to get started.</p>
     <form
       hx-post="/settings/knots/register"
@@ -88,7 +88,7 @@
           >
           <span class="inline-flex items-center gap-2">
             {{ i "plus" "w-4 h-4" }}
-            register
+            Register
           </span>
           <span class="pl-2 hidden group-[.htmx-request]:inline">
             {{ i "loader-circle" "w-4 h-4 animate-spin" }}
@@ -107,7 +107,7 @@
 class="btn flex items-center gap-2"
 href="https://docs.tangled.org/knot-self-hosting-guide.html#knot-self-hosting-guide">
 {{ i "book" "size-4" }}
-docs
+Docs
 </a>
 <div
 id="add-email-modal"

@@ -97,7 +97,7 @@
           hx-get="/profile/edit-bio"
           hx-swap="innerHTML">
           {{ i "pencil" "w-4 h-4" }}
-          edit
+          Edit
           {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
         </button>
         {{ end }}
@@ -158,7 +158,7 @@
         {{ template "repo/fragments/shortTime" .CreatedAt }}
       </div>
       <div class="absolute inset-0 flex items-center gap-1 justify-center opacity-0 group-hover/item:opacity-100 transition-opacity text-xs font-medium text-green-900 dark:text-green-100">
-        view {{ i "arrow-right" "size-3" }}
+        View {{ i "arrow-right" "size-3" }}
       </div>
     </div>
   </div>

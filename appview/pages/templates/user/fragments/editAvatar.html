@@ -4,8 +4,8 @@
   hx-encoding="multipart/form-data"
   hx-swap="none"
   class="flex flex-col gap-2 group/form">
-  <label for="avatar-file" class="uppercase p-0">
-    Upload or Remove Avatar
+  <label for="avatar-file" class="text-lg font-medium p-0">
+    Upload or remove avatar
   </label>
   <p class="text-sm text-gray-500 dark:text-gray-400">Upload a new image (PNG or JPEG, max 5MB) or remove your current avatar.</p>
   <input
@@ -25,7 +25,7 @@
     <button type="submit" class="btn w-full flex items-center justify-center gap-2">
         {{ i "upload" "size-4 inline group-[.htmx-request]/form:hidden" }}
         {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]/form:inline" }}
-        upload
+        Upload
     </button>
     {{ if .Profile.Avatar }}
       <button
@@ -36,7 +36,7 @@
         class="btn w-full flex items-center justify-center gap-2 group">
         {{ i "trash-2" "size-4 inline group-[.htmx-request]:hidden" }}
         {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
-        remove avatar
+        Remove avatar
       </button>
     {{ end }}
     <button
@@ -46,7 +46,7 @@
       popovertargetaction="hide"
       class="btn text-red-500 dark:text-red-400 w-full flex items-center justify-center gap-2">
       {{ i "x" "size-4" }}
-      cancel
+      Cancel
     </button>
   </div>
   <div id="avatar-error" class="text-red-500 dark:text-red-400 text-sm"></div>

@@ -14,11 +14,11 @@
       <div class="text-sm text-gray-500 dark:text-gray-400 flex flex-wrap items-center gap-1">
         {{ $bgColor := "bg-gray-800 dark:bg-gray-700" }}
         {{ $icon := "ban" }}
-        {{ $state := "closed" }}
+        {{ $state := "Closed" }}
         {{ if .Open }}
             {{ $bgColor = "bg-green-600 dark:bg-green-700" }}
             {{ $icon = "circle-dot" }}
-            {{ $state = "open" }}
+            {{ $state = "Open" }}
         {{ end }}
 
         <span class="inline-flex items-center rounded px-2 py-[5px] {{ $bgColor }}">

@@ -1,4 +1,4 @@
-{{ define "title" }}{{ resolve .Card.UserDid }}{{ end }}
+{{ define "title" }}{{ resolve .Card.UserDid }} &middot; Tangled{{ end }}
 
 {{ define "extrameta" }}
     {{ $handle := resolve .Card.UserDid }}
@@ -89,7 +89,7 @@
            ">
           <span class="flex items-center justify-center">
             {{ i $icon "w-4 h-4 mr-2" }}
-            {{ $key }}
+            {{ if eq $key "repos" }}Repositories{{ else }}{{ $key | capitalize }}{{ end }}
             {{ if $meta }}
               <span class="bg-gray-200 dark:bg-gray-700 rounded py-1/2 px-1 text-sm ml-1">{{ scaleFmt $meta }}</span>
             {{ end }}
@@ -104,8 +104,8 @@
 {{ define "punchcard" }}
   {{ $now := now }}
   <div>
-    <p class="px-2 pb-4 flex gap-2 text-sm font-bold dark:text-white">
-      PUNCHCARD
+    <p class="px-2 pb-4 flex gap-2 items-baseline text-base font-medium dark:text-white">
+      Punchcard
       <span class="font-mono font-normal text-sm text-gray-500 dark:text-gray-400 ">
         {{ .Total | int64 | commaFmt }} commits
       </span>

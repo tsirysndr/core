@@ -1,6 +1,6 @@
 {{ define "title" }}
   {{ $messageParts := splitN .Diff.Commit.Message "\n\n" 2 }}
-  {{ index $messageParts 0 }} &middot; {{ .RepoInfo.FullName }}@{{ slice .Diff.Commit.This 0 7 }}
+  {{ index $messageParts 0 }} &middot; {{ .RepoInfo.FullName }}@{{ slice .Diff.Commit.This 0 7 }} &middot; Tangled
 {{ end }}
 
 {{ define "extrameta" }}
@@ -49,7 +49,7 @@
           <div class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-2 py-1 rounded cursor-pointer">
               <div class="flex items-center gap-2">
                   {{ i "shield-check" "w-4 h-4" }}
-                  verified
+                  Verified
               </div>
           </div>
           <div class="absolute z-[9999] hidden group-hover:block bg-white dark:bg-gray-900 text-sm text-black dark:text-white rounded-md shadow-md p-4 w-80 top-full mt-2">

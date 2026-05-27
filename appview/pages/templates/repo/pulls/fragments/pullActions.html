@@ -28,7 +28,7 @@
       class="btn-flat p-2 flex items-center gap-2 no-underline hover:no-underline group">
         {{ i "message-square-plus" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
         {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-        comment
+        Comment
     </button>
     {{ if .BranchDeleteStatus }}
       <button 
@@ -38,7 +38,7 @@
         class="btn-flat p-2 flex items-center gap-2 no-underline hover:no-underline group text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
           {{ i "git-branch" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
           {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-          delete branch
+          Delete branch
       </button>
     {{ end }}
     {{ if and $isPushAllowed $isOpen $isLastRound }}
@@ -51,7 +51,7 @@
       >
         {{ i "git-merge" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
         {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-        merge{{if $stackCount}} {{$stackCount}}{{end}}
+        Merge{{if $stackCount}} {{$stackCount}}{{end}}
       </button>
     {{ end }}
 
@@ -76,7 +76,7 @@
           >
           {{ i "rotate-ccw" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
           {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-          resubmit
+          Resubmit
       </button>
     {{ end }}
 
@@ -87,7 +87,7 @@
       class="btn-flat p-2 flex items-center gap-2 group">
         {{ i "ban" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
         {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-        close
+        Close
     </button>
     {{ end }}
 
@@ -98,7 +98,7 @@
       class="btn-flat p-2 flex items-center gap-2 group">
         {{ i "refresh-ccw-dot" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
         {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-        reopen
+        Reopen
     </button>
     {{ end }}
   </div>

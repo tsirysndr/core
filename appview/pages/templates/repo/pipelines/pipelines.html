@@ -1,7 +1,7 @@
-{{ define "title" }}pipelines &middot; {{ .RepoInfo.FullName }}{{ end }}
+{{ define "title" }}Pipelines &middot; {{ .RepoInfo.FullName }} &middot; Tangled{{ end }}
 
 {{ define "extrameta" }}
-    {{ $title := "pipelines"}}
+    {{ $title := "Pipelines"}}
     {{ $url := printf "https://tangled.org/%s/pipelines" .RepoInfo.FullName }}
     {{ template "repo/fragments/og" (dict "RepoInfo" .RepoInfo "Title" $title "Url" $url) }}
 {{ end }}
@@ -12,19 +12,19 @@
   {{ $all :=
      (dict
        "Key" "all"
-       "Value" "all"
+       "Value" "All"
        "Icon" "package"
        "Meta" "") }}
   {{ $push :=
      (dict
        "Key" "push"
-       "Value" "push"
+       "Value" "Push"
        "Icon" "git-commit-horizontal"
        "Meta" "") }}
   {{ $pr :=
      (dict
        "Key" "pull_request"
-       "Value" "pull request"
+       "Value" "Pull request"
        "Icon" "git-pull-request"
        "Meta" "") }}
   {{ $values := list $all $push $pr }}

@@ -1,4 +1,4 @@
-{{ define "title" }}{{ resolve .Card.UserDid }} · followers {{ end }}
+{{ define "title" }}Followers &middot; {{ resolve .Card.UserDid }} &middot; Tangled{{ end }}
 
 {{ define "profileContent" }}
   <div id="all-followers" class="md:col-span-8 order-2 md:order-2">
@@ -7,7 +7,7 @@
 {{ end }}
 
 {{ define "followers" }}
-  <p class="text-sm font-bold p-2 dark:text-white">ALL FOLLOWERS</p>
+  <p class="text-base font-medium p-2 dark:text-white">All followers</p>
   <div id="followers" class="grid grid-cols-1 gap-4 mb-6">
     {{ range .Followers }}
        {{ template "user/fragments/followCard"

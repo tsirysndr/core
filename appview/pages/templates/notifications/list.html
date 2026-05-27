@@ -1,4 +1,4 @@
-{{ define "title" }}notifications{{ end }}
+{{ define "title" }}Notifications &middot; Tangled{{ end }}
 
 {{ define "content" }}
   <div class="px-6 py-4">
@@ -6,7 +6,7 @@
       <p class="text-xl font-bold dark:text-white">Notifications</p>
       <a href="/settings/notifications" class="flex items-center gap-2">
         {{ i "settings" "w-4 h-4" }}
-        preferences
+        Preferences
       </a>
     </div>
   </div>
@@ -43,7 +43,7 @@
               href = "/notifications?offset={{ $prev.Offset }}&limit={{ $prev.Limit }}"
           >
               {{ i "chevron-left" "w-4 h-4" }}
-              previous
+              Previous
           </a>
       {{ else }}
           <div></div>
@@ -57,7 +57,7 @@
               hx-boost="true"
               href = "/notifications?offset={{ $next.Offset }}&limit={{ $next.Limit }}"
           >
-              next
+              Next
               {{ i "chevron-right" "w-4 h-4" }}
           </a>
       {{ end }}

@@ -1,4 +1,4 @@
-{{ define "title" }}{{ .Tab }} settings &middot; {{ .RepoInfo.FullName }}{{ end }}
+{{ define "title" }}{{ .Tab | capitalize }} settings &middot; {{ .RepoInfo.FullName }} &middot; Tangled{{ end }}
 
 {{ define "repoContent" }}
   <section class="w-full grid grid-cols-1 md:grid-cols-4 gap-2">
@@ -14,7 +14,7 @@
 {{ define "repoSiteSettings" }}
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
     <div class="col-span-1 md:col-span-2">
-      <h2 class="text-sm pb-2 uppercase font-bold">Git Sites</h2>
+      <h2 class="text-lg pb-2 font-medium">Git sites</h2>
       <p class="text-gray-500 dark:text-gray-400">
         Serve a static site directly from this repository.
         Choose a branch and the directory containing your <code>index.html</code>.
@@ -27,28 +27,28 @@
     {{ if .SiteConfig.IsIndex }}
       <div class="flex items-center gap-2 px-3 py-2 rounded border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 text-sm text-green-800 dark:text-green-300">
         {{ i "circle-check" "size-4 shrink-0" }}
-        live at <a class="underline font-mono" href="https://{{ .OwnerClaim.Domain }}">{{ .OwnerClaim.Domain }}</a>
+        Live at <a class="underline font-mono" href="https://{{ .OwnerClaim.Domain }}">{{ .OwnerClaim.Domain }}</a>
       </div>
     {{ else }}
       <div class="flex items-center gap-2 px-3 py-2 rounded border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 text-sm text-green-800 dark:text-green-300">
         {{ i "circle-check" "size-4 shrink-0" }}
-        live at <a class="underline font-mono" href="https://{{ .OwnerClaim.Domain }}/{{ .RepoInfo.Name }}">{{ .OwnerClaim.Domain }}/{{ .RepoInfo.Name }}</a>
+        Live at <a class="underline font-mono" href="https://{{ .OwnerClaim.Domain }}/{{ .RepoInfo.Name }}">{{ .OwnerClaim.Domain }}/{{ .RepoInfo.Name }}</a>
       </div>
     {{ end }}
   {{ else if and .SiteConfig (not .OwnerClaim) }}
     <div class="flex items-center gap-2 px-3 py-2 rounded border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 text-sm text-amber-800 dark:text-amber-300">
       {{ i "triangle-alert" "size-4 shrink-0" }}
-      site is configured but not live &mdash; <a class="underline" href="/settings/sites">claim a domain</a> to publish it.
+      Site is configured but not live &mdash; <a class="underline" href="/settings/sites">claim a domain</a> to publish it.
     </div>
   {{ else if and (not .SiteConfig) .OwnerClaim }}
     <div class="flex items-center gap-2 px-3 py-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-sm text-gray-600 dark:text-gray-400">
       {{ i "circle-dashed" "size-4 shrink-0" }}
-      not enabled &mdash; configure a branch below to publish to <span class="font-mono">{{ .OwnerClaim.Domain }}</span>.
+      Not enabled &mdash; configure a branch below to publish to <span class="font-mono">{{ .OwnerClaim.Domain }}</span>.
     </div>
   {{ else }}
     <div class="flex items-center gap-2 px-3 py-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-sm text-gray-600 dark:text-gray-400">
       {{ i "circle-dashed" "size-4 shrink-0" }}
-      not enabled &mdash; configure a branch below and <a class="underline" href="/settings/sites">claim a domain</a> to publish.
+      Not enabled &mdash; configure a branch below and <a class="underline" href="/settings/sites">claim a domain</a> to publish.
     </div>
   {{ end }}
 
@@ -62,7 +62,7 @@
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
         <div class="col-span-1 md:col-span-2">
-          <h2 class="text-sm pb-2 uppercase font-bold">Branch</h2>
+          <h2 class="text-lg pb-2 font-medium">Branch</h2>
           <p class="text-gray-500 dark:text-gray-400">
             The branch to build and deploy the site from.
           </p>
@@ -88,7 +88,7 @@
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
         <div class="col-span-1 md:col-span-2">
-          <h2 class="text-sm pb-2 uppercase font-bold">Deploy directory</h2>
+          <h2 class="text-lg pb-2 font-medium">Deploy directory</h2>
           <p class="text-gray-500 dark:text-gray-400">
             Path within the repository that contains your <code>index.html</code>.
             Use <code>/</code> for the root, or a subdirectory like <code>/docs</code>.
@@ -108,7 +108,7 @@
       </div>
 
       <div class="flex flex-col gap-2">
-        <h2 class="text-sm pb-2 uppercase font-bold">Site type</h2>
+        <h2 class="text-lg pb-2 font-medium">Site type</h2>
         <p class="text-gray-500 dark:text-gray-400">
           An <strong>index site</strong> is served at the root of your sites domain.
           A <strong>sub-path site</strong> is served under the repository name.
@@ -130,7 +130,7 @@
               {{ if and .IndexSiteTakenBy (not (and .SiteConfig .SiteConfig.IsIndex)) }}disabled{{ end }}
             />
             <div>
-              <span class="font-medium">index site</span>
+              <span class="font-medium">Index site</span>
               <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
                 {{ if .OwnerClaim }}
                   <code>{{ .OwnerClaim.Domain }}</code>
@@ -140,7 +140,7 @@
               </p>
               {{ if and .IndexSiteTakenBy (not (and .SiteConfig .SiteConfig.IsIndex)) }}
                 <p class="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                  already used by <code>{{ .IndexSiteTakenBy }}</code>
+                  Already used by <code>{{ .IndexSiteTakenBy }}</code>
                 </p>
               {{ end }}
             </div>
@@ -154,7 +154,7 @@
               {{ if and .SiteConfig (not .SiteConfig.IsIndex) }}checked{{ end }}
             />
             <div>
-              <span class="font-medium">sub-path site</span>
+              <span class="font-medium">Sub-path site</span>
               <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
                 {{ if .OwnerClaim }}
                   <code>{{ .OwnerClaim.Domain }}/{{ $.RepoInfo.Name }}</code>
@@ -174,7 +174,7 @@
           type="submit"
           class="btn-create flex items-center gap-2 group">
           {{ i "save" "size-4" }}
-          save
+          Save
           <span id="sites-spinner" class="group">
             {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
           </span>
@@ -187,7 +187,7 @@
   {{ if .SiteConfig }}
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
     <div class="col-span-1 md:col-span-2">
-      <h2 class="text-sm pb-2 uppercase text-red-500 dark:text-red-400 font-bold">Disable Site</h2>
+      <h2 class="text-lg pb-2 text-red-500 dark:text-red-400 font-medium">Disable site</h2>
       <p class="text-red-500 dark:text-red-400">
         Removes the site configuration for this repository. The site will no longer be served.
       </p>
@@ -202,7 +202,7 @@
           class="btn group flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
           {{ if not .RepoInfo.Roles.IsOwner }}disabled{{ end }}>
           {{ i "trash-2" "size-4" }}
-          disable
+          Disable
           {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
         </button>
       </form>
@@ -211,7 +211,7 @@
   {{ end }}
 
   <div class="flex flex-col gap-3">
-    <h2 class="text-sm uppercase font-bold">Recent Deploys</h2>
+    <h2 class="text-lg font-medium">Recent deploys</h2>
     {{ if .Deploys }}
       <div class="flex flex-col divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded">
         {{ range .Deploys }}
@@ -220,23 +220,23 @@
               {{ if eq .Status "success" }}
                 <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
                   {{ i "circle-check" "size-3" }}
-                  success
+                  Success
                 </span>
               {{ else }}
                 <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
                   {{ i "circle-x" "size-3" }}
-                  failed
+                  Failed
                 </span>
               {{ end }}
               {{ if eq .Trigger "push" }}
                 <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
                   {{ i "git-commit-horizontal" "size-3" }}
-                  push
+                  Push
                 </span>
               {{ else if eq .Trigger "config_change" }}
                 <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300">
                   {{ i "settings" "size-3" }}
-                  config change
+                  Config change
                 </span>
               {{ end }}
               <span class="font-mono text-xs text-gray-600 dark:text-gray-400">
@@ -261,7 +261,7 @@
       </div>
     {{ else }}
       <div class="flex items-center justify-center p-6 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded">
-        no deploys yet
+        No deploys yet
       </div>
     {{ end }}
   </div>

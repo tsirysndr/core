@@ -22,11 +22,11 @@
   popovertargetaction="toggle"
   class="{{ if $isVouched }}btn-create{{else if $isDenounced}}btn-cancel{{else}}btn{{end}} w-full flex gap-2 items-center justify-center">
   {{ if $isVouched }}
-    {{ i "shield-check" "size-4" }} vouched
+    {{ i "shield-check" "size-4" }} Vouched
   {{ else if $isDenounced }}
-    {{ i "shield-off" "size-4" }} denounced
+    {{ i "shield-off" "size-4" }} Denounced
   {{ else }}
-    {{ i "shield-question-mark" "size-4" }} vouch
+    {{ i "shield-question-mark" "size-4" }} Vouch
   {{ end }}
 </button>
 {{ end }}

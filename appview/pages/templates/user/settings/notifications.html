@@ -1,4 +1,4 @@
-{{ define "title" }}{{ .Tab }} settings{{ end }}
+{{ define "title" }}{{ .Tab | capitalize }} settings &middot; Tangled{{ end }}
 
 {{ define "content" }}
   <div class="p-6">
@@ -19,7 +19,7 @@
 {{ define "notificationSettings" }}
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
     <div class="col-span-1 md:col-span-2">
-      <h2 class="text-sm pb-2 uppercase font-bold">Notification Preferences</h2>
+      <h2 class="text-lg pb-2 font-medium">Notification preferences</h2>
       <p class="text-gray-500 dark:text-gray-400">
         Choose which notifications you want to receive when activity happens on your repositories and profile.
       </p>
@@ -176,7 +176,7 @@
         class="btn-create flex items-center gap-2 group"
       >
         {{ i "save" "w-4 h-4" }}
-        save
+        Save
         {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
       </button>
     </div>

@@ -1,4 +1,4 @@
-{{ define "title" }}{{ resolve .Card.UserDid }} · repos {{ end }}
+{{ define "title" }}Repositories &middot; {{ resolve .Card.UserDid }} &middot; Tangled{{ end }}
 
 {{ define "profileContent" }}
   <div id="all-repos" class="md:col-span-8 order-2 md:order-2">
@@ -12,7 +12,7 @@
             type="text"
             name="q"
             value="{{ .FilterQuery }}"
-            placeholder="search repos..."
+            placeholder="Search repositories..."
           >
           <a
             {{ if .FilterQuery }}href="?tab=repos"{{ else }}href="#"{{ end }}
@@ -56,7 +56,7 @@
       </div>
     {{ else }}
         <div class="text-base text-gray-500 flex items-center justify-center italic p-12 border border-gray-200 dark:border-gray-700 rounded">
-          <span>This user does not have any repos yet.</span>
+          <span>This user does not have any repositories yet.</span>
         </div>
     {{ end }}
   </div>

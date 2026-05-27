@@ -1,4 +1,4 @@
-{{ define "title" }}fork &middot; {{ .RepoInfo.FullName }}{{ end }}
+{{ define "title" }}Fork &middot; {{ .RepoInfo.FullName }} &middot; Tangled{{ end }}
 
 {{ define "content" }}
 <div class="grid grid-cols-12">
@@ -32,13 +32,13 @@
       <div class="flex gap-4 relative border-l border-gray-200 dark:border-gray-700 pl-6 pb-6">
         {{ template "fork/numberCircle" 1 }}
         <div class="flex-1">
-          <h2 class="text-lg font-semibold dark:text-white">Details</h2>
+          <h2 class="text-lg font-medium dark:text-white">Details</h2>
 
           <div class="space-y-4">
 
             {{/* Repository name */}}
             <div>
-              <label class="block text-sm font-bold uppercase dark:text-white mb-1">Repository name</label>
+              <label class="block text-sm font-bold dark:text-white mb-1">Repository name</label>
               <div class="flex flex-col md:flex-row md:items-center gap-2 md:gap-0 w-full">
                 <div class="shrink-0 hidden md:flex items-center px-2 py-2 gap-1 text-sm text-gray-700 dark:text-gray-300 md:border md:border-r-0 md:border-gray-300 md:dark:border-gray-600 md:rounded-l md:bg-gray-50 md:dark:bg-gray-700">
                   {{ template "user/fragments/picHandle" .LoggedInUser.Did }}
@@ -56,7 +56,7 @@
 
             {{/* Description */}}
             <div>
-              <label for="fork_description" class="block text-sm font-bold uppercase dark:text-white mb-1">Description</label>
+              <label for="fork_description" class="block text-sm font-bold dark:text-white mb-1">Description</label>
               <input
                 type="text"
                 id="fork_description"
@@ -78,7 +78,7 @@
       <div class="flex gap-4 relative border-l border-gray-200 dark:border-gray-700 pl-6 pb-6">
         {{ template "fork/numberCircle" 2 }}
         <div class="flex-1 flex flex-col gap-2">
-          <h2 class="text-lg font-semibold dark:text-white">Knot selection</h2>
+          <h2 class="text-lg font-medium dark:text-white">Knot selection</h2>
 
           <div class="space-y-4">
 
@@ -99,7 +99,7 @@
 
             {{/* Knot list */}}
             <div>
-              <label class="block text-sm font-bold uppercase dark:text-white mb-1">Select a knot</label>
+              <label class="block text-sm font-bold dark:text-white mb-1">Select a knot</label>
               <div class="w-full dark:bg-gray-800 dark:text-white dark:border-gray-700 space-y-2">
                 {{ range .Knots }}
                   <div class="flex items-center">
@@ -127,7 +127,7 @@
       <div class="py-8 flex justify-end border-l border-gray-200 dark:border-gray-700 pl-6">
         <button type="submit" class="btn-create flex items-center gap-2">
           {{ i "git-fork" "size-4" }}
-          fork repo
+          Fork repository
           <span id="spinner" class="group">
             {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
           </span>

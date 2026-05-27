@@ -1,4 +1,4 @@
-{{ define "title" }}{{ .String.Filename }} · by {{ resolve .Owner.DID.String }}{{ end }}
+{{ define "title" }}{{ .String.Filename }} &middot; by {{ resolve .Owner.DID.String }} &middot; Tangled{{ end }}
 
 {{ define "extrameta" }}
   {{ $ownerId := resolve .Owner.DID.String }}
@@ -25,7 +25,7 @@
           {{ if .String.Description }}
             {{ .String.Description }}
           {{ else }}
-            <span class="italic">this string has no description</span>
+            <span class="italic">This string has no description</span>
           {{ end }}
         </span>
       </div>
@@ -36,7 +36,7 @@
              hx-boost="true"
              href="/strings/{{ .String.Did }}/{{ .String.Rkey }}/edit">
             {{ i "pencil" "w-4 h-4" }}
-            <span class="hidden md:inline">edit</span>
+            <span class="hidden md:inline">Edit</span>
             {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
           </a>
           <button
@@ -47,7 +47,7 @@
             hx-confirm="Are you sure you want to delete the string `{{ .String.Filename }}`?"
           >
             {{ i "trash-2" "w-4 h-4" }}
-            <span class="hidden md:inline">delete</span>
+            <span class="hidden md:inline">Delete</span>
             {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
           </button>
         {{ end }}
@@ -76,11 +76,11 @@
         <span class="select-none px-1 md:px-2 [&:before]:content-['·']"></span>
         <span>{{ byteFmt .Stats.ByteCount }}</span>
         <span class="select-none px-1 md:px-2 [&:before]:content-['·']"></span>
-        <a href="/strings/{{ $ownerId }}/{{ .String.Rkey }}/raw">view raw</a>
+        <a href="/strings/{{ $ownerId }}/{{ .String.Rkey }}/raw">View raw</a>
         {{ if .RenderToggle }}
         <span class="select-none px-1 md:px-2 [&:before]:content-['·']"></span>
         <a href="?code={{ .ShowRendered }}" hx-boost="true">
-          view {{ if .ShowRendered }}code{{ else }}rendered{{ end }}
+          View {{ if .ShowRendered }}code{{ else }}rendered{{ end }}
         </a>
         {{ end }}
       </div>
@@ -140,14 +140,14 @@
         >
           {{ i "message-square-plus" "w-4 h-4 inline group-[.htmx-request]/form:hidden" }}
           {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]/form:inline" }}
-          comment
+          Comment
         </button>
       </div>
     </form>
   {{ else }}
     <div class="bg-amber-50 dark:bg-amber-900 border border-amber-500 rounded drop-shadow-sm p-6 relative flex gap-2 items-center">
       <a href="/signup" class="btn-create py-0 hover:no-underline hover:text-white flex items-center gap-2">
-        sign up
+        Sign up
       </a>
       <span class="text-gray-500 dark:text-gray-400">or</span>
       <a href="/login" class="underline">login</a>

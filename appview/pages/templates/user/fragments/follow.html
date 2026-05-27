@@ -15,11 +15,11 @@
     {{ if eq .FollowStatus.String "IsNotFollowing" }}
       {{ i "user-round-plus" "size-4 inline group-[.htmx-request]:hidden" }} 
       {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
-      follow
+      Follow
     {{ else }}
       {{ i "user-round-minus" "size-4 inline group-[.htmx-request]:hidden" }} 
       {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
-      unfollow
+      Unfollow
     {{ end }}
   </button>
 {{ end }}

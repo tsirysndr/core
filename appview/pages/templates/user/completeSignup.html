@@ -1,4 +1,4 @@
-{{ define "title" }} complete signup {{ end }}
+{{ define "title" }}Complete signup &middot; Tangled{{ end }}
 
 {{ define "content" }}
   <form
@@ -8,7 +8,7 @@
       hx-disabled-elt="#complete-signup-button"
   >
       <div class="flex flex-col">
-          <label for="code">verification code</label>
+          <label for="code">Verification code</label>
           <input
               type="text"
               id="code"
@@ -23,7 +23,7 @@
       </div>
 
       <div class="flex flex-col">
-          <label for="username">username</label>
+          <label for="username">Username</label>
           <input
               type="text"
               id="username"
@@ -38,7 +38,7 @@
       </div>
 
       <div class="flex flex-col">
-          <label for="password">password</label>
+          <label for="password">Password</label>
           <input
               type="password"
               id="password"
@@ -58,7 +58,7 @@
           tabindex="4"
       >
         {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
-        <span class="inline group-[.htmx-request]:hidden">complete signup</span>
+        <span class="inline group-[.htmx-request]:hidden">Complete signup</span>
       </button>
   </form>
   <p id="signup-error" class="error w-full"></p>

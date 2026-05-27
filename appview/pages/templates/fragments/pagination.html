@@ -23,7 +23,7 @@
       {{ end }}
     >
       {{ i "chevron-left" "w-4 h-4" }}
-      prev
+      Prev
     </a>
 
     {{ if gt $page.Offset 0 }}
@@ -74,7 +74,7 @@
         href="{{ $basePath }}?{{ $queryParams }}&offset={{ $next }}&limit={{ $page.Limit }}"
       {{ end }}
     >
-      next
+      Next
       {{ i "chevron-right" "w-4 h-4" }}
     </a>
   </div>

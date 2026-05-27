@@ -1,4 +1,4 @@
-{{ define "title" }}{{ .Path }} at {{ .Ref }} &middot; {{ .RepoInfo.FullName }}{{ end }}
+{{ define "title" }}{{ .Path }} at {{ .Ref }} &middot; {{ .RepoInfo.FullName }} &middot; Tangled{{ end }}
 
 {{ define "extrameta" }}
     {{ template "repo/fragments/meta" . }}
@@ -45,13 +45,13 @@
 
                 {{ if .BlobView.HasRawView }}
                   <span class="select-none px-1 md:px-2 [&:before]:content-['·']"></span>
-                  <a href="/{{ .RepoInfo.FullName }}/raw/{{ pathEscape .Ref }}/{{ .Path }}">view raw</a>
+                  <a href="/{{ .RepoInfo.FullName }}/raw/{{ pathEscape .Ref }}/{{ .Path }}">View raw</a>
                 {{ end }}
 
                 {{ if .BlobView.ShowToggle }}
                   <span class="select-none px-1 md:px-2 [&:before]:content-['·']"></span>
                   <a href="/{{ .RepoInfo.FullName }}/blob/{{ pathEscape .Ref }}/{{ .Path }}?code={{ .BlobView.ShowingRendered }}" hx-boost="true">
-                    view {{ if .BlobView.ShowingRendered }}code{{ else }}rendered{{ end }}
+                    View {{ if .BlobView.ShowingRendered }}code{{ else }}rendered{{ end }}
                   </a>
                 {{ end }}
 

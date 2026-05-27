@@ -8,7 +8,7 @@
 </div>
 {{- else if .Query -}}
 <div class="bg-white dark:bg-gray-900 border border-t-0 border-gray-200 dark:border-gray-700 rounded-b-md shadow-xl overflow-hidden px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
-  no results for "{{ .Query }}"
+  No results for "{{ .Query }}"
 </div>
 {{- end -}}
 {{end}}
@@ -23,7 +23,7 @@
 </div>
 {{- else if .Query -}}
 <div class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
-  no results for "{{ .Query }}"
+  No results for "{{ .Query }}"
 </div>
 {{- end -}}
 {{end}}
@@ -36,10 +36,10 @@
 
 {{define "search/fragments/quickFooter"}}
 <div data-results-footer class="bg-gray-50 dark:bg-gray-800 px-4 py-2 flex justify-between items-center text-sm text-gray-600 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700">
-  <span>showing {{ len .Repos }} of {{ .Total }}</span>
+  <span>Showing {{ len .Repos }} of {{ .Total }}</span>
   <a href="/search?q={{ urlquery .Query }}"
      class="flex items-center gap-1 hover:text-gray-600 dark:hover:text-gray-300 no-underline hover:no-underline">
-    all results {{ i "arrow-right" "size-4" }}
+    All results {{ i "arrow-right" "size-4" }}
   </a>
 </div>
 {{end}}

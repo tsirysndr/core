@@ -1,4 +1,4 @@
-{{ define "title" }}{{ .Tab }} settings{{ end }}
+{{ define "title" }}{{ .Tab | capitalize }} settings &middot; Tangled{{ end }}
 
 {{ define "content" }}
   <div class="p-6">
@@ -19,7 +19,7 @@
 {{ define "sitesSettings" }}
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
     <div class="col-span-1 md:col-span-2">
-      <h2 class="text-sm pb-2 uppercase font-bold">Git Sites</h2>
+      <h2 class="text-lg pb-2 font-medium">Git sites</h2>
       {{ if .IsTnglHandle }}
       <p class="text-gray-500 dark:text-gray-400">
         Since your handle is on <code>tngl.sh</code>, it doubles as your sites domain&mdash;your site will be served from that subdomain automatically.
@@ -43,7 +43,7 @@
       {{ template "activeClaim" . }}
     {{ else }}
       <div class="flex items-center justify-center p-2 text-gray-500">
-        no domain claimed yet
+        No domain claimed yet
       </div>
     {{ end }}
   </div>
@@ -62,7 +62,7 @@
       {{ i "globe" "size-4 text-gray-400 dark:text-gray-500 flex-shrink-0" }}
       <div class="flex items-center gap-2">
         <span class="font-mono">{{ .Claim.Domain }}</span>
-        <span class="inline-flex items-center gap-1 text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-2 py-1 rounded">{{ i "circle-check" "size-3" }} active</span>
+        <span class="inline-flex items-center gap-1 text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-2 py-1 rounded">{{ i "circle-check" "size-3" }} Active</span>
       </div>
     </div>
     <form
@@ -75,7 +75,7 @@
         type="submit"
         class="btn flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
         {{ i "trash-2" "size-4" }}
-        release
+        Release
       </button>
     </form>
   </div>
@@ -87,7 +87,7 @@
     popovertarget="claim-domain-modal"
     popovertargetaction="toggle">
     {{ i "plus" "size-4" }}
-    claim domain
+    Claim domain
   </button>
   <div
     id="claim-domain-modal"
@@ -104,7 +104,7 @@
   hx-swap="none"
   class="flex flex-col gap-2"
 >
-  <label class="uppercase p-0">claim a subdomain</label>
+  <label class="text-lg font-medium p-0">Claim a subdomain</label>
   <p class="text-gray-500 dark:text-gray-400">Choose a subdomain under <code>{{ .SitesDomain }}</code>. Only lowercase letters, digits, and hyphens are allowed.</p>
   <div class="flex items-stretch rounded border border-gray-200 dark:border-gray-600 overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 dark:bg-gray-700">
     <input
@@ -123,10 +123,10 @@
       popovertarget="claim-domain-modal"
       popovertargetaction="hide"
       class="btn w-1/2 flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
-      {{ i "x" "size-4" }} cancel
+      {{ i "x" "size-4" }} Cancel
     </button>
     <button type="submit" class="btn w-1/2 flex items-center">
-      <span class="inline-flex gap-2 items-center">{{ i "plus" "size-4" }} claim</span>
+      <span class="inline-flex gap-2 items-center">{{ i "plus" "size-4" }} Claim</span>
       <span id="claim-spinner" class="group">
         {{ i "loader-circle" "ml-2 w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
       </span>

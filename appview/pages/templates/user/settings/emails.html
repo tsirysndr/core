@@ -1,4 +1,4 @@
-{{ define "title" }}{{ .Tab }} settings{{ end }}
+{{ define "title" }}{{ .Tab | capitalize }} settings &middot; Tangled{{ end }}
 
 {{ define "content" }}
   <div class="p-6">
@@ -19,7 +19,7 @@
 {{ define "emailSettings" }}
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
     <div class="col-span-1 md:col-span-2">
-      <h2 class="text-sm pb-2 uppercase font-bold">Email Addresses</h2>
+      <h2 class="text-lg pb-2 font-medium">Email addresses</h2>
       <p class="text-gray-500 dark:text-gray-400">
         Commits authored using emails listed here will be associated with your Tangled profile.
       </p>
@@ -33,7 +33,7 @@
       {{ template "user/settings/fragments/emailListing" (list $ .) }}
     {{ else }}
       <div class="flex items-center justify-center p-2 text-gray-500">
-        no emails added yet
+        No emails added yet
       </div>
     {{ end }}
   </div>
@@ -45,7 +45,7 @@
     popovertarget="add-email-modal"
     popovertargetaction="toggle">
     {{ i "plus" "size-4" }}
-    add email
+    Add email
   </button>
   <div
     id="add-email-modal"
@@ -62,8 +62,8 @@
   hx-swap="none"
   class="flex flex-col gap-2"
 >
-  <label for="email-address" class="uppercase p-0">
-    add email
+  <label for="email-address" class="text-lg font-medium p-0">
+    Add email
   </label>
   <p class="text-sm text-gray-500 dark:text-gray-400">Commits using this email will be associated with your profile.</p>
   <input
@@ -81,10 +81,10 @@
       popovertargetaction="hide"
       class="btn w-1/2 flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
       >
-      {{ i "x" "size-4" }} cancel
+      {{ i "x" "size-4" }} Cancel
     </button>
     <button type="submit" class="btn w-1/2 flex items-center">
-      <span class="inline-flex gap-2 items-center">{{ i "plus" "size-4" }} add</span>
+      <span class="inline-flex gap-2 items-center">{{ i "plus" "size-4" }} Add</span>
       <span id="spinner" class="group">
         {{ i "loader-circle" "ml-2 w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
       </span>

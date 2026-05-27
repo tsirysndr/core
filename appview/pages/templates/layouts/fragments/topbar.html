@@ -15,10 +15,10 @@
                     <div class="hidden md:block md:order-2 w-px h-6 bg-gray-200 dark:bg-gray-700 self-center"></div>
                     <div class="flex items-center order-4 md:order-5">{{ block "profileDropdown" . }} {{ end }}</div>
                 {{ else }}
-                    <a href="/login">login</a>
+                    <a href="/login">Login</a>
                     <span class="text-gray-500 dark:text-gray-400">or</span>
                     <a href="/signup" class="btn-create py-0 hover:no-underline hover:text-white flex items-center gap-2">
-                      join now {{ i "arrow-right" "size-4" }}
+                      Join now {{ i "arrow-right" "size-4" }}
                     </a>
                 {{ end }}
             </div>
@@ -29,16 +29,16 @@
 {{ define "newButton" }}
 <details class="relative inline-block text-left nav-dropdown">
     <summary class="btn py-0 cursor-pointer list-none flex items-center gap-2">
-      {{ i "plus" "w-4 h-4" }} <span class="hidden md:inline">new</span>
+      {{ i "plus" "w-4 h-4" }} <span class="hidden md:inline">New</span>
     </summary>
     <div class="absolute flex flex-col right-0 mt-3 p-4 rounded w-48 bg-white dark:bg-gray-800 dark:text-white border border-gray-200 dark:border-gray-700">
         <a href="/repo/new" class="flex items-center gap-2">
           {{ i "book-plus" "w-4 h-4" }}
-          new repository
+          New repository
         </a>
         <a href="/strings/new" class="flex items-center gap-2">
           {{ i "line-squiggle" "w-4 h-4" }}
-          new string
+          New string
         </a>
     </div>
 </details>
@@ -52,7 +52,7 @@
       type="text"
       id="topbar-search-input"
       name="q"
-      placeholder="search..."
+      placeholder="Search..."
       autocomplete="off"
       class="flex-1 border-none bg-transparent p-0 focus:outline-none focus:[box-shadow:none] text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 peer"
       hx-get="/search/quick"
@@ -107,7 +107,7 @@
       type="text"
       id="mobile-search-input"
       name="q"
-      placeholder="search..."
+      placeholder="Search..."
       autocomplete="off"
       inputmode="search"
       class="flex-1 min-w-0 border-none bg-transparent p-0 focus:outline-none focus:[box-shadow:none] text-[16px] text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 peer"
@@ -158,7 +158,7 @@
 
         {{ $others := .Accounts | otherAccounts .Did }}
         {{ if $others }}
-          <div class="text-sm text-gray-500 dark:text-gray-400 px-3 py-1 pt-2">switch account</div>
+          <div class="text-sm text-gray-500 dark:text-gray-400 px-3 py-1 pt-2">Switch account</div>
           {{ range $others }}
             <button
                 type="button"
@@ -179,33 +179,33 @@
           </div>
 
           <div class="text-left flex-1 min-w-0 block truncate">
-            add account
+            Add account
           </div>
         </a>
 
         <div class="border-t border-gray-200 dark:border-gray-700">
             <a href="/{{ $handle }}" class="{{$linkStyle}}">
               {{ i "user" "size-4" }}
-              profile
+              Profile
             </a>
             <a href="/{{ $handle }}?tab=repos" class="{{$linkStyle}}">
               {{ i "book-marked" "size-4" }}
-              repositories
+              Repositories
             </a>
             <a href="/{{ $handle }}?tab=strings" class="{{$linkStyle}}">
               {{ i "line-squiggle" "size-4" }}
-              strings
+              Strings
             </a>
             <a href="/settings" class="{{$linkStyle}}">
               {{ i "cog" "size-4" }}
-              settings
+              Settings
             </a>
             <a href="#"
                hx-post="/logout"
                hx-swap="none"
                class="{{$linkStyle}} text-red-400 hover:text-red-400 hover:bg-red-100 dark:hover:bg-red-700/20 pb-2">
               {{ i "log-out" "size-4" }}
-              logout
+              Logout
             </a>
         </div>
     </div>

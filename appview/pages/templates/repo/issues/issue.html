@@ -1,4 +1,4 @@
-{{ define "title" }}{{ .Issue.Title }} &middot; issue #{{ .Issue.IssueId }} &middot; {{ .RepoInfo.FullName }}{{ end }}
+{{ define "title" }}{{ .Issue.Title }} &middot; Issue #{{ .Issue.IssueId }} &middot; {{ .RepoInfo.FullName }} &middot; Tangled{{ end }}
 
 
 {{ define "extrameta" }}
@@ -64,7 +64,7 @@
   <div class="inline-flex items-center gap-2">
     <span class="inline-flex items-center rounded px-2 py-[5px] {{ $bgColor }}">
         {{ i $icon "w-3 h-3 mr-1.5 text-white dark:text-white" }}
-        <span class="text-white dark:text-white text-sm">{{ .Issue.State }}</span>
+        <span class="text-white dark:text-white text-sm">{{ if eq .Issue.State "open" }}Open{{ else }}Closed{{ end }}</span>
     </span>
 
     <span class="text-gray-500 dark:text-gray-400 text-sm flex flex-wrap items-center gap-1">

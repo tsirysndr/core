@@ -19,7 +19,7 @@
         {{ if $denounces }} border-t {{ else }} border-y {{ end }}
         ">
         <a class="text-sm text-green-800 dark:text-green-200 hover:no-underline" href="/{{ .SubjectDid.String }}?tab=vouches">
-          vouched for by {{ len $vouches }} {{ if eq (len $vouches) 1 }}user{{ else }}users{{ end }}
+          Vouched for by {{ len $vouches }} {{ if eq (len $vouches) 1 }}user{{ else }}users{{ end }}
         </a>
         {{ template "fragments/tinyAvatarList" (dict "all" $vouches "classes" "size-6") }}
       </div>
@@ -33,7 +33,7 @@
         {{ if $vouches }} border-b {{ else }} border-y {{ end }}
         ">
         <a class="text-sm text-red-800 dark:text-red-200 hover:no-underline" href="/{{ .SubjectDid.String }}?tab=vouches">
-          denounced by {{ len $denounces }} {{ if eq (len $denounces) 1 }}user{{ else }}users{{ end }}
+          Denounced by {{ len $denounces }} {{ if eq (len $denounces) 1 }}user{{ else }}users{{ end }}
         </a>
         {{ template "fragments/tinyAvatarList" (dict "all" $denounces "classes" "size-6") }}
       </div>

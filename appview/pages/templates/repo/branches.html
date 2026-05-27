@@ -1,5 +1,5 @@
 {{ define "title" }}
-    branches &middot; {{ .RepoInfo.FullName }}
+    Branches &middot; {{ .RepoInfo.FullName }} &middot; Tangled
 {{ end }}
 
 {{ define "extrameta" }}
@@ -11,7 +11,7 @@
 
 {{ define "repoContent" }}
 <section id="branches-table" class="overflow-x-auto">
-  <h2 class="font-bold text-sm mb-4 uppercase dark:text-white">
+  <h2 class="font-bold text-sm mb-4 dark:text-white">
       Branches
   </h2>
 
@@ -19,10 +19,10 @@
   <table class="w-full border-collapse hidden md:table">
     <thead>
       <tr>
-        <th class="py-2 text-sm text-left text-gray-700 dark:text-gray-300 uppercase font-bold">Name</th>
-        <th class="py-2 text-sm text-left text-gray-700 dark:text-gray-300 uppercase font-bold">Commit</th>
-        <th class="py-2 text-sm text-left text-gray-700 dark:text-gray-300 uppercase font-bold">Message</th>
-        <th class="py-2 text-sm text-left text-gray-700 dark:text-gray-300 uppercase font-bold">Date</th>
+        <th class="py-2 text-sm text-left text-gray-700 dark:text-gray-300 font-bold">Name</th>
+        <th class="py-2 text-sm text-left text-gray-700 dark:text-gray-300 font-bold">Commit</th>
+        <th class="py-2 text-sm text-left text-gray-700 dark:text-gray-300 font-bold">Message</th>
+        <th class="py-2 text-sm text-left text-gray-700 dark:text-gray-300 font-bold">Date</th>
       </tr>
     </thead>
     <tbody>
@@ -41,7 +41,7 @@
                 px-2 mx-1/2
                 inline-flex items-center
                 ">
-                default
+                Default
               </span>
             {{ end }}
           </a>
@@ -84,7 +84,7 @@
               px-2
               inline-flex items-center
               ">
-              default
+              Default
             </span>
           {{ end }}
         </a>

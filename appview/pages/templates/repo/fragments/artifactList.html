@@ -4,7 +4,7 @@
   {{ $isPushAllowed := $root.RepoInfo.Roles.IsPushAllowed }}
   {{ $artifacts := index $root.ArtifactMap $tag.Tag.Hash }}
 
-  <h2 class="my-4 text-sm text-left text-gray-700 dark:text-gray-300 uppercase font-bold">artifacts</h2>
+  <h2 class="my-4 text-sm text-left text-gray-700 dark:text-gray-300 font-bold">Artifacts</h2>
   <div class="flex flex-col rounded border border-gray-200 dark:border-gray-700">
     {{ range $artifact := $artifacts }}
       {{ $args := dict "LoggedInUser" $root.LoggedInUser "RepoInfo" $root.RepoInfo "Artifact" $artifact }}
@@ -62,7 +62,7 @@
         title="Upload artifact">
         {{ i "upload" "size-4 inline group-[.htmx-request]:hidden" }}
         {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
-        <span class="hidden md:inline">upload</span>
+        <span class="hidden md:inline">Upload</span>
       </button>
     </div>
   </form>

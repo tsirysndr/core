@@ -1,4 +1,4 @@
-{{ define "title" }}{{ .Registration.Domain }} &middot; {{ .Tab }} settings{{ end }}
+{{ define "title" }}{{ .Tab | capitalize }} &middot; {{ .Registration.Domain }} &middot; Tangled{{ end }}
 
 {{ define "content" }}
   <div class="p-6">
@@ -19,24 +19,24 @@
 {{ define "knotDash" }}
 <div>
   <div class="flex justify-between items-center">
-    <h2 class="text-sm pb-2 uppercase font-bold">{{ .Tab }} &middot; {{ .Registration.Domain }}</h2>
+    <h2 class="text-lg pb-2 font-medium">{{ .Tab | capitalize }} &middot; {{ .Registration.Domain }}</h2>
     <div id="right-side" class="flex gap-2">
       {{ $style := "px-2 py-1 rounded flex items-center flex-shrink-0 gap-2" }}
       {{ $isOwner := and .LoggedInUser (eq .LoggedInUser.Did .Registration.ByDid)  }}
       {{ if .Registration.IsRegistered }}
-        <span class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 {{$style}}">{{ i "shield-check" "w-4 h-4" }} verified</span>
+        <span class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 {{$style}}">{{ i "shield-check" "w-4 h-4" }} Verified</span>
         {{ if $isOwner }}
           {{ template "knots/fragments/addMemberModal" .Registration }}
         {{ end }}
       {{ else if .Registration.IsReadOnly }}
         <span class="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 {{$style}}">
-          {{ i "shield-alert" "w-4 h-4" }} read-only
+          {{ i "shield-alert" "w-4 h-4" }} Read-only
         </span>
         {{ if $isOwner }}
           {{ block "retryButton" .Registration }} {{ end }}
         {{ end }}
       {{ else }}
-        <span class="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 {{$style}}">{{ i "shield-off" "w-4 h-4" }} unverified</span>
+        <span class="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 {{$style}}">{{ i "shield-off" "w-4 h-4" }} Unverified</span>
         {{ if $isOwner }}
           {{ block "retryButton" .Registration }} {{ end }}
         {{ end }}
@@ -101,7 +101,7 @@
     hx-headers='{"shouldRedirect": "true"}'
   >
     {{ i "trash-2" "w-5 h-5" }}
-    <span class="hidden md:inline">delete</span> 
+    <span class="hidden md:inline">Delete</span> 
     {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
   </button>
 {{ end }}
@@ -116,7 +116,7 @@
     hx-headers='{"shouldRefresh": "true"}'
   >
     {{ i "rotate-ccw" "w-5 h-5" }}
-    <span class="hidden md:inline">retry</span> 
+    <span class="hidden md:inline">Retry</span> 
     {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
   </button>
 {{ end }}
@@ -135,7 +135,7 @@
       hx-confirm="Are you sure you want to remove {{ $memberHandle }} from this knot?"
     >
       {{ i "user-minus" "w-4 h-4" }}
-      remove
+      Remove
       {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
     </button>
 {{ end }}

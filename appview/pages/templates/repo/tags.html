@@ -1,5 +1,5 @@
 {{ define "title" }}
-    tags · {{ .RepoInfo.FullName }}
+    Tags &middot; {{ .RepoInfo.FullName }} &middot; Tangled
 {{ end }}
 
 {{ define "extrameta" }}
@@ -11,7 +11,7 @@
 
 {{ define "repoContent" }}
 <section>
-  <h2 class="mb-4 text-sm text-left text-gray-700 dark:text-gray-300 uppercase font-bold">tags</h2>
+  <h2 class="mb-4 text-sm text-left text-gray-700 dark:text-gray-300 font-bold">Tags</h2>
   <div class="flex flex-col py-2 gap-12 md:gap-0">
     {{ range .Tags }}
       {{ template "repo/fragments/singleTag" (list $ . ) }}
@@ -38,7 +38,7 @@
   {{ $artifacts := $root.DanglingArtifacts }}
 
   {{ if and (gt (len $artifacts) 0) $isPushAllowed }}
-  <h2 class="mb-2 text-sm text-left text-red-700 dark:text-red-400 uppercase font-bold">dangling artifacts</h2>
+  <h2 class="mb-2 text-sm text-left text-red-700 dark:text-red-400 font-bold">Dangling artifacts</h2>
   <p class="mb-4">The tags that these artifacts were attached to have been deleted. These artifacts are only visible to collaborators.</p>
   <div class="flex flex-col rounded border border-gray-200 dark:border-gray-700">
     {{ range $artifact := $artifacts }}

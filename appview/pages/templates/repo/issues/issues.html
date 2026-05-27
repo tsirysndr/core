@@ -1,7 +1,7 @@
-{{ define "title" }}issues &middot; {{ .RepoInfo.FullName }}{{ end }}
+{{ define "title" }}Issues &middot; {{ .RepoInfo.FullName }} &middot; Tangled{{ end }}
 
 {{ define "extrameta" }}
-    {{ $title := "issues"}}
+    {{ $title := "Issues"}}
     {{ $url := printf "https://tangled.org/%s/issues" .RepoInfo.FullName }}
 
     {{ template "repo/fragments/og" (dict "RepoInfo" .RepoInfo "Title" $title "Url" $url) }}
@@ -13,13 +13,13 @@
   {{ $open :=
      (dict
        "Key" "open"
-       "Value" "open"
+       "Value" "Open"
        "Icon" "circle-dot"
        "Meta" (scaleFmt .RepoInfo.Stats.IssueCount.Open)) }}
   {{ $closed :=
      (dict
        "Key" "closed"
-       "Value" "closed"
+       "Value" "Closed"
        "Icon" "ban"
        "Meta" (scaleFmt .RepoInfo.Stats.IssueCount.Closed)) }}
   {{ $values := list $open $closed }}
@@ -33,7 +33,7 @@
           type="text"
           name="q"
           value="{{ .FilterQuery }}"
-          placeholder="search issues..."
+          placeholder="Search issues..."
         >
         <a
           {{ if $active }}href="?q=state:{{ $active }}"{{ else }}href="?"{{ end }}
@@ -57,7 +57,7 @@
       class="col-start-3 btn-create text-sm flex items-center justify-center gap-2 no-underline hover:no-underline hover:text-white"
     >
       {{ i "circle-plus" "w-4 h-4" }}
-      <span>new</span>
+      <span>New</span>
     </a>
   </div>
   <div class="error" id="issues"></div>

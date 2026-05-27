@@ -1,4 +1,4 @@
-{{ define "title" }}{{ .Tab }} settings &middot; {{ .RepoInfo.FullName }}{{ end }}
+{{ define "title" }}{{ .Tab | capitalize }} settings &middot; {{ .RepoInfo.FullName }} &middot; Tangled{{ end }}
 
 {{ define "repoContent" }}
   <section class="w-full grid grid-cols-1 md:grid-cols-4 gap-2">
@@ -18,7 +18,7 @@
 {{ define "spindleSettings" }}
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
     <div class="col-span-1 md:col-span-2">
-      <h2 class="text-sm pb-2 uppercase font-bold">Spindle</h2>
+      <h2 class="text-lg pb-2 font-medium">Spindle</h2>
       <p class="text-gray-500 dark:text-gray-400">
         Choose a spindle to execute your workflows on. Only repository owners
         can configure spindles. Spindles can be selfhosted,
@@ -64,7 +64,7 @@
 {{ define "secretSettings" }}
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
     <div class="col-span-1 md:col-span-2">
-      <h2 class="text-sm pb-2 uppercase font-bold">SECRETS</h2>
+      <h2 class="text-lg pb-2 font-medium">Secrets</h2>
       <p class="text-gray-500 dark:text-gray-400">
       Secrets are accessible in workflow runs via environment variables. Anyone
       with collaborator access to this repository can add and use secrets in
@@ -80,7 +80,7 @@
       {{ template "repo/settings/fragments/secretListing" (list $ .) }}
     {{ else }}
       <div class="flex items-center justify-center p-2 text-gray-500">
-        no secrets added yet
+        No secrets added yet
       </div>
     {{ end }}
   </div>
@@ -92,7 +92,7 @@
     popovertarget="add-secret-modal"
     popovertargetaction="toggle">
     {{ i "plus" "size-4" }}
-    add secret
+    Add secret
   </button>
   <div
     id="add-secret-modal"
@@ -110,7 +110,7 @@
   hx-swap="none"
   class="flex flex-col gap-2"
 >
-  <p class="uppercase p-0 font-bold">ADD SECRET</p>
+  <p class="text-lg font-medium p-0">Add secret</p>
   <p class="text-sm text-gray-500 dark:text-gray-400">Secrets are available as environment variables in the workflow.</p>
   <input
     type="text"
@@ -124,7 +124,7 @@
     id="secret-value"
     name="value"
     required
-    placeholder="secret value"></textarea>
+    placeholder="Secret value"></textarea>
   <div class="flex gap-2 pt-2">
     <button
       type="button"
@@ -132,10 +132,10 @@
       popovertargetaction="hide"
       class="btn w-1/2 flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
       >
-      {{ i "x" "size-4" }} cancel
+      {{ i "x" "size-4" }} Cancel
     </button>
     <button type="submit" class="btn w-1/2 flex items-center">
-      <span class="inline-flex gap-2 items-center">{{ i "plus" "size-4" }} add</span>
+      <span class="inline-flex gap-2 items-center">{{ i "plus" "size-4" }} Add</span>
       <span id="spinner" class="group">
         {{ i "loader-circle" "ml-2 w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
       </span>

@@ -1,7 +1,7 @@
-{{ define "title" }}forks · {{ .RepoInfo.FullName }}{{ end }}
+{{ define "title" }}Forks &middot; {{ .RepoInfo.FullName }} &middot; Tangled{{ end }}
   {{ define "repoContent" }}
   <div class="flex flex-col gap-4">
-    <h2 class="text-sm uppercase font-bold">Forked by</h2>
+    <h2 class="text-lg font-medium">Forked by</h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {{ range .Forks }}
         <div class="border border-gray-200 dark:border-gray-700 rounded p-4">
@@ -34,7 +34,7 @@
         <a href="/{{ $repoOwner }}/{{ .Name }}" class="truncate">{{ .Name }}</a>
       </div>
       <p class="text-sm text-gray-500 dark:text-gray-400">
-        forked {{ .Created | relTimeFmt }}
+        Forked {{ .Created | relTimeFmt }}
       </p>
     </div>
   </div>

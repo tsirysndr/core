@@ -44,7 +44,7 @@
       {{ if $root.IsInterdiff }}
         <!-- interdiff indicator -->
         <div class="flex items-center gap-2 before:content-['|'] before:text-gray-300 dark:before:text-gray-600 before:mr-2">
-          <span class="text-xs text-gray-600 dark:text-gray-400 uppercase tracking-wide">Interdiff</span>
+          <span class="text-xs text-gray-600 dark:text-gray-400 tracking-wide">Interdiff</span>
           <a
             href="/{{ $root.RepoInfo.FullName }}/pulls/{{ $root.Pull.PullId }}/round/{{ sub $root.ActiveRound 1 }}"
             class="px-2 py-0.5 bg-white dark:bg-gray-700 rounded font-mono text-xs hover:bg-gray-50 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600"
@@ -62,9 +62,9 @@
       {{ else if ne $root.ActiveRound nil }}
         <!-- diff round indicator -->
         <div class="flex items-center gap-2 before:content-['|'] before:text-gray-300 dark:before:text-gray-600 before:mr-2">
-          <span class="text-xs text-gray-600 dark:text-gray-400 uppercase tracking-wide">Diff</span>
+          <span class="text-xs text-gray-600 dark:text-gray-400 tracking-wide">Diff</span>
           <span class="px-2 py-0.5 bg-white dark:bg-gray-700 rounded font-mono text-xs border border-gray-300 dark:border-gray-600">
-            <span class="hidden md:inline">round </span>#{{ $root.ActiveRound }}
+            <span class="hidden md:inline">Round </span>#{{ $root.ActiveRound }}
           </span>
         </div>
       {{ end }}
@@ -195,7 +195,7 @@
             />
             <span class="peer-checked:hidden">{{ i "circle" "size-4" }}</span>
             <span class="hidden peer-checked:inline text-green-600 dark:text-green-400">{{ i "circle-check" "size-4" }}</span>
-            <span class="hidden md:inline">reviewed</span>
+            <span class="hidden md:inline">Reviewed</span>
           </label>
         </div>
       </summary>
@@ -236,11 +236,11 @@
     <input type="checkbox" id="collapseToggle" class="peer/collapse hidden" checked/>
     <span class="peer-checked/collapse:hidden inline-flex items-center gap-2">
       {{ i "unfold-vertical" "w-4 h-4" }}
-      <span class="hidden md:inline">expand all</span>
+      <span class="hidden md:inline">Expand all</span>
     </span>
     <span class="peer-checked/collapse:inline-flex hidden flex items-center gap-2">
       {{ i "fold-vertical" "w-4 h-4" }}
-      <span class="hidden md:inline">collapse all</span>
+      <span class="hidden md:inline">Collapse all</span>
     </span>
   </label>
   <script>

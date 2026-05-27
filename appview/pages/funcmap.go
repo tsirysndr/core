@@ -45,6 +45,12 @@ func (p *Pages) funcMap() template.FuncMap {
 		"split": func(s string) []string {
 			return strings.Split(s, "\n")
 		},
+		"capitalize": func(s string) string {
+			if s == "" {
+				return s
+			}
+			return strings.ToUpper(s[:1]) + s[1:]
+		},
 		"trimPrefix": func(s, prefix string) string {
 			return strings.TrimPrefix(s, prefix)
 		},
@@ -527,20 +533,20 @@ func (p *Pages) funcMap() template.FuncMap {
 				"OrderedReactionKinds": models.OrderedReactionKinds,
 				// would be great to have ordered maps right about now
 				"UserSettingsTabs": []tab{
-					{"Name": "profile", "Icon": "user"},
-					{"Name": "keys", "Icon": "key"},
-					{"Name": "emails", "Icon": "mail"},
-					{"Name": "notifications", "Icon": "bell"},
-					{"Name": "knots", "Icon": "volleyball"},
-					{"Name": "spindles", "Icon": "spool"},
-					{"Name": "sites", "Icon": "globe"},
+					{"Name": "profile", "Label": "Profile", "Icon": "user"},
+					{"Name": "keys", "Label": "Keys", "Icon": "key"},
+					{"Name": "emails", "Label": "Emails", "Icon": "mail"},
+					{"Name": "notifications", "Label": "Notifications", "Icon": "bell"},
+					{"Name": "knots", "Label": "Knots", "Icon": "volleyball"},
+					{"Name": "spindles", "Label": "Spindles", "Icon": "spool"},
+					{"Name": "sites", "Label": "Sites", "Icon": "globe"},
 				},
 				"RepoSettingsTabs": []tab{
-					{"Name": "general", "Icon": "sliders-horizontal"},
-					{"Name": "access", "Icon": "users"},
-					{"Name": "pipelines", "Icon": "layers-2"},
-					{"Name": "hooks", "Icon": "webhook"},
-					{"Name": "sites", "Icon": "globe"},
+					{"Name": "general", "Label": "General", "Icon": "sliders-horizontal"},
+					{"Name": "access", "Label": "Access", "Icon": "users"},
+					{"Name": "pipelines", "Label": "Pipelines", "Icon": "layers-2"},
+					{"Name": "hooks", "Label": "Hooks", "Icon": "webhook"},
+					{"Name": "sites", "Label": "Sites", "Icon": "globe"},
 				},
 				"PdsUserDomain": p.pdsCfg.UserDomain,
 			}

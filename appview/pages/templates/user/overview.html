@@ -1,4 +1,4 @@
-{{ define "title" }}{{ resolve .Card.UserDid }}{{ end }}
+{{ define "title" }}{{ resolve .Card.UserDid }} &middot; Tangled{{ end }}
 
 {{ define "profileContent" }}
   <div id="all-repos" class="md:col-span-4 order-2 md:order-2">
@@ -13,7 +13,7 @@
 {{ end }}
 
 {{ define "profileTimeline" }}
-  <p class="text-sm font-bold px-2 pb-4 dark:text-white">ACTIVITY</p>
+  <p class="text-base font-medium px-2 pb-4 dark:text-white">Activity</p>
   <div class="flex flex-col gap-4 relative">
     {{ if .ProfileTimeline.IsEmpty }}
       <div class="text-base text-gray-500 flex items-center justify-center italic p-12 border border-gray-200 dark:border-gray-700 rounded">
@@ -30,7 +30,7 @@
             <div class="border border-gray-200 dark:border-gray-700 rounded-sm py-4 px-6">
             <p class="text-sm font-mono mb-2 text-gray-500 dark:text-gray-400">
               {{ if eq $idx 0 }}
-                this month
+                This month
               {{ else }}
                 {{$idx}} month{{if ne $idx 1}}s{{end}} ago
               {{ end }}
@@ -54,7 +54,7 @@
   {{ if . }}
     <div class="flex flex-wrap items-center gap-1">
       {{ i "git-commit-horizontal" "size-5" }}
-      created {{ scaleFmt . }} commits
+      Created {{ scaleFmt . }} commits
     </div>
   {{ end }}
 {{ end }}
@@ -65,7 +65,7 @@
       <summary class="list-none cursor-pointer hover:text-gray-500 hover:dark:text-gray-400">
         <div class="flex flex-wrap items-center gap-2">
           {{ i "book-plus" "w-4 h-4" }}
-          created {{ scaleFmt (len .) }} {{if eq (len .) 1 }}repository{{else}}repositories{{end}}
+          Created {{ scaleFmt (len .) }} {{if eq (len .) 1 }}repository{{else}}repositories{{end}}
         </div>
       </summary>
       <div class="py-2 text-sm flex flex-col gap-3 mb-2">
@@ -110,7 +110,7 @@
           {{ i "circle-dot" "w-4 h-4" }}
 
           <div>
-            created {{ scaleFmt (len $items) }} {{if eq (len $items) 1 }}issue{{else}}issues{{end}} 
+            Created {{ scaleFmt (len $items) }} {{if eq (len $items) 1 }}issue{{else}}issues{{end}} 
           </div>
 
           {{ if gt $stats.Open 0 }}
@@ -146,7 +146,7 @@
           {{ i "git-pull-request" "w-4 h-4" }}
 
           <div>
-            created {{ scaleFmt (len $items) }} {{if eq (len $items) 1 }}pull request{{else}}pull requests{{end}} 
+            Created {{ scaleFmt (len $items) }} {{if eq (len $items) 1 }}pull request{{else}}pull requests{{end}} 
           </div>
 
           {{ if gt $stats.Open 0 }}
@@ -181,10 +181,10 @@
 
 {{ define "ownRepos" }}
   <div>
-    <div class="text-sm font-bold px-2 pb-4 dark:text-white flex items-center gap-2">
+    <div class="text-base font-medium px-2 pb-4 dark:text-white flex items-center gap-2">
       <a href="/{{ resolve $.Card.UserDid }}?tab=repos"
         class="flex text-black dark:text-white items-center gap-2 no-underline hover:no-underline group">
-        <span>PINNED REPOS</span>
+        <span>Pinned repositories</span>
       </a>
       {{ if and .LoggedInUser (eq .LoggedInUser.Did .Card.UserDid) }}
         <button
@@ -208,7 +208,7 @@
               <span class="truncate min-w-0">{{ resolve .Did }}/{{ .Name }}</span>
             </div>
             <div class="text-gray-500 dark:text-gray-400 text-sm italic">
-              This repo is hosted on a legacy knot that ought to be upgraded.
+              This repository is hosted on a legacy knot that ought to be upgraded.
             </div>
           </div>
         {{ end }}
@@ -216,7 +216,7 @@
       {{ else }}
         <div class="text-base text-gray-500 flex items-center justify-center italic p-12 border border-gray-200 dark:border-gray-700 rounded">
           <span class="flex items-center gap-2">
-            This user does not have any pinned repos.
+            This user does not have any pinned repositories.
           </span>
         </div>
       {{ end }}
@@ -227,7 +227,7 @@
 {{ define "collaboratingRepos" }}
   {{ if gt (len .CollaboratingRepos) 0 }}
     <div>
-      <p class="text-sm font-bold px-2 pb-4 dark:text-white">COLLABORATING ON</p>
+      <p class="text-base font-medium px-2 pb-4 dark:text-white">Collaborating on</p>
       <div id="collaborating" class="grid grid-cols-1 gap-4">
         {{ range .CollaboratingRepos }}
         <div class="border border-gray-200 dark:border-gray-700 rounded-sm">
@@ -240,7 +240,7 @@
                 <span class="truncate min-w-0">{{ resolve .Did }}/{{ .Name }}</span>
               </div>
               <div class="text-gray-500 dark:text-gray-400 text-sm italic">
-                This repo is hosted on a legacy knot that ought to be upgraded.
+                This repository is hosted on a legacy knot that ought to be upgraded.
               </div>
             </div>
           {{ end }}

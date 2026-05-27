@@ -1,7 +1,7 @@
-{{ define "title" }}commits &middot; {{ .RepoInfo.FullName }}{{ end }}
+{{ define "title" }}Commits &middot; {{ .RepoInfo.FullName }} &middot; Tangled{{ end }}
 
 {{ define "extrameta" }}
-    {{ $title := printf "commits &middot; %s" .RepoInfo.FullName }}
+    {{ $title := printf "Commits &middot; %s" .RepoInfo.FullName }}
     {{ $url := printf "https://tangled.org/%s/commits" .RepoInfo.FullName }}
 
     {{ template "repo/fragments/og" (dict "RepoInfo" .RepoInfo "Title" $title "Url" $url) }}
@@ -9,18 +9,18 @@
 
 {{ define "repoContent" }}
 <section id="commit-table" class="overflow-x-auto">
-    <h2 class="font-bold text-sm mb-4 uppercase dark:text-white">
-       commits
+    <h2 class="font-bold text-sm mb-4 dark:text-white">
+       Commits
     </h2>
 
     <!-- desktop view (hidden on small screens) -->
     <div class="hidden md:flex md:flex-col divide-y divide-gray-200 dark:divide-gray-700">
       {{ $grid := "grid grid-cols-14 gap-4" }}
       <div class="{{ $grid }}">
-        <div class="py-2 text-sm text-left text-gray-700 dark:text-gray-300 uppercase font-bold col-span-3">Author</div>
-        <div class="py-2 text-sm text-left text-gray-700 dark:text-gray-300 uppercase font-bold col-span-3">Commit</div>
-        <div class="py-2 text-sm text-left text-gray-700 dark:text-gray-300 uppercase font-bold col-span-6">Message</div>
-        <div class="py-2 text-sm text-left text-gray-700 dark:text-gray-300 uppercase font-bold col-span-2 justify-self-end">Date</div>
+        <div class="py-2 text-sm text-left text-gray-700 dark:text-gray-300 font-bold col-span-3">Author</div>
+        <div class="py-2 text-sm text-left text-gray-700 dark:text-gray-300 font-bold col-span-3">Commit</div>
+        <div class="py-2 text-sm text-left text-gray-700 dark:text-gray-300 font-bold col-span-6">Message</div>
+        <div class="py-2 text-sm text-left text-gray-700 dark:text-gray-300 font-bold col-span-2 justify-self-end">Date</div>
       </div>
       {{ range $index, $commit := .Commits }}
         {{ $messageParts := splitN $commit.Message "\n\n" 2 }}
@@ -202,7 +202,7 @@
 {{ define "repoAfter" }}
   {{ $commits_len := len .Commits }}
   <div class="flex justify-end mt-4 gap-2">
-      {{ if gt .Page 1 }}<a class="btn flex items-center gap-2 no-underline hover:no-underline dark:text-white dark:hover:bg-gray-700" hx-boost="true" onclick="window.location.href = window.location.pathname + '?page={{ sub .Page 1 }}'">{{ i "chevron-left" "w-4 h-4" }} previous</a>{{ else }}<div></div>{{ end }}
-      {{ if eq $commits_len 60 }}<a class="btn flex items-center gap-2 no-underline hover:no-underline dark:text-white dark:hover:bg-gray-700" hx-boost="true" onclick="window.location.href = window.location.pathname + '?page={{ add .Page 1 }}'">next {{ i "chevron-right" "w-4 h-4" }}</a>{{ end }}
+      {{ if gt .Page 1 }}<a class="btn flex items-center gap-2 no-underline hover:no-underline dark:text-white dark:hover:bg-gray-700" hx-boost="true" onclick="window.location.href = window.location.pathname + '?page={{ sub .Page 1 }}'">{{ i "chevron-left" "w-4 h-4" }} Previous</a>{{ else }}<div></div>{{ end }}
+      {{ if eq $commits_len 60 }}<a class="btn flex items-center gap-2 no-underline hover:no-underline dark:text-white dark:hover:bg-gray-700" hx-boost="true" onclick="window.location.href = window.location.pathname + '?page={{ add .Page 1 }}'">Next {{ i "chevron-right" "w-4 h-4" }}</a>{{ end }}
   </div>
 {{ end }}

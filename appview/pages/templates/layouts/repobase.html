@@ -1,4 +1,4 @@
-{{ define "title" }}{{ .RepoInfo.FullName }}{{ end }}
+{{ define "title" }}{{ .RepoInfo.FullName }} &middot; Tangled{{ end }}
 
 {{ define "content" }}
     <section id="repo-header" class="mb-2 py-2 px-4 dark:text-white">
@@ -45,7 +45,7 @@
                         >
                             <span class="flex items-center justify-center">
                                 {{ i $icon "w-4 h-4 mr-2" }}
-                                {{ $key }}
+                                {{ $key | capitalize }}
                                 {{ if $meta }}
                                   <span class="bg-gray-200 dark:bg-gray-700 rounded py-1/2 px-1 text-sm ml-1">{{ scaleFmt $meta }}</span>
                                 {{ end }}
@@ -90,7 +90,7 @@
     {{ if .RepoInfo.Description }}
       {{ .RepoInfo.Description | description }}
     {{ else }}
-      <span class="italic">this repo has no description</span>
+      <span class="italic">This repository has no description</span>
     {{ end }}
 
     {{ with .RepoInfo.Website }}
@@ -124,7 +124,7 @@
           href="/{{ .RepoInfo.FullName }}/fork"
         >
           {{ i "git-fork" "w-4 h-4" }}
-          fork
+          Fork
           {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
         </a>
         <a

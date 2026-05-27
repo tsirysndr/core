@@ -1,5 +1,5 @@
 {{ define "title" }}
-    {{ .Pull.Title }} &middot; pull #{{ .Pull.PullId }} &middot; {{ .RepoInfo.FullName }}
+    {{ .Pull.Title }} &middot; Pull #{{ .Pull.PullId }} &middot; {{ .RepoInfo.FullName }} &middot; Tangled
 {{ end }}
 
 {{ define "extrameta" }}
@@ -364,14 +364,14 @@
       <a class="btn-flat flex items-center gap-2 no-underline hover:no-underline text-sm"
         href="/{{ $root.RepoInfo.FullName }}/pulls/{{ $root.Pull.PullId }}/round/{{ $round }}?{{ safeUrl $root.DiffOpts.Encode }}#round-#{{ $round }}">
         {{ i "diff" "w-4 h-4" }}
-        diff
+        Diff
       </a>
       {{ end }}
       {{ if and (ne $idx 0) (or (not $root.IsInterdiff) (ne $root.ActiveRound $round)) }}
         <a class="btn-flat flex items-center gap-2 no-underline hover:no-underline text-sm"
            href="/{{ $root.RepoInfo.FullName }}/pulls/{{ $root.Pull.PullId }}/round/{{ $round }}/interdiff?{{ safeUrl $root.DiffOpts.Encode }}">
           {{ i "chevrons-left-right-ellipsis" "w-4 h-4 rotate-90" }}
-          interdiff
+          Interdiff
         </a>
       {{ end }}
     </div>
@@ -389,8 +389,8 @@
         <span>{{ i "git-commit-horizontal" "w-4 h-4" }}</span>
         {{ len $patches }} commit{{ if ne (len $patches) 1 }}s{{ end }}
         <div class="text-sm text-gray-500 dark:text-gray-400">
-          <span class="group-open/commit:hidden inline">expand</span>
-          <span class="hidden group-open/commit:inline">collapse</span>
+          <span class="group-open/commit:hidden inline">Expand</span>
+          <span class="hidden group-open/commit:inline">Collapse</span>
         </div>
       </summary>
       {{ range $patches }}
@@ -447,19 +447,19 @@
 {{ define "mergeCheck" }}
   {{ $isOpen := .Pull.State.IsOpen }}
   {{ if and $isOpen .MergeCheck .MergeCheck.Error }}
-    <div class="flex items-center gap-2">
-      {{ i "triangle-alert" "w-4 h-4 text-red-600 dark:text-red-500" }}
-      {{ .MergeCheck.Error }}
+    <div class="flex items-center gap-2 text-red-600 dark:text-red-500">
+      {{ i "triangle-alert" "w-4 h-4" }}
+      <span class="font-medium">{{ .MergeCheck.Error }}</span>
     </div>
   {{ else if and $isOpen .MergeCheck .MergeCheck.IsConflicted }}
     <details class="group/conflict">
       <summary class="flex items-center justify-between cursor-pointer list-none">
-        <div class="flex items-center gap-2 ">
-          {{ i "triangle-alert" "text-red-600 dark:text-red-500 w-4 h-4" }}
-          <span class="font-medium">merge conflicts detected</span>
+        <div class="flex items-center gap-2 text-red-600 dark:text-red-500">
+          {{ i "triangle-alert" "w-4 h-4" }}
+          <span class="font-medium">Merge conflicts detected</span>
           <div class="text-sm text-gray-500 dark:text-gray-400">
-            <span class="group-open/conflict:hidden inline">expand</span>
-            <span class="hidden group-open/conflict:inline">collapse</span>
+            <span class="group-open/conflict:hidden inline">Expand</span>
+            <span class="hidden group-open/conflict:inline">Collapse</span>
           </div>
         </div>
       </summary>
@@ -482,9 +482,9 @@
       {{ end }}
     </details>
   {{ else if and $isOpen .MergeCheck }}
-    <div class="flex items-center gap-2">
-      {{ i "check" "w-4 h-4 text-green-600 dark:text-green-500" }}
-      <span>no conflicts, ready to merge</span>
+    <div class="flex items-center gap-2 text-green-600 dark:text-green-500">
+      {{ i "check" "w-4 h-4" }}
+      <span class="font-medium">No conflicts, ready to merge</span>
     </div>
   {{ end }}
 {{ end }}
@@ -494,7 +494,7 @@
   <div class="bg-gray-50 dark:bg-gray-700 border border-black dark:border-gray-500 rounded shadow-sm px-6 py-2 relative">
     <div class="flex items-center gap-2 text-black dark:text-white">
       {{ i "ban" "w-4 h-4" }}
-      <span class="font-medium">closed without merging</span
+      <span class="font-medium">Closed without merging</span
       >
     </div>
   </div>
@@ -502,7 +502,7 @@
   <div class="bg-purple-50 dark:bg-purple-900 border border-purple-500 rounded shadow-sm px-6 py-2 relative">
     <div class="flex items-center gap-2 text-purple-500 dark:text-purple-300">
       {{ i "git-merge" "w-4 h-4" }}
-      <span class="font-medium">pull request successfully merged</span
+      <span class="font-medium">Pull request successfully merged</span
       >
     </div>
   </div>
@@ -521,7 +521,7 @@
   <div class="bg-amber-50 dark:bg-amber-900 border border-amber-500 rounded shadow-sm px-6 py-2 relative">
     <div class="flex items-center gap-2 text-amber-500 dark:text-amber-300">
       {{ i "triangle-alert" "w-4 h-4" }}
-      <span class="font-medium">this branch has been updated, consider resubmitting</span>
+      <span class="font-medium">This branch has been updated, consider resubmitting</span>
     </div>
   </div>
   {{ end }}
@@ -538,8 +538,8 @@
         <summary class="cursor-pointer list-none flex items-center gap-2">
           {{ template "repo/pipelines/fragments/pipelineSymbol" (dict "Pipeline" $pipeline "ShortSummary" false) }}
           <div class="text-sm text-gray-500 dark:text-gray-400">
-            <span class="group-open/pipeline:hidden inline">expand</span>
-            <span class="hidden group-open/pipeline:inline">collapse</span>
+            <span class="group-open/pipeline:hidden inline">Expand</span>
+            <span class="hidden group-open/pipeline:inline">Collapse</span>
           </div>
         </summary>
           <div class="my-2 grid grid-cols-1 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700">
@@ -589,7 +589,7 @@
         </div>
         <span class="text-gray-500 dark:text-gray-400 text-sm group-hover/summary:text-gray-600 dark:group-hover/summary:text-gray-300 transition-colors flex items-center gap-2 -ml-2 relative">
           {{ i "circle-plus" "size-4 z-5" }}
-          expand {{ $c }} comment{{ if ne $c 1 }}s{{ end }}
+          Expand {{ $c }} comment{{ if ne $c 1 }}s{{ end }}
         </span>
       </div>
     </summary>
@@ -606,7 +606,7 @@
     </div>
     {{ if gt $c 0}}
       <button class="flex items-center gap-2 -ml-2 relative cursor-pointer text-sm text-gray-500 dark:text-gray-400 group-hover/collapse:text-gray-600 dark:group-hover/collapse:text-gray-300 mt-4 pb-4 transition-colors" hx-on:click="this.closest('details').open = false">
-        <span class="bg-gray-50 dark:bg-slate-900 dark:rounded-full">{{ i "circle-chevron-up" "size-4 z-5" }}</span> collapse comment{{ if ne $c 1 }}s{{ end }}
+        <span class="bg-gray-50 dark:bg-slate-900 dark:rounded-full">{{ i "circle-chevron-up" "size-4 z-5" }}</span> Collapse comment{{ if ne $c 1 }}s{{ end }}
       </button>
     {{ end }}
 
@@ -652,10 +652,10 @@
 {{ define "loginPrompt" }}
   <div class="bg-amber-50 dark:bg-amber-900 border border-amber-500 rounded shadow-sm p-2 relative flex gap-2 items-center">
     <a href="/signup" class="btn-create py-0 hover:no-underline hover:text-white flex items-center gap-2">
-      sign up
+      Sign up
     </a>
     <span class="text-gray-500 dark:text-gray-400">or</span>
-    <a href="/login" class="underline">login</a>
+    <a href="/login" class="underline">Login</a>
     to add to the discussion
   </div>
 {{ end }}

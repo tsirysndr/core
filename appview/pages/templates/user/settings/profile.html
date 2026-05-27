@@ -1,4 +1,4 @@
-{{ define "title" }}{{ .Tab }} settings{{ end }}
+{{ define "title" }}{{ .Tab | capitalize }} settings &middot; Tangled{{ end }}
 
 {{ define "content" }}
   <div class="p-6">
@@ -22,7 +22,7 @@
 
 {{ define "profile" }}
   <div>
-    <h2 class="text-sm uppercase font-bold">Profile</h2>
+    <h2 class="text-lg font-medium">Profile</h2>
     <p class="text-gray-500 dark:text-gray-400 pb-2">
       Your account information from your AT Protocol identity.
     </p>
@@ -36,9 +36,9 @@
               <button
                 popovertarget="change-handle-modal"
                 popovertargetaction="toggle"
-                class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer">change</button>
+                class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer">Change</button>
             {{ else }}
-              <a href="/settings/handle" class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">change</a>
+              <a href="/settings/handle" class="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Change</a>
             {{ end }}
           {{ end }}
         </div>
@@ -58,7 +58,7 @@
         popover
         class="bg-white w-full md:w-96 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 drop-shadow dark:text-white backdrop:bg-gray-400/50 dark:backdrop:bg-gray-800/50">
         <div id="handle-subdomain" class="flex flex-col gap-3">
-          <label class="uppercase text-sm font-bold p-0">Change handle</label>
+          <label class="text-lg font-medium p-0">Change handle</label>
           <form hx-post="/settings/handle" hx-swap="none" class="flex flex-col gap-3">
             <input type="hidden" name="type" value="subdomain">
             <div class="flex items-stretch rounded border border-gray-200 dark:border-gray-600 overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 dark:bg-gray-700">
@@ -67,17 +67,17 @@
             </div>
             <div class="flex gap-2 pt-2">
               <button type="button" popovertarget="change-handle-modal" popovertargetaction="hide" class="btn w-1/2 flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
-                {{ i "x" "size-4" }} cancel
+                {{ i "x" "size-4" }} Cancel
               </button>
               <button type="submit" class="btn w-1/2 flex items-center justify-center gap-2">
-                {{ i "check" "size-4" }} save
+                {{ i "check" "size-4" }} Save
               </button>
             </div>
           </form>
           <a href="#" id="switch-to-custom" class="text-sm text-gray-400 underline hover:text-gray-600 dark:hover:text-gray-300">I have my own domain</a>
         </div>
         <div id="handle-custom" style="display: none;" class="flex flex-col gap-3">
-          <label class="uppercase text-sm font-bold p-0">Change handle</label>
+          <label class="text-lg font-medium p-0">Change handle</label>
           <form hx-post="/settings/handle" hx-swap="none" class="flex flex-col gap-3">
             <input type="hidden" name="type" value="custom">
             <input id="custom-domain-input" type="text" name="handle" placeholder="mycoolhandle.com" class="w-full dark:bg-gray-800 dark:text-white dark:border-gray-700 dark:placeholder-gray-400 px-2 py-1.5 border border-gray-200 dark:border-gray-600 rounded outline-none focus:ring-1 focus:ring-blue-500" required>
@@ -97,10 +97,10 @@
             </div>
             <div class="flex gap-2 pt-2">
               <button type="button" popovertarget="change-handle-modal" popovertargetaction="hide" class="btn w-1/2 flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
-                {{ i "x" "size-4" }} cancel
+                {{ i "x" "size-4" }} Cancel
               </button>
               <button type="submit" class="btn w-1/2 flex items-center justify-center gap-2">
-                {{ i "check" "size-4" }} verify & save
+                {{ i "check" "size-4" }} Verify & save
               </button>
             </div>
           </form>
@@ -134,7 +134,7 @@
 {{ define "accountActions" }}
   {{ $isDeactivated := (and .IsTnglSh .IsDeactivated) }}
   <div>
-    <h2 class="text-sm uppercase font-bold">Account</h2>
+    <h2 class="text-lg font-medium">Account</h2>
     {{ if $isDeactivated }}
       <div class="mt-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded text-sm text-amber-700 dark:text-amber-300">
         Your account is deactivated. Your profile and repositories are currently inaccessible. Reactivate to restore access.
@@ -146,7 +146,7 @@
         popovertargetaction="toggle"
         class="btn flex items-center gap-2 text-sm cursor-pointer">
         {{ i "key" "size-4" }}
-        change password
+        Change password
       </button>
       {{ if $isDeactivated }}
         <button
@@ -154,7 +154,7 @@
           popovertargetaction="toggle"
           class="btn flex items-center gap-2 text-sm text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 border-green-300 dark:border-green-600 cursor-pointer">
           {{ i "play" "size-4" }}
-          reactivate account
+          Reactivate account
         </button>
       {{ else }}
         <button
@@ -162,7 +162,7 @@
           popovertargetaction="toggle"
           class="btn flex items-center gap-2 text-sm text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 cursor-pointer">
           {{ i "pause" "size-4" }}
-          deactivate account
+          Deactivate account
         </button>
       {{ end }}
       <button
@@ -170,7 +170,7 @@
         popovertargetaction="toggle"
         class="btn flex items-center gap-2 text-sm text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 cursor-pointer">
         {{ i "trash-2" "size-4" }}
-        delete account
+        Delete account
       </button>
     </div>
   </div>
@@ -180,19 +180,19 @@
     popover
     class="bg-white w-full md:w-96 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 drop-shadow dark:text-white backdrop:bg-gray-400/50 dark:backdrop:bg-gray-800/50">
     <div id="password-form-container" class="flex flex-col gap-3">
-      <label class="uppercase text-sm font-bold p-0">Change password</label>
+      <label class="text-lg font-medium p-0">Change password</label>
       <form hx-post="/settings/password/request" hx-swap="none" hx-disabled-elt="find button[type='submit']" class="flex flex-col gap-3">
         <div class="flex flex-col">
-          <label for="current-password">current password</label>
+          <label for="current-password">Current password</label>
           <input type="password" id="current-password" name="current_password" required autocomplete="current-password" />
           <span class="text-sm text-gray-500 mt-1">Confirm your identity to proceed.</span>
         </div>
         <div class="flex gap-2 pt-2">
           <button type="button" popovertarget="change-password-modal" popovertargetaction="hide" class="btn w-1/2 flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
-            {{ i "x" "size-4" }} cancel
+            {{ i "x" "size-4" }} Cancel
           </button>
           <button type="submit" class="btn w-1/2 flex items-center justify-center gap-2">
-            {{ i "key" "size-4" }} send reset code
+            {{ i "key" "size-4" }} Send reset code
           </button>
         </div>
       </form>
@@ -206,20 +206,20 @@
       popover
       class="bg-white w-full md:w-96 dark:bg-gray-800 p-4 rounded border border-green-300 dark:border-green-600 drop-shadow dark:text-white backdrop:bg-gray-400/50 dark:backdrop:bg-gray-800/50">
       <div class="flex flex-col gap-3">
-        <label class="uppercase text-sm font-bold p-0 text-green-600 dark:text-green-400">Reactivate account</label>
+        <label class="text-lg font-medium p-0 text-green-600 dark:text-green-400">Reactivate account</label>
         <p class="text-sm text-gray-500 dark:text-gray-400">This will restore your profile and repositories, making them accessible again.</p>
         <form hx-post="/settings/reactivate" hx-swap="none" hx-disabled-elt="find button[type='submit']" class="flex flex-col gap-3">
           <div class="flex flex-col">
-            <label for="reactivate-password">password</label>
+            <label for="reactivate-password">Password</label>
             <input type="password" id="reactivate-password" name="password" required autocomplete="current-password" />
             <span class="text-sm text-gray-500 mt-1">Confirm your identity to proceed.</span>
           </div>
           <div class="flex gap-2 pt-2">
             <button type="button" popovertarget="reactivate-modal" popovertargetaction="hide" class="btn w-1/2 flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
-              {{ i "x" "size-4" }} cancel
+              {{ i "x" "size-4" }} Cancel
             </button>
             <button type="submit" class="btn w-1/2 flex items-center justify-center gap-2 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300">
-              {{ i "play" "size-4" }} reactivate
+              {{ i "play" "size-4" }} Reactivate
             </button>
           </div>
         </form>
@@ -232,20 +232,20 @@
       popover
       class="bg-white w-full md:w-96 dark:bg-gray-800 p-4 rounded border border-amber-300 dark:border-amber-600 drop-shadow dark:text-white backdrop:bg-gray-400/50 dark:backdrop:bg-gray-800/50">
       <div class="flex flex-col gap-3">
-        <label class="uppercase text-sm font-bold p-0 text-amber-600 dark:text-amber-400">Deactivate account</label>
+        <label class="text-lg font-medium p-0 text-amber-600 dark:text-amber-400">Deactivate account</label>
         <p class="text-sm text-gray-500 dark:text-gray-400">Your profile and repositories will become inaccessible. You can reactivate by logging in again.</p>
         <form hx-post="/settings/deactivate" hx-swap="none" hx-confirm="Are you sure you want to deactivate your account?" hx-disabled-elt="find button[type='submit']" class="flex flex-col gap-3">
           <div class="flex flex-col">
-            <label for="deactivate-password">password</label>
+            <label for="deactivate-password">Password</label>
             <input type="password" id="deactivate-password" name="password" required autocomplete="current-password" />
             <span class="text-sm text-gray-500 mt-1">Confirm your identity to proceed.</span>
           </div>
           <div class="flex gap-2 pt-2">
             <button type="button" popovertarget="deactivate-modal" popovertargetaction="hide" class="btn w-1/2 flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
-              {{ i "x" "size-4" }} cancel
+              {{ i "x" "size-4" }} Cancel
             </button>
             <button type="submit" class="btn w-1/2 flex items-center justify-center gap-2 text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300">
-              {{ i "pause" "size-4" }} deactivate
+              {{ i "pause" "size-4" }} Deactivate
             </button>
           </div>
         </form>
@@ -259,20 +259,20 @@
     popover
     class="bg-white w-full md:w-96 dark:bg-gray-800 p-4 rounded border border-red-300 dark:border-red-600 drop-shadow dark:text-white backdrop:bg-gray-400/50 dark:backdrop:bg-gray-800/50">
     <div id="delete-form-container" class="flex flex-col gap-3">
-      <label class="uppercase text-sm font-bold p-0 text-red-600 dark:text-red-400">Delete account</label>
+      <label class="text-lg font-medium p-0 text-red-600 dark:text-red-400">Delete account</label>
       <p class="text-sm text-gray-500 dark:text-gray-400">This permanently deletes your account and all associated data. This cannot be undone.</p>
       <form hx-post="/settings/delete/request" hx-swap="none" hx-disabled-elt="find button[type='submit']" class="flex flex-col gap-3">
         <div class="flex flex-col">
-          <label for="delete-password">password</label>
+          <label for="delete-password">Password</label>
           <input type="password" id="delete-password" name="password" required autocomplete="current-password" />
           <span class="text-sm text-gray-500 mt-1">Confirm your identity to proceed.</span>
         </div>
         <div class="flex gap-2 pt-2">
           <button type="button" popovertarget="delete-modal" popovertargetaction="hide" class="btn w-1/2 flex items-center gap-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
-            {{ i "x" "size-4" }} cancel
+            {{ i "x" "size-4" }} Cancel
           </button>
           <button type="submit" class="btn w-1/2 flex items-center justify-center gap-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
-            {{ i "trash-2" "size-4" }} send deletion code
+            {{ i "trash-2" "size-4" }} Send deletion code
           </button>
         </div>
       </form>
@@ -283,7 +283,7 @@
 
 {{ define "punchcard" }}
   <div>
-    <h2 class="text-sm uppercase font-bold">Punchcard</h2>
+    <h2 class="text-lg font-medium">Punchcard</h2>
     <p class="text-gray-500 dark:text-gray-400 pb-2 ">
       Configure punchcard visibility and preferences.
     </p>

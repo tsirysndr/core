@@ -32,19 +32,19 @@
     {{ $style := "px-2 py-1 rounded flex items-center flex-shrink-0 gap-2 text-sm" }}
     {{ if .IsRegistered }}
       <span class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 {{$style}}">
-        {{ i "shield-check" "w-4 h-4" }} verified
+        {{ i "shield-check" "w-4 h-4" }} Verified
       </span>
       {{ template "knots/fragments/addMemberModal" . }}
       {{ block "knotDeleteButton" . }} {{ end }}
     {{ else if .IsNeedsUpgrade }}
       <span class="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 {{$style}}">
-        {{ i "shield-alert" "w-4 h-4" }} needs upgrade
+        {{ i "shield-alert" "w-4 h-4" }} Needs upgrade
       </span>
       {{ block "knotRetryButton" . }} {{ end }}
       {{ block "knotDeleteButton" . }} {{ end }}
     {{ else }}
       <span class="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 {{$style}}">
-        {{ i "shield-off" "w-4 h-4" }} unverified
+        {{ i "shield-off" "w-4 h-4" }} Unverified
       </span>
       {{ block "knotRetryButton" . }} {{ end }}
       {{ block "knotDeleteButton" . }} {{ end }}
@@ -62,7 +62,7 @@
     hx-confirm="{{ template "knots/fragments/deleteConfirm" . }}"
   >
     {{ i "trash-2" "w-5 h-5" }}
-    <span class="hidden md:inline">delete</span>
+    <span class="hidden md:inline">Delete</span>
     {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
   </button>
 {{ end }}
@@ -77,14 +77,14 @@
     hx-target="#knot-{{.Id}}"
   >
     {{ i "rotate-ccw" "w-5 h-5" }}
-    <span class="hidden md:inline">retry</span>
+    <span class="hidden md:inline">Retry</span>
     {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
   </button>
 {{ end }}
 
 {{ define "knots/fragments/deleteConfirm" -}}
 {{ if .RepoCount -}}
-Unregistering '{{ .Domain }}' will remove {{ plural .RepoCount "repository" "" }} from Tangled. The git data will stay on the knot, but these repos will disappear from Tangled. Are you sure?
+Unregistering '{{ .Domain }}' will remove {{ plural .RepoCount "repository" "" }} from Tangled. The git data will stay on the knot, but these repositories will disappear from Tangled. Are you sure?
 {{- else -}}
 Are you sure you want to delete the knot '{{ .Domain }}'?
 {{- end -}}

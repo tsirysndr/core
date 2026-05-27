@@ -5,7 +5,7 @@
     {{ template "labels/fragments/labelDef" $label }}
     <div class="flex flex-wrap text items-center gap-1 text-gray-500 dark:text-gray-400">
       {{ if $label.ValueType.IsNull }} 
-        basic
+        Basic
       {{ else }}
         {{ $label.ValueType.Type }} type
       {{ end }}
@@ -22,7 +22,7 @@
 
       {{ if $label.Multiple }}
         <span class="before:content-['·'] before:select-none"></span>
-        multiple
+        Multiple
       {{ end }}
 
       <span class="before:content-['·'] before:select-none"></span>

@@ -34,7 +34,7 @@
         >
             {{ i "message-square-plus" "w-4 h-4 inline group-[.htmx-request]/form:hidden" }}
             {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]/form:inline" }}
-            comment
+            Comment
         </button>
 
         {{ $isIssueAuthor := and .LoggedInUser (eq .LoggedInUser.Did .Issue.Did) }}
@@ -49,7 +49,7 @@
         >
             {{ i "ban" "w-4 h-4 inline group-[.htmx-request]/close:hidden" }}
             {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]/close:inline" }}
-            <span id="close-button-text">close</span>
+            <span id="close-button-text">Close</span>
         </button>
         <div
             id="close-issue"
@@ -70,7 +70,7 @@
         >
             {{ i "refresh-ccw-dot" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
             {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-            reopen
+            Reopen
         </button>
         {{ end }}
 
@@ -93,9 +93,9 @@
 
             if (closeButtonText) {
                 if (textarea.value.trim() !== '') {
-                  closeButtonText.innerHTML = `close with comment`;
+                  closeButtonText.innerHTML = `Close with comment`;
                 } else {
-                  closeButtonText.innerHTML = `close`;
+                  closeButtonText.innerHTML = `Close`;
                 }
             }
         }
@@ -109,10 +109,10 @@
   {{ else }}
     <div class="bg-amber-50 dark:bg-amber-900 border border-amber-500 rounded drop-shadow-sm p-6 relative flex gap-2 items-center">
       <a href="/signup" class="btn-create py-0 hover:no-underline hover:text-white flex items-center gap-2">
-        sign up
+        Sign up
       </a>
       <span class="text-gray-500 dark:text-gray-400">or</span>
-      <a href="/login" class="underline">login</a>
+      <a href="/login" class="underline">Login</a>
       to add to the discussion
     </div>
   {{ end }}

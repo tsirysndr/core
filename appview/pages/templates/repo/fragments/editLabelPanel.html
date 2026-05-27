@@ -148,7 +148,7 @@
     })()"
     class="text-xs text-gray-500 dark:text-gray-400 hover:underline self-end inline-flex items-center gap-1">
     {{ i "user-round-plus" "size-3.5" }}
-    assign to me
+    Assign to me
   </button>
 {{ end }}
 
@@ -160,7 +160,7 @@
     {{ template "multipleInputField" (dict "def" $def "value" "" "key" $def.AtUri.String "prefix" $prefix) }}
   </div>
   <button type="button" onClick="this.insertAdjacentHTML('beforebegin', document.getElementById('tpl-{{ $def.Id }}{{ $groupSuffix }}').innerHTML)" class="w-full btn flex items-center gap-2">
-    {{ i "plus" "size-4" }} add
+    {{ i "plus" "size-4" }} Add
   </button>
 {{ end }}
 
@@ -254,14 +254,14 @@
       hx-swap="outerHTML"
       hx-target="#edit-label-panel"
       class="btn w-1/2 flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 group">
-      {{ i "x" "size-4" }} cancel
+      {{ i "x" "size-4" }} Cancel
     </button>
 
     <button
       id="save-btn"
       type="submit"
       class="btn w-1/2 flex items-center">
-      <span class="inline-flex gap-2 items-center">{{ i "check" "size-4" }} save</span>
+      <span class="inline-flex gap-2 items-center">{{ i "check" "size-4" }} Save</span>
       <span id="spinner" class="group">
         {{ i "loader-circle" "ml-2 w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
       </span>

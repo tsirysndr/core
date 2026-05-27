@@ -1,4 +1,4 @@
-{{ define "title" }}new repo{{ end }}
+{{ define "title" }}New repository &middot; Tangled{{ end }}
 
 {{ define "content" }}
 <div class="grid grid-cols-12">
@@ -27,7 +27,7 @@
     <div class="mt-8 flex justify-end">
       <button type="submit" class="btn-create flex items-center gap-2">
         {{ i "book-plus" "w-4 h-4" }}
-        create repo
+        Create repository
         <span id="spinner" class="group">
           {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
         </span>
@@ -46,7 +46,7 @@
 
     <!-- Content column -->
     <div class="flex-1 pb-12">
-      <h2 class="text-lg font-semibold dark:text-white">General</h2>
+      <h2 class="text-lg font-medium dark:text-white">General</h2>
       <div class="text-sm text-gray-500 dark:text-gray-400 mb-4">Basic repository information.</div>
 
       <div class="space-y-2">
@@ -64,7 +64,7 @@
     </div>
 
     <div class="flex-1">
-      <h2 class="text-lg font-semibold dark:text-white">Configuration</h2>
+      <h2 class="text-lg font-medium dark:text-white">Configuration</h2>
       <div class="text-sm text-gray-500 dark:text-gray-400 mb-4">Repository settings and hosting.</div>
 
       <div class="space-y-2">
@@ -78,7 +78,7 @@
 {{ define "name" }}
   <!-- Repository Name with Owner -->
   <div>
-    <label class="block text-sm font-bold uppercase dark:text-white mb-1">
+    <label class="block text-sm font-bold dark:text-white mb-1">
       Repository name
     </label>
     <div class="flex flex-col md:flex-row md:items-center gap-2 md:gap-0 w-full">
@@ -103,7 +103,7 @@
 {{ define "description" }}
   <!-- Description -->
   <div>
-    <label for="description" class="block text-sm font-bold uppercase dark:text-white mb-1">
+    <label for="description" class="block text-sm font-bold dark:text-white mb-1">
       Description
     </label>
     <input
@@ -123,7 +123,7 @@
 {{ define "defaultBranch" }}
   <!-- Default Branch -->
   <div>
-    <label for="branch" class="block text-sm font-bold uppercase dark:text-white mb-1">
+    <label for="branch" class="block text-sm font-bold dark:text-white mb-1">
       Default branch
     </label>
     <input
@@ -143,7 +143,7 @@
 {{ define "knot" }}
   <!-- Knot Selection -->
   <div>
-    <label class="block text-sm font-bold uppercase dark:text-white mb-1">
+    <label class="block text-sm font-bold dark:text-white mb-1">
       Select a knot
     </label>
     <div class="w-full space-y-2">
@@ -161,7 +161,7 @@
           <label for="domain-{{ . }}" class="dark:text-white lowercase">{{ . }}</label>
         </div>
       {{ else }}
-      <p class="dark:text-white">no knots available.</p>
+      <p class="dark:text-white">No knots available.</p>
       {{ end }}
     </div>
     <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">

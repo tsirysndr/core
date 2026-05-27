@@ -1,4 +1,4 @@
-{{ define "title" }}{{ .RepoInfo.FullName }}{{ end }}
+{{ define "title" }}{{ .RepoInfo.FullName }} &middot; Tangled{{ end }}
 {{ define "extrameta" }}
     {{ template "repo/fragments/meta" . }}
     {{ template "repo/fragments/og" (dict "RepoInfo" .RepoInfo) }}
@@ -7,7 +7,7 @@
   <main>
     <div class="relative w-full h-96 flex items-center justify-center">
       <div class="w-full h-full grid grid-cols-1 md:grid-cols-2 gap-4 md:divide-x divide-gray-300 dark:divide-gray-600 text-gray-300 dark:text-gray-600">
-        <!-- mimic the repo view here, placeholders are LLM generated -->
+        <!-- mimic the repository view here, placeholders are LLM generated -->
         <div id="file-list" class="flex flex-col gap-2 col-span-1 w-full h-full p-4 items-start justify-start text-left">
           {{ $files :=
             (list
