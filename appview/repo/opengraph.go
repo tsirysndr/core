@@ -22,10 +22,11 @@ func (rp *Repo) Opengraph(w http.ResponseWriter, r *http.Request) {
 
 	avatarUrl := rp.pages.AvatarUrl(f.Did, "256")
 
-	languageStats, err := rp.getLanguageInfo(r.Context(), syntax.DID(f.RepoDid), "")
+	langs, err := rp.getLanguageInfo(r.Context(), syntax.DID(f.RepoDid), "")
 	if err != nil {
 		log.Printf("failed to get language stats from knotmirror: %v", err)
 	}
+	languageStats := makeLanguageStats(langs)
 
 	ogLanguages := []ogre.LanguageData{}
 	for _, lang := range languageStats {

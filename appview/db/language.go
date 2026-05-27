@@ -10,59 +10,6 @@ import (
 	"tangled.org/core/orm"
 )
 
-func GetRepoLanguages(e Execer, filters ...orm.Filter) ([]models.RepoLanguage, error) {
-	var conditions []string
-	var args []any
-	for _, filter := range filters {
-		conditions = append(conditions, filter.Condition())
-		args = append(args, filter.Arg()...)
-	}
-
-	whereClause := ""
-	if conditions != nil {
-		whereClause = " where " + strings.Join(conditions, " and ")
-	}
-
-	query := fmt.Sprintf(
-		`select id, repo_did, ref, is_default_ref, language, bytes from repo_languages %s`,
-		whereClause,
-	)
-	rows, err := e.Query(query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute query: %w ", err)
-	}
-	defer rows.Close()
-
-	var langs []models.RepoLanguage
-	for rows.Next() {
-		var rl models.RepoLanguage
-		var isDefaultRef int
-
-		err := rows.Scan(
-			&rl.Id,
-			&rl.RepoDid,
-			&rl.Ref,
-			&isDefaultRef,
-			&rl.Language,
-			&rl.Bytes,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan: %w ", err)
-		}
-
-		if isDefaultRef != 0 {
-			rl.IsDefaultRef = true
-		}
-
-		langs = append(langs, rl)
-	}
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to scan rows: %w ", err)
-	}
-
-	return langs, nil
-}
-
 func InsertRepoLanguages(e Execer, langs []models.RepoLanguage) error {
 	stmt, err := e.Prepare(
 		"insert or replace into repo_languages (repo_did, ref, is_default_ref, language, bytes) values (?, ?, ?, ?, ?)",

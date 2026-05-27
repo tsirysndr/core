@@ -114,10 +114,39 @@ func (rp *Repo) Index(w http.ResponseWriter, r *http.Request) {
 
 	var languageInfo []types.RepoLanguageDetails
 	if !result.IsEmpty {
-		languageInfo, err = rp.getLanguageInfo(r.Context(), syntax.DID(f.RepoDid), result.Ref)
+		langs, err := rp.getLanguageInfo(r.Context(), syntax.DID(f.RepoDid), result.Ref)
 		if err != nil {
 			l.Warn("failed to compute language percentages", "err", err)
 			// non-fatal
+		} else if ref == "" { // when request didn't specified ref, we are fetching default branch.
+			if err := func(repo syntax.DID, ref string, langs []*tangled.GitTempListLanguages_Language) error {
+				tx, err := rp.db.Begin()
+				if err != nil {
+					return err
+				}
+				defer tx.Rollback()
+
+				var mlangs []models.RepoLanguage
+				for _, lang := range langs {
+					mlangs = append(mlangs, models.RepoLanguage{
+						RepoDid:      repo,
+						Ref:          ref,
+						IsDefaultRef: true,
+						Language:     lang.Name,
+						Bytes:        lang.Size,
+					})
+				}
+
+				if err := db.UpdateRepoLanguages(tx, syntax.DID(f.RepoDid), ref, mlangs); err != nil {
+					return err
+				}
+
+				return tx.Commit()
+			}(syntax.DID(f.RepoDid), result.Ref, langs); err != nil {
+				l.Error("failed to populate appview repo languages index", "err", err)
+				// non-fatal
+			}
+			languageInfo = makeLanguageStats(langs)
 		}
 	}
 
@@ -151,41 +180,39 @@ func (rp *Repo) getLanguageInfo(
 	ctx context.Context,
 	repoId syntax.DID,
 	ref string,
-) ([]types.RepoLanguageDetails, error) {
-	var langs []models.RepoLanguage
+) ([]*tangled.GitTempListLanguages_Language, error) {
 	// non-fatal, fetch langs from knotmirror via XRPC
 	xrpcc := &indigoxrpc.Client{
 		Host:   rp.config.KnotMirror.Url,
 		Client: http.DefaultClient,
 	}
-	ls, err := tangled.GitTempListLanguages(ctx, xrpcc, ref, repoId.String())
+	out, err := tangled.GitTempListLanguages(ctx, xrpcc, ref, repoId.String())
 	if err != nil {
 		return nil, fmt.Errorf("calling knotmirror git.listLanguages: %w", err)
 	}
 
-	if ls == nil || ls.Languages == nil {
+	if out == nil || out.Languages == nil {
 		return nil, nil
 	}
 
+	return out.Languages, nil
+}
+
+func makeLanguageStats(langs []*tangled.GitTempListLanguages_Language) []types.RepoLanguageDetails {
+	if len(langs) == 0 {
+		return nil
+	}
 	var total int64
-	for _, lang := range ls.Languages {
+	for _, lang := range langs {
 		total += lang.Size
-		langs = append(langs, models.RepoLanguage{
-			RepoDid:  repoId,
-			Ref:      ref,
-			Language: lang.Name,
-			Bytes:    lang.Size,
-		})
 	}
 
 	var languageStats []types.RepoLanguageDetails
 	for _, l := range langs {
-		percentage := float32(l.Bytes) / float32(total) * 100
-		color := enry.GetColor(l.Language)
 		languageStats = append(languageStats, types.RepoLanguageDetails{
-			Name:       l.Language,
-			Percentage: percentage,
-			Color:      color,
+			Name:       l.Name,
+			Color:      enry.GetColor(l.Name),
+			Percentage: float32(l.Size) / float32(total) * 100,
 		})
 	}
 
@@ -201,8 +228,7 @@ func (rp *Repo) getLanguageInfo(
 		}
 		return languageStats[i].Name < languageStats[j].Name
 	})
-
-	return languageStats, nil
+	return languageStats
 }
 
 // buildIndexResponse creates a RepoIndexResponse by combining multiple xrpc calls in parallel
