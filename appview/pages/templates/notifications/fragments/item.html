@@ -1,7 +1,7 @@
 {{define "notifications/fragments/item"}}
   <a href="{{ template "notificationUrl" . }}"
-     onclick="navigator.sendBeacon('/notifications/{{ .ID }}/read')"
-     class="block no-underline hover:no-underline">
+     onclick="if(!event.target.closest('button'))navigator.sendBeacon('/notifications/{{ .ID }}/read')"
+     class="block no-underline hover:no-underline group">
     <div
       class="
         w-full mx-auto dark:text-white px-2 md:px-6 py-4
@@ -19,8 +19,31 @@
         {{- end -}}
         {{- template "notificationHeader" . -}}
       </div>
-      {{/* row 1, col 3: time */}}
-      <span class="row-start-1 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{{ template "repo/fragments/shortTime" .Created }}</span>
+      {{/* row 1, col 3: timestamp normally, button on hover */}}
+      <div class="row-start-1 relative flex items-center justify-end">
+        <span class="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap md:group-hover:invisible">{{ template "repo/fragments/shortTime" .Created }}</span>
+        {{ if .Read }}
+          <button
+            hx-post="/notifications/{{ .ID }}/unread"
+            hx-target="closest a"
+            hx-swap="outerHTML"
+            class="hidden md:group-hover:flex absolute inset-0 items-center justify-end p-0 text-gray-400 dark:text-gray-500 hover:text-gray-600"
+            title="Mark as unread"
+            onclick="event.preventDefault()">
+            {{ i "mail" "size-4" }}
+          </button>
+        {{ else }}
+          <button
+            hx-post="/notifications/{{ .ID }}/read"
+            hx-target="closest a"
+            hx-swap="outerHTML"
+            class="hidden md:group-hover:flex absolute inset-0 items-center justify-end p-0 text-gray-400 dark:text-gray-500 hover:text-gray-600"
+            title="Mark as read"
+            onclick="event.preventDefault()">
+            {{ i "mail-open" "size-4" }}
+          </button>
+        {{ end }}
+      </div>
       {{/* row 2, col 1: #N */}}
       {{ template "notificationNumber" . }}
       {{/* row 2, col 2: title */}}

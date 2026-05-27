@@ -41,6 +41,7 @@ func (n *Notifications) Router(mw *middleware.Middleware) http.Handler {
 		r.With(middleware.Paginate).Get("/", n.notificationsPage)
 		r.Get("/preview", n.previewHandler)
 		r.Post("/{id}/read", n.markRead)
+		r.Post("/{id}/unread", n.markUnread)
 		r.Post("/read-all", n.markAllRead)
 		r.Delete("/{id}", n.deleteNotification)
 	})
@@ -224,6 +225,15 @@ func (n *Notifications) getUnreadCount(w http.ResponseWriter, r *http.Request) {
 }
 
 func (n *Notifications) markRead(w http.ResponseWriter, r *http.Request) {
+	n.toggleRead(w, r, true)
+}
+
+func (n *Notifications) markUnread(w http.ResponseWriter, r *http.Request) {
+	n.toggleRead(w, r, false)
+}
+
+func (n *Notifications) toggleRead(w http.ResponseWriter, r *http.Request, read bool) {
+	l := n.logger.With("handler", "toggleRead")
 	userDid := n.oauth.GetDid(r)
 
 	idStr := chi.URLParam(r, "id")
@@ -233,9 +243,27 @@ func (n *Notifications) markRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = db.MarkNotificationRead(n.db, notificationID, userDid)
+	if read {
+		err = db.MarkNotificationRead(n.db, notificationID, userDid)
+	} else {
+		err = db.MarkNotificationUnread(n.db, notificationID, userDid)
+	}
 	if err != nil {
-		http.Error(w, "Failed to mark notification as read", http.StatusInternalServerError)
+		http.Error(w, "Failed to update notification", http.StatusInternalServerError)
+		return
+	}
+
+	// if called via HTMX (has HX-Request header), return the updated item fragment
+	if r.Header.Get("HX-Request") == "true" {
+		notif, err := db.GetNotificationWithEntity(n.db, notificationID, userDid)
+		if err != nil {
+			l.Error("failed to fetch notification after toggle", "err", err)
+			http.Error(w, "Failed to fetch notification", http.StatusInternalServerError)
+			return
+		}
+		if err := n.pages.NotificationItem(w, notif); err != nil {
+			l.Error("failed to render notification item", "err", err)
+		}
 		return
 	}
 

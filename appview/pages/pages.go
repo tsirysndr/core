@@ -487,12 +487,8 @@ func (p *Pages) Notifications(w io.Writer, params NotificationsParams) error {
 	return p.execute("notifications/list", w, params)
 }
 
-type NotificationItemParams struct {
-	Notification *models.Notification
-}
-
-func (p *Pages) NotificationItem(w io.Writer, params NotificationItemParams) error {
-	return p.executePlain("notifications/fragments/item", w, params)
+func (p *Pages) NotificationItem(w io.Writer, notif *models.NotificationWithEntity) error {
+	return p.executePlain("notifications/fragments/item", w, notif)
 }
 
 type NotificationCountParams struct {

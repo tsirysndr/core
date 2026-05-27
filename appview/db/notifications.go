@@ -113,6 +113,20 @@ func GetNotificationsPaginated(e Execer, page pagination.Page, filters ...orm.Fi
 	return notifications, nil
 }
 
+func GetNotificationWithEntity(e Execer, notificationID int64, userDID string) (*models.NotificationWithEntity, error) {
+	results, err := GetNotificationsWithEntities(e, pagination.Page{Limit: 1, Offset: 0},
+		orm.FilterEq("n.id", notificationID),
+		orm.FilterEq("n.recipient_did", userDID),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if len(results) == 0 {
+		return nil, fmt.Errorf("notification not found")
+	}
+	return results[0], nil
+}
+
 // GetNotificationsWithEntities retrieves notifications with their related entities
 func GetNotificationsWithEntities(e Execer, page pagination.Page, filters ...orm.Filter) ([]*models.NotificationWithEntity, error) {
 	var conditions []string
@@ -303,6 +317,35 @@ func MarkNotificationRead(e Execer, notificationID int64, userDID string) error 
 	result, err := e.Exec(query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to mark notification as read: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("notification not found or access denied")
+	}
+
+	return nil
+}
+
+func MarkNotificationUnread(e Execer, notificationID int64, userDID string) error {
+	idFilter := orm.FilterEq("id", notificationID)
+	recipientFilter := orm.FilterEq("recipient_did", userDID)
+
+	query := fmt.Sprintf(`
+		UPDATE notifications
+		SET read = 0
+		WHERE %s AND %s
+	`, idFilter.Condition(), recipientFilter.Condition())
+
+	args := append(idFilter.Arg(), recipientFilter.Arg()...)
+
+	result, err := e.Exec(query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to mark notification as unread: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
