@@ -102,6 +102,17 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 	}
 	l = l.With("pull_id", pull.PullId, "pull_owner", pull.OwnerDid)
 
+	if user != nil {
+		repoDid := f.RepoDid
+		userDid := user.Did
+		pullId := pull.PullId
+		go func() {
+			if err := db.MarkNotificationsReadForPull(s.db, userDid, repoDid, pullId); err != nil {
+				l.Error("failed to mark pull notifications as read", "err", err)
+			}
+		}()
+	}
+
 	backlinks, err := db.GetBacklinks(s.db, pull.AtUri())
 	if err != nil {
 		l.Error("failed to get pull backlinks", "err", err)

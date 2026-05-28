@@ -99,6 +99,17 @@ func (rp *Issues) RepoSingleIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if user != nil {
+		repoDid := f.RepoDid
+		userDid := user.Did
+		issueId := issue.IssueId
+		go func() {
+			if err := db.MarkNotificationsReadForIssue(rp.db, userDid, repoDid, issueId); err != nil {
+				l.Error("failed to mark issue notifications as read", "err", err)
+			}
+		}()
+	}
+
 	entities := []syntax.ATURI{issue.AtUri()}
 	for _, c := range issue.Comments {
 		entities = append(entities, c.FeedCommentAtUri())

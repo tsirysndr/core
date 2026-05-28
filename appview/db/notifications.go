@@ -331,6 +331,28 @@ func MarkNotificationRead(e Execer, notificationID int64, userDID string) error 
 	return nil
 }
 
+func MarkNotificationsReadForIssue(e Execer, userDID, repoDid string, issueNum int) error {
+	query := `
+		update notifications set read = 1
+		where recipient_did = ?
+		  and read = 0
+		  and issue_id = (select id from issues where repo_did = ? and issue_id = ?)
+	`
+	_, err := e.Exec(query, userDID, repoDid, issueNum)
+	return err
+}
+
+func MarkNotificationsReadForPull(e Execer, userDID, repoDid string, pullNum int) error {
+	query := `
+		update notifications set read = 1
+		where recipient_did = ?
+		  and read = 0
+		  and pull_id = (select p.id from pulls p where p.pull_id = ? and p.repo_did = ?)
+	`
+	_, err := e.Exec(query, userDID, pullNum, repoDid)
+	return err
+}
+
 func MarkNotificationUnread(e Execer, notificationID int64, userDID string) error {
 	idFilter := orm.FilterEq("id", notificationID)
 	recipientFilter := orm.FilterEq("recipient_did", userDID)
