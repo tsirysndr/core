@@ -17,9 +17,8 @@ patches
 *.rdb
 .envrc
 **/*.bleve
-sites/target/
 sites/.wrangler/
-/target
+target/
 **/src/_lex/
 # Created if following hacking.md
 genjwks.out

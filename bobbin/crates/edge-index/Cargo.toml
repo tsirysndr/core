@@ -1,0 +1,17 @@
+[package]
+name = "bobbin-edge-index"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+bobbin-runtime = { workspace = true }
+bobbin-types = { workspace = true }
+either = { workspace = true }
+jacquard-common = { workspace = true }
+lasso = { workspace = true }
+scc = { workspace = true }
+smallvec = "1"
+thiserror = { workspace = true }
+tokio = { workspace = true }

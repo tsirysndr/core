@@ -1,0 +1,16 @@
+[package]
+name = "bobbin-record-lru"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+bobbin-types = { workspace = true }
+jacquard-common = { workspace = true }
+bytes = { workspace = true }
+quick_cache = { workspace = true }
+zstd = "0.13"
+
+[dev-dependencies]
+bytes = { workspace = true }

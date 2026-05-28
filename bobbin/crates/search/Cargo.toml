@@ -1,0 +1,19 @@
+[package]
+name = "bobbin-search"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+bobbin-runtime = { workspace = true }
+bobbin-types = { workspace = true }
+jacquard-common = { workspace = true }
+
+tantivy = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt", "sync", "time"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

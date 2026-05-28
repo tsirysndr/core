@@ -1,0 +1,38 @@
+[package]
+name = "bobbin-sim"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "bobbin-sim"
+path = "src/main.rs"
+
+[dependencies]
+bobbin-edge-index = { workspace = true }
+bobbin-ingest = { workspace = true }
+bobbin-record-lru = { workspace = true }
+bobbin-runtime = { workspace = true }
+bobbin-search = { workspace = true }
+bobbin-slingshot-client = { workspace = true }
+bobbin-types = { workspace = true }
+
+bytes = { workspace = true }
+clap = { workspace = true }
+futures = { workspace = true }
+http = { workspace = true }
+jacquard-common = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]

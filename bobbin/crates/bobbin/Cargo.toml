@@ -1,0 +1,40 @@
+[package]
+name = "bobbin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "bobbin"
+path = "src/main.rs"
+
+[dependencies]
+bobbin-edge-index = { workspace = true }
+bobbin-ingest = { workspace = true }
+bobbin-knot-proxy = { workspace = true }
+bobbin-record-lru = { workspace = true }
+bobbin-runtime = { workspace = true }
+bobbin-search = { workspace = true }
+bobbin-slingshot-client = { workspace = true }
+bobbin-xrpc = { workspace = true }
+
+axum = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+futures = { workspace = true }
+socket2 = "0.6"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net", "signal"] }
+tokio-util = { workspace = true }
+url = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }
+confique = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+tikv-jemallocator = { version = "0.7", features = ["unprefixed_malloc_on_supported_platforms", "profiling"] }
+tikv-jemalloc-ctl = { version = "0.7", features = ["stats", "profiling"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

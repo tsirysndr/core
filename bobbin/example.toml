@@ -1,0 +1,163 @@
+[server]
+# Addresses the XRPC server listens on. When using as an env var, comma-separated.
+#
+# Can also be specified via environment variable `BOBBIN_BIND`.
+#
+# Default value: ["127.0.0.1:8090", "[::1]:8090"]
+#binds = ["127.0.0.1:8090", "[::1]:8090"]
+
+# The amount of time in seconds to allow in-flight requests to drain after sigterm
+# before forcing the listener closed.
+#
+# Can also be specified via environment variable `BOBBIN_SHUTDOWN_GRACE_SECS`.
+#
+# Default value: 30
+#shutdown_grace_secs = 30
+
+# Address for the `/debug/mem` and `/debug/heap` introspection endpoints,
+# for example `127.0.0.1:8091`. Empty disables them so the debug surface is
+# never reachable on the public listener. Bind to loopback only.
+#
+# Can also be specified via environment variable `BOBBIN_DEBUG_BIND`.
+#
+# Default value: ""
+#debug_bind = ""
+
+[hydrant]
+# Base URL of the hydrant instance - the cursor-replayable /stream lives
+# under this. Use `ws://` or `wss://` - `http://` and `https://`
+# are rewritten to the corresponding ws scheme at connection time!
+#
+# Can also be specified via environment variable `BOBBIN_HYDRANT_URL`.
+#
+# Default value: "http://127.0.0.1:13010"
+#url = "http://127.0.0.1:13010"
+
+# The cursor to request on first connect. Reconnects ignore this and resume
+# strictly after the last cursor seen internally.
+#
+# Can also be specified via environment variable `BOBBIN_START_CURSOR`.
+#
+# Default value: 0
+#start_cursor = 0
+
+[ingest]
+# Concurrent in-flight resolves during ingest. One slot per slingshot rtt.
+# Default 16 sits at the measured throughput
+# knee for cold replay against a healthy hydrant. The committer stays
+# serial so that like, cursor and Spur allocation order are preserved.
+#
+# Can also be specified via environment variable `BOBBIN_INGEST_PARALLELISM`.
+#
+# Default value: 16
+#parallelism = 16
+
+[backpressure]
+# Estimated peak transient anonymous bytes a single hydrating request holds:
+# roughly the page of decoded records plus its serialized copy. Combined with
+# the detected cgroup memory limit to size the in-flight cap on heavy
+# endpoints. Has no effect when no cgroup memory limit is present, the heavy
+# path stays unbounded exactly as before.
+#
+# Can also be specified via environment variable `BOBBIN_BACKPRESSURE_PER_REQUEST_ANON_BYTES`.
+#
+# Default value: 2097152
+#per_request_anon_bytes = 2097152
+
+# How often the adaptive watcher samples memory.current/memory.max and
+# adjusts the in-flight cap. Ignored when no cgroup memory limit is present.
+#
+# Can also be specified via environment variable `BOBBIN_BACKPRESSURE_ADJUST_INTERVAL_MS`.
+#
+# Default value: 500
+#adjust_interval_ms = 500
+
+# memory.current/memory.max ratio below which the watcher additively raises
+# the in-flight cap back toward its ceiling. Sits below the memory.high
+# throttle band so the kernel, not this loop, handles mild pressure.
+#
+# Can also be specified via environment variable `BOBBIN_BACKPRESSURE_RELIEVE_BELOW_RATIO`.
+#
+# Default value: 0.85
+#relieve_below_ratio = 0.85
+
+# memory.current/memory.max ratio above which the watcher multiplicatively
+# cuts the in-flight cap and purges jemalloc arenas. Set above the memory.high
+# watermark so this loop acts as the anti-OOM backstop, not a duplicate throttle.
+#
+# Can also be specified via environment variable `BOBBIN_BACKPRESSURE_TIGHTEN_ABOVE_RATIO`.
+#
+# Default value: 0.92
+#tighten_above_ratio = 0.92
+
+# Bytes held back for the edge index, state indexes, and other derived
+# state that grows after startup. Folded into the heavy-request reserve so
+# the static in-flight cap leaves the index room to fill. Has no effect when
+# no cgroup memory limit is present.
+#
+# Can also be specified via environment variable `BOBBIN_BACKPRESSURE_RESERVED_INDEX_BYTES`.
+#
+# Default value: 67108864
+#reserved_index_bytes = 67108864
+
+[slingshot]
+# Base URL of a slingshot instance. Used for record bodies and identity.
+#
+# Can also be specified via environment variable `BOBBIN_SLINGSHOT_URL`.
+#
+# Default value: "http://127.0.0.1:13011"
+#url = "http://127.0.0.1:13011"
+
+[record_cache]
+# Bound of bytes on the in-process record LRU. Records evict on a weighted
+# LRU policy keyed on URI plus payload length.
+#
+# Can also be specified via environment variable `BOBBIN_RECORD_LRU_BYTES`.
+#
+# Default value: 67108864
+#lru_bytes = 67108864
+
+[search]
+# The heap size in bytes for the in-mem tantivy writer. Larger values
+# trade RAM for fewer segment merges - the index itself lives in
+# `RamDirectory` and is rebuilt from hydrant replay on every restart.
+#
+# Can also be specified via environment variable `BOBBIN_SEARCH_HEAP_BYTES`.
+#
+# Default value: 50000000
+#heap_bytes = 50000000
+
+[knot]
+# Whether to allow the knot proxy to dial private/loopback addresses. Off in
+# production - on for local testing against a knotserver on localhost.
+#
+# Can also be specified via environment variable `BOBBIN_KNOT_ALLOW_PRIVATE`.
+#
+# Default value: false
+#allow_private = false
+
+# Require https on knot hosts. Disable only when proxying to a local
+# knot for development.
+#
+# Can also be specified via environment variable `BOBBIN_KNOT_REQUIRE_HTTPS`.
+#
+# Default value: true
+#require_https = true
+
+[log]
+# Log emitter format. `text` produces human-readable output for local
+# development. `json` emits one structured object per line for log
+# shippers in production.
+#
+# Can also be specified via environment variable `BOBBIN_LOG_FORMAT`.
+#
+# Default value: "text"
+#format = "text"
+
+# `tracing-subscriber` env-filter directive. Defaults to `info` across
+# every span - override with `BOBBIN_LOG=bobbin_xrpc=debug,info` etc.
+#
+# Can also be specified via environment variable `BOBBIN_LOG`.
+#
+# Default value: "info"
+#filter = "info"
