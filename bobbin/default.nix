@@ -4,7 +4,6 @@
   tangled,
   ...
 }:
-
 rustPlatform.buildRustPackage {
   pname = "bobbin";
   version = "main";
@@ -33,4 +32,3 @@ rustPlatform.buildRustPackage {
     mainProgram = "bobbin";
   };
 }
-

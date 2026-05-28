@@ -21,16 +21,15 @@ fn adversarial_keys(n: u32) -> Vec<Key> {
 
 fn vec_shift_work(keys: &[Key]) -> u128 {
     let mut sorted: Vec<Key> = Vec::with_capacity(keys.len());
-    keys.iter().fold(0u128, |moves, &key| {
-        match sorted.binary_search(&key) {
+    keys.iter()
+        .fold(0u128, |moves, &key| match sorted.binary_search(&key) {
             Ok(_) => moves,
             Err(pos) => {
                 let displaced = (sorted.len() - pos) as u128;
                 sorted.insert(pos, key);
                 moves + displaced
             }
-        }
-    })
+        })
 }
 
 thread_local! {
@@ -63,9 +62,7 @@ fn btree_compare_work(keys: &[Key]) -> u128 {
 }
 
 fn doubling_ratios(work: &[u128]) -> Vec<f64> {
-    work.windows(2)
-        .map(|w| w[1] as f64 / w[0] as f64)
-        .collect()
+    work.windows(2).map(|w| w[1] as f64 / w[0] as f64).collect()
 }
 
 #[test]
@@ -120,16 +117,15 @@ fn sorted_vec_build_is_quadratic_while_btree_is_quasilinear() {
 fn vec_remove_work(keys: &[Key]) -> u128 {
     let mut sorted: Vec<Key> = keys.to_vec();
     sorted.sort_unstable();
-    keys.iter().fold(0u128, |moves, key| {
-        match sorted.binary_search(key) {
+    keys.iter()
+        .fold(0u128, |moves, key| match sorted.binary_search(key) {
             Ok(pos) => {
                 let displaced = (sorted.len() - pos - 1) as u128;
                 sorted.remove(pos);
                 moves + displaced
             }
             Err(_) => moves,
-        }
-    })
+        })
 }
 
 fn btree_remove_work(keys: &[Key]) -> u128 {

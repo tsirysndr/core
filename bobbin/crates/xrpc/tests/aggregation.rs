@@ -767,7 +767,11 @@ async fn gone_item_is_evicted_so_count_converges_to_list() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["items"].as_array().unwrap().len(), 1, "gone item dropped from the page");
+    assert_eq!(
+        body["items"].as_array().unwrap().len(),
+        1,
+        "gone item dropped from the page"
+    );
 
     let (cstatus, cbody) = json_response(
         app.oneshot(list_request(

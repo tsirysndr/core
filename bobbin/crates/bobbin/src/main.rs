@@ -247,13 +247,14 @@ async fn run(cfg: BobbinConfig) -> anyhow::Result<()> {
         )
     });
 
-    let debug_bind: Option<SocketAddr> = if cfg.server.debug_bind.is_empty() {
-        None
-    } else {
-        Some(cfg.server.debug_bind.parse().with_context(|| {
-            format!("invalid server.debug_bind `{}`", cfg.server.debug_bind)
-        })?)
-    };
+    let debug_bind: Option<SocketAddr> =
+        if cfg.server.debug_bind.is_empty() {
+            None
+        } else {
+            Some(cfg.server.debug_bind.parse().with_context(|| {
+                format!("invalid server.debug_bind `{}`", cfg.server.debug_bind)
+            })?)
+        };
     let mem_probe = debug_bind.is_some().then(|| mem::MemProbe {
         edges: edges.clone(),
         search: search.clone(),

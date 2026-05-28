@@ -251,7 +251,22 @@ pub struct EdgeMemReport {
 }
 
 const BUCKET_CLASS_BOUNDS: [u64; 16] = [
-    1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 8192, 32768, 131072, u64::MAX,
+    1,
+    2,
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    8192,
+    32768,
+    131072,
+    u64::MAX,
 ];
 const BUCKET_CLASS_COUNT: usize = BUCKET_CLASS_BOUNDS.len();
 
@@ -264,7 +279,9 @@ fn bucket_class(n: u64) -> usize {
 
 impl EdgeMemReport {
     pub fn bucket_histogram(&self) -> impl Iterator<Item = (u64, u64)> {
-        BUCKET_CLASS_BOUNDS.into_iter().zip(self.bucket_size_classes)
+        BUCKET_CLASS_BOUNDS
+            .into_iter()
+            .zip(self.bucket_size_classes)
     }
 }
 
@@ -347,7 +364,9 @@ impl Sources {
                 }
             }
             Self::Large(big) => {
-                if big.keys.remove(key) && let Some(a) = author {
+                if big.keys.remove(key)
+                    && let Some(a) = author
+                {
                     drop_author(&mut big.authors, a);
                 }
             }
@@ -675,9 +694,9 @@ impl EdgeStore {
             .and_then(|id| {
                 self.forward.read_sync(&id, |_, sources| {
                     let init = ScanState::with_capacity(limit_usize + 1);
-                    let outcome = sources.directed(cursor, dir).try_fold(
-                        init,
-                        |mut state, key| {
+                    let outcome = sources
+                        .directed(cursor, dir)
+                        .try_fold(init, |mut state, key| {
                             if state.scanned >= scan_cap && state.matched.len() <= limit_usize {
                                 return ControlFlow::Break(state);
                             }
@@ -695,8 +714,7 @@ impl EdgeStore {
                                 }
                             }
                             ControlFlow::Continue(state)
-                        },
-                    );
+                        });
                     let (state, bucket_exhausted) = match outcome {
                         ControlFlow::Continue(s) => (s, true),
                         ControlFlow::Break(s) => (s, false),

@@ -99,10 +99,7 @@ impl Weighter<AtUri<DefaultStr>, Stored> for ByteWeighter {
             Payload::Raw(bytes) => bytes.len(),
             Payload::Zstd { compressed, .. } => compressed.len(),
         };
-        ENTRY_OVERHEAD
-            + payload as u64
-            + key.as_ref().len() as u64
-            + val.cid.as_ref().len() as u64
+        ENTRY_OVERHEAD + payload as u64 + key.as_ref().len() as u64 + val.cid.as_ref().len() as u64
     }
 }
 
