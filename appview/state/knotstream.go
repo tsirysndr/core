@@ -364,7 +364,7 @@ func ingestDIDAssign(d *db.DB, enforcer *rbac.Enforcer, source ec.Source, msg ev
 
 	repos, err := db.GetRepos(d,
 		orm.FilterEq("did", record.OwnerDid),
-		orm.FilterEq("rkey", strings.ToLower(record.RepoName)),
+		orm.FilterEq("name", record.RepoName),
 	)
 	if err != nil || len(repos) == 0 {
 		logger.Warn("didAssign for unknown repo, skipping",
