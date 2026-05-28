@@ -75,7 +75,7 @@ module.exports = {
             h3: {
               "@apply mt-2": {},
             },
-            img: {
+            "img, video": {
               "@apply rounded border border-gray-200 dark:border-gray-700": {},
             },
           },
