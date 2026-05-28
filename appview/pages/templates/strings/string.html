@@ -30,31 +30,34 @@
         </span>
       </div>
 
-      <div class="w-full sm:w-fit grid grid-cols-3 gap-2 z-auto">
-        {{ if and .LoggedInUser (eq .LoggedInUser.Did .String.Did) }}
-          <a class="btn text-sm no-underline hover:no-underline flex items-center gap-2 group"
-             hx-boost="true"
-             href="/strings/{{ .String.Did }}/{{ .String.Rkey }}/edit">
-            {{ i "pencil" "w-4 h-4" }}
-            <span class="hidden md:inline">Edit</span>
-            {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-          </a>
-          <button
-            class="btn text-sm text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 flex items-center gap-2 group"
-            title="Delete string"
-            hx-delete="/strings/{{ .String.Did }}/{{ .String.Rkey }}/"
-            hx-swap="none"
-            hx-confirm="Are you sure you want to delete the string `{{ .String.Filename }}`?"
-          >
-            {{ i "trash-2" "w-4 h-4" }}
-            <span class="hidden md:inline">Delete</span>
-            {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-          </button>
-        {{ end }}
-        {{ template "fragments/starBtn"
-          (dict "SubjectAt" .String.AtUri
-                "IsStarred" .IsStarred
-                "StarCount" .StarCount) }}
+      {{ $isOwner := and .LoggedInUser (eq .LoggedInUser.Did .String.Did) }}
+      <div class="w-fit grid grid-flow-col grid-cols-3 gap-2">
+          {{ if $isOwner }}
+            <a class="btn no-underline hover:no-underline group"
+               hx-boost="true"
+               href="/strings/{{ .String.Did }}/{{ .String.Rkey }}/edit">
+              {{ i "pencil" "w-4 h-4" }}
+              <span class="hidden md:inline">Edit</span>
+              {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+            </a>
+            <button
+              class="btn text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 group"
+              title="Delete string"
+              hx-delete="/strings/{{ .String.Did }}/{{ .String.Rkey }}/"
+              hx-swap="none"
+              hx-confirm="Are you sure you want to delete the string `{{ .String.Filename }}`?"
+            >
+              {{ i "trash-2" "w-4 h-4" }}
+              <span class="hidden md:inline">Delete</span>
+              {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+            </button>
+          {{ end }}
+          <div class="{{ if not $isOwner }}col-span-3 justify-self-end{{ end }}">
+            {{ template "fragments/starBtn"
+            (dict "SubjectAt" .String.AtUri
+                  "IsStarred" .IsStarred
+                  "StarCount" .StarCount) }}
+          </div>
       </div>
     </div>
   </section>
