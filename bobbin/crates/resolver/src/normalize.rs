@@ -105,6 +105,7 @@ macro_rules! identity_normalize {
 }
 
 use bobbin_types::sh_tangled::actor::profile::Profile;
+use bobbin_types::sh_tangled::feed::comment::Comment as FeedComment;
 use bobbin_types::sh_tangled::feed::reaction::Reaction;
 use bobbin_types::sh_tangled::feed::star::Star;
 use bobbin_types::sh_tangled::git::ref_update::RefUpdate;
@@ -119,10 +120,8 @@ use bobbin_types::sh_tangled::public_key::PublicKey;
 use bobbin_types::sh_tangled::repo::Repo;
 use bobbin_types::sh_tangled::repo::collaborator::Collaborator;
 use bobbin_types::sh_tangled::repo::issue::Issue;
-use bobbin_types::sh_tangled::repo::issue::comment::Comment as IssueComment;
 use bobbin_types::sh_tangled::repo::issue::state::State as IssueState;
 use bobbin_types::sh_tangled::repo::pull::Pull;
-use bobbin_types::sh_tangled::repo::pull::comment::Comment as PullComment;
 use bobbin_types::sh_tangled::repo::pull::status::Status as PullStatus;
 use bobbin_types::sh_tangled::spindle::Spindle;
 use bobbin_types::sh_tangled::spindle::member::Member as SpindleMember;
@@ -130,6 +129,7 @@ use bobbin_types::sh_tangled::string::TangledString;
 
 identity_normalize!(
     Profile<DefaultStr>,
+    FeedComment<DefaultStr>,
     Reaction<DefaultStr>,
     Star<DefaultStr>,
     RefUpdate<DefaultStr>,
@@ -144,10 +144,8 @@ identity_normalize!(
     Repo<DefaultStr>,
     Collaborator<DefaultStr>,
     Issue<DefaultStr>,
-    IssueComment<DefaultStr>,
     IssueState<DefaultStr>,
     Pull<DefaultStr>,
-    PullComment<DefaultStr>,
     PullStatus<DefaultStr>,
     Spindle<DefaultStr>,
     SpindleMember<DefaultStr>,

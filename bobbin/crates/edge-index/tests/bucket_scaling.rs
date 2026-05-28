@@ -33,7 +33,7 @@ fn vec_shift_work(keys: &[Key]) -> u128 {
 }
 
 thread_local! {
-    static COMPARES: Cell<u128> = Cell::new(0);
+    static COMPARES: Cell<u128> = const { Cell::new(0) };
 }
 
 #[derive(PartialEq, Eq)]

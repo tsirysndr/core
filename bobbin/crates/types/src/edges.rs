@@ -9,6 +9,7 @@ use jacquard_common::{BosStr, DefaultStr};
 
 use crate::ids::{SubjectRef, nsid_static};
 use crate::sh_tangled::actor::profile::Profile;
+use crate::sh_tangled::feed::comment::Comment as FeedCommentRecord;
 use crate::sh_tangled::feed::reaction::Reaction;
 use crate::sh_tangled::feed::star::Star;
 use crate::sh_tangled::git::ref_update::RefUpdate;
@@ -25,10 +26,8 @@ use crate::sh_tangled::repo::Repo as RepoRecord;
 use crate::sh_tangled::repo::artifact::Artifact;
 use crate::sh_tangled::repo::collaborator::Collaborator;
 use crate::sh_tangled::repo::issue::Issue;
-use crate::sh_tangled::repo::issue::comment::Comment as IssueCommentRecord;
 use crate::sh_tangled::repo::issue::state::State as IssueStateRecord;
 use crate::sh_tangled::repo::pull::Pull;
-use crate::sh_tangled::repo::pull::comment::Comment as PullCommentRecord;
 use crate::sh_tangled::repo::pull::status::Status as PullStatusRecord;
 use crate::sh_tangled::spindle::Spindle;
 use crate::sh_tangled::spindle::member::Member as SpindleMemberRecord;
@@ -55,6 +54,7 @@ pub enum ExtractError {
 #[derive(Debug)]
 pub enum Record {
     Profile(Profile<DefaultStr>),
+    FeedComment(FeedCommentRecord<DefaultStr>),
     Reaction(Reaction<DefaultStr>),
     Star(Star<DefaultStr>),
     RefUpdate(RefUpdate<DefaultStr>),
@@ -71,10 +71,8 @@ pub enum Record {
     Artifact(Artifact<DefaultStr>),
     Collaborator(Collaborator<DefaultStr>),
     Issue(Issue<DefaultStr>),
-    IssueComment(IssueCommentRecord<DefaultStr>),
     IssueState(IssueStateRecord<DefaultStr>),
     Pull(Pull<DefaultStr>),
-    PullComment(PullCommentRecord<DefaultStr>),
     PullStatus(PullStatusRecord<DefaultStr>),
     Spindle(Spindle<DefaultStr>),
     SpindleMember(SpindleMemberRecord<DefaultStr>),
@@ -101,6 +99,7 @@ impl Record {
         }
         match nsid.as_ref() {
             "sh.tangled.actor.profile" => parse!(Profile),
+            "sh.tangled.feed.comment" => parse!(FeedComment),
             "sh.tangled.feed.reaction" => parse!(Reaction),
             "sh.tangled.feed.star" => parse!(Star),
             "sh.tangled.git.refUpdate" => parse!(RefUpdate),
@@ -117,10 +116,8 @@ impl Record {
             "sh.tangled.repo.artifact" => parse!(Artifact),
             "sh.tangled.repo.collaborator" => parse!(Collaborator),
             "sh.tangled.repo.issue" => parse!(Issue),
-            "sh.tangled.repo.issue.comment" => parse!(IssueComment),
             "sh.tangled.repo.issue.state" => parse!(IssueState),
             "sh.tangled.repo.pull" => parse!(Pull),
-            "sh.tangled.repo.pull.comment" => parse!(PullComment),
             "sh.tangled.repo.pull.status" => parse!(PullStatus),
             "sh.tangled.spindle" => parse!(Spindle),
             "sh.tangled.spindle.member" => parse!(SpindleMember),
@@ -132,6 +129,7 @@ impl Record {
     pub fn collection(&self) -> Nsid<DefaultStr> {
         let s: &'static str = match self {
             Self::Profile(_) => "sh.tangled.actor.profile",
+            Self::FeedComment(_) => "sh.tangled.feed.comment",
             Self::Reaction(_) => "sh.tangled.feed.reaction",
             Self::Star(_) => "sh.tangled.feed.star",
             Self::RefUpdate(_) => "sh.tangled.git.refUpdate",
@@ -148,10 +146,8 @@ impl Record {
             Self::Artifact(_) => "sh.tangled.repo.artifact",
             Self::Collaborator(_) => "sh.tangled.repo.collaborator",
             Self::Issue(_) => "sh.tangled.repo.issue",
-            Self::IssueComment(_) => "sh.tangled.repo.issue.comment",
             Self::IssueState(_) => "sh.tangled.repo.issue.state",
             Self::Pull(_) => "sh.tangled.repo.pull",
-            Self::PullComment(_) => "sh.tangled.repo.pull.comment",
             Self::PullStatus(_) => "sh.tangled.repo.pull.status",
             Self::Spindle(_) => "sh.tangled.spindle",
             Self::SpindleMember(_) => "sh.tangled.spindle.member",
@@ -185,6 +181,7 @@ impl Record {
     fn created_at(&self) -> Option<&Datetime> {
         match self {
             Self::Profile(_) => None,
+            Self::FeedComment(r) => Some(&r.created_at),
             Self::Reaction(r) => Some(&r.created_at),
             Self::Star(r) => Some(&r.created_at),
             Self::RefUpdate(_) => None,
@@ -201,10 +198,8 @@ impl Record {
             Self::Artifact(r) => Some(&r.created_at),
             Self::Collaborator(r) => Some(&r.created_at),
             Self::Issue(r) => Some(&r.created_at),
-            Self::IssueComment(r) => Some(&r.created_at),
             Self::IssueState(_) => None,
             Self::Pull(r) => Some(&r.created_at),
-            Self::PullComment(r) => Some(&r.created_at),
             Self::PullStatus(_) => None,
             Self::Spindle(r) => Some(&r.created_at),
             Self::SpindleMember(r) => Some(&r.created_at),
@@ -215,6 +210,7 @@ impl Record {
     fn primary_edges(&self, source: &AtUri<DefaultStr>) -> Result<Vec<Edge>, ExtractError> {
         match self {
             Self::Star(r) => star_edges(source, r),
+            Self::FeedComment(r) => feed_comment_edges(source, r),
             Self::Reaction(r) => reaction_edges(source, r),
             Self::Follow(r) => follow_edges(source, r),
             Self::RefUpdate(r) => ref_update_edges(source, r),
@@ -224,10 +220,8 @@ impl Record {
             Self::Artifact(r) => artifact_edges(source, r),
             Self::Collaborator(r) => collaborator_edges(source, r),
             Self::Issue(r) => issue_edges(source, r),
-            Self::IssueComment(r) => issue_comment_edges(source, r),
             Self::IssueState(r) => issue_state_edges(source, r),
             Self::Pull(r) => pull_edges(source, r),
-            Self::PullComment(r) => pull_comment_edges(source, r),
             Self::PullStatus(r) => pull_status_edges(source, r),
             Self::SpindleMember(r) => spindle_member_edges(source, r),
             Self::Pipeline(r) => pipeline_edges(source, r),
@@ -268,6 +262,7 @@ fn one_edge(kind: &'static str, subject: SubjectRef, source: &AtUri<DefaultStr>)
 }
 
 const MIRROR_KINDS: &[(&str, &str)] = &[
+    ("sh.tangled.feed.comment", "sh.tangled.feed.comment.by"),
     ("sh.tangled.feed.star", "sh.tangled.feed.star.by"),
     ("sh.tangled.feed.reaction", "sh.tangled.feed.reaction.by"),
     ("sh.tangled.graph.follow", "sh.tangled.graph.follow.by"),
@@ -287,18 +282,10 @@ const MIRROR_KINDS: &[(&str, &str)] = &[
     ),
     ("sh.tangled.repo.issue", "sh.tangled.repo.issue.by"),
     (
-        "sh.tangled.repo.issue.comment",
-        "sh.tangled.repo.issue.comment.by",
-    ),
-    (
         "sh.tangled.repo.issue.state",
         "sh.tangled.repo.issue.state.by",
     ),
     ("sh.tangled.repo.pull", "sh.tangled.repo.pull.by"),
-    (
-        "sh.tangled.repo.pull.comment",
-        "sh.tangled.repo.pull.comment.by",
-    ),
     (
         "sh.tangled.repo.pull.status",
         "sh.tangled.repo.pull.status.by",
@@ -445,14 +432,14 @@ fn issue_edges(
     ))
 }
 
-fn issue_comment_edges(
+fn feed_comment_edges(
     source: &AtUri<DefaultStr>,
-    record: &IssueCommentRecord<DefaultStr>,
+    record: &FeedCommentRecord<DefaultStr>,
 ) -> Result<Vec<Edge>, ExtractError> {
-    let Some(subject) = uri_subject_for_record(&record.issue) else {
+    let Some(subject) = uri_subject_for_record(&record.subject.uri) else {
         return Ok(Vec::new());
     };
-    Ok(one_edge("sh.tangled.repo.issue.comment", subject, source))
+    Ok(one_edge("sh.tangled.feed.comment", subject, source))
 }
 
 fn issue_state_edges(
@@ -474,16 +461,6 @@ fn pull_edges(
         SubjectRef::Did(record.target.repo.clone()),
         source,
     ))
-}
-
-fn pull_comment_edges(
-    source: &AtUri<DefaultStr>,
-    record: &PullCommentRecord<DefaultStr>,
-) -> Result<Vec<Edge>, ExtractError> {
-    let Some(subject) = uri_subject_for_record(&record.pull) else {
-        return Ok(Vec::new());
-    };
-    Ok(one_edge("sh.tangled.repo.pull.comment", subject, source))
 }
 
 fn pull_status_edges(
@@ -674,14 +651,17 @@ mod tests {
     }
 
     #[test]
-    fn issue_comment_uses_issue_uri() {
+    fn feed_comment_keys_on_subject_uri() {
         let edges = extract(
-            "sh.tangled.repo.issue.comment",
-            "at://did:plc:nel/sh.tangled.repo.issue.comment/abcabcabcabcz",
+            "sh.tangled.feed.comment",
+            "at://did:plc:nel/sh.tangled.feed.comment/abcabcabcabcz",
             json!({
-                "$type": "sh.tangled.repo.issue.comment",
-                "issue": "at://did:plc:nel/sh.tangled.repo.issue/3lk1",
-                "body": "thoughts",
+                "$type": "sh.tangled.feed.comment",
+                "subject": {
+                    "uri": "at://did:plc:nel/sh.tangled.repo.issue/3lk1",
+                    "cid": "bafkqaaa"
+                },
+                "body": { "$type": "sh.tangled.markup.markdown", "text": "thoughts" },
                 "createdAt": "2026-05-01T00:00:00Z"
             }),
         );
@@ -689,6 +669,29 @@ mod tests {
         assert_eq!(
             edges[0].subject,
             uri_subj("at://did:plc:nel/sh.tangled.repo.issue/3lk1")
+        );
+    }
+
+    #[test]
+    fn feed_comment_on_pull_keys_on_pull_uri() {
+        let edges = extract(
+            "sh.tangled.feed.comment",
+            "at://did:plc:nel/sh.tangled.feed.comment/abcabcabcabcz",
+            json!({
+                "$type": "sh.tangled.feed.comment",
+                "subject": {
+                    "uri": "at://did:plc:nel/sh.tangled.repo.pull/limpet",
+                    "cid": "bafkqaaa"
+                },
+                "body": { "$type": "sh.tangled.markup.markdown", "text": "lgtm" },
+                "createdAt": "2026-05-01T00:00:00Z",
+                "pullRoundIdx": 2
+            }),
+        );
+        assert_eq!(edges.len(), 1);
+        assert_eq!(
+            edges[0].subject,
+            uri_subj("at://did:plc:nel/sh.tangled.repo.pull/limpet")
         );
     }
 

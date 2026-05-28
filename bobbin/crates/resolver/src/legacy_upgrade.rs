@@ -1,19 +1,26 @@
+use alloc::collections::BTreeMap;
+use bobbin_types::com_atproto::repo::strong_ref::StrongRef;
 use bobbin_types::edges::{ExtractError, Record};
 use bobbin_types::legacy::{
-    LegacyCollaborator, LegacyIssue, LegacyKnotMember, LegacyPublicKey, LegacyPull, LegacyRecord,
+    LEGACY_COMMENT_SENTINEL_CID, LegacyCollaborator, LegacyIssue, LegacyIssueComment,
+    LegacyKnotMember, LegacyPublicKey, LegacyPull, LegacyPullComment, LegacyRecord,
     LegacyRefUpdate, LegacyRepo, LegacySource, LegacyStar, LegacyTarget,
 };
+use bobbin_types::sh_tangled::feed::comment::Comment as FeedComment;
 use bobbin_types::sh_tangled::feed::star::{Repo as StarRepo, Star, StarString, StarSubject};
 use bobbin_types::sh_tangled::git::ref_update::RefUpdate;
 use bobbin_types::sh_tangled::knot::member::Member as KnotMember;
+use bobbin_types::sh_tangled::markup::markdown::Markdown;
 use bobbin_types::sh_tangled::public_key::PublicKey;
 use bobbin_types::sh_tangled::repo::Repo;
 use bobbin_types::sh_tangled::repo::collaborator::Collaborator;
 use bobbin_types::sh_tangled::repo::issue::Issue;
 use bobbin_types::sh_tangled::repo::pull::{Pull, Round, Source, Target};
+use jacquard_common::deps::smol_str::SmolStr;
 use jacquard_common::types::did::Did;
 use jacquard_common::types::nsid::Nsid;
-use jacquard_common::types::string::AtUri;
+use jacquard_common::types::string::{AtUri, AtprotoStr, Cid};
+use jacquard_common::types::value::{Array, Data};
 use jacquard_common::{BosStr, DefaultStr};
 
 use crate::normalize::{is_repo_at_uri, resolve_repo_uri};
@@ -201,6 +208,7 @@ pub async fn decode_canon_or_upgrade_bytes<'a, S: BosStr + AsRef<str>>(
 
 fn serialize_canon_variant(record: &Record) -> Result<alloc::vec::Vec<u8>, serde_json::Error> {
     match record {
+        Record::FeedComment(r) => serde_json::to_vec(r),
         Record::Issue(r) => serde_json::to_vec(r),
         Record::Pull(r) => serde_json::to_vec(r),
         Record::Collaborator(r) => serde_json::to_vec(r),
@@ -210,7 +218,7 @@ fn serialize_canon_variant(record: &Record) -> Result<alloc::vec::Vec<u8>, serde
         Record::Repo(r) => serde_json::to_vec(r),
         Record::KnotMember(r) => serde_json::to_vec(r),
         _ => unreachable!(
-            "upgrade only produces Issue/Pull/Collaborator/RefUpdate/Star/PublicKey/Repo/KnotMember"
+            "upgrade only produces FeedComment/Issue/Pull/Collaborator/RefUpdate/Star/PublicKey/Repo/KnotMember"
         ),
     }
 }
@@ -218,7 +226,9 @@ fn serialize_canon_variant(record: &Record) -> Result<alloc::vec::Vec<u8>, serde
 pub async fn upgrade(legacy: LegacyRecord, resolver: &RepoIdResolver) -> Option<Record> {
     match legacy {
         LegacyRecord::Issue(l) => upgrade_issue(l, resolver).await.map(Record::Issue),
+        LegacyRecord::IssueComment(l) => Some(Record::FeedComment(upgrade_issue_comment(l))),
         LegacyRecord::Pull(l) => upgrade_pull(l, resolver).await.map(Record::Pull),
+        LegacyRecord::PullComment(l) => Some(Record::FeedComment(upgrade_pull_comment(l))),
         LegacyRecord::Collaborator(l) => upgrade_collaborator(l, resolver)
             .await
             .map(Record::Collaborator),
@@ -227,6 +237,79 @@ pub async fn upgrade(legacy: LegacyRecord, resolver: &RepoIdResolver) -> Option<
         LegacyRecord::PublicKey(l) => Some(Record::PublicKey(upgrade_public_key(l))),
         LegacyRecord::Repo(l) => Some(Record::Repo(upgrade_repo(l))),
         LegacyRecord::KnotMember(l) => Some(Record::KnotMember(upgrade_knot_member(l))),
+    }
+}
+
+fn sentinel_strong_ref(uri: AtUri<DefaultStr>) -> StrongRef<DefaultStr> {
+    let cid = Cid::<DefaultStr>::new_owned(LEGACY_COMMENT_SENTINEL_CID.as_bytes())
+        .expect("LEGACY_COMMENT_SENTINEL_CID is a valid CID literal");
+    StrongRef {
+        uri,
+        cid,
+        extra_data: None,
+    }
+}
+
+fn legacy_body_markdown(text: DefaultStr) -> Markdown<DefaultStr> {
+    Markdown {
+        blobs: None,
+        original: None,
+        text,
+        extra_data: None,
+    }
+}
+
+fn upgrade_issue_comment(l: LegacyIssueComment<DefaultStr>) -> FeedComment<DefaultStr> {
+    FeedComment {
+        body: legacy_body_markdown(l.body),
+        created_at: l.created_at,
+        pull_round_idx: None,
+        reply_to: l.reply_to.map(sentinel_strong_ref),
+        subject: sentinel_strong_ref(l.issue),
+        extra_data: legacy_comment_extras(l.extra_data, l.mentions, l.references),
+    }
+}
+
+fn upgrade_pull_comment(l: LegacyPullComment<DefaultStr>) -> FeedComment<DefaultStr> {
+    FeedComment {
+        body: legacy_body_markdown(l.body),
+        created_at: l.created_at,
+        pull_round_idx: None,
+        reply_to: None,
+        subject: sentinel_strong_ref(l.pull),
+        extra_data: legacy_comment_extras(l.extra_data, l.mentions, l.references),
+    }
+}
+
+fn legacy_comment_extras<S: BosStr>(
+    base: Option<BTreeMap<SmolStr, Data<S>>>,
+    mentions: Option<Vec<Did<S>>>,
+    references: Option<Vec<AtUri<S>>>,
+) -> Option<BTreeMap<SmolStr, Data<S>>> {
+    let mention_entry = mentions.filter(|v| !v.is_empty()).map(|items| {
+        let arr = items
+            .into_iter()
+            .map(|d| Data::String(AtprotoStr::Did(d)))
+            .collect();
+        (SmolStr::new_static("mentions"), Data::Array(Array(arr)))
+    });
+    let reference_entry = references.filter(|v| !v.is_empty()).map(|items| {
+        let arr = items
+            .into_iter()
+            .map(|u| Data::String(AtprotoStr::AtUri(u)))
+            .collect();
+        (SmolStr::new_static("references"), Data::Array(Array(arr)))
+    });
+    let combined: BTreeMap<SmolStr, Data<S>> = base
+        .into_iter()
+        .flatten()
+        .chain(mention_entry)
+        .chain(reference_entry)
+        .collect();
+    if combined.is_empty() {
+        None
+    } else {
+        Some(combined)
     }
 }
 

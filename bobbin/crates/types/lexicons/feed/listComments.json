@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "sh.tangled.repo.pull.listComments",
+  "id": "sh.tangled.feed.listComments",
   "defs": {
     "main": {
       "type": "query",
@@ -11,7 +11,7 @@
           "subject": {
             "type": "string",
             "format": "at-uri",
-            "description": "Pull AT-URI whose comments to list."
+            "description": "Record AT-URI the comments are attached to."
           },
           "cursor": {
             "type": "string",
@@ -54,7 +54,7 @@
         "cid": { "type": "string", "format": "cid" },
         "value": {
           "type": "unknown",
-          "description": "Embedded sh.tangled.repo.pull.comment record"
+          "description": "Embedded sh.tangled.feed.comment record"
         }
       }
     }

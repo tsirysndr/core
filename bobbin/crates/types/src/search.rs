@@ -11,12 +11,11 @@ use serde::Serialize;
 use crate::edges::{ExtractError, Record};
 use crate::ids::nsid_static;
 use crate::sh_tangled::actor::profile::Profile;
+use crate::sh_tangled::feed::comment::Comment as FeedCommentRecord;
 use crate::sh_tangled::label::definition::Definition as LabelDefinitionRecord;
 use crate::sh_tangled::repo::Repo as RepoRecord;
 use crate::sh_tangled::repo::issue::Issue;
-use crate::sh_tangled::repo::issue::comment::Comment as IssueCommentRecord;
 use crate::sh_tangled::repo::pull::Pull;
-use crate::sh_tangled::repo::pull::comment::Comment as PullCommentRecord;
 use crate::sh_tangled::string::TangledString;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -48,9 +47,8 @@ pub enum SearchableRecord {
     Profile(Profile<DefaultStr>),
     Repo(RepoRecord<DefaultStr>),
     Issue(Issue<DefaultStr>),
-    IssueComment(IssueCommentRecord<DefaultStr>),
     Pull(Pull<DefaultStr>),
-    PullComment(PullCommentRecord<DefaultStr>),
+    FeedComment(FeedCommentRecord<DefaultStr>),
     TangledString(TangledString<DefaultStr>),
     LabelDefinition(LabelDefinitionRecord<DefaultStr>),
 }
@@ -61,9 +59,8 @@ impl SearchableRecord {
             Record::Profile(r) => Some(Self::Profile(r)),
             Record::Repo(r) => Some(Self::Repo(r)),
             Record::Issue(r) => Some(Self::Issue(r)),
-            Record::IssueComment(r) => Some(Self::IssueComment(r)),
             Record::Pull(r) => Some(Self::Pull(r)),
-            Record::PullComment(r) => Some(Self::PullComment(r)),
+            Record::FeedComment(r) => Some(Self::FeedComment(r)),
             Record::TangledString(r) => Some(Self::TangledString(r)),
             Record::LabelDefinition(r) => Some(Self::LabelDefinition(r)),
             Record::Reaction(_)
@@ -100,9 +97,8 @@ impl SearchableRecord {
             Self::Profile(_) => "sh.tangled.actor.profile",
             Self::Repo(_) => "sh.tangled.repo",
             Self::Issue(_) => "sh.tangled.repo.issue",
-            Self::IssueComment(_) => "sh.tangled.repo.issue.comment",
             Self::Pull(_) => "sh.tangled.repo.pull",
-            Self::PullComment(_) => "sh.tangled.repo.pull.comment",
+            Self::FeedComment(_) => "sh.tangled.feed.comment",
             Self::TangledString(_) => "sh.tangled.string",
             Self::LabelDefinition(_) => "sh.tangled.label.definition",
         };
@@ -114,9 +110,8 @@ impl SearchableRecord {
             Self::Profile(r) => profile_doc(source, r),
             Self::Repo(r) => repo_doc(source, r),
             Self::Issue(r) => issue_doc(source, r),
-            Self::IssueComment(r) => issue_comment_doc(source, r),
             Self::Pull(r) => pull_doc(source, r),
-            Self::PullComment(r) => pull_comment_doc(source, r),
+            Self::FeedComment(r) => feed_comment_doc(source, r),
             Self::TangledString(r) => string_doc(source, r),
             Self::LabelDefinition(r) => label_definition_doc(source, r),
         }
@@ -215,12 +210,12 @@ fn issue_doc(source: &AtUri<DefaultStr>, r: &Issue<DefaultStr>) -> SearchDoc {
     )
 }
 
-fn issue_comment_doc(source: &AtUri<DefaultStr>, r: &IssueCommentRecord<DefaultStr>) -> SearchDoc {
+fn feed_comment_doc(source: &AtUri<DefaultStr>, r: &FeedCommentRecord<DefaultStr>) -> SearchDoc {
     doc(
         source,
-        "sh.tangled.repo.issue.comment",
+        "sh.tangled.feed.comment",
         "",
-        Vec::from([r.body.as_str().to_owned()]),
+        Vec::from([r.body.text.as_str().to_owned()]),
         Some(r.created_at.timestamp()),
         None,
     )
@@ -239,17 +234,6 @@ fn pull_doc(source: &AtUri<DefaultStr>, r: &Pull<DefaultStr>) -> SearchDoc {
         body,
         Some(r.created_at.timestamp()),
         Some(r.target.repo.clone()),
-    )
-}
-
-fn pull_comment_doc(source: &AtUri<DefaultStr>, r: &PullCommentRecord<DefaultStr>) -> SearchDoc {
-    doc(
-        source,
-        "sh.tangled.repo.pull.comment",
-        "",
-        Vec::from([r.body.as_str().to_owned()]),
-        Some(r.created_at.timestamp()),
-        None,
     )
 }
 

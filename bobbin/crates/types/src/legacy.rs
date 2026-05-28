@@ -12,6 +12,8 @@ use serde::{Deserialize, Deserializer};
 use crate::edges::ExtractError;
 use crate::sh_tangled::repo::pull::Round as CanonRound;
 
+pub const LEGACY_COMMENT_SENTINEL_CID: &str = "bafkqaaa";
+
 fn empty_string_as_none<'de, D, T>(d: D) -> Result<Option<T>, D::Error>
 where
     D: Deserializer<'de>,
@@ -110,6 +112,46 @@ pub struct LegacyPull<S: BosStr = DefaultStr> {
     pub dependent_on: Option<AtUri<S>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub patch_blob: Option<BlobRef<S>>,
+    #[serde(flatten, default, skip_serializing_if = "Option::is_none")]
+    pub extra_data: Option<BTreeMap<SmolStr, Data<S>>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(
+    rename_all = "camelCase",
+    rename = "sh.tangled.repo.issue.comment",
+    tag = "$type",
+    bound(deserialize = "S: Deserialize<'de> + BosStr")
+)]
+pub struct LegacyIssueComment<S: BosStr = DefaultStr> {
+    pub created_at: Datetime,
+    pub body: S,
+    pub issue: AtUri<S>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reply_to: Option<AtUri<S>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mentions: Option<Vec<Did<S>>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub references: Option<Vec<AtUri<S>>>,
+    #[serde(flatten, default, skip_serializing_if = "Option::is_none")]
+    pub extra_data: Option<BTreeMap<SmolStr, Data<S>>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(
+    rename_all = "camelCase",
+    rename = "sh.tangled.repo.pull.comment",
+    tag = "$type",
+    bound(deserialize = "S: Deserialize<'de> + BosStr")
+)]
+pub struct LegacyPullComment<S: BosStr = DefaultStr> {
+    pub created_at: Datetime,
+    pub body: S,
+    pub pull: AtUri<S>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mentions: Option<Vec<Did<S>>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub references: Option<Vec<AtUri<S>>>,
     #[serde(flatten, default, skip_serializing_if = "Option::is_none")]
     pub extra_data: Option<BTreeMap<SmolStr, Data<S>>>,
 }
@@ -224,7 +266,9 @@ pub struct LegacyKnotMember<S: BosStr = DefaultStr> {
 #[derive(Debug)]
 pub enum LegacyRecord {
     Issue(LegacyIssue<DefaultStr>),
+    IssueComment(LegacyIssueComment<DefaultStr>),
     Pull(LegacyPull<DefaultStr>),
+    PullComment(LegacyPullComment<DefaultStr>),
     Collaborator(LegacyCollaborator<DefaultStr>),
     RefUpdate(LegacyRefUpdate<DefaultStr>),
     Star(LegacyStar<DefaultStr>),
@@ -240,7 +284,11 @@ impl LegacyRecord {
     ) -> Result<Self, ExtractError> {
         match nsid.as_ref() {
             "sh.tangled.repo.issue" => Ok(Self::Issue(serde_json::from_slice(bytes)?)),
+            "sh.tangled.repo.issue.comment" => {
+                Ok(Self::IssueComment(serde_json::from_slice(bytes)?))
+            }
             "sh.tangled.repo.pull" => Ok(Self::Pull(serde_json::from_slice(bytes)?)),
+            "sh.tangled.repo.pull.comment" => Ok(Self::PullComment(serde_json::from_slice(bytes)?)),
             "sh.tangled.repo.collaborator" => {
                 Ok(Self::Collaborator(serde_json::from_slice(bytes)?))
             }

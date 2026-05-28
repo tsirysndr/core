@@ -804,8 +804,8 @@ async fn handle_authority_subject_is_400() {
         "sh.tangled.repo.countIssues",
         "sh.tangled.repo.listPulls",
         "sh.tangled.repo.countPulls",
-        "sh.tangled.repo.issue.listComments",
-        "sh.tangled.repo.issue.countComments",
+        "sh.tangled.feed.listComments",
+        "sh.tangled.feed.countComments",
     ];
     stream::iter(cases)
         .for_each(|endpoint| {
@@ -893,28 +893,28 @@ async fn count_after_remove_source_returns_zero() {
 }
 
 #[tokio::test]
-async fn list_issue_comments_hydrates_end_to_end() {
+async fn list_feed_comments_hydrates_end_to_end() {
     let h = Harness::new().await;
     let issue_uri = at("at://did:plc:abalone/sh.tangled.repo.issue/i1");
     let nel = did("did:plc:nel");
     let rk = rkey("c1");
     h.add_edge(
-        &nsid("sh.tangled.repo.issue.comment"),
+        &nsid("sh.tangled.feed.comment"),
         &issue_uri,
         &at(&format!(
-            "at://{}/sh.tangled.repo.issue.comment/{}",
+            "at://{}/sh.tangled.feed.comment/{}",
             nel.as_ref(),
             rk.as_ref()
         )),
     );
     h.mount(
         &nel,
-        &nsid("sh.tangled.repo.issue.comment"),
+        &nsid("sh.tangled.feed.comment"),
         &rk,
         json!({
-            "$type": "sh.tangled.repo.issue.comment",
-            "issue": issue_uri.as_ref(),
-            "body": "thoughts",
+            "$type": "sh.tangled.feed.comment",
+            "subject": { "uri": issue_uri.as_ref(), "cid": "bafkqaaa" },
+            "body": { "$type": "sh.tangled.markup.markdown", "text": "thoughts" },
             "createdAt": "2026-05-01T00:00:00Z"
         }),
     )
@@ -923,7 +923,7 @@ async fn list_issue_comments_hydrates_end_to_end() {
     let app = router(h.state.clone());
     let (status, body) = json_response(
         app.oneshot(list_request(
-            "sh.tangled.repo.issue.listComments",
+            "sh.tangled.feed.listComments",
             issue_uri.as_ref(),
             &[],
         ))
@@ -934,8 +934,11 @@ async fn list_issue_comments_hydrates_end_to_end() {
     assert_eq!(status, StatusCode::OK);
     let items = body["items"].as_array().unwrap();
     assert_eq!(items.len(), 1);
-    assert_eq!(items[0]["value"]["body"], json!("thoughts"));
-    assert_eq!(items[0]["value"]["issue"], json!(issue_uri.as_ref()));
+    assert_eq!(items[0]["value"]["body"]["text"], json!("thoughts"));
+    assert_eq!(
+        items[0]["value"]["subject"]["uri"],
+        json!(issue_uri.as_ref())
+    );
 }
 
 #[tokio::test]
@@ -976,24 +979,24 @@ async fn list_item_cid_is_present() {
 }
 
 #[tokio::test]
-async fn count_issue_comments_subjects_on_issue_uri() {
+async fn count_feed_comments_subjects_on_issue_uri() {
     let h = Harness::new().await;
     let issue_uri = at("at://did:plc:abalone/sh.tangled.repo.issue/i1");
     h.add_edge(
-        &nsid("sh.tangled.repo.issue.comment"),
+        &nsid("sh.tangled.feed.comment"),
         &issue_uri,
-        &at("at://did:plc:nel/sh.tangled.repo.issue.comment/c1"),
+        &at("at://did:plc:nel/sh.tangled.feed.comment/c1"),
     );
     h.add_edge(
-        &nsid("sh.tangled.repo.issue.comment"),
+        &nsid("sh.tangled.feed.comment"),
         &issue_uri,
-        &at("at://did:plc:olaren/sh.tangled.repo.issue.comment/c2"),
+        &at("at://did:plc:olaren/sh.tangled.feed.comment/c2"),
     );
 
     let app = router(h.state.clone());
     let (status, body) = json_response(
         app.oneshot(list_request(
-            "sh.tangled.repo.issue.countComments",
+            "sh.tangled.feed.countComments",
             issue_uri.as_ref(),
             &[],
         ))
@@ -1283,12 +1286,12 @@ async fn repo_pointing_endpoints_accept_bare_did() {
 }
 
 #[tokio::test]
-async fn issue_collection_endpoints_reject_bare_did_or_wrong_collection() {
+async fn feed_comment_endpoints_reject_bare_did_or_wrong_collection() {
     let h = Harness::new().await;
     let app = router(h.state.clone());
     let endpoints = [
-        "sh.tangled.repo.issue.listComments",
-        "sh.tangled.repo.issue.countComments",
+        "sh.tangled.feed.listComments",
+        "sh.tangled.feed.countComments",
     ];
     let inputs = [
         "at://did:plc:abalone",
@@ -1308,13 +1311,10 @@ async fn issue_collection_endpoints_reject_bare_did_or_wrong_collection() {
                     .unwrap();
                 let (status, body) = json_response(resp).await;
                 assert_eq!(status, StatusCode::BAD_REQUEST, "{endpoint} input={input}");
+                let msg = body["message"].as_str().unwrap_or_default();
                 assert!(
-                    body["message"]
-                        .as_str()
-                        .unwrap_or_default()
-                        .contains("sh.tangled.repo.issue/<rkey>"),
-                    "{endpoint} input={input}: {}",
-                    body["message"],
+                    msg.contains("sh.tangled.repo.issue") && msg.contains("sh.tangled.repo.pull"),
+                    "{endpoint} input={input}: {msg}",
                 );
             }
         })
@@ -1556,14 +1556,14 @@ async fn list_issues_includes_state_comment_count_and_state_updated_at() {
     )
     .await;
     h.add_edge(
-        &nsid("sh.tangled.repo.issue.comment"),
+        &nsid("sh.tangled.feed.comment"),
         &issue_uri,
-        &at("at://did:plc:olaren/sh.tangled.repo.issue.comment/c1"),
+        &at("at://did:plc:olaren/sh.tangled.feed.comment/c1"),
     );
     h.add_edge(
-        &nsid("sh.tangled.repo.issue.comment"),
+        &nsid("sh.tangled.feed.comment"),
         &issue_uri,
-        &at("at://did:plc:teq/sh.tangled.repo.issue.comment/c2"),
+        &at("at://did:plc:teq/sh.tangled.feed.comment/c2"),
     );
 
     h.state.issue_states.upsert(
@@ -1731,9 +1731,9 @@ async fn list_pulls_includes_merged_state_and_comment_count() {
     )
     .await;
     h.add_edge(
-        &nsid("sh.tangled.repo.pull.comment"),
+        &nsid("sh.tangled.feed.comment"),
         &pull_uri,
-        &at("at://did:plc:teq/sh.tangled.repo.pull.comment/c1"),
+        &at("at://did:plc:teq/sh.tangled.feed.comment/c1"),
     );
     h.state.pull_statuses.upsert(
         at("at://did:plc:nel/sh.tangled.repo.pull.status/s1"),

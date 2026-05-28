@@ -81,7 +81,10 @@ fn star_text() -> &'static str {
             "record": {
                 "$type": "sh.tangled.feed.star",
                 "createdAt": "2026-05-01T00:00:00Z",
-                "subject": "at://did:plc:abalone/sh.tangled.repo/3lq2zk5wq0000"
+                "subject": {
+                    "$type": "sh.tangled.feed.star#repo",
+                    "did": "did:plc:limpet"
+                }
             }
         }
     }"#
@@ -131,8 +134,7 @@ fn issue_text() -> &'static str {
                 "createdAt": "2026-05-01T00:00:00Z",
                 "title": "ingest: single-pass JSON decode follow-up corpus entry",
                 "body": "Long body to give the bench a realistic decode cost. Repeats: blahhhhh meow meow aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "repo": "at://did:plc:limpet",
-                "repoDid": "did:plc:limpet",
+                "repo": "did:plc:limpet",
                 "mentions": [
                     "did:plc:nel",
                     "did:plc:olaren",
@@ -155,15 +157,21 @@ fn pull_comment_text() -> &'static str {
             "live": false,
             "did": "did:plc:lyna",
             "rev": "3lq2zk5wqsh2n",
-            "collection": "sh.tangled.repo.pull.comment",
+            "collection": "sh.tangled.feed.comment",
             "rkey": "3lq2zk5wq0200",
             "action": "create",
             "record": {
-                "$type": "sh.tangled.repo.pull.comment",
+                "$type": "sh.tangled.feed.comment",
                 "createdAt": "2026-05-01T00:00:00Z",
-                "body": "lgtm i thinks!!!! but please verify the cursor invariant under buffered(N) before landing. :3",
-                "pull": "at://did:plc:limpet/sh.tangled.repo.pull/3lq2zk5wq0098",
-                "owner": "did:plc:lyna"
+                "body": {
+                    "$type": "sh.tangled.markup.markdown",
+                    "text": "lgtm i thinks!!!! but please verify the cursor invariant under buffered(N) before landing. :3"
+                },
+                "subject": {
+                    "uri": "at://did:plc:limpet/sh.tangled.repo.pull/3lq2zk5wq0098",
+                    "cid": "bafkqaaa"
+                },
+                "pullRoundIdx": 0
             }
         }
     }"#

@@ -37,6 +37,9 @@ use bobbin_types::ids::{EdgeKey, SubjectRef, nsid_static};
 use bobbin_types::record::RecordBody;
 use bobbin_types::search::SearchableRecord;
 use bobbin_types::sh_tangled::actor::profile::{Profile, ProfileGetRecordOutput, ProfileRecord};
+use bobbin_types::sh_tangled::feed::comment::{
+    Comment as FeedComment, CommentRecord as FeedCommentRecord,
+};
 use bobbin_types::sh_tangled::feed::reaction::{Reaction, ReactionRecord};
 use bobbin_types::sh_tangled::feed::star::{Star, StarRecord};
 use bobbin_types::sh_tangled::git::ref_update::{RefUpdate, RefUpdateRecord};
@@ -57,16 +60,10 @@ use bobbin_types::sh_tangled::pipeline::{Pipeline, PipelineRecord};
 use bobbin_types::sh_tangled::public_key::{PublicKey, PublicKeyRecord};
 use bobbin_types::sh_tangled::repo::artifact::{Artifact, ArtifactRecord};
 use bobbin_types::sh_tangled::repo::collaborator::{Collaborator, CollaboratorRecord};
-use bobbin_types::sh_tangled::repo::issue::comment::{
-    Comment as IssueComment, CommentRecord as IssueCommentRecord,
-};
 use bobbin_types::sh_tangled::repo::issue::state::{
     State as IssueState, StateRecord as IssueStateRecord,
 };
 use bobbin_types::sh_tangled::repo::issue::{Issue, IssueGetRecordOutput, IssueRecord};
-use bobbin_types::sh_tangled::repo::pull::comment::{
-    Comment as PullComment, CommentRecord as PullCommentRecord,
-};
 use bobbin_types::sh_tangled::repo::pull::status::{
     Status as PullStatus, StatusRecord as PullStatusRecord,
 };
@@ -181,20 +178,12 @@ pub fn router(state: AppState) -> Router {
         .route("/xrpc/sh.tangled.repo.listPulls", get(list_pulls))
         .route("/xrpc/sh.tangled.repo.countPulls", get(count_pulls))
         .route(
-            "/xrpc/sh.tangled.repo.issue.listComments",
-            get(list_issue_comments),
+            "/xrpc/sh.tangled.feed.listComments",
+            get(list_feed_comments),
         )
         .route(
-            "/xrpc/sh.tangled.repo.issue.countComments",
-            get(count_issue_comments),
-        )
-        .route(
-            "/xrpc/sh.tangled.repo.pull.listComments",
-            get(list_pull_comments),
-        )
-        .route(
-            "/xrpc/sh.tangled.repo.pull.countComments",
-            get(count_pull_comments),
+            "/xrpc/sh.tangled.feed.countComments",
+            get(count_feed_comments),
         )
         .route("/xrpc/sh.tangled.feed.listReactions", get(list_reactions))
         .route("/xrpc/sh.tangled.feed.countReactions", get(count_reactions))
@@ -316,12 +305,12 @@ pub fn router(state: AppState) -> Router {
         .route("/xrpc/sh.tangled.repo.listIssuesBy", get(list_issues_by))
         .route("/xrpc/sh.tangled.repo.countIssuesBy", get(count_issues_by))
         .route(
-            "/xrpc/sh.tangled.repo.issue.listCommentsBy",
-            get(list_issue_comments_by),
+            "/xrpc/sh.tangled.feed.listCommentsBy",
+            get(list_feed_comments_by),
         )
         .route(
-            "/xrpc/sh.tangled.repo.issue.countCommentsBy",
-            get(count_issue_comments_by),
+            "/xrpc/sh.tangled.feed.countCommentsBy",
+            get(count_feed_comments_by),
         )
         .route(
             "/xrpc/sh.tangled.repo.issue.listStatesBy",
@@ -333,14 +322,6 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/xrpc/sh.tangled.repo.listPullsBy", get(list_pulls_by))
         .route("/xrpc/sh.tangled.repo.countPullsBy", get(count_pulls_by))
-        .route(
-            "/xrpc/sh.tangled.repo.pull.listCommentsBy",
-            get(list_pull_comments_by),
-        )
-        .route(
-            "/xrpc/sh.tangled.repo.pull.countCommentsBy",
-            get(count_pull_comments_by),
-        )
         .route(
             "/xrpc/sh.tangled.repo.pull.listStatusesBy",
             get(list_pull_statuses_by),
@@ -541,23 +522,48 @@ impl<'de> Deserialize<'de> for SubjectQuery {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ExpectedNsid(Nsid<DefaultStr>);
+pub struct ExpectedNsid {
+    canon: Nsid<DefaultStr>,
+    aliases: &'static [&'static str],
+}
+
+const FEED_COMMENT_LEGACY_ALIASES: &[&str] = &[
+    "sh.tangled.repo.issue.comment",
+    "sh.tangled.repo.pull.comment",
+];
+
+fn aliases_for(nsid: &str) -> &'static [&'static str] {
+    match nsid {
+        "sh.tangled.feed.comment" => FEED_COMMENT_LEGACY_ALIASES,
+        _ => &[],
+    }
+}
 
 impl ExpectedNsid {
     pub fn new(nsid: Nsid<DefaultStr>) -> Self {
-        Self(nsid)
+        let aliases = aliases_for(nsid.as_ref());
+        Self {
+            canon: nsid,
+            aliases,
+        }
     }
 
     pub fn from_static(s: &'static str) -> Self {
-        Self(nsid_static(s))
+        let canon = nsid_static(s);
+        let aliases = aliases_for(s);
+        Self { canon, aliases }
     }
 
     pub fn as_nsid(&self) -> &Nsid<DefaultStr> {
-        &self.0
+        &self.canon
     }
 
     pub fn as_str(&self) -> &str {
-        self.0.as_ref()
+        self.canon.as_ref()
+    }
+
+    fn accepts(&self, other: &str) -> bool {
+        other == self.canon.as_ref() || self.aliases.contains(&other)
     }
 }
 
@@ -764,7 +770,7 @@ fn enrich_issue_view(
     let repo_did = view.value.repo.clone();
     enrich_view(
         &state.edges,
-        nsid_static("sh.tangled.repo.issue.comment"),
+        nsid_static("sh.tangled.feed.comment"),
         &state.issue_states,
         view,
         move |src| accept_state_source(src, issue_author.as_ref(), &repo_did),
@@ -779,7 +785,7 @@ fn enrich_pull_view(
     let target_repo = view.value.target.repo.clone();
     enrich_view(
         &state.edges,
-        nsid_static("sh.tangled.repo.pull.comment"),
+        nsid_static("sh.tangled.feed.comment"),
         &state.pull_statuses,
         view,
         move |src| accept_state_source(src, pull_author.as_ref(), &target_repo),
@@ -893,11 +899,10 @@ pub struct PipelineBy;
 pub struct PipelineStatusBy;
 pub struct ArtifactBy;
 pub struct CollaboratorBy;
+pub struct FeedCommentBy;
 pub struct IssueBy;
-pub struct IssueCommentBy;
 pub struct IssueStateBy;
 pub struct PullBy;
-pub struct PullCommentBy;
 pub struct PullStatusBy;
 pub struct SpindleMemberBy;
 
@@ -956,14 +961,14 @@ impl MirrorOf for CollaboratorBy {
     const EDGE_KIND: &'static str = "sh.tangled.repo.collaborator.by";
     const SHAPE: SubjectShape = SubjectShape::BareDid;
 }
+impl MirrorOf for FeedCommentBy {
+    type Record = FeedCommentRecord;
+    const EDGE_KIND: &'static str = "sh.tangled.feed.comment.by";
+    const SHAPE: SubjectShape = SubjectShape::BareDid;
+}
 impl MirrorOf for IssueBy {
     type Record = IssueRecord;
     const EDGE_KIND: &'static str = "sh.tangled.repo.issue.by";
-    const SHAPE: SubjectShape = SubjectShape::BareDid;
-}
-impl MirrorOf for IssueCommentBy {
-    type Record = IssueCommentRecord;
-    const EDGE_KIND: &'static str = "sh.tangled.repo.issue.comment.by";
     const SHAPE: SubjectShape = SubjectShape::BareDid;
 }
 impl MirrorOf for IssueStateBy {
@@ -974,11 +979,6 @@ impl MirrorOf for IssueStateBy {
 impl MirrorOf for PullBy {
     type Record = PullRecord;
     const EDGE_KIND: &'static str = "sh.tangled.repo.pull.by";
-    const SHAPE: SubjectShape = SubjectShape::BareDid;
-}
-impl MirrorOf for PullCommentBy {
-    type Record = PullCommentRecord;
-    const EDGE_KIND: &'static str = "sh.tangled.repo.pull.comment.by";
     const SHAPE: SubjectShape = SubjectShape::BareDid;
 }
 impl MirrorOf for PullStatusBy {
@@ -1004,11 +1004,9 @@ impl HasSubject for IssueRecord {
 impl HasSubject for PullRecord {
     const SHAPE: SubjectShape = SubjectShape::BareDid;
 }
-impl HasSubject for IssueCommentRecord {
-    const SHAPE: SubjectShape = SubjectShape::Collection("sh.tangled.repo.issue");
-}
-impl HasSubject for PullCommentRecord {
-    const SHAPE: SubjectShape = SubjectShape::Collection("sh.tangled.repo.pull");
+impl HasSubject for FeedCommentRecord {
+    const SHAPE: SubjectShape =
+        SubjectShape::OneOfCollections(&["sh.tangled.repo.issue", "sh.tangled.repo.pull"]);
 }
 impl HasSubject for LabelDefinitionRecord {
     const SHAPE: SubjectShape = SubjectShape::BareDid;
@@ -1177,7 +1175,7 @@ async fn resolve(
     let collection = uri
         .collection()
         .ok_or_else(|| XrpcError::InvalidParams("uri missing collection".into()))?;
-    if collection.as_ref() != expected.as_str() {
+    if !expected.accepts(collection.as_ref()) {
         return Err(XrpcError::InvalidParams(format!(
             "collection mismatch: expected {}, got {}",
             expected.as_str(),
@@ -1231,7 +1229,7 @@ fn verify_type_tag(body: &RecordBody, expected: &ExpectedNsid) -> Result<(), Xrp
                 .ok_or_else(|| XrpcError::InvalidRecord("$type peek: missing $type field".into()))?
         }
     };
-    if ty.as_ref() != expected.as_str() {
+    if !expected.accepts(ty.as_ref()) {
         return Err(XrpcError::InvalidRecord(format!(
             "$type mismatch: expected {}, got {}",
             expected.as_str(),
@@ -1239,6 +1237,11 @@ fn verify_type_tag(body: &RecordBody, expected: &ExpectedNsid) -> Result<(), Xrp
         )));
     }
     Ok(())
+}
+
+fn wire_type_nsid(bytes: &[u8]) -> Option<Nsid<DefaultStr>> {
+    let ty = serde_json::from_slice::<TypeTag>(bytes).ok()?.ty;
+    Nsid::<DefaultStr>::new_owned(ty).ok()
 }
 
 async fn deserialize_or_upgrade<V>(
@@ -1266,7 +1269,8 @@ where
             {
                 return Ok(v);
             }
-            match upgrade_wire_bytes(nsid, retry_bytes, &state.resolver).await {
+            let wire_nsid = wire_type_nsid(retry_bytes).unwrap_or_else(|| nsid.clone());
+            match upgrade_wire_bytes(&wire_nsid, retry_bytes, &state.resolver).await {
                 Ok(canon_bytes) => serde_json::from_slice(&canon_bytes)
                     .map_err(|e| XrpcError::InvalidRecord(e.to_string())),
                 Err(_) => Err(XrpcError::InvalidRecord(canon_err.to_string())),
@@ -1864,32 +1868,18 @@ async fn count_pulls(
     count_for::<PullRecord>(&state, q).map(Json)
 }
 
-async fn list_issue_comments(
+async fn list_feed_comments(
     State(state): State<AppState>,
     XrpcQuery(q): XrpcQuery<TypedListQuery<NoFilter>>,
 ) -> Result<Response, XrpcError> {
-    list_records::<IssueCommentRecord, IssueComment<DefaultStr>, _>(&state, q).await
+    list_records::<FeedCommentRecord, FeedComment<DefaultStr>, _>(&state, q).await
 }
 
-async fn count_issue_comments(
+async fn count_feed_comments(
     State(state): State<AppState>,
     XrpcQuery(q): XrpcQuery<CountQuery>,
 ) -> Result<Json<CountResponse>, XrpcError> {
-    count_for::<IssueCommentRecord>(&state, q).map(Json)
-}
-
-async fn list_pull_comments(
-    State(state): State<AppState>,
-    XrpcQuery(q): XrpcQuery<TypedListQuery<NoFilter>>,
-) -> Result<Response, XrpcError> {
-    list_records::<PullCommentRecord, PullComment<DefaultStr>, _>(&state, q).await
-}
-
-async fn count_pull_comments(
-    State(state): State<AppState>,
-    XrpcQuery(q): XrpcQuery<CountQuery>,
-) -> Result<Json<CountResponse>, XrpcError> {
-    count_for::<PullCommentRecord>(&state, q).map(Json)
+    count_for::<FeedCommentRecord>(&state, q).map(Json)
 }
 
 async fn list_reactions(
@@ -2203,17 +2193,17 @@ async fn count_issues_by(
     count_mirror::<IssueBy>(&state, q).map(Json)
 }
 
-async fn list_issue_comments_by(
+async fn list_feed_comments_by(
     State(state): State<AppState>,
     XrpcQuery(q): XrpcQuery<TypedListQuery<NoFilter>>,
 ) -> Result<Response, XrpcError> {
-    list_mirror::<IssueCommentBy, IssueComment<DefaultStr>, _>(&state, q).await
+    list_mirror::<FeedCommentBy, FeedComment<DefaultStr>, _>(&state, q).await
 }
-async fn count_issue_comments_by(
+async fn count_feed_comments_by(
     State(state): State<AppState>,
     XrpcQuery(q): XrpcQuery<CountQuery>,
 ) -> Result<Json<CountResponse>, XrpcError> {
-    count_mirror::<IssueCommentBy>(&state, q).map(Json)
+    count_mirror::<FeedCommentBy>(&state, q).map(Json)
 }
 
 async fn list_issue_states_by(
@@ -2251,19 +2241,6 @@ async fn count_pulls_by(
     XrpcQuery(q): XrpcQuery<CountQuery>,
 ) -> Result<Json<CountResponse>, XrpcError> {
     count_mirror::<PullBy>(&state, q).map(Json)
-}
-
-async fn list_pull_comments_by(
-    State(state): State<AppState>,
-    XrpcQuery(q): XrpcQuery<TypedListQuery<NoFilter>>,
-) -> Result<Response, XrpcError> {
-    list_mirror::<PullCommentBy, PullComment<DefaultStr>, _>(&state, q).await
-}
-async fn count_pull_comments_by(
-    State(state): State<AppState>,
-    XrpcQuery(q): XrpcQuery<CountQuery>,
-) -> Result<Json<CountResponse>, XrpcError> {
-    count_mirror::<PullCommentBy>(&state, q).map(Json)
 }
 
 async fn list_pull_statuses_by(
