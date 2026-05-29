@@ -1,7 +1,6 @@
 package xrpc
 
 import (
-	"compress/gzip"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -32,10 +31,10 @@ func (x *Xrpc) RepoArchive(w http.ResponseWriter, r *http.Request) {
 
 	prefix := r.URL.Query().Get("prefix")
 
-	if format != "tar.gz" {
+	if format != "tar.gz" && format != "zip" {
 		writeError(w, xrpcerr.NewXrpcError(
 			xrpcerr.WithTag("InvalidRequest"),
-			xrpcerr.WithMessage("only tar.gz format is supported"),
+			xrpcerr.WithMessage("only tar.gz and zip formats are supported"),
 		), http.StatusBadRequest)
 		return
 	}
@@ -70,29 +69,25 @@ func (x *Xrpc) RepoArchive(w http.ResponseWriter, r *http.Request) {
 		archivePrefix = fmt.Sprintf("%s-%s", repoName, safeRefFilename)
 	}
 
-	filename := fmt.Sprintf("%s-%s.tar.gz", repoName, safeRefFilename)
+	filename := fmt.Sprintf("%s-%s.%s", repoName, safeRefFilename, format)
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
-	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Type", archiveContentType(format))
 	w.Header().Set("Link", fmt.Sprintf("<%s>; rel=\"immutable\"", immutableLink))
 
-	gw := gzip.NewWriter(w)
-	defer gw.Close()
-
-	err = gr.WriteTar(gw, archivePrefix)
+	err = gr.WriteArchive(w, format, archivePrefix)
 	if err != nil {
 		// once we start writing to the body we can't report error anymore
 		// so we are only left with logging the error
-		x.Logger.Error("writing tar file", "error", err.Error())
+		x.Logger.Error("writing archive", "error", err.Error(), "format", format)
 		return
 	}
+}
 
-	err = gw.Flush()
-	if err != nil {
-		// once we start writing to the body we can't report error anymore
-		// so we are only left with logging the error
-		x.Logger.Error("flushing", "error", err.Error())
-		return
+func archiveContentType(format string) string {
+	if format == "zip" {
+		return "application/zip"
 	}
+	return "application/gzip"
 }
 
 func (x *Xrpc) buildImmutableLink(repo string, format string, ref string, prefix string) (string, error) {

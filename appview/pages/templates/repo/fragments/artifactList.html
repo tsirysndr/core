@@ -13,7 +13,7 @@
     <div id="artifact-git-source" class="flex items-center justify-between p-2 border-b border-gray-200 dark:border-gray-700">
       <div id="left-side" class="flex items-center gap-2 min-w-0 max-w-[60%]">
         {{ i "archive" "w-4 h-4" }}
-        <a href="/{{ $root.RepoInfo.FullName }}/archive/{{ pathEscape (print "refs/tags/" $tag.Name) }}" class="no-underline hover:no-underline">
+        <a href="/{{ $root.RepoInfo.FullName }}/archive/{{ pathEscape (print "refs/tags/" $tag.Name) }}?format=tar.gz" class="no-underline hover:no-underline">
             Source code (.tar.gz)
         </a>
       </div>

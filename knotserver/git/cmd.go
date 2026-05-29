@@ -1,8 +1,11 @@
 package git
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os/exec"
+	"strings"
 )
 
 const (
@@ -43,4 +46,24 @@ func (g *GitRepo) revParse(extraArgs ...string) ([]byte, error) {
 
 func (g *GitRepo) mergeBase(extraArgs ...string) ([]byte, error) {
 	return g.runGitCmd("merge-base", extraArgs...)
+}
+
+func (g *GitRepo) WriteArchive(w io.Writer, format string, prefix string) error {
+	args := []string{"archive", "--format=" + format}
+	if prefix != "" {
+		args = append(args, "--prefix="+strings.TrimRight(prefix, "/")+"/")
+	}
+	args = append(args, g.h.String())
+
+	cmd := exec.Command("git", args...)
+	cmd.Dir = g.path
+	cmd.Stdout = w
+	stderr := new(bytes.Buffer)
+	cmd.Stderr = stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%w, stderr: %s", err, stderr.String())
+	}
+
+	return nil
 }

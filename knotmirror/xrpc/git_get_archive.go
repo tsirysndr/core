@@ -1,7 +1,10 @@
 package xrpc
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os/exec"
@@ -29,12 +32,12 @@ func (x *Xrpc) GetArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if format != "tar.gz" {
-		writeJson(w, http.StatusBadRequest, atclient.ErrorBody{Name: "BadRequest", Message: "only tar.gz format is supported"})
-		return
-	}
 	if format == "" {
 		format = "tar.gz"
+	}
+	if format != "tar.gz" && format != "zip" {
+		writeJson(w, http.StatusBadRequest, atclient.ErrorBody{Name: "BadRequest", Message: "only tar.gz and zip formats are supported"})
+		return
 	}
 
 	l := x.logger.With("repo", repo, "ref", ref, "format", format, "prefix", prefix)
@@ -57,6 +60,14 @@ func (x *Xrpc) GetArchive(w http.ResponseWriter, r *http.Request) {
 		rev = "HEAD"
 	}
 	commit, err := gitea.GetCommit(ctx, repoPath, rev)
+	if err != nil {
+		l.Warn("local mirror failed, trying proxy", "err", err)
+		if x.proxyToKnot(w, r, repo) {
+			return
+		}
+		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to resolve ref"})
+		return
+	}
 
 	repoName, err := func() (string, error) {
 		r, err := db.GetRepoByRepoDid(ctx, x.db, repo)
@@ -78,6 +89,9 @@ func (x *Xrpc) GetArchive(w http.ResponseWriter, r *http.Request) {
 	}
 
 	safeRefFilename := strings.ReplaceAll(plumbing.ReferenceName(ref).Short(), "/", "-")
+	if safeRefFilename == "" {
+		safeRefFilename = commit.Hash.String()
+	}
 	immutableLink := func() string {
 		params := url.Values{}
 		params.Set("repo", repo.String())
@@ -87,27 +101,45 @@ func (x *Xrpc) GetArchive(w http.ResponseWriter, r *http.Request) {
 		return fmt.Sprintf("%s/xrpc/%s?%s", x.cfg.BaseUrl(), tangled.GitTempGetArchiveNSID, params.Encode())
 	}()
 
-	filename := fmt.Sprintf("%s-%s.tar.gz", repoName, safeRefFilename)
+	var archivePrefix string
+	if prefix != "" {
+		archivePrefix = prefix
+	} else {
+		archivePrefix = fmt.Sprintf("%s-%s", repoName, safeRefFilename)
+	}
+
+	filename := fmt.Sprintf("%s-%s.%s", repoName, safeRefFilename, format)
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
-	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Type", archiveContentType(format))
 	w.Header().Set("Link", fmt.Sprintf("<%s>; rel=\"immutable\"", immutableLink))
 
-	cmd := exec.Command(
-		"git",
-		"archive",
-		fmt.Sprintf("--prefix=%s", prefix),
-		"--format=tar.gz",
-		commit.Hash.String(),
-	)
-
-	var stderr strings.Builder
-	cmd.Dir = repoPath
-	cmd.Stdout = w
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		err = fmt.Errorf("%w\n%s", err, stderr.String())
-		l.Error("failed to archive", "err", err)
+	if err := writeLocalArchive(ctx, w, repoPath, commit.Hash.String(), format, archivePrefix); err != nil {
+		l.Error("writing archive", "err", err.Error(), "format", format)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
+}
+
+func archiveContentType(format string) string {
+	if format == "zip" {
+		return "application/zip"
+	}
+	return "application/gzip"
+}
+
+func writeLocalArchive(ctx context.Context, w io.Writer, repoPath, rev, format, prefix string) error {
+	args := []string{"-C", repoPath, "archive", "--format=" + format}
+	if prefix != "" {
+		args = append(args, "--prefix="+strings.TrimRight(prefix, "/")+"/")
+	}
+	args = append(args, rev)
+
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Stdout = w
+	stderr := new(bytes.Buffer)
+	cmd.Stderr = stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%w, stderr: %s", err, stderr.String())
+	}
+	return nil
 }

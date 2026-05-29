@@ -53,13 +53,25 @@
       For self-hosted knots, clone URLs may differ based on your setup.
     </p>
 
-    <a
-      href="/{{ .RepoInfo.FullName }}/archive/{{ .Ref | urlquery }}"
-      class="flex items-center btn-create w-full mt-4 gap-2 text-sm hover:no-underline hover:text-gray-100"
-      >
-      {{ i "download" "w-4 h-4" }}
-      Download tar.gz
-    </a>
+    <br/>
+    <hr/>
+
+    <div class="flex gap-2 mt-4">
+      <a
+        href="/{{ .RepoInfo.FullName }}/archive/{{ .Ref | urlquery }}?format=tar.gz"
+        class="btn flex-1"
+        >
+        {{ i "download" "w-4 h-4" }}
+        Download tar.gz
+      </a>
+      <a
+        href="/{{ .RepoInfo.FullName }}/archive/{{ .Ref | urlquery }}?format=zip"
+        class="btn flex-1"
+        >
+        {{ i "download" "w-4 h-4" }}
+        Download .zip
+      </a>
+    </div>
   </div>
 
   <style>
