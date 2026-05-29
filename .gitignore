@@ -27,3 +27,9 @@ blog/build/
 build/
 .wrangler/
 localinfra/certs/*
+id_rsa
+id_ecdsa
+id_dsa
+id_ed25519
+*.pem
+*.key
