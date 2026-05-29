@@ -63,7 +63,7 @@ func (ix *Indexer) DeleteIssue(ctx context.Context, issue *models.Issue) {
 	ix.getAndReindexRepo(ctx, issue.RepoDid)
 }
 
-func (ix *Indexer) NewIssueLabelOp(ctx context.Context, issue *models.Issue) {
+func (ix *Indexer) NewIssueLabelOp(ctx context.Context, _ syntax.DID, issue *models.Issue, _ []models.LabelOp) {
 	l := log.FromContext(ctx).With("notifier", "indexer", "issue", issue)
 	l.Debug("reindexing issue after label change")
 	err := ix.Issues.Index(ctx, *issue)
@@ -72,7 +72,7 @@ func (ix *Indexer) NewIssueLabelOp(ctx context.Context, issue *models.Issue) {
 	}
 }
 
-func (ix *Indexer) NewPullLabelOp(ctx context.Context, pull *models.Pull) {
+func (ix *Indexer) NewPullLabelOp(ctx context.Context, _ syntax.DID, pull *models.Pull, _ []models.LabelOp) {
 	l := log.FromContext(ctx).With("notifier", "indexer", "pull", pull)
 	l.Debug("reindexing pull after label change")
 	err := ix.Pulls.Index(ctx, pull)

@@ -57,7 +57,9 @@
   {{ else if or (eq .Type "pull_created") (eq .Type "pull_reopen") }}text-green-600 dark:text-green-500
   {{ else if eq .Type "pull_merged" }}text-purple-600 dark:text-purple-500
   {{ else if eq .Type "pull_closed" }}text-red-600 dark:text-red-500
-  {{ else if eq .Type "user_mentioned" }}text-blue-600 dark:text-blue-500
+  {{ else if eq .Type "user_mentioned" }}text-blue-500 dark:text-blue-400
+  {{ else if eq .Type "repo_starred" }}text-yellow-500 dark:text-yellow-600
+  {{ else if or (eq .Type "issue_assigned") (eq .Type "pull_assigned") }} text-blue-500 dark:text-blue-400
   {{ else }}text-gray-500 dark:text-gray-400
   {{ end }}
 {{ end }}
@@ -113,6 +115,14 @@
     {{ else }}
       <span class="{{ $textStyle }}">mentioned you in</span> <span class="{{ $subjectStyle }}">{{ $repo }}</span>
     {{ end }}
+  {{ else if eq .Type "issue_assigned" }}
+    <span class="{{ $textStyle }}">assigned you to an issue on</span> <span class="{{ $subjectStyle }}">{{ $repo }}</span>
+  {{ else if eq .Type "issue_unassigned" }}
+    <span class="{{ $textStyle }}">unassigned you from an issue on</span> <span class="{{ $subjectStyle }}">{{ $repo }}</span>
+  {{ else if eq .Type "pull_assigned" }}
+    <span class="{{ $textStyle }}">assigned you to a PR on</span> <span class="{{ $subjectStyle }}">{{ $repo }}</span>
+  {{ else if eq .Type "pull_unassigned" }}
+    <span class="{{ $textStyle }}">unassigned you from a PR on</span> <span class="{{ $subjectStyle }}">{{ $repo }}</span>
   {{ end }}
   </span>
 {{ end }}

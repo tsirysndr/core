@@ -28,8 +28,8 @@ type Notifier interface {
 	NewPull(ctx context.Context, pull *models.Pull)
 	NewPullState(ctx context.Context, actor syntax.DID, pull *models.Pull)
 
-	NewIssueLabelOp(ctx context.Context, issue *models.Issue)
-	NewPullLabelOp(ctx context.Context, pull *models.Pull)
+	NewIssueLabelOp(ctx context.Context, actor syntax.DID, issue *models.Issue, ops []models.LabelOp)
+	NewPullLabelOp(ctx context.Context, actor syntax.DID, pull *models.Pull, ops []models.LabelOp)
 
 	UpdateProfile(ctx context.Context, profile *models.Profile)
 
@@ -63,8 +63,10 @@ func (m *BaseNotifier) NewIssue(ctx context.Context, issue *models.Issue, mentio
 func (m *BaseNotifier) NewIssueState(ctx context.Context, actor syntax.DID, issue *models.Issue) {}
 func (m *BaseNotifier) DeleteIssue(ctx context.Context, issue *models.Issue)                     {}
 
-func (m *BaseNotifier) NewIssueLabelOp(ctx context.Context, issue *models.Issue) {}
-func (m *BaseNotifier) NewPullLabelOp(ctx context.Context, pull *models.Pull)    {}
+func (m *BaseNotifier) NewIssueLabelOp(ctx context.Context, actor syntax.DID, issue *models.Issue, ops []models.LabelOp) {
+}
+func (m *BaseNotifier) NewPullLabelOp(ctx context.Context, actor syntax.DID, pull *models.Pull, ops []models.LabelOp) {
+}
 
 func (m *BaseNotifier) NewFollow(ctx context.Context, follow *models.Follow)    {}
 func (m *BaseNotifier) DeleteFollow(ctx context.Context, follow *models.Follow) {}

@@ -173,7 +173,7 @@ func (s *Pulls) applyCreationLabels(
 			continue
 		}
 
-		s.notifier.NewPullLabelOp(ctx, pull)
+		s.notifier.NewPullLabelOp(ctx, userDid, pull, valid)
 	}
 }
 

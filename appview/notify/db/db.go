@@ -16,7 +16,8 @@ import (
 )
 
 const (
-	maxMentions = 8
+	maxMentions     = 8
+	assigneeLabelAt = "at://did:plc:wshs7t2adsemcrrd4snkeqli/sh.tangled.label.definition/assignee"
 )
 
 type databaseNotifier struct {
@@ -276,8 +277,62 @@ func (n *databaseNotifier) DeleteIssue(ctx context.Context, issue *models.Issue)
 	// no-op for now
 }
 
-func (n *databaseNotifier) NewIssueLabelOp(ctx context.Context, issue *models.Issue) {}
-func (n *databaseNotifier) NewPullLabelOp(ctx context.Context, pull *models.Pull)    {}
+func (n *databaseNotifier) NewIssueLabelOp(ctx context.Context, actor syntax.DID, issue *models.Issue, ops []models.LabelOp) {
+	entityType := "issue"
+	entityId := issue.AtUri().String()
+	repoId := &issue.Repo.Id
+	issueId := &issue.Id
+	var pullId *int64
+
+	assigned := sets.New[syntax.DID]()
+	unassigned := sets.New[syntax.DID]()
+	for _, op := range ops {
+		if op.OperandKey != assigneeLabelAt {
+			continue
+		}
+		assignee := syntax.DID(op.OperandValue)
+		switch op.Operation {
+		case models.LabelOperationAdd:
+			assigned.Insert(assignee)
+		case models.LabelOperationDel:
+			unassigned.Insert(assignee)
+		default:
+			continue
+		}
+	}
+
+	n.notifyEvent(ctx, actor, assigned, models.NotificationTypeIssueAssigned, entityType, entityId, repoId, issueId, pullId)
+	n.notifyEvent(ctx, actor, unassigned, models.NotificationTypeIssueUnassigned, entityType, entityId, repoId, issueId, pullId)
+}
+
+func (n *databaseNotifier) NewPullLabelOp(ctx context.Context, actor syntax.DID, pull *models.Pull, ops []models.LabelOp) {
+	entityType := "pull"
+	entityId := pull.AtUri().String()
+	repoId := &pull.Repo.Id
+	var issueId *int64
+	p := int64(pull.ID)
+	pullId := &p
+
+	assigned := sets.New[syntax.DID]()
+	unassigned := sets.New[syntax.DID]()
+	for _, op := range ops {
+		if op.OperandKey != assigneeLabelAt {
+			continue
+		}
+		assignee := syntax.DID(op.OperandValue)
+		switch op.Operation {
+		case models.LabelOperationAdd:
+			assigned.Insert(assignee)
+		case models.LabelOperationDel:
+			unassigned.Insert(assignee)
+		default:
+			continue
+		}
+	}
+
+	n.notifyEvent(ctx, actor, assigned, models.NotificationTypePullAssigned, entityType, entityId, repoId, issueId, pullId)
+	n.notifyEvent(ctx, actor, unassigned, models.NotificationTypePullUnassigned, entityType, entityId, repoId, issueId, pullId)
+}
 
 func (n *databaseNotifier) NewFollow(ctx context.Context, follow *models.Follow) {
 	actorDid := syntax.DID(follow.UserDid)

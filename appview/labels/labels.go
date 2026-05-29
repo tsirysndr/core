@@ -253,13 +253,13 @@ func (l *Labels) PerformLabelOp(w http.ResponseWriter, r *http.Request) {
 	if subject.Collection() == tangled.RepoIssueNSID {
 		issues, err := db.GetIssues(l.db, orm.FilterEq("at_uri", subjectUri))
 		if err == nil && len(issues) == 1 {
-			l.notifier.NewIssueLabelOp(r.Context(), &issues[0])
+			l.notifier.NewIssueLabelOp(r.Context(), syntax.DID(did), &issues[0], validLabelOps)
 		}
 	}
 	if subject.Collection() == tangled.RepoPullNSID {
 		pulls, err := db.GetPulls(l.db, orm.FilterEq("at_uri", subjectUri))
 		if err == nil && len(pulls) == 1 {
-			l.notifier.NewPullLabelOp(r.Context(), pulls[0])
+			l.notifier.NewPullLabelOp(r.Context(), syntax.DID(did), pulls[0], validLabelOps)
 		}
 	}
 

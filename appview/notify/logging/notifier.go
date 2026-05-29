@@ -70,14 +70,14 @@ func (l *loggingNotifier) DeleteIssue(ctx context.Context, issue *models.Issue) 
 	l.inner.DeleteIssue(ctx, issue)
 }
 
-func (l *loggingNotifier) NewIssueLabelOp(ctx context.Context, issue *models.Issue) {
+func (l *loggingNotifier) NewIssueLabelOp(ctx context.Context, actor syntax.DID, issue *models.Issue, ops []models.LabelOp) {
 	ctx = tlog.IntoContext(ctx, tlog.SubLogger(l.logger, "NewIssueLabelOp"))
-	l.inner.NewIssueLabelOp(ctx, issue)
+	l.inner.NewIssueLabelOp(ctx, actor, issue, ops)
 }
 
-func (l *loggingNotifier) NewPullLabelOp(ctx context.Context, pull *models.Pull) {
+func (l *loggingNotifier) NewPullLabelOp(ctx context.Context, actor syntax.DID, pull *models.Pull, ops []models.LabelOp) {
 	ctx = tlog.IntoContext(ctx, tlog.SubLogger(l.logger, "NewPullLabelOp"))
-	l.inner.NewPullLabelOp(ctx, pull)
+	l.inner.NewPullLabelOp(ctx, actor, pull, ops)
 }
 
 func (l *loggingNotifier) NewFollow(ctx context.Context, follow *models.Follow) {

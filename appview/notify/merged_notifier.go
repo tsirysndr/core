@@ -70,12 +70,12 @@ func (m *mergedNotifier) DeleteIssue(ctx context.Context, issue *models.Issue) {
 	m.fanout(func(n Notifier) { n.DeleteIssue(ctx, issue) })
 }
 
-func (m *mergedNotifier) NewIssueLabelOp(ctx context.Context, issue *models.Issue) {
-	m.fanout(func(n Notifier) { n.NewIssueLabelOp(ctx, issue) })
+func (m *mergedNotifier) NewIssueLabelOp(ctx context.Context, actor syntax.DID, issue *models.Issue, ops []models.LabelOp) {
+	m.fanout(func(n Notifier) { n.NewIssueLabelOp(ctx, actor, issue, ops) })
 }
 
-func (m *mergedNotifier) NewPullLabelOp(ctx context.Context, pull *models.Pull) {
-	m.fanout(func(n Notifier) { n.NewPullLabelOp(ctx, pull) })
+func (m *mergedNotifier) NewPullLabelOp(ctx context.Context, actor syntax.DID, pull *models.Pull, ops []models.LabelOp) {
+	m.fanout(func(n Notifier) { n.NewPullLabelOp(ctx, actor, pull, ops) })
 }
 
 func (m *mergedNotifier) NewFollow(ctx context.Context, follow *models.Follow) {

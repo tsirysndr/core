@@ -9,18 +9,22 @@ import (
 type NotificationType string
 
 const (
-	NotificationTypeRepoStarred    NotificationType = "repo_starred"
-	NotificationTypeIssueCreated   NotificationType = "issue_created"
-	NotificationTypeIssueCommented NotificationType = "issue_commented"
-	NotificationTypePullCreated    NotificationType = "pull_created"
-	NotificationTypePullCommented  NotificationType = "pull_commented"
-	NotificationTypeFollowed       NotificationType = "followed"
-	NotificationTypePullMerged     NotificationType = "pull_merged"
-	NotificationTypeIssueClosed    NotificationType = "issue_closed"
-	NotificationTypeIssueReopen    NotificationType = "issue_reopen"
-	NotificationTypePullClosed     NotificationType = "pull_closed"
-	NotificationTypePullReopen     NotificationType = "pull_reopen"
-	NotificationTypeUserMentioned  NotificationType = "user_mentioned"
+	NotificationTypeRepoStarred     NotificationType = "repo_starred"
+	NotificationTypeIssueCreated    NotificationType = "issue_created"
+	NotificationTypeIssueCommented  NotificationType = "issue_commented"
+	NotificationTypePullCreated     NotificationType = "pull_created"
+	NotificationTypePullCommented   NotificationType = "pull_commented"
+	NotificationTypeFollowed        NotificationType = "followed"
+	NotificationTypePullMerged      NotificationType = "pull_merged"
+	NotificationTypeIssueClosed     NotificationType = "issue_closed"
+	NotificationTypeIssueReopen     NotificationType = "issue_reopen"
+	NotificationTypePullClosed      NotificationType = "pull_closed"
+	NotificationTypePullReopen      NotificationType = "pull_reopen"
+	NotificationTypeUserMentioned   NotificationType = "user_mentioned"
+	NotificationTypeIssueAssigned   NotificationType = "issue_assigned"
+	NotificationTypeIssueUnassigned NotificationType = "issue_unassigned"
+	NotificationTypePullAssigned    NotificationType = "pull_assigned"
+	NotificationTypePullUnassigned  NotificationType = "pull_unassigned"
 )
 
 var SocialNotificationTypes = []NotificationType{
@@ -39,6 +43,10 @@ var WorkNotificationTypes = []NotificationType{
 	NotificationTypePullClosed,
 	NotificationTypePullReopen,
 	NotificationTypeUserMentioned,
+	NotificationTypeIssueAssigned,
+	NotificationTypeIssueUnassigned,
+	NotificationTypePullAssigned,
+	NotificationTypePullUnassigned,
 }
 
 type Notification struct {
@@ -84,6 +92,10 @@ func (n *Notification) Icon() string {
 		return "user-plus"
 	case NotificationTypeUserMentioned:
 		return "at-sign"
+	case NotificationTypeIssueAssigned, NotificationTypePullAssigned:
+		return "user-round-check"
+	case NotificationTypeIssueUnassigned, NotificationTypePullUnassigned:
+		return "user-round-x"
 	default:
 		return ""
 	}
@@ -135,7 +147,11 @@ func (prefs *NotificationPreferences) ShouldNotify(t NotificationType) bool {
 		return prefs.PullCreated // same pref for now
 	case NotificationTypeFollowed:
 		return prefs.Followed
-	case NotificationTypeUserMentioned:
+	case NotificationTypeUserMentioned,
+		NotificationTypeIssueAssigned,
+		NotificationTypeIssueUnassigned,
+		NotificationTypePullAssigned,
+		NotificationTypePullUnassigned:
 		return prefs.UserMentioned
 	default:
 		return false
