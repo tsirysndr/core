@@ -93,9 +93,9 @@ func (n *Notification) Icon() string {
 	case NotificationTypeUserMentioned:
 		return "at-sign"
 	case NotificationTypeIssueAssigned, NotificationTypePullAssigned:
-		return "user-round-check"
+		return "user-round-arrow-forward"
 	case NotificationTypeIssueUnassigned, NotificationTypePullUnassigned:
-		return "user-round-x"
+		return "user-round-minus"
 	default:
 		return ""
 	}

@@ -23,6 +23,7 @@ runCommandLocal "appview-static-files" {
   cp -f ${htmx-ws-src} htmx-ext-ws.min.js
   cp -f ${mermaid-src} mermaid.min.js
   cp -rf ${lucide-src}/*.svg icons/
+  cp -rf ${src}/icons/*.svg icons/
   cp -f ${inter-fonts-src}/web/InterVariable*.woff2 fonts/
   cp -f ${inter-fonts-src}/web/InterDisplay*.woff2 fonts/
   cp -f ${inter-fonts-src}/InterVariable*.ttf fonts/
