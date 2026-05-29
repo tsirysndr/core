@@ -168,6 +168,7 @@
             command = pkgs.lib.getExe' fenix.packages.${system}.stable.rustfmt "rustfmt";
             options = ["--edition" "2024"];
             includes = ["*.rs"];
+            excludes = ["**/src/_lex/**"];
           };
 
           # prettier = let

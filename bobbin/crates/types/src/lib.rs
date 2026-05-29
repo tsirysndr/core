@@ -12,6 +12,7 @@ extern crate alloc;
     clippy::should_implement_trait,
     clippy::type_complexity
 )]
+#[rustfmt::skip]
 mod _lex;
 
 pub use _lex::*;
