@@ -72,49 +72,54 @@ func (i *Ingester) Ingest() processFunc {
 		case jmodels.EventKindIdentity:
 			err = i.IdResolver.InvalidateIdent(ctx, e.Identity.Did)
 		case jmodels.EventKindCommit:
+			l = l.With(
+				"nsid", e.Commit.Collection,
+				"did", e.Did,
+				"rkey", e.Commit.RKey,
+				"op", e.Commit.Operation,
+			)
 			switch e.Commit.Collection {
 			case tangled.GraphFollowNSID:
-				err = i.ingestFollow(e)
+				err = i.ingestFollow(e, l)
 			case tangled.GraphVouchNSID:
-				err = i.ingestVouch(ctx, e)
+				err = i.ingestVouch(ctx, e, l)
 			case tangled.FeedStarNSID:
-				err = i.ingestStar(ctx, e)
+				err = i.ingestStar(ctx, e, l)
 			case tangled.FeedReactionNSID:
-				err = i.ingestReaction(e)
+				err = i.ingestReaction(e, l)
 			case tangled.PublicKeyNSID:
-				err = i.ingestPublicKey(e)
+				err = i.ingestPublicKey(e, l)
 			case tangled.RepoArtifactNSID:
-				err = i.ingestArtifact(ctx, e)
+				err = i.ingestArtifact(ctx, e, l)
 			case tangled.ActorProfileNSID:
-				err = i.ingestProfile(ctx, e)
+				err = i.ingestProfile(ctx, e, l)
 			case tangled.SpindleMemberNSID:
-				err = i.ingestSpindleMember(ctx, e)
+				err = i.ingestSpindleMember(ctx, e, l)
 			case tangled.SpindleNSID:
-				err = i.ingestSpindle(ctx, e)
+				err = i.ingestSpindle(ctx, e, l)
 			case tangled.KnotMemberNSID:
-				err = i.ingestKnotMember(ctx, e)
+				err = i.ingestKnotMember(ctx, e, l)
 			case tangled.KnotNSID:
-				err = i.ingestKnot(ctx, e)
+				err = i.ingestKnot(ctx, e, l)
 			case tangled.StringNSID:
-				err = i.ingestString(e)
+				err = i.ingestString(e, l)
 			case tangled.RepoIssueNSID:
-				err = i.ingestIssue(ctx, e)
+				err = i.ingestIssue(ctx, e, l)
 			case tangled.RepoPullNSID:
-				err = i.ingestPull(ctx, e)
+				err = i.ingestPull(ctx, e, l)
 			case tangled.FeedCommentNSID:
-				err = i.ingestComment(e)
+				err = i.ingestComment(e, l)
 			case tangled.RepoIssueCommentNSID:
-				err = i.ingestIssueComment(e)
+				err = i.ingestIssueComment(e, l)
 			case tangled.RepoPullCommentNSID:
-				err = i.ingestPullComment(e)
+				err = i.ingestPullComment(e, l)
 			case tangled.LabelDefinitionNSID:
-				err = i.ingestLabelDefinition(e)
+				err = i.ingestLabelDefinition(e, l)
 			case tangled.LabelOpNSID:
-				err = i.ingestLabelOp(e)
+				err = i.ingestLabelOp(e, l)
 			case tangled.RepoNSID:
-				err = i.ingestRepo(ctx, e)
+				err = i.ingestRepo(ctx, e, l)
 			}
-			l = i.Logger.With("nsid", e.Commit.Collection)
 		}
 
 		if err != nil {
@@ -183,12 +188,11 @@ func (i *Ingester) resolveOldFormatStar(raw json.RawMessage, star *models.Star, 
 	}
 }
 
-func (i *Ingester) ingestStar(ctx context.Context, e *jmodels.Event) error {
+func (i *Ingester) ingestStar(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {
 	var err error
 	did := e.Did
 
-	l := i.Logger.With("handler", "ingestStar")
-	l = l.With("nsid", e.Commit.Collection)
+	l = l.With("handler", "ingestStar")
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
@@ -241,15 +245,15 @@ func (i *Ingester) ingestStar(ctx context.Context, e *jmodels.Event) error {
 		return fmt.Errorf("failed to %s star record: %w", e.Commit.Operation, err)
 	}
 
+	l.Info("ingested record")
 	return nil
 }
 
-func (i *Ingester) ingestFollow(e *jmodels.Event) error {
+func (i *Ingester) ingestFollow(e *jmodels.Event, l *slog.Logger) error {
 	var err error
 	did := e.Did
 
-	l := i.Logger.With("handler", "ingestFollow")
-	l = l.With("nsid", e.Commit.Collection)
+	l = l.With("handler", "ingestFollow")
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
@@ -274,16 +278,15 @@ func (i *Ingester) ingestFollow(e *jmodels.Event) error {
 		return fmt.Errorf("failed to %s follow record: %w", e.Commit.Operation, err)
 	}
 
+	l.Info("ingested record")
 	return nil
 }
 
-func (i *Ingester) ingestVouch(ctx context.Context, e *jmodels.Event) error {
+func (i *Ingester) ingestVouch(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {
 	var err error
 	did := e.Did
 
-	l := i.Logger.With("handler", "ingestVouch")
-	l = l.With("nsid", e.Commit.Collection)
-	l.Info("ingesting vouch")
+	l = l.With("handler", "ingestVouch")
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
@@ -368,15 +371,15 @@ func (i *Ingester) ingestVouch(ctx context.Context, e *jmodels.Event) error {
 		return fmt.Errorf("failed to %s vouch record: %w", e.Commit.Operation, err)
 	}
 
+	l.Info("ingested record")
 	return nil
 }
 
-func (i *Ingester) ingestPublicKey(e *jmodels.Event) error {
+func (i *Ingester) ingestPublicKey(e *jmodels.Event, l *slog.Logger) error {
 	did := e.Did
 	var err error
 
-	l := i.Logger.With("handler", "ingestPublicKey")
-	l = l.With("nsid", e.Commit.Collection)
+	l = l.With("handler", "ingestPublicKey")
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate:
@@ -414,15 +417,15 @@ func (i *Ingester) ingestPublicKey(e *jmodels.Event) error {
 		return fmt.Errorf("failed to %s pubkey record: %w", e.Commit.Operation, err)
 	}
 
+	l.Info("ingested record")
 	return nil
 }
 
-func (i *Ingester) ingestArtifact(ctx context.Context, e *jmodels.Event) error {
+func (i *Ingester) ingestArtifact(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {
 	did := e.Did
 	var err error
 
-	l := i.Logger.With("handler", "ingestArtifact")
-	l = l.With("nsid", e.Commit.Collection)
+	l = l.With("handler", "ingestArtifact")
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
@@ -496,15 +499,15 @@ func (i *Ingester) ingestArtifact(ctx context.Context, e *jmodels.Event) error {
 		return fmt.Errorf("failed to %s artifact record: %w", e.Commit.Operation, err)
 	}
 
+	l.Info("ingested record")
 	return nil
 }
 
-func (i *Ingester) ingestProfile(ctx context.Context, e *jmodels.Event) error {
+func (i *Ingester) ingestProfile(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {
 	did := e.Did
 	var err error
 
-	l := i.Logger.With("handler", "ingestProfile")
-	l = l.With("nsid", e.Commit.Collection)
+	l = l.With("handler", "ingestProfile")
 
 	if e.Commit.RKey != "self" {
 		return fmt.Errorf("ingestProfile only ingests `self` record")
@@ -638,15 +641,15 @@ func (i *Ingester) ingestProfile(ctx context.Context, e *jmodels.Event) error {
 		return fmt.Errorf("failed to %s profile record: %w", e.Commit.Operation, err)
 	}
 
+	l.Info("ingested record")
 	return nil
 }
 
-func (i *Ingester) ingestSpindleMember(ctx context.Context, e *jmodels.Event) error {
+func (i *Ingester) ingestSpindleMember(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {
 	did := e.Did
 	var err error
 
-	l := i.Logger.With("handler", "ingestSpindleMember")
-	l = l.With("nsid", e.Commit.Collection)
+	l = l.With("handler", "ingestSpindleMember")
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
@@ -804,12 +807,11 @@ func (i *Ingester) ingestSpindleMember(ctx context.Context, e *jmodels.Event) er
 	return nil
 }
 
-func (i *Ingester) ingestSpindle(ctx context.Context, e *jmodels.Event) error {
+func (i *Ingester) ingestSpindle(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {
 	did := e.Did
 	var err error
 
-	l := i.Logger.With("handler", "ingestSpindle")
-	l = l.With("nsid", e.Commit.Collection)
+	l = l.With("handler", "ingestSpindle")
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
@@ -836,6 +838,7 @@ func (i *Ingester) ingestSpindle(ctx context.Context, e *jmodels.Event) error {
 			l.Warn("failed to verify spindle", "instance", instance, "did", did, "err", err)
 		}
 
+		l.Info("ingested record", "instance", instance)
 		return nil
 
 	case jmodels.CommitOperationDelete:
@@ -855,7 +858,7 @@ func (i *Ingester) ingestSpindle(ctx context.Context, e *jmodels.Event) error {
 
 		tx, err := i.Db.Begin()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to start txn: %w", err)
 		}
 		defer func() {
 			tx.Rollback()
@@ -869,7 +872,7 @@ func (i *Ingester) ingestSpindle(ctx context.Context, e *jmodels.Event) error {
 			orm.FilterEq("instance", instance),
 		)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to remove spindle members: %w", err)
 		}
 
 		err = db.DeleteSpindle(
@@ -878,38 +881,39 @@ func (i *Ingester) ingestSpindle(ctx context.Context, e *jmodels.Event) error {
 			orm.FilterEq("instance", instance),
 		)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to delete spindle: %w", err)
 		}
 
 		if spindle.Verified != nil {
 			err = i.Enforcer.RemoveSpindle(instance)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to remove spindle from enforcer: %w", err)
 			}
 		}
 
 		err = tx.Commit()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to commit txn: %w", err)
 		}
 
 		err = i.Enforcer.E.SavePolicy()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to save ACLs: %w", err)
 		}
+
+		l.Info("ingested record", "instance", instance)
 	}
 
 	return nil
 }
 
-func (i *Ingester) ingestString(e *jmodels.Event) error {
+func (i *Ingester) ingestString(e *jmodels.Event, l *slog.Logger) error {
 	did := e.Did
 	rkey := e.Commit.RKey
 
 	var err error
 
-	l := i.Logger.With("handler", "ingestString", "nsid", e.Commit.Collection, "did", did, "rkey", rkey)
-	l.Info("ingesting record")
+	l = l.With("handler", "ingestString")
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
@@ -933,6 +937,7 @@ func (i *Ingester) ingestString(e *jmodels.Event) error {
 			return err
 		}
 
+		l.Info("ingested record")
 		return nil
 
 	case jmodels.CommitOperationDelete:
@@ -945,18 +950,18 @@ func (i *Ingester) ingestString(e *jmodels.Event) error {
 			return fmt.Errorf("failed to delete string record: %w", err)
 		}
 
+		l.Info("ingested record")
 		return nil
 	}
 
 	return nil
 }
 
-func (i *Ingester) ingestKnotMember(ctx context.Context, e *jmodels.Event) error {
+func (i *Ingester) ingestKnotMember(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {
 	did := e.Did
 	var err error
 
-	l := i.Logger.With("handler", "ingestKnotMember")
-	l = l.With("nsid", e.Commit.Collection)
+	l = l.With("handler", "ingestKnotMember")
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
@@ -1117,12 +1122,11 @@ func (i *Ingester) ingestKnotMember(ctx context.Context, e *jmodels.Event) error
 	return nil
 }
 
-func (i *Ingester) ingestKnot(ctx context.Context, e *jmodels.Event) error {
+func (i *Ingester) ingestKnot(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {
 	did := e.Did
 	var err error
 
-	l := i.Logger.With("handler", "ingestKnot")
-	l = l.With("nsid", e.Commit.Collection)
+	l = l.With("handler", "ingestKnot")
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
@@ -1146,6 +1150,7 @@ func (i *Ingester) ingestKnot(ctx context.Context, e *jmodels.Event) error {
 			l.Warn("failed to verify knot", "domain", domain, "did", did, "err", err)
 		}
 
+		l.Info("ingested record", "domain", domain)
 		return nil
 
 	case jmodels.CommitOperationDelete:
@@ -1167,7 +1172,7 @@ func (i *Ingester) ingestKnot(ctx context.Context, e *jmodels.Event) error {
 
 		tx, err := i.Db.Begin()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to start txn: %w", err)
 		}
 		defer func() {
 			tx.Rollback()
@@ -1180,7 +1185,7 @@ func (i *Ingester) ingestKnot(ctx context.Context, e *jmodels.Event) error {
 			orm.FilterEq("domain", domain),
 		)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to remove knot members: %w", err)
 		}
 
 		err = db.DeleteKnot(
@@ -1189,30 +1194,32 @@ func (i *Ingester) ingestKnot(ctx context.Context, e *jmodels.Event) error {
 			orm.FilterEq("domain", domain),
 		)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to delete knot: %w", err)
 		}
 
 		err = db.RemoveReposByKnot(tx, domain)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to remove repos by knot: %w", err)
 		}
 
 		if registration.Registered != nil {
 			err = i.Enforcer.RemoveKnot(domain)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to remove knot from enforcer: %w", err)
 			}
 		}
 
 		err = tx.Commit()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to commit txn: %w", err)
 		}
 
 		err = i.Enforcer.E.SavePolicy()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to save ACLs: %w", err)
 		}
+
+		l.Info("ingested record", "domain", domain)
 	}
 
 	return nil
@@ -1324,14 +1331,13 @@ func (i *Ingester) SweepPendingVerifications() {
 	g.Wait()
 }
 
-func (i *Ingester) ingestIssue(ctx context.Context, e *jmodels.Event) error {
+func (i *Ingester) ingestIssue(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {
 	did := e.Did
 	rkey := e.Commit.RKey
 
 	var err error
 
-	l := i.Logger.With("handler", "ingestIssue", "nsid", e.Commit.Collection, "did", did, "rkey", rkey)
-	l.Info("ingesting record")
+	l = l.With("handler", "ingestIssue")
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
@@ -1384,6 +1390,7 @@ func (i *Ingester) ingestIssue(ctx context.Context, e *jmodels.Event) error {
 			return err
 		}
 
+		l.Info("ingested record")
 		return nil
 
 	case jmodels.CommitOperationDelete:
@@ -1407,20 +1414,20 @@ func (i *Ingester) ingestIssue(ctx context.Context, e *jmodels.Event) error {
 			return err
 		}
 
+		l.Info("ingested record")
 		return nil
 	}
 
 	return nil
 }
 
-func (i *Ingester) ingestPull(ctx context.Context, e *jmodels.Event) error {
+func (i *Ingester) ingestPull(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {
 	did := e.Did
 	rkey := e.Commit.RKey
 
 	var err error
 
-	l := i.Logger.With("handler", "ingestPull", "nsid", e.Commit.Collection, "did", did, "rkey", rkey)
-	l.Info("ingesting record")
+	l = l.With("handler", "ingestPull")
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
@@ -1434,7 +1441,7 @@ func (i *Ingester) ingestPull(ctx context.Context, e *jmodels.Event) error {
 
 		ownerId, err := i.IdResolver.ResolveIdent(ctx, did)
 		if err != nil {
-			l.Error("failed to resolve did")
+			l.Error("failed to resolve did", "err", err)
 			return err
 		}
 
@@ -1523,6 +1530,7 @@ func (i *Ingester) ingestPull(ctx context.Context, e *jmodels.Event) error {
 			return err
 		}
 
+		l.Info("ingested record")
 		return nil
 
 	case jmodels.CommitOperationDelete:
@@ -1546,6 +1554,7 @@ func (i *Ingester) ingestPull(ctx context.Context, e *jmodels.Event) error {
 			return err
 		}
 
+		l.Info("ingested record")
 		return nil
 	}
 
@@ -1553,9 +1562,8 @@ func (i *Ingester) ingestPull(ctx context.Context, e *jmodels.Event) error {
 }
 
 // ingestIssueComment ingests legacy sh.tangled.repo.issue.comment deletions
-func (i *Ingester) ingestIssueComment(e *jmodels.Event) error {
-	l := i.Logger.With("handler", "ingestIssueComment", "nsid", e.Commit.Collection, "did", e.Did, "rkey", e.Commit.RKey)
-	l.Info("ingesting record")
+func (i *Ingester) ingestIssueComment(e *jmodels.Event, l *slog.Logger) error {
+	l = l.With("handler", "ingestIssueComment")
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
@@ -1572,13 +1580,13 @@ func (i *Ingester) ingestIssueComment(e *jmodels.Event) error {
 		}
 	}
 
+	l.Info("ingested record")
 	return nil
 }
 
 // ingestPullComment ingests legacy sh.tangled.repo.pull.comment deletions
-func (i *Ingester) ingestPullComment(e *jmodels.Event) error {
-	l := i.Logger.With("handler", "ingestPullComment", "nsid", e.Commit.Collection, "did", e.Did, "rkey", e.Commit.RKey)
-	l.Info("ingesting record")
+func (i *Ingester) ingestPullComment(e *jmodels.Event, l *slog.Logger) error {
+	l = l.With("handler", "ingestPullComment")
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
@@ -1595,18 +1603,18 @@ func (i *Ingester) ingestPullComment(e *jmodels.Event) error {
 		}
 	}
 
+	l.Info("ingested record")
 	return nil
 }
 
-func (i *Ingester) ingestComment(e *jmodels.Event) error {
+func (i *Ingester) ingestComment(e *jmodels.Event, l *slog.Logger) error {
 	did := e.Did
 	rkey := e.Commit.RKey
 	cid := e.Commit.CID
 
 	var err error
 
-	l := i.Logger.With("handler", "ingestComment", "nsid", e.Commit.Collection, "did", did, "rkey", rkey)
-	l.Info("ingesting record")
+	l = l.With("handler", "ingestComment")
 
 	ctx := context.Background()
 
@@ -1657,19 +1665,17 @@ func (i *Ingester) ingestComment(e *jmodels.Event) error {
 		); err != nil {
 			return fmt.Errorf("failed to delete comment record: %w", err)
 		}
-
-		return nil
 	}
 
+	l.Info("ingested record")
 	return nil
 }
 
-func (i *Ingester) ingestReaction(e *jmodels.Event) error {
+func (i *Ingester) ingestReaction(e *jmodels.Event, l *slog.Logger) error {
 	did := e.Did
 	rkey := e.Commit.RKey
 
-	l := i.Logger.With("handler", "ingestReaction", "nsid", e.Commit.Collection, "did", did, "rkey", rkey)
-	l.Info("ingesting record")
+	l = l.With("handler", "ingestReaction")
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
@@ -1708,7 +1714,9 @@ func (i *Ingester) ingestReaction(e *jmodels.Event) error {
 			return fmt.Errorf("failed to add reaction: %w", err)
 		}
 
-		return tx.Commit()
+		if err := tx.Commit(); err != nil {
+			return err
+		}
 
 	case jmodels.CommitOperationDelete:
 		if err := db.DeleteReactionByRkey(i.Db, did, rkey); err != nil {
@@ -1716,17 +1724,17 @@ func (i *Ingester) ingestReaction(e *jmodels.Event) error {
 		}
 	}
 
+	l.Info("ingested record")
 	return nil
 }
 
-func (i *Ingester) ingestLabelDefinition(e *jmodels.Event) error {
+func (i *Ingester) ingestLabelDefinition(e *jmodels.Event, l *slog.Logger) error {
 	did := e.Did
 	rkey := e.Commit.RKey
 
 	var err error
 
-	l := i.Logger.With("handler", "ingestLabelDefinition", "nsid", e.Commit.Collection, "did", did, "rkey", rkey)
-	l.Info("ingesting record")
+	l = l.With("handler", "ingestLabelDefinition")
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
@@ -1751,6 +1759,7 @@ func (i *Ingester) ingestLabelDefinition(e *jmodels.Event) error {
 			return fmt.Errorf("failed to create labeldef: %w", err)
 		}
 
+		l.Info("ingested record")
 		return nil
 
 	case jmodels.CommitOperationDelete:
@@ -1762,20 +1771,20 @@ func (i *Ingester) ingestLabelDefinition(e *jmodels.Event) error {
 			return fmt.Errorf("failed to delete labeldef record: %w", err)
 		}
 
+		l.Info("ingested record")
 		return nil
 	}
 
 	return nil
 }
 
-func (i *Ingester) ingestLabelOp(e *jmodels.Event) error {
+func (i *Ingester) ingestLabelOp(e *jmodels.Event, l *slog.Logger) error {
 	did := e.Did
 	rkey := e.Commit.RKey
 
 	var err error
 
-	l := i.Logger.With("handler", "ingestLabelOp", "nsid", e.Commit.Collection, "did", did, "rkey", rkey)
-	l.Info("ingesting record")
+	l = l.With("handler", "ingestLabelOp")
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate:
@@ -1840,6 +1849,8 @@ func (i *Ingester) ingestLabelOp(e *jmodels.Event) error {
 		if err = tx.Commit(); err != nil {
 			return err
 		}
+
+		l.Info("ingested record")
 	}
 
 	return nil

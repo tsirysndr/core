@@ -2,7 +2,6 @@ package appview
 
 import (
 	"encoding/json"
-	"io"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -27,7 +26,7 @@ func newStringIngester(t *testing.T) *Ingester {
 	t.Cleanup(func() { d.Close() })
 	return &Ingester{
 		Db:        d,
-		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Logger:    slog.New(slog.DiscardHandler),
 		Validator: &validator.Validator{},
 	}
 }
@@ -79,7 +78,7 @@ func TestIngestString_CreateRoundTrip(t *testing.T) {
 		CreatedAt:   created.Format(time.RFC3339),
 	})
 
-	if err := ing.ingestString(e); err != nil {
+	if err := ing.ingestString(e, ing.Logger); err != nil {
 		t.Fatalf("ingestString: %v", err)
 	}
 
@@ -114,13 +113,13 @@ func TestIngestString_UpdateBumpsEditedOnContentChange(t *testing.T) {
 		CreatedAt:   created.Format(time.RFC3339),
 	}
 
-	if err := ing.ingestString(makeStringEvent(t, jmodels.CommitOperationCreate, "did:plc:boltless", "rk1", base)); err != nil {
+	if err := ing.ingestString(makeStringEvent(t, jmodels.CommitOperationCreate, "did:plc:boltless", "rk1", base), ing.Logger); err != nil {
 		t.Fatalf("ingestString create: %v", err)
 	}
 
 	updated := base
 	updated.Contents = "hello, world!\n"
-	if err := ing.ingestString(makeStringEvent(t, jmodels.CommitOperationUpdate, "did:plc:boltless", "rk1", updated)); err != nil {
+	if err := ing.ingestString(makeStringEvent(t, jmodels.CommitOperationUpdate, "did:plc:boltless", "rk1", updated), ing.Logger); err != nil {
 		t.Fatalf("ingestString update: %v", err)
 	}
 
@@ -148,10 +147,10 @@ func TestIngestString_UpdateNoChangeKeepsEditedNil(t *testing.T) {
 		CreatedAt:   time.Date(2025, 9, 14, 10, 30, 0, 0, time.UTC).Format(time.RFC3339),
 	}
 
-	if err := ing.ingestString(makeStringEvent(t, jmodels.CommitOperationCreate, "did:plc:akshay", "rk2", rec)); err != nil {
+	if err := ing.ingestString(makeStringEvent(t, jmodels.CommitOperationCreate, "did:plc:akshay", "rk2", rec), ing.Logger); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if err := ing.ingestString(makeStringEvent(t, jmodels.CommitOperationUpdate, "did:plc:akshay", "rk2", rec)); err != nil {
+	if err := ing.ingestString(makeStringEvent(t, jmodels.CommitOperationUpdate, "did:plc:akshay", "rk2", rec), ing.Logger); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 
@@ -168,7 +167,7 @@ func TestIngestString_DeleteRemovesRow(t *testing.T) {
 		Contents:  "x",
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
-	if err := ing.ingestString(makeStringEvent(t, jmodels.CommitOperationCreate, "did:plc:boltless", "rk1", rec)); err != nil {
+	if err := ing.ingestString(makeStringEvent(t, jmodels.CommitOperationCreate, "did:plc:boltless", "rk1", rec), ing.Logger); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -181,7 +180,7 @@ func TestIngestString_DeleteRemovesRow(t *testing.T) {
 			RKey:       "rk1",
 		},
 	}
-	if err := ing.ingestString(del); err != nil {
+	if err := ing.ingestString(del, ing.Logger); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 
@@ -206,7 +205,7 @@ func TestIngestString_ValidatorRejects(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			e := makeStringEvent(t, jmodels.CommitOperationCreate, "did:plc:akshay", "bad", tc.rec)
-			if err := ing.ingestString(e); err == nil {
+			if err := ing.ingestString(e, ing.Logger); err == nil {
 				t.Fatal("expected validator error, got nil")
 			}
 			if _, ok := loadString(t, ing, "did:plc:akshay", "bad"); ok {
@@ -227,13 +226,13 @@ func TestIngestString_ColdReplayPreservesCreated(t *testing.T) {
 	event := makeStringEvent(t, jmodels.CommitOperationCreate, "did:plc:boltless", "rkcold", rec)
 
 	first := newStringIngester(t)
-	if err := first.ingestString(event); err != nil {
+	if err := first.ingestString(event, first.Logger); err != nil {
 		t.Fatalf("first ingest: %v", err)
 	}
 	live, _ := loadString(t, first, "did:plc:boltless", "rkcold")
 
 	second := newStringIngester(t)
-	if err := second.ingestString(event); err != nil {
+	if err := second.ingestString(event, second.Logger); err != nil {
 		t.Fatalf("replay ingest: %v", err)
 	}
 	replayed, _ := loadString(t, second, "did:plc:boltless", "rkcold")

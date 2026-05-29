@@ -19,24 +19,24 @@ import (
 	"tangled.org/core/orm"
 )
 
-func (i *Ingester) ingestRepo(ctx context.Context, e *jmodels.Event) error {
-	l := i.Logger.With("handler", "ingestRepo", "did", e.Did, "rkey", e.Commit.RKey)
+func (i *Ingester) ingestRepo(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {
+	l = l.With("handler", "ingestRepo")
 
 	switch e.Commit.Operation {
 	case jmodels.CommitOperationCreate:
-		return i.ingestRepoCreate(ctx, e)
+		return i.ingestRepoCreate(ctx, e, l)
 	case jmodels.CommitOperationUpdate:
-		return i.ingestRepoUpdate(ctx, e)
+		return i.ingestRepoUpdate(ctx, e, l)
 	case jmodels.CommitOperationDelete:
-		return i.ingestRepoDelete(ctx, e)
+		return i.ingestRepoDelete(ctx, e, l)
 	default:
-		l.Info("unknown repo operation", "op", e.Commit.Operation)
+		l.Info("unknown repo operation")
 		return nil
 	}
 }
 
-func (i *Ingester) ingestRepoCreate(ctx context.Context, e *jmodels.Event) error {
-	l := i.Logger.With("handler", "ingestRepoCreate", "did", e.Did, "rkey", e.Commit.RKey)
+func (i *Ingester) ingestRepoCreate(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {
+	l = l.With("handler", "ingestRepoCreate")
 
 	record := tangled.Repo{}
 	if err := json.Unmarshal(json.RawMessage(e.Commit.Record), &record); err != nil {
@@ -182,8 +182,8 @@ func (i *Ingester) ensureRepoOwnerPermissions(ownerDid, knot, repo string) error
 	return i.Enforcer.E.SavePolicy()
 }
 
-func (i *Ingester) ingestRepoUpdate(ctx context.Context, e *jmodels.Event) error {
-	l := i.Logger.With("handler", "ingestRepoUpdate", "did", e.Did, "rkey", e.Commit.RKey)
+func (i *Ingester) ingestRepoUpdate(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {
+	l = l.With("handler", "ingestRepoUpdate")
 
 	record := tangled.Repo{}
 	if err := json.Unmarshal(json.RawMessage(e.Commit.Record), &record); err != nil {
@@ -247,8 +247,8 @@ func (i *Ingester) ingestRepoUpdate(ctx context.Context, e *jmodels.Event) error
 	return tx.Commit()
 }
 
-func (i *Ingester) ingestRepoDelete(ctx context.Context, e *jmodels.Event) error {
-	l := i.Logger.With("handler", "ingestRepoDelete", "did", e.Did, "rkey", e.Commit.RKey)
+func (i *Ingester) ingestRepoDelete(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {
+	l = l.With("handler", "ingestRepoDelete")
 
 	repo, err := db.GetRepo(i.Db,
 		orm.FilterEq("did", e.Did),

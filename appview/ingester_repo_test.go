@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net/url"
 	"path/filepath"
@@ -79,7 +78,7 @@ func newTestIngester(t *testing.T) (*Ingester, *spyNotifier) {
 	ing := &Ingester{
 		Db:       d,
 		Enforcer: enforcer,
-		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Logger:   slog.New(slog.DiscardHandler),
 		Notifier: spy,
 	}
 	return ing, spy
@@ -93,7 +92,7 @@ func withVerifier(ing *Ingester, v repoverify.Verifier) *Ingester {
 func ingestAcceptingOwner(t *testing.T, ing *Ingester, e *jmodels.Event) error {
 	t.Helper()
 	ing.Verifier = acceptOwner(t, e)
-	return ing.ingestRepo(context.Background(), e)
+	return ing.ingestRepo(context.Background(), e, ing.Logger)
 }
 
 func seedRepoRow(t *testing.T, ing *Ingester, did, knot, name, rkey, repoDid string) *models.Repo {
@@ -566,7 +565,7 @@ func TestIngestRepo_CreateSquatRejected(t *testing.T) {
 		KnotURL:  mustKnotURL(t, "https://knot.example"),
 	}, nil))
 
-	if err := ing.ingestRepo(context.Background(), e); err != nil {
+	if err := ing.ingestRepo(context.Background(), e, ing.Logger); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
 	}
 
@@ -596,7 +595,7 @@ func TestIngestRepo_CreateHijackExistingRepoRejected(t *testing.T) {
 		KnotURL:  mustKnotURL(t, "https://knot.example"),
 	}, nil))
 
-	if err := ing.ingestRepo(context.Background(), e); err != nil {
+	if err := ing.ingestRepo(context.Background(), e, ing.Logger); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
 	}
 
@@ -625,7 +624,7 @@ func TestIngestRepo_CreateRenameIgnoresRkeyDrift(t *testing.T) {
 		KnotURL:  mustKnotURL(t, "https://knot.example"),
 	}, nil))
 
-	if err := ing.ingestRepo(context.Background(), e); err != nil {
+	if err := ing.ingestRepo(context.Background(), e, ing.Logger); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
 	}
 
@@ -648,7 +647,7 @@ func TestIngestRepo_CreateVerifierTransientErrorPropagates(t *testing.T) {
 
 	withVerifier(ing, stubVerifier(repoverify.Result{}, errors.New("knot unreachable")))
 
-	err := ing.ingestRepo(context.Background(), e)
+	err := ing.ingestRepo(context.Background(), e, ing.Logger)
 	if err == nil {
 		t.Fatalf("expected error on transient verifier failure, got nil")
 	}
@@ -673,7 +672,7 @@ func TestIngestRepo_UpdateRejectsOwnerMismatch(t *testing.T) {
 		KnotURL:  mustKnotURL(t, "https://knot.example"),
 	}, nil))
 
-	if err := ing.ingestRepo(context.Background(), e); err != nil {
+	if err := ing.ingestRepo(context.Background(), e, ing.Logger); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
 	}
 
@@ -697,7 +696,7 @@ func TestIngestRepo_CreateInvalidRepoDidRejected(t *testing.T) {
 		return repoverify.Result{}, nil
 	})
 
-	if err := ing.ingestRepo(context.Background(), e); err != nil {
+	if err := ing.ingestRepo(context.Background(), e, ing.Logger); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
 	}
 	if verifierCalled {
@@ -716,7 +715,7 @@ func TestIngestRepo_NilVerifierFailsClosed(t *testing.T) {
 		RepoDid: ptr("did:plc:akshays-repo"),
 	})
 
-	err := ing.ingestRepo(context.Background(), e)
+	err := ing.ingestRepo(context.Background(), e, ing.Logger)
 	if err == nil {
 		t.Fatalf("expected error when Verifier is nil, got nil")
 	}
@@ -739,7 +738,7 @@ func TestIngestRepo_CreateRejectsKnotMismatch(t *testing.T) {
 		KnotURL:  mustKnotURL(t, "https://knot.example"),
 	}, nil))
 
-	if err := ing.ingestRepo(context.Background(), e); err != nil {
+	if err := ing.ingestRepo(context.Background(), e, ing.Logger); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
 	}
 	if _, err := db.GetRepo(ing.Db,
@@ -769,7 +768,7 @@ func TestIngestRepo_UpdateRejectsKnotMismatch(t *testing.T) {
 		KnotURL:  mustKnotURL(t, "https://knot.example"),
 	}, nil))
 
-	if err := ing.ingestRepo(context.Background(), e); err != nil {
+	if err := ing.ingestRepo(context.Background(), e, ing.Logger); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
 	}
 	akshay := loadRepo(t, ing, "did:plc:akshay", "akshayskey")
@@ -797,7 +796,7 @@ func TestIngestRepo_UpdateRejectsRepoDidMutation(t *testing.T) {
 		KnotURL:  mustKnotURL(t, "https://knot.example"),
 	}, nil))
 
-	if err := ing.ingestRepo(context.Background(), e); err != nil {
+	if err := ing.ingestRepo(context.Background(), e, ing.Logger); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
 	}
 	akshay := loadRepo(t, ing, "did:plc:akshay", "akshayskey")
