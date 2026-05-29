@@ -10,9 +10,9 @@ import (
 	"tangled.org/core/orm"
 )
 
-func AddReaction(e Execer, reactedByDid string, threadAt syntax.ATURI, kind models.ReactionKind, rkey string) error {
-	query := `insert or ignore into reactions (reacted_by_did, thread_at, kind, rkey) values (?, ?, ?, ?)`
-	_, err := e.Exec(query, reactedByDid, threadAt, kind, rkey)
+func AddReaction(e Execer, reactedByDid string, threadAt syntax.ATURI, kind models.ReactionKind, rkey string, created time.Time) error {
+	query := `insert or ignore into reactions (reacted_by_did, thread_at, kind, rkey, created) values (?, ?, ?, ?, ?)`
+	_, err := e.Exec(query, reactedByDid, threadAt, kind, rkey, created.UTC().Format(time.RFC3339))
 	return err
 }
 

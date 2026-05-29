@@ -1,9 +1,12 @@
 package models
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
+
+	"tangled.org/core/api/tangled"
 )
 
 type ReactionKind string
@@ -59,4 +62,12 @@ type Reaction struct {
 type ReactionDisplayData struct {
 	Count int
 	Users []string
+}
+
+func NormalizeReactionSubject(subject syntax.ATURI) syntax.ATURI {
+	switch subject.Collection() {
+	case tangled.RepoIssueCommentNSID, tangled.RepoPullCommentNSID:
+		return syntax.ATURI(fmt.Sprintf("at://%s/%s/%s", subject.Authority(), tangled.FeedCommentNSID, subject.RecordKey()))
+	}
+	return subject
 }

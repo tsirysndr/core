@@ -1,7 +1,6 @@
 package state
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -33,10 +32,7 @@ func (s *State) React(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// override collection NSID to new one
-	switch subjectUri.Collection() {
-	case tangled.RepoIssueCommentNSID, tangled.RepoPullCommentNSID:
-		subjectUri = syntax.ATURI(fmt.Sprintf("at://%s/%s/%s", subjectUri.Authority(), tangled.FeedCommentNSID, subjectUri.RecordKey()))
-	}
+	subjectUri = models.NormalizeReactionSubject(subjectUri)
 
 	reactionKind, ok := models.ParseReactionKind(r.URL.Query().Get("kind"))
 	if !ok {
@@ -52,7 +48,7 @@ func (s *State) React(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodPost:
-		createdAt := time.Now().Format(time.RFC3339)
+		createdAt := time.Now()
 		rkey := tid.TID()
 		resp, err := comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 			Collection: tangled.FeedReactionNSID,
@@ -62,7 +58,7 @@ func (s *State) React(w http.ResponseWriter, r *http.Request) {
 				Val: &tangled.FeedReaction{
 					Subject:   subjectUri.String(),
 					Reaction:  reactionKind.String(),
-					CreatedAt: createdAt,
+					CreatedAt: createdAt.Format(time.RFC3339),
 				},
 			},
 		})
@@ -71,7 +67,7 @@ func (s *State) React(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		err = db.AddReaction(s.db, currentUser.Did, subjectUri, reactionKind, rkey)
+		err = db.AddReaction(s.db, currentUser.Did, subjectUri, reactionKind, rkey, createdAt)
 		if err != nil {
 			l.Error("failed to react", "err", err)
 			return

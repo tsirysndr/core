@@ -79,6 +79,8 @@ func (i *Ingester) Ingest() processFunc {
 				err = i.ingestVouch(ctx, e)
 			case tangled.FeedStarNSID:
 				err = i.ingestStar(ctx, e)
+			case tangled.FeedReactionNSID:
+				err = i.ingestReaction(e)
 			case tangled.PublicKeyNSID:
 				err = i.ingestPublicKey(e)
 			case tangled.RepoArtifactNSID:
@@ -1657,6 +1659,61 @@ func (i *Ingester) ingestComment(e *jmodels.Event) error {
 		}
 
 		return nil
+	}
+
+	return nil
+}
+
+func (i *Ingester) ingestReaction(e *jmodels.Event) error {
+	did := e.Did
+	rkey := e.Commit.RKey
+
+	l := i.Logger.With("handler", "ingestReaction", "nsid", e.Commit.Collection, "did", did, "rkey", rkey)
+	l.Info("ingesting record")
+
+	switch e.Commit.Operation {
+	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
+		raw := json.RawMessage(e.Commit.Record)
+		record := tangled.FeedReaction{}
+		if err := json.Unmarshal(raw, &record); err != nil {
+			return fmt.Errorf("invalid record: %w", err)
+		}
+
+		subjectUri, err := syntax.ParseATURI(record.Subject)
+		if err != nil {
+			return fmt.Errorf("invalid reaction subject %q: %w", record.Subject, err)
+		}
+		subjectUri = models.NormalizeReactionSubject(subjectUri)
+
+		kind, ok := models.ParseReactionKind(record.Reaction)
+		if !ok {
+			return fmt.Errorf("invalid reaction kind: %q", record.Reaction)
+		}
+
+		created, parseErr := time.Parse(time.RFC3339, record.CreatedAt)
+		if parseErr != nil {
+			created = time.Now()
+		}
+
+		tx, err := i.Db.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to start transaction: %w", err)
+		}
+		defer tx.Rollback()
+
+		if err := db.DeleteReactionByRkey(tx, did, rkey); err != nil {
+			return fmt.Errorf("failed to clear existing reaction: %w", err)
+		}
+		if err := db.AddReaction(tx, did, subjectUri, kind, rkey, created); err != nil {
+			return fmt.Errorf("failed to add reaction: %w", err)
+		}
+
+		return tx.Commit()
+
+	case jmodels.CommitOperationDelete:
+		if err := db.DeleteReactionByRkey(i.Db, did, rkey); err != nil {
+			return fmt.Errorf("failed to delete reaction record: %w", err)
+		}
 	}
 
 	return nil

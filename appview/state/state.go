@@ -127,6 +127,7 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 		[]string{
 			tangled.ActorProfileNSID,
 			tangled.FeedStarNSID,
+			tangled.FeedReactionNSID,
 			tangled.FeedCommentNSID,
 			tangled.GraphFollowNSID,
 			tangled.GraphVouchNSID,
