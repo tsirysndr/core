@@ -261,10 +261,6 @@
           ${pkgs.tailwindcss}/bin/tailwindcss --watch=always -i input.css -o ./appview/pages/static/tw.css
         '';
     in {
-      fmt = {
-        type = "app";
-        program = pkgs.lib.getExe packages'.treefmt-wrapper;
-      };
       watch-appview = {
         type = "app";
         program = toString (pkgs.writeShellScript "watch-appview" ''
@@ -405,5 +401,7 @@
 
       services.tangled.spindle.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.spindle;
     };
+
+    formatter = forAllSystems (system: self.packages.${system}.treefmt-wrapper);
   };
 }

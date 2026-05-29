@@ -9,4 +9,4 @@ steps:
     command: |
       mkdir -p bobbin/crates/types/src/_lex
       [ -f bobbin/crates/types/src/_lex/lib.rs ] || : > bobbin/crates/types/src/_lex/lib.rs
-      nix run .#fmt -- --ci
+      nix fmt -- --ci
