@@ -10,7 +10,7 @@ import (
 	"tangled.org/core/knotmirror/models"
 )
 
-func UpsertHost(ctx context.Context, e *sql.DB, host *models.Host) error {
+func UpsertHost(ctx context.Context, e DBTX, host *models.Host) error {
 	if _, err := e.ExecContext(ctx,
 		`insert into hosts (hostname, no_ssl, status, last_seq)
 		values ($1, $2, $3, $4)
@@ -29,7 +29,7 @@ func UpsertHost(ctx context.Context, e *sql.DB, host *models.Host) error {
 	return nil
 }
 
-func GetHost(ctx context.Context, e *sql.DB, hostname string) (*models.Host, error) {
+func GetHost(ctx context.Context, e DBTX, hostname string) (*models.Host, error) {
 	var host models.Host
 	if err := e.QueryRowContext(ctx,
 		`select hostname, no_ssl, status, last_seq
@@ -70,7 +70,7 @@ func StoreCursors(ctx context.Context, e *sql.DB, cursors []models.HostCursor) e
 	return tx.Commit()
 }
 
-func ListHosts(ctx context.Context, e *sql.DB, status models.HostStatus) ([]models.Host, error) {
+func ListHosts(ctx context.Context, e DBTX, status models.HostStatus) ([]models.Host, error) {
 	rows, err := e.QueryContext(ctx,
 		`select hostname, no_ssl, status, last_seq
 		from hosts

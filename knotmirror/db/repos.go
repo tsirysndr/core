@@ -11,7 +11,7 @@ import (
 	"tangled.org/core/knotmirror/models"
 )
 
-func UpsertRepo(ctx context.Context, e *sql.DB, repo *models.Repo) error {
+func UpsertRepo(ctx context.Context, e DBTX, repo *models.Repo) error {
 	if repo.RepoDid == "" {
 		return fmt.Errorf("upsert repo: repo_did is required")
 	}
@@ -48,7 +48,7 @@ func UpsertRepo(ctx context.Context, e *sql.DB, repo *models.Repo) error {
 	return nil
 }
 
-func UpdateRepoState(ctx context.Context, e *sql.DB, repoDid syntax.DID, state models.RepoState) error {
+func UpdateRepoState(ctx context.Context, e DBTX, repoDid syntax.DID, state models.RepoState) error {
 	if _, err := e.ExecContext(ctx,
 		`update repos
 		set state = $1
@@ -61,7 +61,7 @@ func UpdateRepoState(ctx context.Context, e *sql.DB, repoDid syntax.DID, state m
 	return nil
 }
 
-func DeleteRepo(ctx context.Context, e *sql.DB, did syntax.DID, rkey syntax.RecordKey) error {
+func DeleteRepo(ctx context.Context, e DBTX, did syntax.DID, rkey syntax.RecordKey) error {
 	if _, err := e.ExecContext(ctx,
 		`delete from repos where did = $1 and rkey = $2`,
 		did,
@@ -107,7 +107,7 @@ func scanRepo(row interface{ Scan(...any) error }) (*models.Repo, error) {
 	return &repo, nil
 }
 
-func GetRepoByRepoDid(ctx context.Context, e *sql.DB, repoDid syntax.DID) (*models.Repo, error) {
+func GetRepoByRepoDid(ctx context.Context, e DBTX, repoDid syntax.DID) (*models.Repo, error) {
 	row := e.QueryRowContext(ctx,
 		`select`+repoColumns+`
 		from repos
@@ -124,7 +124,7 @@ func GetRepoByRepoDid(ctx context.Context, e *sql.DB, repoDid syntax.DID) (*mode
 	return repo, nil
 }
 
-func GetRepoByAtUri(ctx context.Context, e *sql.DB, aturi syntax.ATURI) (*models.Repo, error) {
+func GetRepoByAtUri(ctx context.Context, e DBTX, aturi syntax.ATURI) (*models.Repo, error) {
 	row := e.QueryRowContext(ctx,
 		`select`+repoColumns+`
 		from repos
@@ -141,7 +141,7 @@ func GetRepoByAtUri(ctx context.Context, e *sql.DB, aturi syntax.ATURI) (*models
 	return repo, nil
 }
 
-func ListRepos(ctx context.Context, e *sql.DB, page pagination.Page, did, knot, state, name string) ([]models.Repo, error) {
+func ListRepos(ctx context.Context, e DBTX, page pagination.Page, did, knot, state, name string) ([]models.Repo, error) {
 	var conditions []string
 	var args []any
 
@@ -200,7 +200,7 @@ func ListRepos(ctx context.Context, e *sql.DB, page pagination.Page, did, knot, 
 	return repos, nil
 }
 
-func GetRepoCountsByState(ctx context.Context, e *sql.DB) (map[models.RepoState]int64, error) {
+func GetRepoCountsByState(ctx context.Context, e DBTX) (map[models.RepoState]int64, error) {
 	const q = `
 		SELECT state, COUNT(*)
 		FROM repos
