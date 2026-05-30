@@ -43,6 +43,16 @@ func (rp *Repo) Index(w http.ResponseWriter, r *http.Request) {
 
 	user := rp.oauth.GetMultiAccountUser(r)
 
+	if user != nil {
+		userDid := user.Did
+		repoDid := f.RepoDid
+		go func() {
+			if err := db.UpsertRecentLink(rp.db, userDid, models.RecentLinkTypeRepo, repoDid); err != nil {
+				l.Error("failed to upsert recent link", "err", err)
+			}
+		}()
+	}
+
 	// Build index response from multiple XRPC calls
 	result, err := rp.buildIndexResponse(r.Context(), f, ref)
 	if err != nil {

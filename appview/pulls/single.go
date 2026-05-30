@@ -110,6 +110,13 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 				l.Error("failed to mark pull notifications as read", "err", err)
 			}
 		}()
+
+		atUri := pull.AtUri().String()
+		go func() {
+			if err := db.UpsertRecentLink(s.db, userDid, models.RecentLinkTypePull, atUri); err != nil {
+				l.Error("failed to upsert recent link", "err", err)
+			}
+		}()
 	}
 
 	backlinks, err := db.GetBacklinks(s.db, pull.AtUri())

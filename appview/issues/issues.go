@@ -107,6 +107,13 @@ func (rp *Issues) RepoSingleIssue(w http.ResponseWriter, r *http.Request) {
 				l.Error("failed to mark issue notifications as read", "err", err)
 			}
 		}()
+
+		atUri := issue.AtUri().String()
+		go func() {
+			if err := db.UpsertRecentLink(rp.db, userDid, models.RecentLinkTypeIssue, atUri); err != nil {
+				l.Error("failed to upsert recent link", "err", err)
+			}
+		}()
 	}
 
 	entities := []syntax.ATURI{issue.AtUri()}
