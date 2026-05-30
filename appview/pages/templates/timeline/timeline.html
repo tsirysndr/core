@@ -16,8 +16,9 @@
 {{ define "content" }}
 <div id="timeline-grid" class="flex flex-col md:grid md:grid-cols-8">
 
-    <div class="hidden md:flex md:col-span-2 md:flex-col md:gap-6 md:pt-4 md:px-4">
+    <div class="hidden md:flex md:col-span-2 md:flex-col md:gap-4 md:pt-4 md:px-4">
         {{ template "timeline/fragments/notifications" . }}
+        {{ template "timeline/fragments/recents" . }}
     </div>
 
     <div class="order-2 md:order-none md:col-start-3 md:row-start-1 md:col-span-4">

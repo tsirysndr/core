@@ -1,0 +1,84 @@
+{{ define "timeline/fragments/recents" }}
+  {{ if .LoggedInUser }}
+  <div class="border border-gray-200 dark:border-gray-700 rounded-sm divide-y divide-gray-200 dark:divide-gray-700">
+    <h3 class="text-base dark:text-white flex items-center gap-2 px-4 py-2 bg-white/50 dark:bg-gray-800/50">
+      {{ i "history" "size-4 flex-shrink-0" }}
+      Recents
+    </h3>
+
+    {{ if not .Recents }}
+    <div class="px-4 py-8 text-sm text-center text-gray-400 dark:text-gray-500">
+      <div class="w-10 h-10 mx-auto mb-3 text-gray-300 dark:text-gray-600">
+        {{ i "route" "size-10" }}
+      </div>
+      <p class="text-sm text-gray-500 dark:text-gray-400">No recent pages yet.</p>
+    </div>
+    {{ else }}
+      <div class="relative flex flex-col bg-white dark:bg-gray-800">
+        <div class="absolute top-0 bottom-0 w-px bg-gray-200 dark:bg-gray-700" style="left: 1.875rem"></div>
+        {{ range .Recents }}
+          {{ if .Repo }}
+            {{ template "timeline/fragments/recentRepo" . }}
+          {{ else if .Issue }}
+            {{ template "timeline/fragments/recentIssue" . }}
+          {{ else if .Pull }}
+            {{ template "timeline/fragments/recentPull" . }}
+          {{ end }}
+        {{ end }}
+      </div>
+    {{ end }}
+  </div>
+  {{ end }}
+{{ end }}
+
+{{ define "recentRowClass" }}
+  relative grid grid-cols-[1.75rem_1fr_auto] grid-rows-2 gap-x-3 pl-4 pr-4 py-3 text-sm no-underline hover:no-underline hover:bg-gray-100/50 dark:hover:bg-gray-700/50 overflow-hidden
+{{ end }}
+
+{{/* call with dict "color" "text-*" "icon" "icon-name" */}}
+{{ define "recentIconCircle" }}
+  <span class="col-start-1 row-start-1 row-span-2 self-center relative z-10 flex items-center justify-center w-7 h-7 rounded-full bg-white dark:bg-gray-800 {{ .color }} shrink-0 border border-gray-200 dark:border-gray-700">
+    {{ i .icon "w-3.5 h-3.5" }}
+  </span>
+{{ end }}
+
+{{ define "timeline/fragments/recentRepo" }}
+  {{ $repoOwner := resolve .Repo.Did }}
+  <a href="/{{ $repoOwner }}/{{ .Repo.Slug }}" class="{{ template "recentRowClass" }}">
+    <span class="col-start-1 row-start-1 row-span-2 self-center relative z-10">
+      {{ template "user/fragments/pic" (list .Repo.Did "size-7") }}
+    </span>
+    <span class="col-start-2 row-start-1 row-span-2 self-center truncate font-medium dark:text-white">{{ $repoOwner }}/{{ .Repo.Name }}</span>
+    <span class="col-start-3 row-start-1 row-span-2 self-center text-gray-500 dark:text-gray-400 text-xs shrink-0">{{ template "repo/fragments/shortTime" .Link.Visited }}</span>
+  </a>
+{{ end }}
+
+{{ define "timeline/fragments/recentIssue" }}
+  {{ $repoOwner := resolve .Issue.Repo.Did }}
+  <a href="/{{ $repoOwner }}/{{ .Issue.Repo.Slug }}/issues/{{ .Issue.IssueId }}" class="{{ template "recentRowClass" }}">
+    {{ if .Issue.Open }}
+      {{ template "recentIconCircle" (dict "color" "text-green-600 dark:text-green-500" "icon" "circle-dot") }}
+    {{ else }}
+      {{ template "recentIconCircle" (dict "color" "text-gray-500 dark:text-gray-400" "icon" "ban") }}
+    {{ end }}
+    <span class="col-start-2 row-start-1 truncate dark:text-white">{{ .Issue.Title }}</span>
+    <span class="col-start-2 row-start-2 truncate text-xs text-gray-500 dark:text-gray-400">{{ $repoOwner }}/{{ .Issue.Repo.Name }}</span>
+    <span class="col-start-3 row-start-1 self-center text-gray-500 dark:text-gray-400 text-xs shrink-0">{{ template "repo/fragments/shortTime" .Link.Visited }}</span>
+  </a>
+{{ end }}
+
+{{ define "timeline/fragments/recentPull" }}
+  {{ $repoOwner := resolve .Pull.Repo.Did }}
+  <a href="/{{ $repoOwner }}/{{ .Pull.Repo.Slug }}/pulls/{{ .Pull.PullId }}" class="{{ template "recentRowClass" }}">
+    {{ if .Pull.State.IsOpen }}
+      {{ template "recentIconCircle" (dict "color" "text-green-600 dark:text-green-500" "icon" "git-pull-request") }}
+    {{ else if .Pull.State.IsMerged }}
+      {{ template "recentIconCircle" (dict "color" "text-purple-600 dark:text-purple-500" "icon" "git-merge") }}
+    {{ else }}
+      {{ template "recentIconCircle" (dict "color" "text-gray-600 dark:text-gray-300" "icon" "git-pull-request-closed") }}
+    {{ end }}
+    <span class="col-start-2 row-start-1 truncate dark:text-white">{{ .Pull.Title }}</span>
+    <span class="col-start-2 row-start-2 truncate text-xs text-gray-500 dark:text-gray-400">{{ $repoOwner }}/{{ .Pull.Repo.Name }}</span>
+    <span class="col-start-3 row-start-1 self-center text-gray-500 dark:text-gray-400 text-xs shrink-0">{{ template "repo/fragments/shortTime" .Link.Visited }}</span>
+  </a>
+{{ end }}

@@ -400,6 +400,13 @@ func (p *Pages) Brand(w io.Writer, params BrandParams) error {
 	return p.execute("brand/brand", w, params)
 }
 
+type RecentItem struct {
+	Link  *models.RecentLink
+	Repo  *models.Repo
+	Issue *models.Issue
+	Pull  *models.Pull
+}
+
 type TimelineParams struct {
 	LoggedInUser     *oauth.MultiAccountUser
 	Timeline         []models.TimelineGroup
@@ -408,6 +415,7 @@ type TimelineParams struct {
 	BlueskyPosts     []models.BskyPost
 	VouchSuggestions []models.VouchSuggestion
 	Notifications    []*models.NotificationWithEntity
+	Recents          []RecentItem
 	// ShowNewsletter controls whether the newsletter widget/CTA is rendered.
 	// For logged-in users it reflects their newsletter_preferences row; for
 	// anonymous visitors it is always true (dismissal falls back to
