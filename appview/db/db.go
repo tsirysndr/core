@@ -559,6 +559,15 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			pull_id integer references pulls(id)
 		);
 
+		create table if not exists recent_links (
+			id        integer primary key autoincrement,
+			user_did  text not null,
+			link_type text not null,
+			target    text not null,
+			visited   text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+			unique(user_did, target)
+		);
+
 		create table if not exists notification_preferences (
 			id integer primary key autoincrement,
 			user_did text not null unique,
