@@ -184,7 +184,7 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 	l.Info("setting up workflow")
 
 	setupStep := Step{
-		name: "nixery image pull",
+		name: "Pull image from Nixery",
 		kind: models.StepKindSystem,
 	}
 	setupStepIdx := -1
@@ -212,7 +212,7 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 	l.Info("pulling image", "image", addl.image)
 	fmt.Fprintf(
 		wfLogger.DataWriter(setupStepIdx, "stdout"),
-		"pulling image: %s",
+		"Pulling image: %s",
 		addl.image,
 	)
 
@@ -233,7 +233,7 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 
 	/// -------------------------CONTAINER CREATION-------------------------------------
 	l.Info("creating container")
-	wfLogger.DataWriter(setupStepIdx, "stdout").Write([]byte("creating container..."))
+	wfLogger.DataWriter(setupStepIdx, "stdout").Write([]byte("Creating container..."))
 
 	resp, err := e.docker.ContainerCreate(ctx, &container.Config{
 		Image:      addl.image,
@@ -297,7 +297,7 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 	})
 
 	/// -------------------------CONTAINER START----------------------------------------
-	wfLogger.DataWriter(setupStepIdx, "stdout").Write([]byte("starting container..."))
+	wfLogger.DataWriter(setupStepIdx, "stdout").Write([]byte("Starting container..."))
 	if err := e.docker.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
 		return fmt.Errorf("starting container: %w", err)
 	}
