@@ -8,6 +8,7 @@ import (
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
+	"tangled.org/core/appview/pagination"
 	"tangled.org/core/orm"
 )
 
@@ -72,6 +73,19 @@ func (s *State) Timeline(w http.ResponseWriter, r *http.Request) {
 		// non-fatal
 	}
 
+	var notifications []*models.NotificationWithEntity
+	if user != nil {
+		notifications, err = db.GetNotificationsWithEntities(
+			s.db,
+			pagination.Page{Limit: 5, Offset: 0},
+			orm.FilterEq("recipient_did", user.Did),
+			orm.FilterEq("read", 0),
+		)
+		if err != nil {
+			s.logger.Error("failed to get notifications for timeline", "err", err)
+		}
+	}
+
 	var vouchSuggestions []models.VouchSuggestion
 	if user != nil {
 		vouchSuggestions, err = db.GetVouchSuggestions(s.db, user.Did, 3)
@@ -100,6 +114,7 @@ func (s *State) Timeline(w http.ResponseWriter, r *http.Request) {
 		Repos:            repos,
 		GfiLabel:         gfiLabel,
 		VouchSuggestions: vouchSuggestions,
+		Notifications:    notifications,
 		ShowNewsletter:   s.showNewsletter(user),
 	})
 }

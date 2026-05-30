@@ -1,16 +1,16 @@
 {{ define "timeline/fragments/vouchSuggestions" }}
   {{ if and .LoggedInUser .VouchSuggestions }}
-    <div>
-      <div class="flex items-center justify-between">
-        <h3 class="text-xl font-bold dark:text-white flex items-center gap-4 px-4 pb-4">
-          {{ i "shield-plus" "size-5 flex-shrink-0" }}
+    <div class="border border border-gray-200 dark:border-gray-700 rounded-sm divide-y divide-gray-200 dark:divide-gray-700">
+      <a href="/{{ .LoggedInUser.Did }}?tab=vouches" class="flex items-center justify-between bg-white/50 dark:bg-gray-800/50 no-underline hover:no-underline">
+        <h3 class="text-base dark:text-white flex items-center gap-2 px-4 py-2">
+          {{ i "shield-plus" "size-4 flex-shrink-0" }}
           Suggested
         </h3>
-        <a href="/{{ .LoggedInUser.Did }}?tab=vouches" class="text-sm font-normal hover:no-underline no-underline flex items-center gap-1 pb-4 pr-4">
+        <span class="text-sm font-normal flex items-center gap-1 pr-4">
           View all {{ i "arrow-right" "size-3.5" }}
         </a>
       </div>
-      <div class="flex flex-col gap-4 bg-white dark:bg-gray-800 p-4 rounded-sm border border-gray-200 dark:border-gray-700 shadow-sm">
+      <div class="flex flex-col gap-4 bg-white dark:bg-gray-800 p-4">
         {{ range .VouchSuggestions }}
         <div class="flex items-center gap-3 ">
           {{ template "user/fragments/picLink" (list .Did.String "size-10") }}

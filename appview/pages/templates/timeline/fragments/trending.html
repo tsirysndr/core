@@ -1,21 +1,62 @@
 {{ define "timeline/fragments/trending" }}
-  <div>
-    <h3 class="text-xl font-bold dark:text-white flex items-center gap-4 px-4 pb-4">
-      {{ i "trending-up" "size-5 flex-shrink-0" }}
+  <div class="border border border-gray-200 dark:border-gray-700 rounded-sm divide-y divide-gray-200 dark:divide-gray-700">
+    <h3 class="text-base dark:text-white flex items-center gap-2 px-4 py-2 bg-white/50 dark:bg-gray-800/50">
+      {{ i "trending-up" "size-4 flex-shrink-0" }}
       Trending
     </h3>
     {{ if .Repos }}
-    <div class="flex gap-4 overflow-x-auto scrollbar-hide items-stretch md:flex-col md:overflow-x-visible">
+    <table class="w-full py-1 bg-white dark:bg-gray-800">
+      <tbody>
       {{ range $index, $repo := .Repos }}
-      <div class="flex-none w-96 border border-gray-200 dark:border-gray-700 rounded-sm md:flex-none md:w-auto">
-        {{ template "user/fragments/repoCard" (list $ $repo true) }}
-      </div>
+        {{ template "singleLineRepo" (list $ $repo) }}
       {{ end }}
-    </div>
+      </tbody>
+    </table>
     {{ else }}
-    <div class="p-6 border border-gray-200 dark:border-gray-700 rounded-sm text-sm text-gray-500 dark:text-gray-400 text-center">
+    <div class="p-6 text-sm text-gray-500 dark:text-gray-400 text-center">
       No trending repositories this week
     </div>
     {{ end }}
   </div>
 {{ end }}
+
+{{ define "singleLineRepo" }}
+  {{ $root := index . 0 }}
+  {{ $repo := index . 1 }}
+  {{ with $repo }}
+    {{ $repoOwner := resolve .Did }}
+    <tr class="relative hover:bg-gray-100/50 dark:hover:bg-gray-700/50 group">
+      <td class="pl-4 pr-2 py-3 text-right text-gray-400 tabular-nums whitespace-nowrap align-top">
+        <div class="flex text-sm items-center justify-end gap-1">
+          {{ i "star" "w-3 h-3 fill-current shrink-0" }}
+          {{ if .RepoStats }}
+            <span>{{ scaleFmt .RepoStats.StarCount }}</span>
+          {{ else }}
+            <span>0</span>
+          {{ end }}
+        </div>
+      </td>
+      <td class="px-2 py-3 w-full max-w-0">
+        <a href="/{{ $repoOwner }}/{{ .Slug }}" class="absolute inset-0 no-underline" aria-label="{{ $repoOwner }}/{{ .Name }}"></a>
+        <span class="text-sm font-medium dark:text-white truncate block">{{ $repoOwner }}/{{ .Name }}</span>
+        {{ with .Description }}
+          <span class="text-xs text-gray-500 dark:text-gray-400 truncate line-clamp-1 block">{{ . | description }}</span>
+        {{ end }}
+      </td>
+      <td class="pl-2 pr-4 py-3 text-gray-400 text-sm whitespace-nowrap font-mono align-top">
+        {{ if and .RepoStats .RepoStats.Language }}
+          {{ $lang := .RepoStats.Language }}
+          {{ $display := $lang }}
+          {{ if gt (len $lang) 6 }}
+            {{ $display = .RepoStats.LangShortName }}
+          {{ end }}
+          <div class="flex items-center gap-1.5">
+            {{ template "repo/fragments/colorBall" (dict "color" (langColor $lang)) }}
+            <span>{{ $display }}</span>
+          </div>
+        {{ end }}
+      </td>
+    </tr>
+  {{ end }}
+{{ end }}
+

@@ -8,30 +8,37 @@
 {{ end }}
 
 {{ define "mainLayout" }}
-<div class="flex-grow">
-    <div class="max-w-screen-lg mx-auto flex flex-col gap-4">
-        <main>{{ block "content" . }}{{ end }}</main>
-    </div>
+<div class="flex-grow flex flex-col">
+    <main class="flex-grow flex flex-col">{{ block "content" . }}{{ end }}</main>
 </div>
 {{ end }}
 
 {{ define "content" }}
-<div id="timeline-grid" class="flex flex-col gap-4 md:grid md:grid-cols-3">
+<div id="timeline-grid" class="flex flex-col md:grid md:grid-cols-8">
 
-    <div class="order-3 md:order-none md:col-span-2 md:row-start-1">
+    <div class="hidden md:flex md:col-span-2 md:flex-col md:gap-6 md:pt-4 md:px-4">
+        {{ template "timeline/fragments/notifications" . }}
+    </div>
+
+    <div class="order-2 md:order-none md:col-start-3 md:row-start-1 md:col-span-4">
         {{ template "timeline/fragments/timeline" . }}
     </div>
 
-    <div class="order-1 md:order-none flex flex-col gap-6 md:col-start-3 md:row-start-1 md:pt-4">
+    <div class="order-1 md:order-none flex flex-col gap-4 md:col-start-7 md:row-start-1 md:col-span-2 md:pt-4 md:px-4">
         {{ if .ShowNewsletter }}
         <div id="newsletter-col" class="order-first md:order-last">
             {{ template "timeline/fragments/newsletterWidget" . }}
         </div>
         {{ end }}
+
         {{ template "timeline/fragments/announcements" . }}
+
+        {{ if and .LoggedInUser .VouchSuggestions }}
         <div class="hidden md:block">
             {{ template "timeline/fragments/vouchSuggestions" . }}
         </div>
+        {{ end }}
+
         {{ template "timeline/fragments/trending" . }}
     </div>
 </div>

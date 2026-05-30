@@ -407,6 +407,7 @@ type TimelineParams struct {
 	GfiLabel         *models.LabelDefinition
 	BlueskyPosts     []models.BskyPost
 	VouchSuggestions []models.VouchSuggestion
+	Notifications    []*models.NotificationWithEntity
 	// ShowNewsletter controls whether the newsletter widget/CTA is rendered.
 	// For logged-in users it reflects their newsletter_preferences row; for
 	// anonymous visitors it is always true (dismissal falls back to

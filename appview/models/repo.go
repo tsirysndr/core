@@ -7,6 +7,7 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	securejoin "github.com/cyphar/filepath-securejoin"
+	enry "github.com/go-enry/go-enry/v2"
 	"tangled.org/core/api/tangled"
 )
 
@@ -112,6 +113,20 @@ type RepoStats struct {
 	IssueCount IssueCount
 	PullCount  PullCount
 	ForkCount  int
+}
+
+// returns the first file extension for the language ("ts" for typescript) as
+// an uppercase string
+func (s *RepoStats) LangShortName() string {
+	if s == nil || s.Language == "" {
+		return ""
+	}
+	exts := enry.GetLanguageExtensions(s.Language)
+	if len(exts) > 0 {
+		// extensions include the leading dot, e.g. ".ts" -> "TS"
+		return strings.ToUpper(strings.TrimPrefix(exts[0], "."))
+	}
+	return s.Language
 }
 
 type IssueCount struct {
