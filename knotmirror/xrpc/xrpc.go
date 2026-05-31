@@ -64,7 +64,7 @@ func (x *Xrpc) Router() http.Handler {
 		r.Get("/"+tangled.GitTempGetBranchNSID, x.GetBranch)
 		// r.Get("/"+tangled.GitTempGetCommitNSID, x.GetCommit) // todo
 		// r.Get("/"+tangled.GitTempGetDiffNSID, x.GetDiff) // todo
-		// r.Get("/"+tangled.GitTempGetEntityNSID, x.GetEntity) // todo
+		r.Get("/"+tangled.GitTempGetEntryNSID, x.GetEntry) // todo
 		// r.Get("/"+tangled.GitTempGetHeadNSID, x.GetHead) // todo
 		r.Get("/"+tangled.GitTempGetTagNSID, x.GetTag) // using types.Response
 		r.Get("/"+tangled.GitTempGetTreeNSID, x.GetTree)

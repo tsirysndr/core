@@ -57,7 +57,7 @@ func (x *Xrpc) RepoBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entry, err := x.getFile(ctx, repoPath, ref, path)
+	entry, err := gitea.GetEntry(ctx, repoPath, ref, path)
 	if err != nil {
 		l.Warn("local mirror failed, trying proxy", "err", err)
 		if x.proxyToKnot(w, r, repo) {

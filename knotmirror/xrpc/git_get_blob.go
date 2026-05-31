@@ -1,7 +1,6 @@
 package xrpc
 
 import (
-	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	"github.com/go-git/go-git/v5/plumbing/object"
 	"tangled.org/core/knotmirror/xrpc/gitea"
 )
 
@@ -45,7 +43,7 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entry, err := x.getFile(ctx, repoPath, ref, path)
+	entry, err := gitea.GetEntry(ctx, repoPath, ref, path)
 	if err != nil {
 		l.Warn("local mirror failed", "err", err)
 		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to get blob"})
@@ -109,46 +107,6 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Write(contents)
-}
-
-func (x *Xrpc) getFile(ctx context.Context, repoPath, ref, path string) (*object.TreeEntry, error) {
-	rev := ref
-	if rev == "" {
-		rev = "HEAD"
-	}
-
-	head, err := gitea.GetCommit(ctx, repoPath, rev)
-	if err != nil {
-		return nil, fmt.Errorf("get head commit: %w", err)
-	}
-
-	treePath := filepath.Dir(path)
-	name := filepath.Base(path)
-
-	// find subTree
-	subRev := head.Hash.String() + "^{tree}"
-	if treePath != "." {
-		subRev = head.Hash.String() + ":" + treePath
-	}
-	subTree, err := gitea.GetTree(ctx, repoPath, subRev)
-	if err != nil {
-		return nil, fmt.Errorf("get subtree %s: %w", subRev, err)
-	}
-
-	// find entry
-	entry, err := func(subTree *object.Tree) (*object.TreeEntry, error) {
-		for _, entry := range subTree.Entries {
-			if entry.Name == name {
-				return &entry, nil
-			}
-		}
-		return nil, fmt.Errorf("object doesn't exist")
-	}(subTree)
-	if err != nil {
-		return nil, fmt.Errorf("get file: %w", err)
-	}
-
-	return entry, nil
 }
 
 var textualMimeTypes = []string{
