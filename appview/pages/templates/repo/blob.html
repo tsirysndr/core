@@ -33,7 +33,7 @@
             <div id="file-info" class="text-gray-500 dark:text-gray-400 text-xs md:text-sm flex flex-wrap items-center gap-1 md:gap-0">
                 <span>at <a href="/{{ .RepoInfo.FullName }}/tree/{{ pathEscape .Ref }}">{{ .Ref }}</a></span>
 
-                {{ if .BlobView.ShowingText }}
+                {{ if (and .BlobView.ContentType.HasTextView (not .ShowRendered)) }}
                   <span class="select-none px-1 md:px-2 [&:before]:content-['·']"></span>
                   <span>{{ .BlobView.Lines }} lines</span>
                 {{ end }}
@@ -43,24 +43,24 @@
                   <span>{{ byteFmt .BlobView.SizeHint }}</span>
                 {{ end }}
 
-                {{ if .BlobView.HasRawView }}
+                {{ if .BlobView.ContentType.HasRawView }}
                   <span class="select-none px-1 md:px-2 [&:before]:content-['·']"></span>
                   <a href="/{{ .RepoInfo.FullName }}/raw/{{ pathEscape .Ref }}/{{ .Path }}">View raw</a>
                 {{ end }}
 
-                {{ if .BlobView.ShowCopy }}
+                {{ if (or .BlobView.ContentType.HasTextView .BlobView.ContentType.IsImage) }}
                   <span class="select-none px-1 md:px-2 [&:before]:content-['·']"></span>
                   {{ template "repo/fragments/copyFileButton" (dict "Url" (printf "/%s/raw/%s/%s" .RepoInfo.FullName (pathEscape .Ref) .Path)) }}
                 {{ end }}
 
-                {{ if .BlobView.ShowToggle }}
+                {{ if (and .BlobView.ContentType.HasTextView .BlobView.ContentType.HasRenderedView) }}
                   <span class="select-none px-1 md:px-2 [&:before]:content-['·']"></span>
-                  <a href="/{{ .RepoInfo.FullName }}/blob/{{ pathEscape .Ref }}/{{ .Path }}?code={{ .BlobView.ShowingRendered }}" hx-boost="true">
-                    View {{ if .BlobView.ShowingRendered }}code{{ else }}rendered{{ end }}
+                  <a href="/{{ .RepoInfo.FullName }}/blob/{{ pathEscape .Ref }}/{{ .Path }}?code={{ .ShowRendered }}" hx-boost="true">
+                    View {{ if .ShowRendered }}code{{ else }}rendered{{ end }}
                   </a>
                 {{ end }}
 
-                {{ if .BlobView.ShowingText }}
+                {{ if (and .BlobView.ContentType.HasTextView (not .ShowRendered)) }}
                   <div id="toggle-wrap-content" class="flex items-center">
                     <span class="select-none px-1 md:px-2 [&:before]:content-['·']"></span>
                     <label class="flex items-center lowercase font-normal px-1 py-0 gap-1 text-xs md:text-sm">
@@ -79,11 +79,7 @@
 
     {{ $wrapContentClasses := "peer-has-[:checked]:*:whitespace-pre-wrap peer-has-[:checked]:*:[overflow-wrap:anywhere]" }}
 
-    {{ if .BlobView.IsUnsupported }}
-      <p class="text-center text-gray-400 dark:text-gray-500">
-          Previews are not supported for this file type.
-      </p>
-    {{ else if .BlobView.ContentType.IsSubmodule }}
+    {{ if .BlobView.ContentType.IsSubmodule }}
       <p class="text-center text-gray-400 dark:text-gray-500">
         This directory is a git submodule of <a href="{{ .BlobView.ContentSrc }}">{{ .BlobView.ContentSrc }}</a>.
       </p>
@@ -102,7 +98,7 @@
       </div>
     {{ else if .BlobView.ContentType.IsSvg }}
       <div class="overflow-auto relative {{ $wrapContentClasses }}">
-        {{ if .BlobView.ShowingRendered }}
+        {{ if .ShowRendered }}
           <div class="text-center">
             <img src="{{ .BlobView.ContentSrc }}"
                  alt="{{ .Path }}"
@@ -118,7 +114,7 @@
       </p>
     {{ else if .BlobView.ContentType.IsMarkup }}
       <div class="overflow-auto relative {{ $wrapContentClasses }}">
-        {{ if .BlobView.ShowingRendered }}
+        {{ if .ShowRendered }}
           <div id="blob-contents" class="prose dark:prose-invert">{{ .BlobView.Contents | readme }}</div>
         {{ else }}
           <div id="blob-contents" class="whitespace-pre peer-target:bg-yellow-200 dark:peer-target:bg-yellow-900">{{ code .BlobView.Contents .Path | escapeHtml }}</div>
@@ -128,6 +124,10 @@
       <div class="overflow-auto relative {{ $wrapContentClasses }}">
         <div id="blob-contents" class="whitespace-pre peer-target:bg-yellow-200 dark:peer-target:bg-yellow-900">{{ code .BlobView.Contents .Path | escapeHtml }}</div>
       </div>
+    {{ else }}
+      <p class="text-center text-gray-400 dark:text-gray-500">
+          Previews are not supported for this file type.
+      </p>
     {{ end }}
     {{ template "fragments/multiline-select" }}
     {{ template "repo/fragments/copyFileScript" }}

@@ -210,6 +210,7 @@ const (
 	BlobContentTypeSvg
 	BlobContentTypeVideo
 	BlobContentTypeSubmodule
+	BlobContentTypeOther
 )
 
 func (ty BlobContentType) IsCode() bool      { return ty == BlobContentTypeCode }
@@ -218,40 +219,24 @@ func (ty BlobContentType) IsImage() bool     { return ty == BlobContentTypeImage
 func (ty BlobContentType) IsSvg() bool       { return ty == BlobContentTypeSvg }
 func (ty BlobContentType) IsVideo() bool     { return ty == BlobContentTypeVideo }
 func (ty BlobContentType) IsSubmodule() bool { return ty == BlobContentTypeSubmodule }
+func (ty BlobContentType) HasTextView() bool {
+	return ty == BlobContentTypeCode || ty == BlobContentTypeMarkup || ty == BlobContentTypeSvg
+}
+func (ty BlobContentType) HasRenderedView() bool {
+	return ty != BlobContentTypeCode && ty != BlobContentTypeOther
+}
+func (ty BlobContentType) HasRawView() bool {
+	return ty != BlobContentTypeSubmodule
+}
 
 type BlobView struct {
-	HasTextView     bool // can show as code/text
-	HasRenderedView bool // can show rendered (markup/image/video/submodule)
-	HasRawView      bool // can download raw (everything except submodule)
-	FileTooLarge    bool // file too large (ignored for image files)
-
-	// current display mode
-	ShowingRendered bool // currently in rendered mode
-
 	// content type flags
 	ContentType BlobContentType
 
 	// Content data
-	Contents   string
-	ContentSrc string // URL for media files
-	Lines      int
-	SizeHint   uint64
-}
-
-// if both views are available, then show a toggle between them
-func (b BlobView) ShowToggle() bool {
-	return b.HasTextView && b.HasRenderedView
-}
-
-func (b BlobView) IsUnsupported() bool {
-	// no view available, only raw
-	return !(b.HasRenderedView || b.HasTextView)
-}
-
-func (b BlobView) ShowingText() bool {
-	return !b.ShowingRendered
-}
-
-func (b BlobView) ShowCopy() bool {
-	return b.ContentType.IsCode() || b.ContentType.IsMarkup() || b.ContentType.IsSvg() || b.ContentType.IsImage()
+	ContentSrc   string // URL to raw content
+	Contents     string // textual content
+	FileTooLarge bool   // textual content is too large
+	Lines        int    // line count of textual content
+	SizeHint     uint64
 }

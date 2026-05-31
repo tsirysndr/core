@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
@@ -57,8 +58,10 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 	}
 	defer reader.Close()
 
+	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+
 	// default to octet-stream for large blobs
-	if size > 1000*1000 { // 1MB
+	if size > 1024*1024 { // 1MiB
 		w.Header().Set("Content-Type", "application/octet-stream")
 		if _, err := io.Copy(w, reader); err != nil {
 			l.Error("failed to serve the blob", "err", err)

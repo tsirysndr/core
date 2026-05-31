@@ -1092,9 +1092,10 @@ func (p *Pages) RepoArtifactFragment(w io.Writer, params RepoArtifactParams) err
 type RepoBlobParams struct {
 	LoggedInUser   *oauth.MultiAccountUser
 	RepoInfo       repoinfo.RepoInfo
-	Active         string
+	Active         string // always "overview"
 	BreadCrumbs    [][]string
-	BlobView       models.BlobView
+	BlobView       models.BlobView // TODO: expose this struct
+	ShowRendered   bool
 	EmailToDid     map[string]string
 	LastCommitInfo *types.LastCommitInfo
 	Ref            string

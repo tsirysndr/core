@@ -3,6 +3,8 @@ package repo
 import (
 	"encoding/base64"
 	"fmt"
+	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -19,20 +21,25 @@ import (
 	xrpcclient "tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/types"
 
+	"github.com/bluesky-social/indigo/util"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/filemode"
 )
+
+// maxBlobSize bounds inline text content; larger blobs are marked too large.
+const maxBlobSize = 1 << 20 // 1MiB
 
 // the content can be one of the following:
 //
 // - code      : text |          | raw
 // - markup    : text | rendered | raw
 // - svg       : text | rendered | raw
-// - png       :      | rendered | raw
+// - image     :      | rendered | raw
 // - video     :      | rendered | raw
 // - submodule :      | rendered |
-// - rest      :      |          |
+// - rest      :      |          | raw
 func (rp *Repo) Blob(w http.ResponseWriter, r *http.Request) {
 	l := rp.logger.With("handler", "RepoBlob")
 
@@ -48,29 +55,125 @@ func (rp *Repo) Blob(w http.ResponseWriter, r *http.Request) {
 	filePath := chi.URLParam(r, "*")
 	filePath, _ = url.PathUnescape(filePath)
 
+	l = l.With("ref", ref, "path", filePath)
+
+	ctx := r.Context()
+
 	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
-	resp, err := tangled.RepoBlob(r.Context(), xrpcc, filePath, false, ref, f.RepoDid)
+	resp, err := tangled.GitTempGetEntry(ctx, xrpcc, filePath, ref, f.RepoDid)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-		l.Error("failed to call XRPC repo.blob", "xrpcerr", xrpcerr, "err", err)
+		l.Error("failed to call XRPC git.getEntry", "xrpcerr", xrpcerr, "err", err)
 		rp.pages.Error503(w)
 		return
 	}
 
-	ownerSlashRepo := reporesolver.GetBaseRepoPath(r, f)
-
-	// Use XRPC response directly instead of converting to internal types
 	var breadcrumbs [][]string
-	breadcrumbs = append(breadcrumbs, []string{f.Name, fmt.Sprintf("/%s/tree/%s", ownerSlashRepo, url.PathEscape(ref))})
+	breadcrumbs = append(breadcrumbs, []string{f.Name, fmt.Sprintf("/%s/tree/%s", reporesolver.GetBaseRepoPath(r, f), url.PathEscape(ref))})
 	if filePath != "" {
 		for idx, elem := range strings.Split(filePath, "/") {
 			breadcrumbs = append(breadcrumbs, []string{elem, fmt.Sprintf("%s/%s", breadcrumbs[idx][1], url.PathEscape(elem))})
 		}
 	}
 
-	// Create the blob view
-	blobView := NewBlobView(resp, rp.config, f, ref, filePath, r.URL.Query())
+	blobView, err := func() (models.BlobView, error) {
+		mode, err := filemode.New(resp.Mode)
+		if err != nil {
+			mode = filemode.Regular
+		}
 
-	user := rp.oauth.GetMultiAccountUser(r)
+		if mode == filemode.Submodule {
+			if resp.Submodule == nil {
+				return models.BlobView{}, fmt.Errorf("submodule info is missing")
+			}
+			return models.BlobView{
+				ContentType: models.BlobContentTypeSubmodule,
+				ContentSrc:  resp.Submodule.Url,
+			}, nil
+		}
+
+		blobUrl := generateBlobURL(rp.config.KnotMirror.Url, f, ref, filePath)
+		blobReq, err := http.NewRequestWithContext(ctx, http.MethodGet, blobUrl, nil)
+		if err != nil {
+			return models.BlobView{}, err
+		}
+		blobResp, err := util.RobustHTTPClient().Do(blobReq)
+		if err != nil {
+			return models.BlobView{}, err
+		}
+		defer blobResp.Body.Close()
+
+		if blobResp.StatusCode != http.StatusOK {
+			return models.BlobView{}, fmt.Errorf("blob fetch failed: status %d", blobResp.StatusCode)
+		}
+
+		// inspect content-type header
+		// - text/plain -> Code / Markup
+		// - image/svg  -> Svg
+		// - image/*    -> Image
+		// - video/*    -> Video
+		// - */*        -> Other
+		mediaType, _, _ := mime.ParseMediaType(blobResp.Header.Get("Content-Type"))
+		var contentType models.BlobContentType
+		switch {
+		case mediaType == "image/svg+xml":
+			contentType = models.BlobContentTypeSvg
+		case strings.HasPrefix(mediaType, "text/"):
+			if markup.GetFormat(filePath) == markup.FormatMarkdown {
+				contentType = models.BlobContentTypeMarkup
+			} else {
+				contentType = models.BlobContentTypeCode
+			}
+		case strings.HasPrefix(mediaType, "image/"):
+			contentType = models.BlobContentTypeImage
+		case strings.HasPrefix(mediaType, "video/"):
+			contentType = models.BlobContentTypeVideo
+		default:
+			contentType = models.BlobContentTypeOther
+		}
+
+		// only text-viewable content is read inline; others stream via ContentSrc
+		if !contentType.HasTextView() {
+			return models.BlobView{
+				ContentType:  contentType,
+				ContentSrc:   blobUrl,
+				FileTooLarge: false,
+				Contents:     "",
+				Lines:        0,
+				SizeHint:     uint64(max(blobResp.ContentLength, 0)),
+			}, nil
+		}
+
+		// skip large blobs
+		if blobResp.ContentLength > maxBlobSize || blobResp.ContentLength < 0 {
+			return models.BlobView{
+				ContentType:  contentType,
+				ContentSrc:   blobUrl,
+				FileTooLarge: true,
+				SizeHint:     uint64(max(blobResp.ContentLength, 0)),
+			}, nil
+		}
+
+		// just in case, check the size again
+		content, err := io.ReadAll(io.LimitReader(blobResp.Body, maxBlobSize))
+		if err != nil {
+			return models.BlobView{}, err
+		}
+
+		contentStr := string(content)
+		return models.BlobView{
+			ContentType:  contentType,
+			ContentSrc:   blobUrl,
+			Contents:     contentStr,
+			FileTooLarge: false,
+			Lines:        countLines(contentStr),
+			SizeHint:     uint64(max(blobResp.ContentLength, 0)),
+		}, nil
+	}()
+	if err != nil {
+		l.Error("failed to render blob", "err", err)
+		rp.pages.Error503(w)
+		return
+	}
 
 	// Get email to DID mapping for commit author
 	var emails []string
@@ -85,9 +188,9 @@ func (rp *Repo) Blob(w http.ResponseWriter, r *http.Request) {
 
 	var lastCommitInfo *types.LastCommitInfo
 	if resp.LastCommit != nil {
-		when, _ := time.Parse(time.RFC3339, resp.LastCommit.When)
+		when, _ := time.Parse(time.RFC3339, resp.LastCommit.Committer.When)
 		lastCommitInfo = &types.LastCommitInfo{
-			Hash:    plumbing.NewHash(resp.LastCommit.Hash),
+			Hash:    plumbing.NewHash(derefString(resp.LastCommit.Hash)),
 			Message: resp.LastCommit.Message,
 			When:    when,
 		}
@@ -98,6 +201,7 @@ func (rp *Repo) Blob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	user := rp.oauth.GetMultiAccountUser(r)
 	rp.pages.RepoBlob(w, pages.RepoBlobParams{
 		LoggedInUser:   user,
 		RepoInfo:       rp.repoResolver.GetRepoInfo(r, user),
@@ -105,8 +209,9 @@ func (rp *Repo) Blob(w http.ResponseWriter, r *http.Request) {
 		BlobView:       blobView,
 		EmailToDid:     emailToDidMap,
 		LastCommitInfo: lastCommitInfo,
-		Ref:            resp.Ref,
-		Path:           resp.Path,
+		ShowRendered:   r.URL.Query().Get("code") != "true",
+		Ref:            ref,
+		Path:           filePath,
 	})
 }
 
@@ -126,7 +231,7 @@ func (rp *Repo) RepoBlobRaw(w http.ResponseWriter, r *http.Request) {
 	filePath := chi.URLParam(r, "*")
 	filePath, _ = url.PathUnescape(filePath)
 
-	blobURL := generateBlobURL(rp.config, f, ref, filePath)
+	blobURL := generateBlobURL(rp.config.KnotMirror.Url, f, ref, filePath)
 
 	w.Header().Set("Cache-Control", "public, no-cache")
 	http.Redirect(w, r, blobURL, http.StatusFound)
@@ -148,29 +253,21 @@ func NewBlobView(resp *tangled.RepoBlob_Output, config *config.Config, repo *mod
 
 	if resp.Submodule != nil {
 		view.ContentType = models.BlobContentTypeSubmodule
-		view.HasRenderedView = true
 		view.ContentSrc = resp.Submodule.Url
 		return view
 	}
 
 	// Determine if binary
 	if (resp.IsBinary != nil && *resp.IsBinary) || (resp.FileTooLarge != nil && *resp.FileTooLarge) {
-		view.ContentSrc = generateBlobURL(config, repo, ref, filePath)
+		view.ContentSrc = generateBlobURL(config.KnotMirror.Url, repo, ref, filePath)
 		ext := strings.ToLower(filepath.Ext(resp.Path))
 
 		switch ext {
 		case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".jxl", ".heic", ".heif":
 			view.ContentType = models.BlobContentTypeImage
-			view.HasRawView = true
-			view.HasRenderedView = true
-			view.ShowingRendered = true
 
 		case ".svg":
 			view.ContentType = models.BlobContentTypeSvg
-			view.HasRawView = true
-			view.HasTextView = true
-			view.HasRenderedView = true
-			view.ShowingRendered = queryParams.Get("code") != "true"
 			if resp.Content != nil {
 				bytes, _ := base64.StdEncoding.DecodeString(*resp.Content)
 				view.Contents = string(bytes)
@@ -179,17 +276,12 @@ func NewBlobView(resp *tangled.RepoBlob_Output, config *config.Config, repo *mod
 
 		case ".mp4", ".webm", ".ogg", ".mov", ".avi":
 			view.ContentType = models.BlobContentTypeVideo
-			view.HasRawView = true
-			view.HasRenderedView = true
-			view.ShowingRendered = true
 		}
 
 		return view
 	}
 
 	// otherwise, we are dealing with text content
-	view.HasRawView = true
-	view.HasTextView = true
 
 	if resp.Content != nil {
 		view.Contents = *resp.Content
@@ -200,21 +292,20 @@ func NewBlobView(resp *tangled.RepoBlob_Output, config *config.Config, repo *mod
 	format := markup.GetFormat(resp.Path)
 	if format == markup.FormatMarkdown {
 		view.ContentType = models.BlobContentTypeMarkup
-		view.HasRenderedView = true
-		view.ShowingRendered = queryParams.Get("code") != "true"
 	}
 
 	return view
 }
 
-func generateBlobURL(config *config.Config, repo *models.Repo, ref, filePath string) string {
+func generateBlobURL(knotmirror string, repo *models.Repo, ref, filePath string) string {
 	query := url.Values{}
 	query.Set("repo", repo.RepoDid)
 	query.Set("ref", ref)
 	query.Set("path", filePath)
 
-	blobURL := fmt.Sprintf("%s/xrpc/%s?%s", config.KnotMirror.Url, tangled.GitTempGetBlobNSID, query.Encode())
+	blobURL := fmt.Sprintf("%s/xrpc/%s?%s", knotmirror, tangled.GitTempGetBlobNSID, query.Encode())
 	return blobURL
+	// return path.Join("/", repo.RepoDid, url.PathEscape(ref), filePath)
 }
 
 // TODO: dedup with strings
