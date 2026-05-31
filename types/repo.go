@@ -38,16 +38,6 @@ type RepoFormatPatchResponse struct {
 	CombinedPatchRaw string          `json:"combined_patch_raw,omitempty"`
 }
 
-type RepoTreeResponse struct {
-	Ref            string     `json:"ref,omitempty"`
-	Parent         string     `json:"parent,omitempty"`
-	Description    string     `json:"description,omitempty"`
-	DotDot         string     `json:"dotdot,omitempty"`
-	Files          []NiceTree `json:"files,omitempty"`
-	ReadmeFileName string     `json:"readme_filename,omitempty"`
-	Readme         string     `json:"readme_contents,omitempty"`
-}
-
 type TagReference struct {
 	Reference
 	Tag     *object.Tag `json:"tag,omitempty"`

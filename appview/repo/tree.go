@@ -43,6 +43,16 @@ func (rp *Repo) Tree(w http.ResponseWriter, r *http.Request) {
 		rp.pages.Error503(w)
 		return
 	}
+
+	ownerSlashRepo := reporesolver.GetBaseRepoPath(r, f)
+	// redirects tree paths trying to access a blob; in this case the result.Files is unpopulated,
+	// so we can safely redirect to the "parent" (which is the same file).
+	if len(xrpcResp.Files) == 0 && xrpcResp.Parent != nil && *xrpcResp.Parent == treePath {
+		redirectTo := fmt.Sprintf("/%s/blob/%s/%s", ownerSlashRepo, url.PathEscape(ref), *xrpcResp.Parent)
+		http.Redirect(w, r, redirectTo, http.StatusFound)
+		return
+	}
+
 	var readmeFile *tangled.GitTempGetTree_TreeEntry
 	// Convert XRPC response to internal types.RepoTreeResponse
 	files := make([]types.NiceTree, len(xrpcResp.Files))
@@ -66,16 +76,12 @@ func (rp *Repo) Tree(w http.ResponseWriter, r *http.Request) {
 			readmeFile = xrpcFile
 		}
 	}
-	result := types.RepoTreeResponse{
-		Ref:   xrpcResp.Ref,
-		Files: files,
-	}
-	if xrpcResp.Parent != nil {
-		result.Parent = *xrpcResp.Parent
-	}
-	if xrpcResp.Dotdot != nil {
-		result.DotDot = *xrpcResp.Dotdot
-	}
+	sortFiles(files)
+
+	var (
+		readmeFileName    string
+		readmeFileContent string
+	)
 	if readmeFile != nil {
 		bytes, err := tangled.GitTempGetBlob(r.Context(), xrpcc, path.Join(treePath, readmeFile.Name), ref, f.RepoDid)
 		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
@@ -83,18 +89,9 @@ func (rp *Repo) Tree(w http.ResponseWriter, r *http.Request) {
 			rp.pages.Error503(w)
 			return
 		}
-		result.ReadmeFileName = readmeFile.Name
-		result.Readme = string(bytes)
+		readmeFileName = readmeFile.Name
+		readmeFileContent = string(bytes)
 	}
-	ownerSlashRepo := reporesolver.GetBaseRepoPath(r, f)
-	// redirects tree paths trying to access a blob; in this case the result.Files is unpopulated,
-	// so we can safely redirect to the "parent" (which is the same file).
-	if len(result.Files) == 0 && result.Parent == treePath {
-		redirectTo := fmt.Sprintf("/%s/blob/%s/%s", ownerSlashRepo, url.PathEscape(ref), result.Parent)
-		http.Redirect(w, r, redirectTo, http.StatusFound)
-		return
-	}
-	user := rp.oauth.GetMultiAccountUser(r)
 	var breadcrumbs [][]string
 	breadcrumbs = append(breadcrumbs, []string{f.Name, fmt.Sprintf("/%s/tree/%s", ownerSlashRepo, url.PathEscape(ref))})
 	if treePath != "" {
@@ -102,7 +99,6 @@ func (rp *Repo) Tree(w http.ResponseWriter, r *http.Request) {
 			breadcrumbs = append(breadcrumbs, []string{elem, fmt.Sprintf("%s/%s", breadcrumbs[idx][1], url.PathEscape(elem))})
 		}
 	}
-	sortFiles(result.Files)
 
 	// Get email to DID mapping for commit author
 	var emails []string
@@ -130,13 +126,26 @@ func (rp *Repo) Tree(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	user := rp.oauth.GetMultiAccountUser(r)
 	rp.pages.RepoTree(w, pages.RepoTreeParams{
-		LoggedInUser:     user,
-		BreadCrumbs:      breadcrumbs,
-		Path:             treePath,
-		RepoInfo:         rp.repoResolver.GetRepoInfo(r, user),
-		EmailToDid:       emailToDidMap,
-		LastCommitInfo:   lastCommitInfo,
-		RepoTreeResponse: result,
+		LoggedInUser:   user,
+		BreadCrumbs:    breadcrumbs,
+		Path:           treePath,
+		RepoInfo:       rp.repoResolver.GetRepoInfo(r, user),
+		EmailToDid:     emailToDidMap,
+		LastCommitInfo: lastCommitInfo,
+		Ref:            xrpcResp.Ref,
+		Parent:         derefString(xrpcResp.Parent),
+		DotDot:         derefString(xrpcResp.Dotdot),
+		Files:          files,
+		ReadmeFileName: readmeFileName,
+		Readme:         readmeFileContent,
 	})
+}
+
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

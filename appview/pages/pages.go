@@ -987,7 +987,12 @@ type RepoTreeParams struct {
 	HTMLReadme     template.HTML
 	EmailToDid     map[string]string
 	LastCommitInfo *types.LastCommitInfo
-	types.RepoTreeResponse
+	Ref            string
+	Parent         string
+	DotDot         string
+	Files          []types.NiceTree
+	ReadmeFileName string
+	Readme         string
 }
 
 type RepoTreeStats struct {
@@ -1092,7 +1097,8 @@ type RepoBlobParams struct {
 	BlobView       models.BlobView
 	EmailToDid     map[string]string
 	LastCommitInfo *types.LastCommitInfo
-	*tangled.RepoBlob_Output
+	Ref            string
+	Path           string
 }
 
 func (p *Pages) RepoBlob(w io.Writer, params RepoBlobParams) error {

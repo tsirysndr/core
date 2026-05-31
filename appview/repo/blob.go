@@ -99,13 +99,14 @@ func (rp *Repo) Blob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rp.pages.RepoBlob(w, pages.RepoBlobParams{
-		LoggedInUser:    user,
-		RepoInfo:        rp.repoResolver.GetRepoInfo(r, user),
-		BreadCrumbs:     breadcrumbs,
-		BlobView:        blobView,
-		EmailToDid:      emailToDidMap,
-		LastCommitInfo:  lastCommitInfo,
-		RepoBlob_Output: resp,
+		LoggedInUser:   user,
+		RepoInfo:       rp.repoResolver.GetRepoInfo(r, user),
+		BreadCrumbs:    breadcrumbs,
+		BlobView:       blobView,
+		EmailToDid:     emailToDidMap,
+		LastCommitInfo: lastCommitInfo,
+		Ref:            resp.Ref,
+		Path:           resp.Path,
 	})
 }
 
