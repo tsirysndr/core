@@ -47,19 +47,13 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 
 	entry, err := x.getFile(ctx, repoPath, ref, path)
 	if err != nil {
-		l.Warn("local mirror failed, trying proxy", "err", err)
-		if x.proxyToKnot(w, r, repo) {
-			return
-		}
+		l.Warn("local mirror failed", "err", err)
 		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to get blob"})
 		return
 	}
 	size, reader, err := gitea.ReadBlob(ctx, repoPath, entry.Hash)
 	if err != nil {
-		l.Warn("local mirror failed, trying proxy", "err", err)
-		if x.proxyToKnot(w, r, repo) {
-			return
-		}
+		l.Warn("local mirror failed", "err", err)
 		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to get blob"})
 		return
 	}

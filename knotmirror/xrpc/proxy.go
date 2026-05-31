@@ -23,7 +23,6 @@ var mirrorToKnotNSID = map[string]string{
 	tangled.GitTempListCommitsNSID:   tangled.RepoLogNSID,
 	tangled.GitTempGetTreeNSID:       tangled.RepoTreeNSID,
 	tangled.GitTempGetBranchNSID:     tangled.RepoBranchNSID,
-	tangled.GitTempGetBlobNSID:       tangled.RepoBlobNSID,
 	tangled.GitTempGetTagNSID:        tangled.RepoTagNSID,
 	tangled.GitTempGetArchiveNSID:    tangled.RepoArchiveNSID,
 	tangled.RepoBlobNSID:             tangled.RepoBlobNSID,
@@ -152,9 +151,6 @@ func (x *Xrpc) proxyToKnot(w http.ResponseWriter, r *http.Request, repoDid synta
 	params := make(url.Values)
 	maps.Copy(params, r.URL.Query())
 	params.Set("repo", knot.repoIdentifier)
-	if mirrorNSID == tangled.GitTempGetBlobNSID {
-		params.Set("raw", "true")
-	}
 
 	target := fmt.Sprintf("%s/xrpc/%s?%s", knot.baseURL, knotNSID, params.Encode())
 

@@ -3,12 +3,9 @@ package repo
 import (
 	"encoding/base64"
 	"fmt"
-	"io"
-	"mime"
 	"net/http"
 	"net/url"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -130,69 +127,8 @@ func (rp *Repo) RepoBlobRaw(w http.ResponseWriter, r *http.Request) {
 
 	blobURL := generateBlobURL(rp.config, f, ref, filePath)
 
-	req, err := http.NewRequest("GET", blobURL, nil)
-	if err != nil {
-		l.Error("failed to create request", "err", err)
-		return
-	}
-
-	// forward the If-None-Match header
-	if clientETag := r.Header.Get("If-None-Match"); clientETag != "" {
-		req.Header.Set("If-None-Match", clientETag)
-	}
-	client := &http.Client{}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		l.Error("failed to reach knotserver", "err", err)
-		rp.pages.Error503(w)
-		return
-	}
-
-	defer resp.Body.Close()
-
-	// forward 304 not modified
-	if resp.StatusCode == http.StatusNotModified {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		l.Error("knotserver returned non-OK status for raw blob", "url", blobURL, "statuscode", resp.StatusCode)
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(resp.StatusCode)
-		return
-	}
-
-	contentType := resp.Header.Get("Content-Type")
-
-	// Normalize to bare media type before classification; strips parameters
-	// (e.g. "; charset=utf-8") and prevents bypass attempts like
-	// "image/svg+xml; innocent=param".  A parse error yields an empty string
-	// which falls through to the 415 default — the safe outcome.
-	mediaType, _, _ := mime.ParseMediaType(contentType)
-
-	// Prevent browser sniffing regardless of branch taken below.
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-
-	switch {
-	case strings.HasPrefix(mediaType, "text/") || isTextualMimeType(mediaType):
-		// Serve all textual content as plain text so the browser never
-		// interprets knot-supplied markup or scripts.
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	case safeBinaryMIMEType(mediaType):
-		// Use the normalized type, never the raw knot-supplied string.
-		w.Header().Set("Content-Type", mediaType)
-	default:
-		// If mediatype is unknown or it's unsafe (e.g. SVG which allows XSS,)
-		// fallback to octet-stream
-		w.Header().Set("Content-Type", "application/octet-stream")
-	}
-	if _, err := io.Copy(w, resp.Body); err != nil {
-		l.Error("error streaming knotmirror response", "err", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+	w.Header().Set("Cache-Control", "public, no-cache")
+	http.Redirect(w, r, blobURL, http.StatusFound)
 }
 
 // NewBlobView creates a BlobView from the XRPC response
@@ -275,42 +211,9 @@ func generateBlobURL(config *config.Config, repo *models.Repo, ref, filePath str
 	query.Set("repo", repo.RepoDid)
 	query.Set("ref", ref)
 	query.Set("path", filePath)
-	query.Set("raw", "true")
 
 	blobURL := fmt.Sprintf("%s/xrpc/%s?%s", config.KnotMirror.Url, tangled.GitTempGetBlobNSID, query.Encode())
 	return blobURL
-}
-
-// safeBinaryMIMETypes is an explicit allowlist of binary content types that
-// are safe to serve inline. SVG is intentionally absent: it supports embedded
-// scripts and would enable XSS if a malicious knot returned one.
-var safeBinaryMIMETypes = map[string]bool{
-	"image/png":  true,
-	"image/jpeg": true,
-	"image/gif":  true,
-	"image/webp": true,
-	"image/avif": true,
-	"video/mp4":  true,
-	"video/webm": true,
-	"video/ogg":  true,
-}
-
-func safeBinaryMIMEType(mediaType string) bool {
-	return safeBinaryMIMETypes[mediaType]
-}
-
-func isTextualMimeType(mimeType string) bool {
-	textualTypes := []string{
-		"application/json",
-		"application/xml",
-		"application/yaml",
-		"application/x-yaml",
-		"application/toml",
-		"application/javascript",
-		"application/ecmascript",
-		"message/",
-	}
-	return slices.Contains(textualTypes, mimeType)
 }
 
 // TODO: dedup with strings
