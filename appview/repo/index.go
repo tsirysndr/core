@@ -370,7 +370,6 @@ func (rp *Repo) buildIndexResponse(ctx context.Context, repo *models.Repo, ref s
 		Readme:         readmeContent,
 		ReadmeFileName: readmeFileName,
 		Commits:        logResp.Commits,
-		Description:    "",
 		Files:          files,
 		Branches:       branchesResp.Branches,
 		Tags:           tagsResp.Tags,

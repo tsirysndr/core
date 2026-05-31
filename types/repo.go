@@ -6,26 +6,22 @@ import (
 )
 
 type RepoIndexResponse struct {
-	IsEmpty        bool            `json:"is_empty"`
-	Ref            string          `json:"ref,omitempty"`
-	Readme         string          `json:"readme,omitempty"`
-	ReadmeFileName string          `json:"readme_file_name,omitempty"`
-	Commits        []Commit        `json:"commits,omitempty"`
-	Description    string          `json:"description,omitempty"`
-	Files          []NiceTree      `json:"files,omitempty"`
-	Branches       []Branch        `json:"branches,omitempty"`
-	Tags           []*TagReference `json:"tags,omitempty"`
-	TotalCommits   int             `json:"total_commits,omitempty"`
+	IsEmpty        bool
+	Ref            string
+	Readme         string
+	ReadmeFileName string
+	Commits        []Commit
+	Files          []NiceTree
+	Branches       []Branch
+	Tags           []*TagReference
+	TotalCommits   int
 }
 
 type RepoLogResponse struct {
-	Commits     []Commit `json:"commits,omitempty"`
-	Ref         string   `json:"ref,omitempty"`
-	Description string   `json:"description,omitempty"`
-	Log         bool     `json:"log,omitempty"`
-	Total       int      `json:"total,omitempty"`
-	Page        int      `json:"page,omitempty"`
-	PerPage     int      `json:"per_page,omitempty"`
+	Commits []Commit `json:"commits,omitempty"`
+	Ref     string   `json:"ref,omitempty"`
+	Total   int      `json:"total,omitempty"`
+	Page    int      `json:"page,omitempty"`
 }
 
 type RepoCommitResponse struct {
@@ -93,9 +89,9 @@ type ForkStatus int
 
 const (
 	UpToDate        ForkStatus = 0
-	FastForwardable            = 1
-	Conflict                   = 2
-	MissingBranch              = 3
+	FastForwardable ForkStatus = 1
+	Conflict        ForkStatus = 2
+	MissingBranch   ForkStatus = 3
 )
 
 type ForkInfo struct {

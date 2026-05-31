@@ -19,7 +19,6 @@ func (x *Xrpc) RepoLog(w http.ResponseWriter, r *http.Request) {
 
 	ref := r.URL.Query().Get("ref")
 
-	path := r.URL.Query().Get("path")
 	cursor := r.URL.Query().Get("cursor")
 
 	limit := 50 // default
@@ -72,15 +71,8 @@ func (x *Xrpc) RepoLog(w http.ResponseWriter, r *http.Request) {
 		Commits: tcommits,
 		Ref:     ref,
 		Page:    (offset / limit) + 1,
-		PerPage: limit,
 		Total:   total,
 	}
-
-	if path != "" {
-		response.Description = path
-	}
-
-	response.Log = true
 
 	x.writeJson(w, response)
 }

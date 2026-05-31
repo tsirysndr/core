@@ -152,8 +152,6 @@ func (x *Xrpc) listCommits(ctx context.Context, repo syntax.DID, ref string, lim
 		Commits: tcommits,
 		Ref:     ref,
 		Page:    (int(cursor) / limit) + 1,
-		PerPage: limit,
 		Total:   total,
-		Log:     true,
 	}, nil
 }

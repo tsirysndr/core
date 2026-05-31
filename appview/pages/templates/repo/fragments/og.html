@@ -1,6 +1,6 @@
 {{ define "repo/fragments/og" }}
     {{ $title := or .Title .RepoInfo.FullName }}
-    {{ $description := or .Description .RepoInfo.Description "A repository on Tangled" }}
+    {{ $description := or .RepoInfo.Description "A repository on Tangled" }}
     {{ $url := or .Url (printf "https://tangled.org/%s" .RepoInfo.FullName) }}
     {{ $imageUrl := printf "https://tangled.org/%s/opengraph" .RepoInfo.FullName }}
     {{ $ownerHandle := resolve .RepoInfo.OwnerDid }}
