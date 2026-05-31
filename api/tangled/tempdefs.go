@@ -10,20 +10,6 @@ import (
 
 const ()
 
-// GitTempDefs_Blob is a "blob" in the sh.tangled.git.temp.defs schema.
-//
-// blob metadata. This object doesn't include the blob content
-type GitTempDefs_Blob struct {
-	LastCommit *GitTempDefs_Commit `json:"lastCommit" cborgen:"lastCommit"`
-	Mode       string              `json:"mode" cborgen:"mode"`
-	// name: The file name
-	Name string `json:"name" cborgen:"name"`
-	// size: File size in bytes
-	Size int64 `json:"size" cborgen:"size"`
-	// submodule: Submodule information if path is a submodule
-	Submodule *GitTempDefs_Submodule `json:"submodule,omitempty" cborgen:"submodule,omitempty"`
-}
-
 // GitTempDefs_Branch is a "branch" in the sh.tangled.git.temp.defs schema.
 type GitTempDefs_Branch struct {
 	// commit: hydrated commit object
