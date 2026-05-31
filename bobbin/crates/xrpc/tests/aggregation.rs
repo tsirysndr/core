@@ -1312,10 +1312,12 @@ async fn feed_comment_endpoints_reject_bare_did_or_wrong_collection() {
                 let (status, body) = json_response(resp).await;
                 assert_eq!(status, StatusCode::BAD_REQUEST, "{endpoint} input={input}");
                 let msg = body["message"].as_str().unwrap_or_default();
-                 assert!(
-                     msg.contains("sh.tangled.repo.issue") && msg.contains("sh.tangled.repo.pull") && msg.contains("sh.tangled.string"),
-                     "{endpoint} input={input}: {msg}",
-                 );
+                assert!(
+                    msg.contains("sh.tangled.repo.issue")
+                        && msg.contains("sh.tangled.repo.pull")
+                        && msg.contains("sh.tangled.string"),
+                    "{endpoint} input={input}: {msg}",
+                );
             }
         })
         .await;
