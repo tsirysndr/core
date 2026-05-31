@@ -133,19 +133,7 @@ func (t *Tap) processRepo(ctx context.Context, evt *tapc.RecordEventData) error 
 		}
 
 	case tapc.RecordDeleteAction:
-		aturi := syntax.ATURI(fmt.Sprintf("at://%s/%s/%s", evt.Did, tangled.RepoNSID, evt.Rkey))
-		repo, err := db.GetRepoByAtUri(ctx, t.db, aturi)
-		if err != nil {
-			return fmt.Errorf("looking up repo before delete: %w", err)
-		}
-		if repo != nil {
-			if err := t.gitm.Delete(repo); err != nil {
-				return fmt.Errorf("removing mirror dir: %w", err)
-			}
-		}
-		if err := db.DeleteRepo(ctx, t.db, evt.Did, evt.Rkey); err != nil {
-			return fmt.Errorf("deleting repo from db: %w", err)
-		}
+		// no-op. deletion of sh.tangled.repo record doesn't mean repository deletion
 	}
 	return nil
 }

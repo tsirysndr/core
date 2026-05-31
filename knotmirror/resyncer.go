@@ -30,7 +30,7 @@ type Resyncer struct {
 
 	claimJobMu sync.Mutex
 
-	runningJobs   map[syntax.ATURI]context.CancelFunc
+	runningJobs   map[syntax.DID]context.CancelFunc
 	runningJobsMu sync.Mutex
 
 	repoFetchTimeout    time.Duration
@@ -51,7 +51,7 @@ func NewResyncer(l *slog.Logger, db *sql.DB, gitm GitMirrorManager, indexer *kno
 		cfg:     cfg,
 		indexer: indexer,
 
-		runningJobs: make(map[syntax.ATURI]context.CancelFunc),
+		runningJobs: make(map[syntax.DID]context.CancelFunc),
 
 		repoFetchTimeout:    cfg.GitRepoFetchTimeout,
 		manualResyncTimeout: 30 * time.Minute,
@@ -78,7 +78,7 @@ func (r *Resyncer) runResyncWorker(ctx context.Context, workerID int) {
 			return
 		default:
 		}
-		repoAt, found, err := r.claimResyncJob(ctx)
+		repoDid, found, err := r.claimResyncJob(ctx)
 		if err != nil {
 			l.Error("failed to claim resync job", "error", err)
 			time.Sleep(time.Second)
@@ -88,14 +88,14 @@ func (r *Resyncer) runResyncWorker(ctx context.Context, workerID int) {
 			time.Sleep(time.Second)
 			continue
 		}
-		l.Info("processing resync", "aturi", repoAt)
-		if err := r.resyncRepo(ctx, repoAt); err != nil {
-			l.Error("resync failed", "aturi", repoAt, "error", err)
+		l.Info("processing resync", "did", repoDid)
+		if err := r.resyncRepo(ctx, repoDid); err != nil {
+			l.Error("resync failed", "did", repoDid, "error", err)
 		}
 	}
 }
 
-func (r *Resyncer) registerRunning(repo syntax.ATURI, cancel context.CancelFunc) {
+func (r *Resyncer) registerRunning(repo syntax.DID, cancel context.CancelFunc) {
 	r.runningJobsMu.Lock()
 	defer r.runningJobsMu.Unlock()
 
@@ -105,14 +105,14 @@ func (r *Resyncer) registerRunning(repo syntax.ATURI, cancel context.CancelFunc)
 	r.runningJobs[repo] = cancel
 }
 
-func (r *Resyncer) unregisterRunning(repo syntax.ATURI) {
+func (r *Resyncer) unregisterRunning(repo syntax.DID) {
 	r.runningJobsMu.Lock()
 	defer r.runningJobsMu.Unlock()
 
 	delete(r.runningJobs, repo)
 }
 
-func (r *Resyncer) CancelResyncJob(repo syntax.ATURI) {
+func (r *Resyncer) CancelResyncJob(repo syntax.DID) {
 	r.runningJobsMu.Lock()
 	defer r.runningJobsMu.Unlock()
 
@@ -125,13 +125,13 @@ func (r *Resyncer) CancelResyncJob(repo syntax.ATURI) {
 }
 
 // TriggerResyncJob manually triggers the resync job
-func (r *Resyncer) TriggerResyncJob(ctx context.Context, repoAt syntax.ATURI) error {
-	repo, err := db.GetRepoByAtUri(ctx, r.db, repoAt)
+func (r *Resyncer) TriggerResyncJob(ctx context.Context, repoDid syntax.DID) error {
+	repo, err := db.GetRepoByRepoDid(ctx, r.db, repoDid)
 	if err != nil {
 		return fmt.Errorf("failed to get repo: %w", err)
 	}
 	if repo == nil {
-		return fmt.Errorf("repo not found: %s", repoAt)
+		return fmt.Errorf("repo not found: %s", repoDid)
 	}
 
 	if repo.State == models.RepoStateResyncing {
@@ -147,18 +147,18 @@ func (r *Resyncer) TriggerResyncJob(ctx context.Context, repoAt syntax.ATURI) er
 	return nil
 }
 
-func (r *Resyncer) claimResyncJob(ctx context.Context) (syntax.ATURI, bool, error) {
+func (r *Resyncer) claimResyncJob(ctx context.Context) (syntax.DID, bool, error) {
 	// use mutex to prevent duplicated jobs
 	r.claimJobMu.Lock()
 	defer r.claimJobMu.Unlock()
 
-	var repoAt syntax.ATURI
+	var repoDid syntax.DID
 	now := time.Now().Unix()
 	if err := r.db.QueryRowContext(ctx,
 		`update repos
 		set state = $1
-		where at_uri = (
-			select at_uri from repos
+		where repo_did = (
+			select repo_did from repos
 			where state in ($2, $3, $4)
 			and (retry_after = -1 or retry_after = 0 or retry_after < $5)
 			order by
@@ -167,22 +167,22 @@ func (r *Resyncer) claimResyncJob(ctx context.Context) (syntax.ATURI, bool, erro
 				retry_after
 			limit 1
 		)
-		returning at_uri
+		returning repo_did
 		`,
 		models.RepoStateResyncing,
 		models.RepoStatePending, models.RepoStateDesynchronized, models.RepoStateError,
 		now,
-	).Scan(&repoAt); err != nil {
+	).Scan(&repoDid); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", false, nil
 		}
 		return "", false, err
 	}
 
-	return repoAt, true, nil
+	return repoDid, true, nil
 }
 
-func (r *Resyncer) resyncRepo(ctx context.Context, repoAt syntax.ATURI) error {
+func (r *Resyncer) resyncRepo(ctx context.Context, repoDid syntax.DID) error {
 	// ctx, span := tracer.Start(ctx, "resyncRepo")
 	// span.SetAttributes(attribute.String("aturi", repoAt))
 	// defer span.End()
@@ -191,14 +191,14 @@ func (r *Resyncer) resyncRepo(ctx context.Context, repoAt syntax.ATURI) error {
 	startTime := time.Now()
 
 	jobCtx, cancel := context.WithCancel(ctx)
-	r.registerRunning(repoAt, cancel)
-	defer r.unregisterRunning(repoAt)
+	r.registerRunning(repoDid, cancel)
+	defer r.unregisterRunning(repoDid)
 
-	success, err := r.doResync(jobCtx, repoAt)
+	success, err := r.doResync(jobCtx, repoDid)
 	if !success {
 		resyncsFailed.Inc()
 		resyncDuration.Observe(time.Since(startTime).Seconds())
-		return r.handleResyncFailure(ctx, repoAt, err)
+		return r.handleResyncFailure(ctx, repoDid, err)
 	}
 
 	resyncsCompleted.Inc()
@@ -206,12 +206,12 @@ func (r *Resyncer) resyncRepo(ctx context.Context, repoAt syntax.ATURI) error {
 	return nil
 }
 
-func (r *Resyncer) doResync(ctx context.Context, repoAt syntax.ATURI) (bool, error) {
+func (r *Resyncer) doResync(ctx context.Context, repoDid syntax.DID) (bool, error) {
 	// ctx, span := tracer.Start(ctx, "doResync")
 	// span.SetAttributes(attribute.String("aturi", repoAt))
 	// defer span.End()
 
-	repo, err := db.GetRepoByAtUri(ctx, r.db, repoAt)
+	repo, err := db.GetRepoByRepoDid(ctx, r.db, repoDid)
 	if err != nil {
 		return false, fmt.Errorf("failed to get repo: %w", err)
 	}
@@ -323,8 +323,8 @@ func (r *Resyncer) checkKnotReachability(ctx context.Context, repo *models.Repo)
 	return nil
 }
 
-func (r *Resyncer) handleResyncFailure(ctx context.Context, repoAt syntax.ATURI, err error) error {
-	r.logger.Debug("handleResyncFailure", "at_uri", repoAt, "err", err)
+func (r *Resyncer) handleResyncFailure(ctx context.Context, repoDid syntax.DID, err error) error {
+	r.logger.Debug("handleResyncFailure", "at_uri", repoDid, "err", err)
 	var state models.RepoState
 	var errMsg string
 	if err == nil {
@@ -335,12 +335,12 @@ func (r *Resyncer) handleResyncFailure(ctx context.Context, repoAt syntax.ATURI,
 		errMsg = err.Error()
 	}
 
-	repo, err := db.GetRepoByAtUri(ctx, r.db, repoAt)
+	repo, err := db.GetRepoByRepoDid(ctx, r.db, repoDid)
 	if err != nil {
 		return fmt.Errorf("failed to get repo: %w", err)
 	}
 	if repo == nil {
-		return fmt.Errorf("failed to get repo. repo '%s' doesn't exist in db", repoAt)
+		return fmt.Errorf("failed to get repo. repo '%s' doesn't exist in db", repoDid)
 	}
 
 	// start a 1 min & go up to 1 hr between retries

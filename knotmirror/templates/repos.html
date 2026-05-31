@@ -65,7 +65,7 @@
             hx-swap="none"
             hx-disabled-elt="find button"
           >
-            <input type="hidden" name="repo" value="{{.AtUri}}">
+            <input type="hidden" name="repo" value="{{.RepoDid}}">
             <button type="submit">{{ if .State.IsResyncing }}cancel{{ else }}resync{{ end }}</button>
           </form>
         </td>

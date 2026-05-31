@@ -182,8 +182,8 @@ func (s *AdminServer) handleRepoResyncTrigger() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var repoQuery = r.FormValue("repo")
 
-		repo, err := syntax.ParseATURI(repoQuery)
-		if err != nil || repo.RecordKey() == "" {
+		repo, err := syntax.ParseDID(repoQuery)
+		if err != nil {
 			writeNotif(w, http.StatusBadRequest, fmt.Sprintf("repo parameter invalid: %s", repoQuery))
 			return
 		}
@@ -201,8 +201,8 @@ func (s *AdminServer) handleRepoResyncCancel() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var repoQuery = r.FormValue("repo")
 
-		repo, err := syntax.ParseATURI(repoQuery)
-		if err != nil || repo.RecordKey() == "" {
+		repo, err := syntax.ParseDID(repoQuery)
+		if err != nil {
 			writeNotif(w, http.StatusBadRequest, fmt.Sprintf("repo parameter invalid: %s", repoQuery))
 			return
 		}
