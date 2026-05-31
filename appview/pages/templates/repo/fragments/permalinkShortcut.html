@@ -1,13 +1,13 @@
-{{ define "repo/fragments/permalinkShortcut" }}
+{{ define "repo/fragments/permalinkShortcutScript" }}
+  {{ $path := . }}
   <script>
     (() => {
-      {{ if .LastCommitInfo }}
       const abortController = new AbortController();
       const scriptEl = document.currentScript;
       document.addEventListener('keydown', (e) => {
         if(e.key === 'y' && !e.ctrlKey && !e.metaKey && !e.altKey) {
           if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-          const permalinkUrl = '/{{ .RepoInfo.RepoIdentifier }}/tree/{{ .LastCommitInfo.Hash }}/{{ .Path }}' + window.location.hash;
+          const permalinkUrl = '{{ $path }}' + window.location.hash;
           window.location.href = permalinkUrl;
         }
       }, {signal: abortController.signal});
@@ -17,7 +17,6 @@
           abortController.abort();
         }
       }, {signal: abortController.signal});
-      {{ end }}
     })();
   </script>
 {{ end }}

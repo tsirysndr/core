@@ -99,7 +99,9 @@
 
   </div>
 </main>
-{{ template "repo/fragments/permalinkShortcut" . }}
+{{ if .LastCommitInfo }}
+  {{ template "repo/fragments/permalinkShortcutScript" (printf "/%s/tree/%s/%s" .RepoInfo.RepoIdentifier .LastCommitInfo.Hash .Path) }}
+{{ end }}
 {{end}}
 
 {{ define "repoAfter" }}
