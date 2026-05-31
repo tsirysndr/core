@@ -1006,7 +1006,7 @@ impl HasSubject for PullRecord {
 }
 impl HasSubject for FeedCommentRecord {
     const SHAPE: SubjectShape =
-        SubjectShape::OneOfCollections(&["sh.tangled.repo.issue", "sh.tangled.repo.pull"]);
+        SubjectShape::OneOfCollections(&["sh.tangled.repo.issue", "sh.tangled.repo.pull", "sh.tangled.string"]);
 }
 impl HasSubject for LabelDefinitionRecord {
     const SHAPE: SubjectShape = SubjectShape::BareDid;
