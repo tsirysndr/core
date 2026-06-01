@@ -75,6 +75,7 @@ func (x *Xrpc) listCommits(ctx context.Context, repo syntax.DID, ref string, lim
 	logs, err := func(repoPath, rev string) ([]byte, error) {
 		out, err := exec.Command(
 			"git",
+			"-C", repoPath,
 			"rev-list",
 			rev,
 			fmt.Sprintf("--skip=%d", cursor),
@@ -124,6 +125,7 @@ func (x *Xrpc) listCommits(ctx context.Context, repo syntax.DID, ref string, lim
 	total, err := func(repoPath, rev string) (int, error) {
 		out, err := exec.Command(
 			"git",
+			"-C", repoPath,
 			"rev-list",
 			rev,
 			"--count",
