@@ -25,7 +25,6 @@ var mirrorToKnotNSID = map[string]string{
 	tangled.GitTempGetBranchNSID:     tangled.RepoBranchNSID,
 	tangled.GitTempGetTagNSID:        tangled.RepoTagNSID,
 	tangled.GitTempGetArchiveNSID:    tangled.RepoArchiveNSID,
-	tangled.RepoBlobNSID:             tangled.RepoBlobNSID,
 	tangled.GitTempListLanguagesNSID: tangled.RepoLanguagesNSID,
 }
 
