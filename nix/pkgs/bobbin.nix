@@ -2,18 +2,17 @@
   rustPlatform,
   src,
   ...
-}:
-let
+}: let
   flags = ["--bin" "bobbin" "-p" "bobbin"];
 in
-rustPlatform.buildRustPackage {
-  pname = "bobbin";
-  version = "0.0.1";
+  rustPlatform.buildRustPackage {
+    pname = "bobbin";
+    version = "0.0.1";
 
-  inherit src;
+    inherit src;
 
-  cargoLock.lockFile = "${src}/Cargo.lock";
+    cargoLock.lockFile = "${src}/Cargo.lock";
 
-  cargoBuildFlags = flags;
-  cargoTestFlags = flags;
-}
+    cargoBuildFlags = flags;
+    cargoTestFlags = flags;
+  }
