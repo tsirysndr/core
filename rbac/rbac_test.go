@@ -172,10 +172,10 @@ func TestGetByRole(t *testing.T) {
 	collaborators, err := e.GetUserByRoleInRepo("repo:collaborator", knot, repo)
 	assert.NoError(t, err)
 	assert.ElementsMatch(t, []string{
-		"did:plc:foo", // owner
 		"did:plc:bar", // collaborator1
 		"did:plc:baz", // collaborator2
 	}, collaborators)
+	assert.NotContains(t, collaborators, owner, "owner does not hold repo:collaborator and must not be listed")
 }
 
 func TestGetPermissionsInRepo(t *testing.T) {
@@ -474,4 +474,26 @@ func TestRemoveSpindle(t *testing.T) {
 	spindles, err := e.GetSpindleUsersByRole("server:member", "s.com")
 	assert.NoError(t, err)
 	assert.Empty(t, spindles)
+}
+
+func TestWipeRepoPoliciesRemovesCollaborators(t *testing.T) {
+	e := setup(t)
+
+	knot := "example.com"
+	repo := "did:plc:akshay/my-repo"
+	owner := "did:plc:akshay"
+	collaborator := "did:plc:boltless"
+
+	_ = e.AddKnot(knot)
+	_ = e.AddRepo(owner, knot, repo)
+	err := e.AddCollaborator(collaborator, knot, repo)
+	assert.NoError(t, err)
+
+	err = e.WipeRepoPolicies(knot, repo)
+	assert.NoError(t, err)
+
+	assert.ElementsMatch(t, []string{}, e.GetPermissionsInRepo(collaborator, knot, repo),
+		"collaborator policies must be wiped on repo teardown")
+	assert.ElementsMatch(t, []string{}, e.GetPermissionsInRepo(owner, knot, repo),
+		"owner policies must be wiped on repo teardown")
 }

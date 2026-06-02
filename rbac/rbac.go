@@ -264,17 +264,24 @@ func (e *Enforcer) GetSpindleUsersByRole(role, domain string) ([]string, error) 
 }
 
 func (e *Enforcer) GetUserByRoleInRepo(role, domain, repo string) ([]string, error) {
-	var users []string
-
 	policies, err := e.E.GetImplicitUsersForResourceByDomain(repo, domain)
-	for _, p := range policies {
-		user := p[0]
-		if strings.HasPrefix(user, "did:") {
-			users = append(users, user)
-		}
-	}
 	if err != nil {
 		return nil, err
+	}
+
+	var users []string
+	for _, p := range policies {
+		user := p[0]
+		if !strings.HasPrefix(user, "did:") {
+			continue
+		}
+		ok, err := e.E.Enforce(user, domain, repo, role)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			users = append(users, user)
+		}
 	}
 
 	slices.Sort(users)
