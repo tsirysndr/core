@@ -6,10 +6,13 @@ import (
 	"runtime/debug"
 
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/consts"
 )
 
 // version is set during build time.
 var version string
+
+var knotCapabilities = []string{string(consts.CapKnotACL)}
 
 func (x *Xrpc) Version(w http.ResponseWriter, r *http.Request) {
 	if version == "" {
@@ -45,7 +48,8 @@ func (x *Xrpc) Version(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := tangled.KnotVersion_Output{
-		Version: version,
+		Version:      version,
+		Capabilities: knotCapabilities,
 	}
 
 	x.writeJson(w, response)

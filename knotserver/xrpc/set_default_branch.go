@@ -17,8 +17,6 @@ import (
 	xrpcerr "tangled.org/core/xrpc/errors"
 )
 
-const ActorDid string = "ActorDid"
-
 func (x *Xrpc) SetDefaultBranch(w http.ResponseWriter, r *http.Request) {
 	l := x.Logger
 	fail := func(e xrpcerr.XrpcError) {

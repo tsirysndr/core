@@ -14,7 +14,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/idresolver"
-	"tangled.org/core/jetstream"
 	"tangled.org/core/knotserver/config"
 	"tangled.org/core/knotserver/db"
 	"tangled.org/core/knotserver/sandbox"
@@ -24,10 +23,17 @@ import (
 	"tangled.org/core/xrpc/serviceauth"
 )
 
+const ActorDid = serviceauth.ActorDid
+
+type DidIngester interface {
+	AddDid(did string)
+	RemoveDid(did string)
+}
+
 type Xrpc struct {
 	Config      *config.Config
 	Db          *db.DB
-	Ingester    *jetstream.JetstreamClient
+	Ingester    DidIngester
 	Enforcer    *rbac.Enforcer
 	Logger      *slog.Logger
 	Notifier    *notifier.Notifier

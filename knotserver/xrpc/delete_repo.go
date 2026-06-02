@@ -99,7 +99,7 @@ func (x *Xrpc) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if rbacErr := x.Enforcer.RemoveRepo(did, rbac.ThisServer, repoDid); rbacErr != nil {
+	if rbacErr := x.Enforcer.WipeRepoPolicies(rbac.ThisServer, repoDid); rbacErr != nil {
 		l.Error("failed to delete repo from enforcer", "error", rbacErr.Error())
 		writeError(w, xrpcerr.GenericError(rbacErr), http.StatusInternalServerError)
 		return
