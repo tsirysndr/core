@@ -94,29 +94,6 @@ func ListKnotMembers(q DBTX, p ListPage) ([]KnotMember, *int, error) {
 	)
 }
 
-func (d *DB) ApplyKnotMembersBackfill(ctx context.Context, rows []KnotMember, migrationName string) error {
-	conn, err := d.db.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	return orm.RunMigration(conn, d.logger, migrationName, func(tx *sql.Tx) error {
-		for _, m := range rows {
-			if err := AddDid(tx, m.Subject.String()); err != nil {
-				return err
-			}
-			if _, err := tx.ExecContext(ctx,
-				`insert or ignore into knot_members (did, rkey, subject) values (?, ?, ?)`,
-				m.Did, m.Rkey, m.Subject,
-			); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-}
-
 func AddKnotMember(q DBTX, member KnotMember) error {
 	_, err := q.Exec(
 		`insert or ignore into knot_members (did, rkey, subject) values (?, ?, ?)`,

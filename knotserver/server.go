@@ -108,8 +108,11 @@ func Run(ctx context.Context, cmd *cli.Command) error {
 
 	resolver := idresolver.DefaultResolver(c.Server.PlcUrl)
 
-	if err := BackfillKnotMembers(ctx, db, e, resolver, c.Server.Hostname, logger); err != nil {
-		logger.Warn("knot members backfill failed, continuing", "err", err)
+	if err := BackfillKnotMembers(ctx, db, e, c.Server.Owner, logger); err != nil {
+		logger.Warn("knot member backfill failed, continuing", "err", err)
+	}
+	if err := BackfillCollaborators(ctx, db, e, logger, false); err != nil {
+		logger.Warn("collaborator backfill failed, continuing", "err", err)
 	}
 
 	// probe and initialise the sandbox backend.
@@ -140,7 +143,12 @@ func Run(ctx context.Context, cmd *cli.Command) error {
 		sb = &sandbox.NoopBackend{}
 	}
 
-	go migrateReposOnStartup(ctx, c, db, e, &notifier, log.SubLogger(logger, "migrate"))
+	go func() {
+		migrated := migrateReposOnStartup(ctx, c, db, e, &notifier, log.SubLogger(logger, "migrate"))
+		if err := BackfillCollaborators(ctx, db, e, logger, migrated); err != nil {
+			logger.Warn("collaborator backfill failed, continuing", "err", err)
+		}
+	}()
 
 	mux, err := Setup(ctx, c, db, e, jc, &notifier, resolver, sb)
 	if err != nil {

@@ -70,11 +70,11 @@ func scanLegacyRepos(scanPath string, logger *slog.Logger) []legacyRepo {
 	return repos
 }
 
-func migrateReposOnStartup(ctx context.Context, c *config.Config, d *db.DB, e *rbac.Enforcer, n *notifier.Notifier, logger *slog.Logger) {
+func migrateReposOnStartup(ctx context.Context, c *config.Config, d *db.DB, e *rbac.Enforcer, n *notifier.Notifier, logger *slog.Logger) bool {
 	repos := scanLegacyRepos(c.Repo.ScanPath, logger)
 	if len(repos) == 0 {
 		logger.Info("no legacy repos found, migration complete")
-		return
+		return true
 	}
 
 	logger.Info("starting legacy repo migration", "count", len(repos))
@@ -90,7 +90,7 @@ func migrateReposOnStartup(ctx context.Context, c *config.Config, d *db.DB, e *r
 		select {
 		case <-ctx.Done():
 			logger.Info("migration interrupted by shutdown", "migrated", migrated, "remaining", len(repos)-migrated)
-			return
+			return false
 		default:
 		}
 
@@ -103,6 +103,7 @@ func migrateReposOnStartup(ctx context.Context, c *config.Config, d *db.DB, e *r
 	}
 
 	logger.Info("legacy repo migration complete", "migrated", migrated, "total", len(repos), "duration", time.Since(start))
+	return migrated == len(repos)
 }
 
 func migrateOneRepo(
@@ -131,7 +132,7 @@ func migrateOneRepo(
 	}
 
 	if err := rewriteRBACPolicies(e, repo.ownerDid, repo.repoName, repoDid, l); err != nil {
-		l.Error("RBAC rewrite failed (non-fatal)", "error", err)
+		return fmt.Errorf("rewriting RBAC policies: %w", err)
 	}
 
 	newPath := filepath.Join(c.Repo.ScanPath, repoDid)
