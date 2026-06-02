@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "sh.tangled.knot.listMembers",
+  "id": "sh.tangled.repo.listCollaborators",
   "defs": {
     "main": {
       "type": "query",
@@ -10,7 +10,8 @@
         "properties": {
           "subject": {
             "type": "string",
-            "description": "Knot identifier whose member records to list."
+            "format": "did",
+            "description": "Repo DID whose collaborator records to list."
           },
           "cursor": {
             "type": "string",
@@ -47,13 +48,32 @@
     },
     "listItem": {
       "type": "object",
-      "required": ["uri", "value"],
+      "required": ["subject", "addedBy", "createdAt"],
       "properties": {
-        "uri": { "type": "string", "format": "at-uri" },
-        "cid": { "type": "string", "format": "cid" },
-        "value": {
-          "type": "unknown",
-          "description": "Embedded sh.tangled.knot.member record"
+        "subject": {
+          "type": "string",
+          "format": "did",
+          "description": "DID of the collaborator"
+        },
+        "addedBy": {
+          "type": "string",
+          "format": "did",
+          "description": "DID that added this collaborator"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "datetime",
+          "description": "When the collaborator was added"
+        },
+        "uri": {
+          "type": "string",
+          "format": "at-uri",
+          "description": "Optional record AT-URI for record-backed indexers"
+        },
+        "cid": {
+          "type": "string",
+          "format": "cid",
+          "description": "Optional record CID for record-backed indexers"
         }
       }
     }
