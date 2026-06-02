@@ -88,6 +88,9 @@
           (self.callPackage "${gomod2nix}/builder" {
             gomod2nix = gomod2nix.legacyPackages.${pkgs.stdenv.hostPlatform.system}.gomod2nix;
           }).buildGoApplication;
+        rustPlatform = pkgs.makeRustPlatform {
+          inherit (fenix.packages.${pkgs.system}.stable) rustc cargo;
+        };
         modules = ./nix/gomod2nix.toml;
         sqlite-lib = self.callPackage ./nix/pkgs/sqlite-lib.nix {
           inherit sqlite-lib-src;
@@ -109,10 +112,11 @@
         dolly = self.callPackage ./nix/pkgs/dolly.nix {};
         tap = self.callPackage ./nix/pkgs/tap.nix {};
         knotmirror = self.callPackage ./nix/pkgs/knotmirror.nix {};
+        bobbin = self.callPackage ./nix/pkgs/bobbin.nix {};
       });
   in {
     overlays.default = final: prev: {
-      inherit (mkPackageSet final) lexgen goat sqlite-lib spindle knot-unwrapped knot appview docs dolly tap knotmirror;
+      inherit (mkPackageSet final) lexgen goat sqlite-lib spindle knot-unwrapped knot appview docs dolly tap knotmirror bobbin;
     };
 
     packages = forAllSystems (system: let
@@ -136,6 +140,7 @@
         dolly
         tap
         knotmirror
+        bobbin
         ;
 
       pkgsStatic-appview = staticPackages.appview;
