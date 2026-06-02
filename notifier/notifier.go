@@ -31,6 +31,9 @@ func (n *Notifier) Unsubscribe(ch chan struct{}) {
 }
 
 func (n *Notifier) NotifyAll() {
+	if n == nil {
+		return
+	}
 	n.mu.Lock()
 	for ch := range n.subscribers {
 		select {

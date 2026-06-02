@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/eventstream"
 	"tangled.org/core/notifier"
 	"tangled.org/core/tid"
@@ -28,6 +29,43 @@ func (d *DB) EmitDIDAssign(n *notifier.Notifier, ownerDid, repoName, repoDid str
 	return d.InsertEvent(eventstream.Event{
 		Rkey:      tid.TID(),
 		Nsid:      RepoDIDAssignNSID,
+		EventJson: eventJson,
+	}, n)
+}
+
+func (d *DB) EmitKnotMemberUpdate(n *notifier.Notifier, op AclOp, subject syntax.DID) error {
+	payload := KnotMemberUpdate{
+		Op:      op,
+		Subject: subject.String(),
+	}
+
+	eventJson, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal memberUpdate event: %w", err)
+	}
+
+	return d.InsertEvent(eventstream.Event{
+		Rkey:      tid.TID(),
+		Nsid:      KnotMemberUpdateNSID,
+		EventJson: eventJson,
+	}, n)
+}
+
+func (d *DB) EmitCollaboratorUpdate(n *notifier.Notifier, op AclOp, subject, repoDid syntax.DID) error {
+	payload := RepoCollaboratorUpdate{
+		Op:      op,
+		Subject: subject.String(),
+		Repo:    repoDid.String(),
+	}
+
+	eventJson, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal collaboratorUpdate event: %w", err)
+	}
+
+	return d.InsertEvent(eventstream.Event{
+		Rkey:      tid.TID(),
+		Nsid:      RepoCollaboratorUpdateNSID,
 		EventJson: eventJson,
 	}, n)
 }

@@ -26,6 +26,7 @@ type DB struct {
 
 type DBTX interface {
 	QueryRow(query string, args ...any) *sql.Row
+	Query(query string, args ...any) (*sql.Rows, error)
 	Exec(query string, args ...any) (sql.Result, error)
 }
 
@@ -39,6 +40,10 @@ func (d *DB) Exec(query string, args ...any) (sql.Result, error) {
 
 func (d *DB) QueryRow(query string, args ...any) *sql.Row {
 	return d.db.QueryRow(query, args...)
+}
+
+func (d *DB) Query(query string, args ...any) (*sql.Rows, error) {
+	return d.db.Query(query, args...)
 }
 
 func Setup(ctx context.Context, dbPath string) (*DB, error) {
@@ -244,6 +249,63 @@ func Setup(ctx context.Context, dbPath string) (*DB, error) {
 		return nil, err
 	}
 
+	if err := orm.RunMigration(conn, logger, "knot-members-nullable-rkey", func(tx *sql.Tx) error {
+		_, mErr := tx.ExecContext(ctx, `
+			create table knot_members_new (
+				id integer primary key autoincrement,
+				did text not null,
+				rkey text,
+				subject text not null,
+				created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				unique (did, rkey)
+			);
+			insert into knot_members_new (id, did, rkey, subject, created)
+				select id, did, rkey, subject, created from knot_members;
+			drop table knot_members;
+			alter table knot_members_new rename to knot_members;
+		`)
+		return mErr
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := orm.RunMigration(conn, logger, "create-collaborators", func(tx *sql.Tx) error {
+		_, mErr := tx.ExecContext(ctx, `
+			create table if not exists collaborators (
+				id integer primary key autoincrement,
+				repo_did text not null,
+				subject_did text not null,
+				added_by_did text not null,
+				created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				unique (repo_did, subject_did)
+			);
+			create index if not exists idx_collaborators_repo_id
+				on collaborators(repo_did, id);
+		`)
+		return mErr
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := orm.RunMigration(conn, logger, "knot-members-direct-subject-unique", func(tx *sql.Tx) error {
+		_, mErr := tx.ExecContext(ctx, `
+			create unique index if not exists idx_knot_members_direct_subject
+				on knot_members(subject) where rkey is null;
+			create index if not exists idx_knot_members_subject
+				on knot_members(subject);
+		`)
+		return mErr
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := orm.RunMigration(conn, logger, "add-events-created-index", func(tx *sql.Tx) error {
+		_, mErr := tx.ExecContext(ctx, `create index if not exists idx_events_created on events(created)`)
+		return mErr
+	}); err != nil {
+		return nil, err
+	}
+
 	return &DB{
 		db:     db,
 		logger: logger,
@@ -299,6 +361,10 @@ func (d *DB) DeleteRepoKey(repoDid string) error {
 		return err
 	}
 
+	if _, err := tx.Exec(`DELETE FROM collaborators WHERE repo_did = ?`, repoDid); err != nil {
+		return err
+	}
+
 	return tx.Commit()
 }
 
@@ -306,6 +372,24 @@ func (d *DB) RepoDidExists(repoDid string) (bool, error) {
 	var count int
 	err := d.db.QueryRow(`SELECT count(1) FROM repo_keys WHERE repo_did = ?`, repoDid).Scan(&count)
 	return count > 0, err
+}
+
+func (d *DB) ListRepoDids() ([]string, error) {
+	rows, err := d.db.Query(`SELECT repo_did FROM repo_keys`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	dids := []string{}
+	for rows.Next() {
+		var did string
+		if err := rows.Scan(&did); err != nil {
+			return nil, err
+		}
+		dids = append(dids, did)
+	}
+	return dids, rows.Err()
 }
 
 func (d *DB) GetRepoDid(ownerDid, rkey string) (string, error) {
