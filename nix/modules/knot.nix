@@ -190,6 +190,19 @@ in
             description = "Maximum response size in kilobytes";
           };
         };
+
+        environmentFile = mkOption {
+          type = with types; nullOr path;
+          default = null;
+          example = "/etc/knot.env";
+          description = ''
+            Additional environment file as defined in {manpage}`systemd.exec(5)`.
+
+            Sensitive secrets such as {env}`KNOT_SERVER_ADMIN_SECRET` may be
+            passed to the service without making them world readable in the nix
+            store.
+          '';
+        };
       };
     };
 
@@ -336,6 +349,7 @@ in
                 else "false"
               }"
             ];
+            EnvironmentFile = mkIf (cfg.environmentFile != null) cfg.environmentFile;
             ExecStart = "${cfg.package}/bin/knot server";
             Restart = "always";
           }

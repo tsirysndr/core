@@ -24,6 +24,7 @@ type Server struct {
 	Owner              string `env:"OWNER, required"`
 	LogDids            bool   `env:"LOG_DIDS, default=true"`
 	MaxResponseKB      int    `env:"MAX_RESPONSE_KB, default=5120"`
+	AdminSecret        string `env:"ADMIN_SECRET"`
 
 	// This disables signature verification so use with caution.
 	Dev bool `env:"DEV, default=false"`
