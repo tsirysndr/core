@@ -5,16 +5,19 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"path"
 	"strings"
 
 	"github.com/bluesky-social/indigo/atproto/auth"
+	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	"tangled.org/core/idresolver"
 	"tangled.org/core/log"
 	xrpcerr "tangled.org/core/xrpc/errors"
 )
 
-const ActorDid string = "ActorDid"
+type contextKey string
+
+const ActorDid contextKey = "ActorDid"
 
 func DidWeb(hostname string) syntax.DID {
 	return syntax.DID("did:web:" + strings.ReplaceAll(hostname, ":", "%3A"))
@@ -22,14 +25,14 @@ func DidWeb(hostname string) syntax.DID {
 
 type ServiceAuth struct {
 	logger      *slog.Logger
-	resolver    *idresolver.Resolver
+	dir         identity.Directory
 	audienceDid string
 }
 
-func NewServiceAuth(logger *slog.Logger, resolver *idresolver.Resolver, audienceDid string) *ServiceAuth {
+func NewServiceAuth(logger *slog.Logger, dir identity.Directory, audienceDid string) *ServiceAuth {
 	return &ServiceAuth{
 		logger:      log.SubLogger(logger, "serviceauth"),
-		resolver:    resolver,
+		dir:         dir,
 		audienceDid: audienceDid,
 	}
 }
@@ -39,19 +42,26 @@ func (sa *ServiceAuth) VerifyServiceAuth(next http.Handler) http.Handler {
 		token := r.Header.Get("Authorization")
 		token = strings.TrimPrefix(token, "Bearer ")
 
-		s := auth.ServiceAuthValidator{
-			Audience: sa.audienceDid,
-			Dir:      sa.resolver.Directory(),
+		lxm, err := syntax.ParseNSID(path.Base(r.URL.Path))
+		if err != nil {
+			sa.logger.Error("could not derive lexicon method from request path", "path", r.URL.Path, "err", err)
+			writeError(w, xrpcerr.AuthError(err), http.StatusForbidden)
+			return
 		}
 
-		did, err := s.Validate(r.Context(), token, nil)
+		s := auth.ServiceAuthValidator{
+			Audience: sa.audienceDid,
+			Dir:      sa.dir,
+		}
+
+		did, err := s.Validate(r.Context(), token, &lxm)
 		if err != nil {
 			sa.logger.Error("signature verification failed", "err", err)
 			writeError(w, xrpcerr.AuthError(err), http.StatusForbidden)
 			return
 		}
 
-		sa.logger.Debug("valid signature", ActorDid, did)
+		sa.logger.Debug("valid signature", "did", did)
 
 		r = r.WithContext(
 			context.WithValue(r.Context(), ActorDid, did),

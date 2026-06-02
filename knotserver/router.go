@@ -130,7 +130,7 @@ func (h *Knot) GetMotdContent() []byte {
 }
 
 func (h *Knot) XrpcRouter() http.Handler {
-	serviceAuth := serviceauth.NewServiceAuth(h.l, h.resolver, h.c.Server.Did().String())
+	serviceAuth := serviceauth.NewServiceAuth(h.l, h.resolver.Directory(), h.c.Server.Did().String())
 
 	l := log.SubLogger(h.l, "xrpc")
 

@@ -360,7 +360,7 @@ func (s *Spindle) Router() http.Handler {
 }
 
 func (s *Spindle) XrpcRouter() http.Handler {
-	serviceAuth := serviceauth.NewServiceAuth(s.l, s.res, s.cfg.Server.Did().String())
+	serviceAuth := serviceauth.NewServiceAuth(s.l, s.res.Directory(), s.cfg.Server.Did().String())
 
 	l := log.SubLogger(s.l, "xrpc")
 

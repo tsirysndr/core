@@ -20,7 +20,7 @@ import (
 	"tangled.org/core/xrpc/serviceauth"
 )
 
-const ActorDid string = "ActorDid"
+const ActorDid = serviceauth.ActorDid
 
 type Xrpc struct {
 	Logger      *slog.Logger
