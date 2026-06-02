@@ -5,6 +5,12 @@ func AddDid(q DBTX, did string) error {
 	return err
 }
 
+func IsDidKnown(q DBTX, did string) (bool, error) {
+	var exists bool
+	err := q.QueryRow(`select exists (select 1 from known_dids where did = ?)`, did).Scan(&exists)
+	return exists, err
+}
+
 func RemoveDid(q DBTX, did string) error {
 	_, err := q.Exec(`delete from known_dids where did = ?`, did)
 	return err

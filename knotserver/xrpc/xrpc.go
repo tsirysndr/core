@@ -56,6 +56,8 @@ func (x *Xrpc) Router() http.Handler {
 		r.Post("/"+tangled.RepoForkSyncNSID, x.ForkSync)
 		r.Post("/"+tangled.RepoHiddenRefNSID, x.HiddenRef)
 		r.Post("/"+tangled.RepoMergeNSID, x.Merge)
+		r.Post("/"+tangled.KnotAddMemberNSID, x.AddMember)
+		r.Post("/"+tangled.KnotRemoveMemberNSID, x.RemoveMember)
 	})
 
 	// merge check is an open endpoint
