@@ -95,10 +95,6 @@ func (e *Enforcer) wouldHaveAnyPolicyExcludingGrouping(user, role, domain string
 	return false, nil
 }
 
-func (e *Enforcer) WouldHaveAnyPolicyExcludingKnotMember(user, domain string) (bool, error) {
-	return e.wouldHaveAnyPolicyExcludingGrouping(user, "server:member", domain)
-}
-
 func (e *Enforcer) WouldHaveAnyPolicyExcludingSpindleMember(user, domain string) (bool, error) {
 	return e.wouldHaveAnyPolicyExcludingGrouping(user, "server:member", intoSpindle(domain))
 }

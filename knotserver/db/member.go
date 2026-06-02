@@ -11,7 +11,6 @@ import (
 type KnotMember struct {
 	Id      int
 	Did     syntax.DID
-	Rkey    string
 	Subject syntax.DID
 	Created string
 }
@@ -92,43 +91,4 @@ func ListKnotMembers(q DBTX, p ListPage) ([]KnotMember, *int, error) {
 		},
 		func(m KnotMember) int { return m.Id },
 	)
-}
-
-func AddKnotMember(q DBTX, member KnotMember) error {
-	_, err := q.Exec(
-		`insert or ignore into knot_members (did, rkey, subject) values (?, ?, ?)`,
-		member.Did,
-		member.Rkey,
-		member.Subject,
-	)
-	return err
-}
-
-func RemoveKnotMember(q DBTX, ownerDid, rkey string) error {
-	_, err := q.Exec(
-		"delete from knot_members where did = ? and rkey = ?",
-		ownerDid,
-		rkey,
-	)
-	return err
-}
-
-func GetKnotMember(q DBTX, did, rkey string) (*KnotMember, error) {
-	query :=
-		`select id, did, rkey, subject
-		from knot_members
-		where did = ? and rkey = ?`
-
-	var member KnotMember
-	err := q.QueryRow(query, did, rkey).Scan(
-		&member.Id,
-		&member.Did,
-		&member.Rkey,
-		&member.Subject,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &member, nil
 }

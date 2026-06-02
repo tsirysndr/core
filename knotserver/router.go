@@ -14,6 +14,7 @@ import (
 	"tangled.org/core/jetstream"
 	"tangled.org/core/knotserver/config"
 	"tangled.org/core/knotserver/db"
+	"tangled.org/core/knotserver/keys"
 	"tangled.org/core/knotserver/sandbox"
 	"tangled.org/core/knotserver/xrpc"
 	"tangled.org/core/log"
@@ -107,7 +108,9 @@ func (h *Knot) Router() http.Handler {
 	})
 
 	// xrpc apis
-	r.Mount("/xrpc", h.XrpcRouter())
+	x := h.newXrpc()
+	r.Mount("/xrpc", x.Router())
+	r.Mount("/admin", x.AdminRouter())
 
 	// Socket that streams git oplogs
 	r.Get("/events", h.Events)
@@ -129,12 +132,12 @@ func (h *Knot) GetMotdContent() []byte {
 	return h.motd
 }
 
-func (h *Knot) XrpcRouter() http.Handler {
+func (h *Knot) newXrpc() *xrpc.Xrpc {
 	serviceAuth := serviceauth.NewServiceAuth(h.l, h.resolver.Directory(), h.c.Server.Did().String())
 
 	l := log.SubLogger(h.l, "xrpc")
 
-	xrpc := &xrpc.Xrpc{
+	return &xrpc.Xrpc{
 		Config:      h.c,
 		Db:          h.db,
 		Ingester:    h.jc,
@@ -145,8 +148,6 @@ func (h *Knot) XrpcRouter() http.Handler {
 		ServiceAuth: serviceAuth,
 		Sandbox:     h.sandbox,
 	}
-
-	return xrpc.Router()
 }
 
 func (h *Knot) resolveDidRedirect(next http.Handler) http.Handler {
@@ -216,7 +217,7 @@ func (h *Knot) configureOwner(ctx context.Context) error {
 		return fmt.Errorf("failed to add owner to RBAC: %w", err)
 	}
 
-	err = h.fetchAndAddKeys(ctx, cfgOwner)
+	err = keys.FetchAndStore(ctx, h.resolver.Directory(), h.db, cfgOwner)
 	if err != nil {
 		h.l.Error("fetching and adding owners public keys", "error", err, "did", cfgOwner)
 	}
