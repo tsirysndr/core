@@ -18,7 +18,6 @@ import (
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/pages/markup"
-	"tangled.org/core/appview/pages/repoinfo"
 	"tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/patchutil"
 	"tangled.org/core/types"
@@ -67,7 +66,7 @@ func (s *Pulls) NewPull(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Determine PR type based on input parameters
-		roles := repoinfo.RolesInRepo{Roles: s.enforcer.GetPermissionsInRepo(userDid.String(), f.Knot, f.RepoIdentifier())}
+		roles := s.acl.RolesInRepo(r.Context(), f, userDid.String())
 		isPushAllowed := roles.IsPushAllowed()
 		isBranchBased := isPushAllowed && sourceBranch != "" && fromFork == ""
 		isForkBased := fromFork != "" && sourceBranch != ""

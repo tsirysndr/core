@@ -31,6 +31,11 @@ const (
 	sessionCacheTTL  = time.Hour
 )
 
+type KnotMembership interface {
+	IsKnotMember(ctx context.Context, host, userDid string) bool
+	InvalidateMembers(host string)
+}
+
 type OAuth struct {
 	ClientApp  *oauth.ClientApp
 	SessStore  *sessions.CookieStore
@@ -41,6 +46,7 @@ type OAuth struct {
 	Posthog    posthog.Client
 	Db         *db.DB
 	Enforcer   *rbac.Enforcer
+	Acl        KnotMembership
 	IdResolver *idresolver.Resolver
 	Logger     *slog.Logger
 
@@ -92,7 +98,7 @@ func (o *OAuth) HandlePermanentAuthErr(ctx context.Context, did syntax.DID, sess
 	return true
 }
 
-func New(config *config.Config, ph posthog.Client, db *db.DB, enforcer *rbac.Enforcer, res *idresolver.Resolver, logger *slog.Logger) (*OAuth, error) {
+func New(config *config.Config, ph posthog.Client, db *db.DB, enforcer *rbac.Enforcer, acl KnotMembership, res *idresolver.Resolver, logger *slog.Logger) (*OAuth, error) {
 	var oauthConfig oauth.ClientConfig
 	var clientUri string
 	if config.Core.Dev {
@@ -152,6 +158,7 @@ func New(config *config.Config, ph posthog.Client, db *db.DB, enforcer *rbac.Enf
 		Posthog:      ph,
 		Db:           db,
 		Enforcer:     enforcer,
+		Acl:          acl,
 		IdResolver:   res,
 		Logger:       logger,
 		sessionCache: expirable.NewLRU[string, *oauth.ClientSession](sessionCacheSize, nil, sessionCacheTTL),
@@ -405,14 +412,14 @@ func (s *ServiceClientOpts) Host() string {
 }
 
 func (o *OAuth) ServiceClient(r *http.Request, os ...ServiceClientOpt) (*xrpc.Client, error) {
-	opts := DefaultServiceClientOpts()
-	for _, o := range os {
-		o(&opts)
-	}
-
 	client, err := o.AuthorizedClient(r)
 	if err != nil {
 		return nil, err
+	}
+
+	opts := DefaultServiceClientOpts()
+	for _, o := range os {
+		o(&opts)
 	}
 
 	// force expiry to atleast 60 seconds in the future

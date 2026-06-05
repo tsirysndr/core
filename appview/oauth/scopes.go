@@ -27,7 +27,10 @@ var TangledScopes = []string{
 
 	"blob:*/*",
 
+	"rpc:sh.tangled.knot.addMember?aud=*",
+	"rpc:sh.tangled.knot.removeMember?aud=*",
 	"rpc:sh.tangled.pipeline.cancelPipeline?aud=*",
+	"rpc:sh.tangled.repo.addCollaborator?aud=*",
 	"rpc:sh.tangled.repo.addSecret?aud=*",
 	"rpc:sh.tangled.repo.create?aud=*",
 	"rpc:sh.tangled.repo.delete?aud=*",
@@ -38,6 +41,7 @@ var TangledScopes = []string{
 	"rpc:sh.tangled.repo.listSecrets?aud=*",
 	"rpc:sh.tangled.repo.merge?aud=*",
 	"rpc:sh.tangled.repo.mergeCheck?aud=*",
+	"rpc:sh.tangled.repo.removeCollaborator?aud=*",
 	"rpc:sh.tangled.repo.removeSecret?aud=*",
 	"rpc:sh.tangled.repo.setDefaultBranch?aud=*",
 }

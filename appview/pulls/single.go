@@ -3,7 +3,6 @@ package pulls
 import (
 	"fmt"
 	"net/http"
-	"slices"
 	"strconv"
 
 	"tangled.org/core/api/tangled"
@@ -364,8 +363,7 @@ func (s *Pulls) branchDeleteStatus(r *http.Request, repo *models.Repo, pull *mod
 	}
 
 	// user can only delete branch if they are a collaborator in the repo that the branch belongs to
-	perms := s.enforcer.GetPermissionsInRepo(user.Did, repo.Knot, repo.RepoIdentifier())
-	if !slices.Contains(perms, "repo:push") {
+	if !s.acl.HasRepoPermission(r.Context(), repo, user.Did, "repo:push") {
 		return nil
 	}
 

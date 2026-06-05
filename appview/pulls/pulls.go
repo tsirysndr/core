@@ -10,6 +10,7 @@ import (
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
 	pulls_indexer "tangled.org/core/appview/indexer/pulls"
+	"tangled.org/core/appview/knotacl"
 	"tangled.org/core/appview/mentions"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
@@ -19,7 +20,6 @@ import (
 	"tangled.org/core/appview/validator"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/ogre"
-	"tangled.org/core/rbac"
 
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 )
@@ -35,7 +35,7 @@ type Pulls struct {
 	db               *db.DB
 	config           *config.Config
 	notifier         notify.Notifier
-	enforcer         *rbac.Enforcer
+	acl              *knotacl.Service
 	logger           *slog.Logger
 	validator        *validator.Validator
 	indexer          *pulls_indexer.Indexer
@@ -51,7 +51,7 @@ func New(
 	db *db.DB,
 	config *config.Config,
 	notifier notify.Notifier,
-	enforcer *rbac.Enforcer,
+	acl *knotacl.Service,
 	validator *validator.Validator,
 	indexer *pulls_indexer.Indexer,
 	logger *slog.Logger,
@@ -65,7 +65,7 @@ func New(
 		db:               db,
 		config:           config,
 		notifier:         notifier,
-		enforcer:         enforcer,
+		acl:              acl,
 		logger:           logger,
 		validator:        validator,
 		indexer:          indexer,

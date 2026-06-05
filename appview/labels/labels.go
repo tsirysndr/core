@@ -167,7 +167,7 @@ func (l *Labels) PerformLabelOp(w http.ResponseWriter, r *http.Request) {
 
 	for i := range labelOps {
 		def := actx.Defs[labelOps[i].OperandKey]
-		if err := l.validator.ValidateLabelOp(def, repo, &labelOps[i]); err != nil {
+		if err := l.validator.ValidateLabelOp(r.Context(), def, repo, &labelOps[i]); err != nil {
 			fail(fmt.Sprintf("Invalid form data: %s", err), err)
 			return
 		}

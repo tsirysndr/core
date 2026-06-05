@@ -7,12 +7,11 @@ import (
 	"time"
 
 	"tangled.org/core/api/tangled"
-	"tangled.org/core/appview/compat113"
 	"tangled.org/core/appview/db"
+	"tangled.org/core/appview/knotcompat"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
-	"tangled.org/core/appview/pages/repoinfo"
 	"tangled.org/core/appview/reporesolver"
 	"tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/orm"
@@ -123,7 +122,7 @@ func (s *Pulls) resubmitBranch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles := repoinfo.RolesInRepo{Roles: s.enforcer.GetPermissionsInRepo(user.Did, f.Knot, f.RepoIdentifier())}
+	roles := s.acl.RolesInRepo(r.Context(), f, user.Did)
 	if !roles.IsPushAllowed() {
 		l.Warn("unauthorized user - no push permission")
 		w.WriteHeader(http.StatusUnauthorized)
@@ -331,7 +330,7 @@ func (s *Pulls) resubmitPullHelper(
 		Repo:       userDid.String(),
 		Rkey:       pull.Rkey,
 		SwapRecord: ex.Cid,
-		Record:     compat113.Pull(&record),
+		Record:     knotcompat.Pull(&record),
 	})
 	if err != nil {
 		l.Error("failed to update record on PDS", "err", err, "rkey", pull.Rkey)
@@ -520,7 +519,7 @@ func (s *Pulls) resubmitStackedPullHelper(
 			RepoApplyWrites_Create: &comatproto.RepoApplyWrites_Create{
 				Collection: tangled.RepoPullNSID,
 				Rkey:       &p.Rkey,
-				Value:      compat113.Pull(&record),
+				Value:      knotcompat.Pull(&record),
 			},
 		})
 	}
@@ -578,7 +577,7 @@ func (s *Pulls) resubmitStackedPullHelper(
 			RepoApplyWrites_Update: &comatproto.RepoApplyWrites_Update{
 				Collection: tangled.RepoPullNSID,
 				Rkey:       op.Rkey,
-				Value:      compat113.Pull(&record),
+				Value:      knotcompat.Pull(&record),
 			},
 		})
 	}

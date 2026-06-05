@@ -19,12 +19,12 @@ import (
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
 	issues_indexer "tangled.org/core/appview/indexer/issues"
+	"tangled.org/core/appview/knotacl"
 	"tangled.org/core/appview/mentions"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
-	"tangled.org/core/appview/pages/repoinfo"
 	"tangled.org/core/appview/pagination"
 	"tangled.org/core/appview/reporesolver"
 	"tangled.org/core/appview/searchquery"
@@ -32,14 +32,13 @@ import (
 	"tangled.org/core/idresolver"
 	"tangled.org/core/ogre"
 	"tangled.org/core/orm"
-	"tangled.org/core/rbac"
 	"tangled.org/core/tid"
 )
 
 type Issues struct {
 	oauth            *oauth.OAuth
 	repoResolver     *reporesolver.RepoResolver
-	enforcer         *rbac.Enforcer
+	acl              *knotacl.Service
 	pages            *pages.Pages
 	idResolver       *idresolver.Resolver
 	mentionsResolver *mentions.Resolver
@@ -55,7 +54,7 @@ type Issues struct {
 func New(
 	oauth *oauth.OAuth,
 	repoResolver *reporesolver.RepoResolver,
-	enforcer *rbac.Enforcer,
+	acl *knotacl.Service,
 	pages *pages.Pages,
 	idResolver *idresolver.Resolver,
 	mentionsResolver *mentions.Resolver,
@@ -69,7 +68,7 @@ func New(
 	return &Issues{
 		oauth:            oauth,
 		repoResolver:     repoResolver,
-		enforcer:         enforcer,
+		acl:              acl,
 		pages:            pages,
 		idResolver:       idResolver,
 		mentionsResolver: mentionsResolver,
@@ -340,7 +339,7 @@ func (rp *Issues) CloseIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles := repoinfo.RolesInRepo{Roles: rp.enforcer.GetPermissionsInRepo(user.Did, f.Knot, f.RepoIdentifier())}
+	roles := rp.acl.RolesInRepo(r.Context(), f, user.Did)
 	isRepoOwner := roles.IsOwner()
 	isCollaborator := roles.IsCollaborator()
 	isIssueOwner := user.Did == issue.Did
@@ -388,7 +387,7 @@ func (rp *Issues) ReopenIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles := repoinfo.RolesInRepo{Roles: rp.enforcer.GetPermissionsInRepo(user.Did, f.Knot, f.RepoIdentifier())}
+	roles := rp.acl.RolesInRepo(r.Context(), f, user.Did)
 	isRepoOwner := roles.IsOwner()
 	isCollaborator := roles.IsCollaborator()
 	isIssueOwner := user.Did == issue.Did

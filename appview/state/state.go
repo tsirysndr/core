@@ -19,6 +19,8 @@ import (
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/email"
 	"tangled.org/core/appview/indexer"
+	"tangled.org/core/appview/knotacl"
+	"tangled.org/core/appview/knotcompat"
 	"tangled.org/core/appview/mentions"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
@@ -67,6 +69,7 @@ type State struct {
 	jc               *jetstream.JetstreamClient
 	config           *config.Config
 	repoResolver     *reporesolver.RepoResolver
+	aclService       *knotacl.Service
 	knotstream       *eventconsumer.Consumer
 	spindlestream    *eventconsumer.Consumer
 	pipelineNotifier *pipelines.StatusNotifier
@@ -111,13 +114,16 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 	}
 
 	pages := pages.NewPages(config, res, d, rdb, log.SubLogger(logger, "pages"))
-	oauth, err := oauth.New(config, posthog, d, enforcer, res, log.SubLogger(logger, "oauth"))
+	knotcompat.UseNativeLatch(knotacl.NewLatch(d, log.SubLogger(logger, "knotacl-latch")))
+	aclService := knotacl.NewService(enforcer, d, config.Core.Dev, log.SubLogger(logger, "knotacl"))
+	oauth, err := oauth.New(config, posthog, d, enforcer, aclService, res, log.SubLogger(logger, "oauth"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to start oauth handler: %w", err)
 	}
-	validator := validator.New(d, res, enforcer)
 
-	repoResolver := reporesolver.New(config, enforcer, d, rdb)
+	validator := validator.New(d, res, aclService)
+
+	repoResolver := reporesolver.New(config, aclService, d, rdb)
 
 	mentionsResolver := mentions.New(config, res, d, log.SubLogger(logger, "mentionsResolver"))
 
@@ -183,6 +189,7 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 		Ctx:              ctx,
 		Db:               d,
 		Enforcer:         enforcer,
+		Acl:              aclService,
 		IdResolver:       res,
 		Cache:            rdb,
 		Config:           config,
@@ -236,6 +243,7 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 		jc:               jc,
 		config:           config,
 		repoResolver:     repoResolver,
+		aclService:       aclService,
 		knotstream:       knotstream,
 		spindlestream:    spindlestream,
 		pipelineNotifier: pipelineNotifier,
@@ -447,11 +455,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		user := s.oauth.GetMultiAccountUser(r)
-		knots, err := s.enforcer.GetKnotsForUser(user.Did)
-		if err != nil {
-			s.pages.Notice(w, "repo", "Invalid user account.")
-			return
-		}
+		knots := s.aclService.KnotsForUser(r.Context(), user.Did)
 
 		s.pages.NewRepo(w, pages.NewRepoParams{
 			LoggedInUser: user,
@@ -499,8 +503,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// ACL validation
-		ok, err := s.enforcer.E.Enforce(user.Did, domain, domain, "repo:create")
-		if err != nil || !ok {
+		if !s.aclService.IsRepoCreateAllowed(r.Context(), domain, user.Did) {
 			l.Info("unauthorized")
 			s.pages.Notice(w, "repo", "You do not have permission to create a repo in this knot.")
 			return

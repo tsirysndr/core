@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/appview/cache"
 	"tangled.org/core/appview/db"
+	"tangled.org/core/appview/knotacl"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
@@ -32,6 +33,7 @@ type Middleware struct {
 	oauth        *oauth.OAuth
 	db           *db.DB
 	enforcer     *rbac.Enforcer
+	acl          *knotacl.Service
 	repoResolver *reporesolver.RepoResolver
 	idResolver   *idresolver.Resolver
 	pages        *pages.Pages
@@ -39,11 +41,12 @@ type Middleware struct {
 	logger       *slog.Logger
 }
 
-func New(oauth *oauth.OAuth, db *db.DB, enforcer *rbac.Enforcer, repoResolver *reporesolver.RepoResolver, idResolver *idresolver.Resolver, pages *pages.Pages, rdb *cache.Cache, logger *slog.Logger) Middleware {
+func New(oauth *oauth.OAuth, db *db.DB, enforcer *rbac.Enforcer, acl *knotacl.Service, repoResolver *reporesolver.RepoResolver, idResolver *idresolver.Resolver, pages *pages.Pages, rdb *cache.Cache, logger *slog.Logger) Middleware {
 	return Middleware{
 		oauth:        oauth,
 		db:           db,
 		enforcer:     enforcer,
+		acl:          acl,
 		repoResolver: repoResolver,
 		idResolver:   idResolver,
 		pages:        pages,
@@ -173,8 +176,7 @@ func (mw Middleware) RepoPermissionMiddleware(requiredPerm string) middlewareFun
 				return
 			}
 
-			ok, err := mw.enforcer.E.Enforce(actor.Did, f.Knot, f.RepoIdentifier(), requiredPerm)
-			if err != nil || !ok {
+			if !mw.acl.HasRepoPermission(r.Context(), f, actor.Did, requiredPerm) {
 				l.Warn("permission denied", "did", actor.Did, "perm", requiredPerm, "repo", f.RepoIdentifier())
 				http.Error(w, "Forbidden", http.StatusUnauthorized)
 				return

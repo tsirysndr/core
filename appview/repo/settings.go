@@ -448,39 +448,13 @@ func (rp *Repo) accessSettings(w http.ResponseWriter, r *http.Request) {
 	l := rp.logger.With("handler", "accessSettings")
 
 	f, err := rp.repoResolver.Resolve(r)
+	if err != nil {
+		l.Error("failed to resolve repo", "err", err)
+		return
+	}
 	user := rp.oauth.GetMultiAccountUser(r)
 
-	collaborators, err := func(repo *models.Repo) ([]pages.Collaborator, error) {
-		repoCollaborators, err := rp.enforcer.E.GetImplicitUsersForResourceByDomain(repo.RepoIdentifier(), repo.Knot)
-		if err != nil {
-			return nil, err
-		}
-		var collaborators []pages.Collaborator
-		for _, item := range repoCollaborators {
-			// currently only two roles: owner and member
-			var role string
-			switch item[3] {
-			case "repo:owner":
-				role = "owner"
-			case "repo:collaborator":
-				role = "collaborator"
-			default:
-				continue
-			}
-
-			did := item[0]
-
-			c := pages.Collaborator{
-				Did:  did,
-				Role: role,
-			}
-			collaborators = append(collaborators, c)
-		}
-		return collaborators, nil
-	}(f)
-	if err != nil {
-		l.Error("failed to get collaborators", "err", err)
-	}
+	collaborators := rp.acl.Collaborators(r.Context(), f)
 
 	rp.pages.RepoAccessSettings(w, pages.RepoAccessSettingsParams{
 		LoggedInUser:  user,

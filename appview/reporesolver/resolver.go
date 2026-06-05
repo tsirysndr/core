@@ -13,10 +13,10 @@ import (
 	"tangled.org/core/appview/cache"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
+	"tangled.org/core/appview/knotacl"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages/repoinfo"
-	"tangled.org/core/rbac"
 )
 
 var (
@@ -25,14 +25,14 @@ var (
 )
 
 type RepoResolver struct {
-	config   *config.Config
-	enforcer *rbac.Enforcer
-	execer   db.Execer
-	rdb      *cache.Cache
+	config *config.Config
+	acl    *knotacl.Service
+	execer db.Execer
+	rdb    *cache.Cache
 }
 
-func New(config *config.Config, enforcer *rbac.Enforcer, execer db.Execer, rdb *cache.Cache) *RepoResolver {
-	return &RepoResolver{config: config, enforcer: enforcer, execer: execer, rdb: rdb}
+func New(config *config.Config, acl *knotacl.Service, execer db.Execer, rdb *cache.Cache) *RepoResolver {
+	return &RepoResolver{config: config, acl: acl, execer: execer, rdb: rdb}
 }
 
 func CanonicalRepoPath(handle string, repo *models.Repo) string {
@@ -102,7 +102,7 @@ func (rr *RepoResolver) GetRepoInfo(r *http.Request, user *oauth.MultiAccountUse
 	roles := repoinfo.RolesInRepo{}
 	if user != nil {
 		isStarred = db.GetStarStatus(rr.execer, user.Did, repoDid)
-		roles.Roles = rr.enforcer.GetPermissionsInRepo(user.Did, repo.Knot, repo.RepoIdentifier())
+		roles = rr.acl.RolesInRepo(r.Context(), repo, user.Did)
 	}
 
 	stats := repo.RepoStats

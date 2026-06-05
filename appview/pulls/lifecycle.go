@@ -6,7 +6,6 @@ import (
 
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
-	"tangled.org/core/appview/pages/repoinfo"
 	"tangled.org/core/appview/reporesolver"
 	"tangled.org/core/orm"
 
@@ -36,7 +35,7 @@ func (s *Pulls) ClosePull(w http.ResponseWriter, r *http.Request) {
 	l = l.With("pull_id", pull.PullId, "pull_owner", pull.OwnerDid)
 
 	// auth filter: only owner or collaborators can close
-	roles := repoinfo.RolesInRepo{Roles: s.enforcer.GetPermissionsInRepo(user.Did, f.Knot, f.RepoIdentifier())}
+	roles := s.acl.RolesInRepo(r.Context(), f, user.Did)
 	isOwner := roles.IsOwner()
 	isCollaborator := roles.IsCollaborator()
 	isPullAuthor := user.Did == pull.OwnerDid
@@ -113,7 +112,7 @@ func (s *Pulls) ReopenPull(w http.ResponseWriter, r *http.Request) {
 	l = l.With("pull_id", pull.PullId, "pull_owner", pull.OwnerDid, "state", pull.State)
 
 	// auth filter: only owner or collaborators can close
-	roles := repoinfo.RolesInRepo{Roles: s.enforcer.GetPermissionsInRepo(user.Did, f.Knot, f.RepoIdentifier())}
+	roles := s.acl.RolesInRepo(r.Context(), f, user.Did)
 	isOwner := roles.IsOwner()
 	isCollaborator := roles.IsCollaborator()
 	isPullAuthor := user.Did == pull.OwnerDid

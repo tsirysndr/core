@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/issues"
+	"tangled.org/core/appview/knotacl"
 	"tangled.org/core/appview/knots"
 	"tangled.org/core/appview/labels"
 	"tangled.org/core/appview/metrics"
@@ -33,6 +34,7 @@ func (s *State) Router() http.Handler {
 		s.oauth,
 		s.db,
 		s.enforcer,
+		s.aclService,
 		s.repoResolver,
 		s.idResolver,
 		s.pages,
@@ -41,6 +43,7 @@ func (s *State) Router() http.Handler {
 	)
 
 	router.Use(metrics.Middleware)
+	router.Use(knotacl.MemoMiddleware)
 
 	if err := db.ReapStaleRunningMigrations(context.Background(), s.db); err != nil {
 		s.logger.Warn("failed to reap stale running migrations", "err", err)
@@ -311,6 +314,7 @@ func (s *State) KnotsRouter() http.Handler {
 		Pages:      s.pages,
 		Config:     s.config,
 		Enforcer:   s.enforcer,
+		Acl:        s.aclService,
 		IdResolver: s.idResolver,
 		Knotstream: s.knotstream,
 		Logger:     logger,
@@ -338,7 +342,7 @@ func (s *State) IssuesRouter(mw *middleware.Middleware) http.Handler {
 	issues := issues.New(
 		s.oauth,
 		s.repoResolver,
-		s.enforcer,
+		s.aclService,
 		s.pages,
 		s.idResolver,
 		s.mentionsResolver,
@@ -362,7 +366,7 @@ func (s *State) PullsRouter(mw *middleware.Middleware) http.Handler {
 		s.db,
 		s.config,
 		s.notifier,
-		s.enforcer,
+		s.aclService,
 		s.validator,
 		s.indexer.Pulls,
 		log.SubLogger(s.logger, "pulls"),
@@ -381,6 +385,7 @@ func (s *State) RepoRouter(mw *middleware.Middleware) http.Handler {
 		s.config,
 		s.notifier,
 		s.enforcer,
+		s.aclService,
 		log.SubLogger(s.logger, "repo"),
 		s.validator,
 		s.cfClient,

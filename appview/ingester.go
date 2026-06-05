@@ -27,6 +27,7 @@ import (
 	"tangled.org/core/appview/cache"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
+	"tangled.org/core/appview/knotacl"
 	"tangled.org/core/appview/mentions"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
@@ -42,6 +43,7 @@ type Ingester struct {
 	Ctx              context.Context
 	Db               *db.DB
 	Enforcer         *rbac.Enforcer
+	Acl              *knotacl.Service
 	IdResolver       *idresolver.Resolver
 	Cache            *cache.Cache
 	Config           *config.Config
@@ -116,7 +118,7 @@ func (i *Ingester) Ingest() processFunc {
 			case tangled.LabelDefinitionNSID:
 				err = i.ingestLabelDefinition(e, l)
 			case tangled.LabelOpNSID:
-				err = i.ingestLabelOp(e, l)
+				err = i.ingestLabelOp(ctx, e, l)
 			case tangled.RepoNSID:
 				err = i.ingestRepo(ctx, e, l)
 			}
@@ -458,9 +460,12 @@ func (i *Ingester) ingestArtifact(ctx context.Context, e *jmodels.Event, l *slog
 			return fmt.Errorf("artifact record has neither valid repoDid nor repo field")
 		}
 
-		ok, err := i.Enforcer.E.Enforce(did, repo.Knot, repo.RepoIdentifier(), "repo:push")
-		if err != nil || !ok {
-			return err
+		allowed, permErr := i.Acl.HasRepoPermissionErr(ctx, repo, did, "repo:push")
+		if permErr != nil {
+			l.Warn("ingesting artifact without permission check", "did", did, "repo", repo.RepoIdentifier(), "err", permErr)
+		} else if !allowed {
+			l.Info("skipping unauthorized artifact", "did", did, "repo", repo.RepoIdentifier())
+			return nil
 		}
 
 		repoDid := repo.RepoDid
@@ -473,8 +478,8 @@ func (i *Ingester) ingestArtifact(ctx context.Context, e *jmodels.Event, l *slog
 			}
 		}
 
-		createdAt, err := time.Parse(time.RFC3339, record.CreatedAt)
-		if err != nil {
+		createdAt, parseErr := time.Parse(time.RFC3339, record.CreatedAt)
+		if parseErr != nil {
 			createdAt = time.Now()
 		}
 
@@ -1778,7 +1783,7 @@ func (i *Ingester) ingestLabelDefinition(e *jmodels.Event, l *slog.Logger) error
 	return nil
 }
 
-func (i *Ingester) ingestLabelOp(e *jmodels.Event, l *slog.Logger) error {
+func (i *Ingester) ingestLabelOp(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {
 	did := e.Did
 	rkey := e.Commit.RKey
 
@@ -1828,8 +1833,11 @@ func (i *Ingester) ingestLabelOp(e *jmodels.Event, l *slog.Logger) error {
 			if !ok {
 				return fmt.Errorf("failed to find label def for key: %s, expected: %q", o.OperandKey, slices.Collect(maps.Keys(actx.Defs)))
 			}
-			if err := i.Validator.ValidateLabelOp(def, repo, &o); err != nil {
-				return fmt.Errorf("failed to validate labelop: %w", err)
+			if err := i.Validator.ValidateLabelOp(ctx, def, repo, &o); err != nil {
+				if !errors.Is(err, knotacl.ErrKnotUnreachable) {
+					return fmt.Errorf("failed to validate labelop: %w", err)
+				}
+				l.Warn("ingesting labelop without permission check", "did", o.Did, "err", err)
 			}
 		}
 

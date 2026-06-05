@@ -15,9 +15,10 @@ import (
 	"tangled.org/core/appview/cloudflare"
 
 	"tangled.org/core/api/tangled"
-	"tangled.org/core/appview/compat113"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
+	"tangled.org/core/appview/knotacl"
+	"tangled.org/core/appview/knotcompat"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
 	"tangled.org/core/appview/oauth"
@@ -27,6 +28,7 @@ import (
 	"tangled.org/core/appview/sites"
 	"tangled.org/core/appview/validator"
 	xrpcclient "tangled.org/core/appview/xrpcclient"
+	"tangled.org/core/consts"
 	"tangled.org/core/eventconsumer"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/ogre"
@@ -52,6 +54,7 @@ type Repo struct {
 	spindlestream *eventconsumer.Consumer
 	db            *db.DB
 	enforcer      *rbac.Enforcer
+	acl           *knotacl.Service
 	notifier      notify.Notifier
 	logger        *slog.Logger
 	serviceAuth   *serviceauth.ServiceAuth
@@ -70,6 +73,7 @@ func New(
 	config *config.Config,
 	notifier notify.Notifier,
 	enforcer *rbac.Enforcer,
+	acl *knotacl.Service,
 	logger *slog.Logger,
 	validator *validator.Validator,
 	cfClient *cloudflare.Client,
@@ -84,6 +88,7 @@ func New(
 		db:            db,
 		notifier:      notifier,
 		enforcer:      enforcer,
+		acl:           acl,
 		logger:        logger,
 		validator:     validator,
 		cfClient:      cfClient,
@@ -754,6 +759,39 @@ func (rp *Repo) AddCollaborator(w http.ResponseWriter, r *http.Request) {
 	l = l.With("collaborator", collaboratorIdent.Handle)
 	l = l.With("knot", f.Knot)
 
+	if knotcompat.KnotHasCapability(r.Context(), f.Knot, rp.config.Core.Dev, consts.CapKnotACL) {
+		if f.RepoDid == "" {
+			fail("This repository is missing its DID and cannot manage collaborators.", nil)
+			return
+		}
+
+		client, err := rp.oauth.ServiceClient(
+			r,
+			oauth.WithService(f.Knot),
+			oauth.WithLxm(tangled.RepoAddCollaboratorNSID),
+			oauth.WithDev(rp.config.Core.Dev),
+		)
+		if err != nil {
+			fail("Failed to connect to knot server.", err)
+			return
+		}
+
+		err = tangled.RepoAddCollaborator(r.Context(), client, &tangled.RepoAddCollaborator_Input{
+			Repo:    f.RepoDid,
+			Subject: collaboratorIdent.DID.String(),
+		})
+		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+			l.Error("failed to call XRPC repo.addCollaborator", "xrpcerr", xrpcerr, "err", err)
+			rp.pages.Notice(w, errorId, xrpcerr.Error())
+			return
+		}
+
+		rp.acl.InvalidateCollaborators(f.Knot, f.RepoDid)
+
+		rp.pages.HxRefresh(w)
+		return
+	}
+
 	existing, err := db.GetCollaborators(rp.db,
 		orm.FilterEq("repo_did", f.RepoDid),
 		orm.FilterEq("subject_did", collaboratorIdent.DID.String()),
@@ -782,7 +820,7 @@ func (rp *Repo) AddCollaborator(w http.ResponseWriter, r *http.Request) {
 		Collection: tangled.RepoCollaboratorNSID,
 		Repo:       currentUser.Did,
 		Rkey:       rkey,
-		Record:     compat113.Collaborator(repoCollaboratorRecord(f, collaboratorIdent.DID.String(), createdAt)),
+		Record:     knotcompat.Collaborator(repoCollaboratorRecord(f, collaboratorIdent.DID.String(), createdAt)),
 	})
 	// invalid record
 	if err != nil {
@@ -853,6 +891,148 @@ func (rp *Repo) AddCollaborator(w http.ResponseWriter, r *http.Request) {
 	rp.pages.HxRefresh(w)
 }
 
+func (rp *Repo) RemoveCollaborator(w http.ResponseWriter, r *http.Request) {
+	user := rp.oauth.GetMultiAccountUser(r)
+	l := rp.logger.With("handler", "RemoveCollaborator")
+	l = l.With("did", user.Did)
+
+	f, err := rp.repoResolver.Resolve(r)
+	if err != nil {
+		l.Error("failed to get repo and knot", "err", err)
+		return
+	}
+
+	errorId := "collaborator-error"
+	fail := func(msg string, err error) {
+		l.Error(msg, "err", err)
+		rp.pages.Notice(w, errorId, msg)
+	}
+
+	collaborator := r.FormValue("collaborator")
+	if collaborator == "" {
+		fail("Invalid form.", nil)
+		return
+	}
+	collaborator = strings.TrimPrefix(collaborator, "@")
+
+	collaboratorIdent, err := rp.idResolver.ResolveIdent(r.Context(), collaborator)
+	if err != nil {
+		fail(fmt.Sprintf("'%s' is not a valid DID/handle.", collaborator), err)
+		return
+	}
+	l = l.With("collaborator", collaboratorIdent.Handle, "knot", f.Knot)
+
+	if collaboratorIdent.DID.String() == f.Did {
+		fail("Cannot remove the repository owner.", nil)
+		return
+	}
+
+	if knotcompat.KnotHasCapability(r.Context(), f.Knot, rp.config.Core.Dev, consts.CapKnotACL) {
+		if f.RepoDid == "" {
+			fail("This repository is missing its DID and cannot manage collaborators.", nil)
+			return
+		}
+
+		client, err := rp.oauth.ServiceClient(
+			r,
+			oauth.WithService(f.Knot),
+			oauth.WithLxm(tangled.RepoRemoveCollaboratorNSID),
+			oauth.WithDev(rp.config.Core.Dev),
+		)
+		if err != nil {
+			fail("Failed to connect to knot server.", err)
+			return
+		}
+
+		err = tangled.RepoRemoveCollaborator(r.Context(), client, &tangled.RepoRemoveCollaborator_Input{
+			Repo:    f.RepoDid,
+			Subject: collaboratorIdent.DID.String(),
+		})
+		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+			l.Error("failed to call XRPC repo.removeCollaborator", "xrpcerr", xrpcerr, "err", err)
+			rp.pages.Notice(w, errorId, xrpcerr.Error())
+			return
+		}
+
+		rp.acl.InvalidateCollaborators(f.Knot, f.RepoDid)
+
+		rp.pages.HxRefresh(w)
+		return
+	}
+
+	existing, err := db.GetCollaborators(rp.db,
+		orm.FilterEq("repo_did", f.RepoDid),
+		orm.FilterEq("subject_did", collaboratorIdent.DID.String()),
+	)
+	if err != nil {
+		fail("Failed to look up collaborator.", err)
+		return
+	}
+	if len(existing) == 0 {
+		fail(fmt.Sprintf("%s is not a collaborator.", collaboratorIdent.Handle), nil)
+		return
+	}
+	row := existing[0]
+
+	client, err := rp.oauth.AuthorizedClient(r)
+	if err != nil {
+		fail("Failed to write to PDS.", err)
+		return
+	}
+
+	tx, err := rp.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		fail("Failed to remove collaborator.", err)
+		return
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			tx.Rollback()
+			if err := rp.enforcer.E.LoadPolicy(); err != nil {
+				l.Error("failed to reload policy after rollback", "err", err)
+			}
+		}
+	}()
+
+	if err := rp.enforcer.RemoveCollaborator(collaboratorIdent.DID.String(), f.Knot, f.RepoIdentifier()); err != nil {
+		fail("Failed to remove collaborator permissions.", err)
+		return
+	}
+
+	if err := db.DeleteCollaborator(tx,
+		orm.FilterEq("repo_did", f.RepoDid),
+		orm.FilterEq("subject_did", collaboratorIdent.DID.String()),
+	); err != nil {
+		fail("Failed to remove collaborator.", err)
+		return
+	}
+
+	if row.Rkey.Valid && row.Rkey.String != "" {
+		if _, err := comatproto.RepoDeleteRecord(r.Context(), client, &comatproto.RepoDeleteRecord_Input{
+			Collection: tangled.RepoCollaboratorNSID,
+			Repo:       row.Did.String(),
+			Rkey:       row.Rkey.String,
+		}); err != nil {
+			fail("Failed to delete collaborator record from PDS.", err)
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		fail("Failed to remove collaborator.", err)
+		return
+	}
+	committed = true
+
+	if err := rp.enforcer.E.SavePolicy(); err != nil {
+		fail("Failed to update collaborator permissions.", err)
+		return
+	}
+
+	rp.pages.HxRefresh(w)
+}
+
 func (rp *Repo) RenameRepo(w http.ResponseWriter, r *http.Request) {
 	l := rp.logger.With("handler", "RenameRepo")
 	noticeId := "rename-repo-error"
@@ -871,7 +1051,7 @@ func (rp *Repo) RenameRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !compat113.KnotSupports114(r.Context(), f.Knot, rp.config.Core.Dev) {
+	if !knotcompat.KnotSupports114(r.Context(), f.Knot, rp.config.Core.Dev) {
 		rp.pages.Notice(w, noticeId, "This repository's knot is below v1.14 and does not yet support renames. Ask the knot operator to upgrade.")
 		return
 	}
@@ -1242,11 +1422,7 @@ func (rp *Repo) ForkRepo(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		user := rp.oauth.GetMultiAccountUser(r)
-		knots, err := rp.enforcer.GetKnotsForUser(user.Did)
-		if err != nil {
-			rp.pages.Notice(w, "repo", "Invalid user account.")
-			return
-		}
+		knots := rp.acl.KnotsForUser(r.Context(), user.Did)
 
 		rp.pages.ForkRepo(w, pages.ForkRepoParams{
 			LoggedInUser: user,
@@ -1264,8 +1440,7 @@ func (rp *Repo) ForkRepo(w http.ResponseWriter, r *http.Request) {
 		}
 		l = l.With("targetKnot", targetKnot)
 
-		ok, err := rp.enforcer.E.Enforce(user.Did, targetKnot, targetKnot, "repo:create")
-		if err != nil || !ok {
+		if !rp.acl.IsRepoCreateAllowed(r.Context(), targetKnot, user.Did) {
 			rp.pages.Notice(w, "repo", "You do not have permission to create a repo in this knot.")
 			return
 		}

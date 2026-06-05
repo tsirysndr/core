@@ -140,7 +140,7 @@ func (s *Pulls) applyCreationLabels(
 		valid := make([]models.LabelOp, 0, len(raw))
 		for _, op := range raw {
 			def := defs[op.OperandKey]
-			if err := s.validator.ValidateLabelOp(def, repo, &op); err != nil {
+			if err := s.validator.ValidateLabelOp(ctx, def, repo, &op); err != nil {
 				l.Warn("invalid label op", "err", err, "subject", op.Subject, "key", op.OperandKey)
 				continue
 			}

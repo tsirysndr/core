@@ -16,8 +16,10 @@ import (
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
+	"tangled.org/core/appview/knotcompat"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/sites"
+	"tangled.org/core/consts"
 	ec "tangled.org/core/eventconsumer"
 	"tangled.org/core/eventstream"
 	knotdb "tangled.org/core/knotserver/db"
@@ -88,12 +90,14 @@ func ingestRefUpdate(ctx context.Context, d *db.DB, enforcer *rbac.Enforcer, pc 
 		return err
 	}
 
-	knownKnots, err := enforcer.GetKnotsForUser(record.CommitterDid)
-	if err != nil {
-		return err
-	}
-	if !slices.Contains(knownKnots, source.Host) {
-		return fmt.Errorf("%s does not belong to %s, something is fishy", record.CommitterDid, source.Host)
+	if !knotcompat.KnotHasCapability(ctx, source.Host, dev, consts.CapKnotACL) {
+		knownKnots, err := enforcer.GetKnotsForUser(record.CommitterDid)
+		switch {
+		case err != nil:
+			logger.Warn("gitRefUpdate membership lookup failed, ingesting without the sanity check", "committer", record.CommitterDid, "knot", source.Host, "err", err)
+		case !slices.Contains(knownKnots, source.Host):
+			logger.Warn("gitRefUpdate committer is not a known member of the knot, ingesting anyway", "committer", record.CommitterDid, "knot", source.Host)
+		}
 	}
 
 	if record.Repo == "" {

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 
@@ -14,12 +13,15 @@ import (
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
+	"tangled.org/core/appview/knotacl"
+	"tangled.org/core/appview/knotcompat"
 	"tangled.org/core/appview/middleware"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/serververify"
 	"tangled.org/core/appview/xrpcclient"
+	"tangled.org/core/consts"
 	"tangled.org/core/eventconsumer"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/orm"
@@ -37,6 +39,7 @@ type Knots struct {
 	Pages      *pages.Pages
 	Config     *config.Config
 	Enforcer   *rbac.Enforcer
+	Acl        *knotacl.Service
 	IdResolver *idresolver.Resolver
 	Logger     *slog.Logger
 	Knotstream *eventconsumer.Consumer
@@ -119,13 +122,7 @@ func (k *Knots) dashboard(w http.ResponseWriter, r *http.Request) {
 	}
 	registration := registrations[0]
 
-	members, err := k.Enforcer.GetUserByRole("server:member", domain)
-	if err != nil {
-		l.Error("failed to get knot members", "err", err)
-		http.Error(w, "Not found", http.StatusInternalServerError)
-		return
-	}
-	slices.Sort(members)
+	members := k.Acl.KnotMembers(r.Context(), domain)
 
 	repos, err := db.GetRepos(
 		k.Db,
@@ -556,6 +553,34 @@ func (k *Knots) addMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if knotcompat.KnotHasCapability(r.Context(), domain, k.Config.Core.Dev, consts.CapKnotACL) {
+		client, err := k.OAuth.ServiceClient(
+			r,
+			oauth.WithService(domain),
+			oauth.WithLxm(tangled.KnotAddMemberNSID),
+			oauth.WithDev(k.Config.Core.Dev),
+		)
+		if err != nil {
+			l.Error("failed to create knot service client", "err", err)
+			fail()
+			return
+		}
+
+		err = tangled.KnotAddMember(r.Context(), client, &tangled.KnotAddMember_Input{
+			Subject: memberId.DID.String(),
+		})
+		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+			l.Error("failed to call XRPC knot.addMember", "xrpcerr", xrpcerr, "err", err)
+			k.Pages.Notice(w, noticeId, xrpcerr.Error())
+			return
+		}
+
+		k.Acl.InvalidateMembers(domain)
+
+		k.Pages.HxRedirect(w, fmt.Sprintf("/settings/knots/%s", domain))
+		return
+	}
+
 	client, err := k.OAuth.AuthorizedClient(r)
 	if err != nil {
 		l.Error("failed to authorize client", "err", err)
@@ -632,6 +657,34 @@ func (k *Knots) removeMember(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		l.Error("failed to resolve member identity to handle", "err", err)
 		k.Pages.Notice(w, noticeId, "Failed to remove member, identity resolution failed.")
+		return
+	}
+
+	if knotcompat.KnotHasCapability(r.Context(), domain, k.Config.Core.Dev, consts.CapKnotACL) {
+		client, err := k.OAuth.ServiceClient(
+			r,
+			oauth.WithService(domain),
+			oauth.WithLxm(tangled.KnotRemoveMemberNSID),
+			oauth.WithDev(k.Config.Core.Dev),
+		)
+		if err != nil {
+			l.Error("failed to create knot service client", "err", err)
+			fail()
+			return
+		}
+
+		err = tangled.KnotRemoveMember(r.Context(), client, &tangled.KnotRemoveMember_Input{
+			Subject: memberId.DID.String(),
+		})
+		if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
+			l.Error("failed to call XRPC knot.removeMember", "xrpcerr", xrpcerr, "err", err)
+			k.Pages.Notice(w, noticeId, xrpcerr.Error())
+			return
+		}
+
+		k.Acl.InvalidateMembers(domain)
+
+		k.Pages.HxRefresh(w)
 		return
 	}
 
