@@ -2158,6 +2158,17 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		`)
 		return err
 	})
+
+	orm.RunMigration(conn, logger, "add-knot-acl-native", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			create table if not exists knot_acl_native (
+				domain text primary key,
+				since text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+			);
+		`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,

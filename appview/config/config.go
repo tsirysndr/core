@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/sethvargo/go-envconfig"
+
+	"tangled.org/core/consts"
 )
 
 type CoreConfig struct {
@@ -104,6 +106,11 @@ func (p *PdsConfig) IsTnglShUser(pdsHost string) bool {
 	return strings.TrimRight(pdsHost, "/") == strings.TrimRight(p.Host, "/")
 }
 
+type KnotConfig struct {
+	Default     string `env:"DEFAULT"`
+	AdminSecret string `env:"ADMIN_SECRET"`
+}
+
 type R2Config struct {
 	AccessKeyID     string `env:"ACCESS_KEY_ID"`
 	SecretAccessKey string `env:"SECRET_ACCESS_KEY"`
@@ -183,6 +190,7 @@ type Config struct {
 	Redis         RedisConfig      `env:",prefix=TANGLED_REDIS_"`
 	Plc           PlcConfig        `env:",prefix=TANGLED_PLC_"`
 	Pds           PdsConfig        `env:",prefix=TANGLED_PDS_"`
+	Knot          KnotConfig       `env:",prefix=TANGLED_KNOT_"`
 	Cloudflare    Cloudflare       `env:",prefix=TANGLED_CLOUDFLARE_"`
 	Label         LabelConfig      `env:",prefix=TANGLED_LABEL_"`
 	Bluesky       BlueskyConfig    `env:",prefix=TANGLED_BLUESKY_"`
@@ -197,6 +205,10 @@ func LoadConfig(ctx context.Context) (*Config, error) {
 	err := envconfig.Process(ctx, &cfg)
 	if err != nil {
 		return nil, err
+	}
+
+	if cfg.Knot.Default == "" {
+		cfg.Knot.Default = consts.DefaultKnot
 	}
 
 	return &cfg, nil
