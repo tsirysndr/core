@@ -7,3 +7,7 @@ const (
 	DefaultSpindle = "spindle.tangled.sh"
 	DefaultKnot    = "knot1.tangled.sh"
 )
+
+type Capability string
+
+const CapKnotACL Capability = "knot-acl"

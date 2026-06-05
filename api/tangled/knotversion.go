@@ -16,7 +16,8 @@ const (
 
 // KnotVersion_Output is the output of a sh.tangled.knot.version call.
 type KnotVersion_Output struct {
-	Version string `json:"version" cborgen:"version"`
+	Version      string   `json:"version" cborgen:"version"`
+	Capabilities []string `json:"capabilities,omitempty" cborgen:"capabilities,omitempty"`
 }
 
 // KnotVersion calls the XRPC method "sh.tangled.knot.version".
