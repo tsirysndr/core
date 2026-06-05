@@ -1,4 +1,4 @@
-package compat113
+package knotcompat
 
 import (
 	"encoding/json"
