@@ -10,6 +10,7 @@ import (
 var (
 	ErrXrpcUnsupported  = errors.New("xrpc not supported on this knot")
 	ErrXrpcUnauthorized = errors.New("unauthorized xrpc request")
+	ErrXrpcForbidden    = errors.New("forbidden xrpc request")
 	ErrXrpcFailed       = errors.New("xrpc request failed")
 	ErrXrpcInvalid      = errors.New("invalid xrpc request")
 )
@@ -30,6 +31,8 @@ func HandleXrpcErr(err error) error {
 		return ErrXrpcUnsupported
 	case http.StatusUnauthorized:
 		return ErrXrpcUnauthorized
+	case http.StatusForbidden:
+		return ErrXrpcForbidden
 	default:
 		return ErrXrpcFailed
 	}
