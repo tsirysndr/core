@@ -6,26 +6,30 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/auth/oauth"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 	xrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-chi/chi/v5"
 	"github.com/posthog/posthog-go"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/db"
+	"tangled.org/core/appview/knotcompat"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/consts"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/orm"
 	"tangled.org/core/tid"
 )
+
+const knotAdminTimeout = 30 * time.Second
 
 func (o *OAuth) Router() http.Handler {
 	r := chi.NewRouter()
@@ -91,7 +95,7 @@ func (o *OAuth) callback(w http.ResponseWriter, r *http.Request) {
 
 	o.Logger.Debug("session saved successfully")
 
-	go o.addToDefaultKnot(sessData.AccountDID.String())
+	go o.addToDefaultKnot(sessData.AccountDID)
 	go o.addToDefaultSpindle(sessData.AccountDID.String())
 	go o.ensureTangledProfile(sessData)
 	go o.autoClaimTnglShDomain(sessData.AccountDID.String())
@@ -181,48 +185,123 @@ func (o *OAuth) addToDefaultSpindle(did string) {
 	l.Debug("successfully added to default spindle", "did", did)
 }
 
-func (o *OAuth) addToDefaultKnot(did string) {
+type onboardAction int
+
+const (
+	onboardViaAdminAPI onboardAction = iota
+	onboardViaRecord
+	onboardBlockedMissingSecret
+	onboardBlockedSecretSet
+)
+
+type defaultKnotState struct {
+	native         bool
+	adminSecretSet bool
+}
+
+func onboardActionFor(s defaultKnotState) onboardAction {
+	switch {
+	case s.native && s.adminSecretSet:
+		return onboardViaAdminAPI
+	case s.native:
+		return onboardBlockedMissingSecret
+	case s.adminSecretSet:
+		return onboardBlockedSecretSet
+	default:
+		return onboardViaRecord
+	}
+}
+
+func (o *OAuth) addToDefaultKnot(did syntax.DID) {
 	l := o.Logger.With("subject", did)
 
-	// use the tangled.sh app password to get an accessJwt
-	// and create an sh.tangled.spindle.member record with that
+	ctx := context.Background()
 
-	allKnots, err := o.Enforcer.GetKnotsForUser(did)
-	if err != nil {
-		l.Error("failed to get knot members for did", "err", err)
-		return
-	}
-
-	if slices.Contains(allKnots, consts.DefaultKnot) {
+	if o.Acl.IsKnotMember(ctx, o.Config.Knot.Default, did.String()) {
 		l.Warn("already a member of the default knot")
 		return
 	}
 
-	l.Debug("adding to default knot")
-	session, err := o.getAppPasswordSession()
+	native := knotcompat.KnotHasCapability(ctx, o.Config.Knot.Default, o.Config.Core.Dev, consts.CapKnotACL)
+
+	switch onboardActionFor(defaultKnotState{native: native, adminSecretSet: o.Config.Knot.AdminSecret != ""}) {
+	case onboardViaAdminAPI:
+		if err := o.addMemberViaKnotAdmin(ctx, o.Config.Knot.Default, did); err != nil {
+			l.Error("failed to add to default knot via admin api", "err", err)
+			return
+		}
+		o.Acl.InvalidateMembers(o.Config.Knot.Default)
+		l.Debug("successfully added to default knot via admin api")
+
+	case onboardBlockedMissingSecret:
+		l.Error("cannot add to default knot: knot admin secret not configured")
+
+	case onboardBlockedSecretSet:
+		l.Warn("default knot probe failed, skipping legacy fallback because an admin secret is configured")
+
+	case onboardViaRecord:
+		l.Debug("adding to default knot")
+		session, err := o.getAppPasswordSession()
+		if err != nil {
+			l.Error("failed to create session", "err", err)
+			return
+		}
+
+		record := tangled.KnotMember{
+			LexiconTypeID: tangled.KnotMemberNSID,
+			Subject:       did.String(),
+			Domain:        o.Config.Knot.Default,
+			CreatedAt:     time.Now().Format(time.RFC3339),
+		}
+
+		if err := session.putRecord(record, tangled.KnotMemberNSID); err != nil {
+			l.Error("failed to add to default knot", "err", err)
+			return
+		}
+
+		if err := o.Enforcer.AddKnotMember(o.Config.Knot.Default, did.String()); err != nil {
+			l.Error("failed to set up enforcer rules", "err", err)
+			return
+		}
+
+		l.Debug("successfully added to default knot")
+	}
+}
+
+func (o *OAuth) addMemberViaKnotAdmin(ctx context.Context, knotHost string, subject syntax.DID) error {
+	ctx, cancel := context.WithTimeout(ctx, knotAdminTimeout)
+	defer cancel()
+
+	scheme := "https://"
+	if o.Config.Core.Dev {
+		scheme = "http://"
+	}
+	endpoint := fmt.Sprintf("%s%s/admin/addMember", scheme, knotHost)
+
+	body, err := json.Marshal(tangled.KnotAddMember_Input{Subject: subject.String()})
 	if err != nil {
-		l.Error("failed to create session", "err", err)
-		return
+		return err
 	}
 
-	record := tangled.KnotMember{
-		LexiconTypeID: tangled.KnotMemberNSID,
-		Subject:       did,
-		Domain:        consts.DefaultKnot,
-		CreatedAt:     time.Now().Format(time.RFC3339),
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.SetBasicAuth("admin", o.Config.Knot.AdminSecret)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		msg, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("knot admin addMember returned status %d: %s", resp.StatusCode, bytes.TrimSpace(msg))
 	}
 
-	if err := session.putRecord(record, tangled.KnotMemberNSID); err != nil {
-		l.Error("failed to add to default knot", "err", err)
-		return
-	}
-
-	if err := o.Enforcer.AddKnotMember(consts.DefaultKnot, did); err != nil {
-		l.Error("failed to set up enforcer rules", "err", err)
-		return
-	}
-
-	l.Debug("successfully added to default knot")
+	return nil
 }
 
 func (o *OAuth) ensureTangledProfile(sessData *oauth.ClientSessionData) {
