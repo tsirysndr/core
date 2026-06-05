@@ -73,6 +73,14 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	eTag := fmt.Sprintf("\"%x\"", sha256.Sum256(contents))
+	if clientETag := r.Header.Get("If-None-Match"); clientETag == eTag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.Header().Set("ETag", eTag)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+
 	mimeType := http.DetectContentType(contents)
 	// override MIME types for formats that http.DetectContentType does not recognize
 	switch filepath.Ext(path) {
@@ -88,12 +96,6 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case strings.HasPrefix(mimeType, "image/"), strings.HasPrefix(mimeType, "video/"):
-		eTag := fmt.Sprintf("\"%x\"", sha256.Sum256(contents))
-		if clientETag := r.Header.Get("If-None-Match"); clientETag == eTag {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
-		w.Header().Set("ETag", eTag)
 		w.Header().Set("Content-Type", mimeType)
 
 	case strings.HasPrefix(mimeType, "text/") || isTextualMimeType(mimeType):
@@ -102,9 +104,8 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
 	default:
-		l.Error("attempted to serve disallowed file type", "mimetype", mimeType)
-		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InvalidRequest", Message: "only image, video, and text files can be accessed directly"})
-		return
+		// fallback to octet-stream
+		w.Header().Set("Content-Type", "application/octet-stream")
 	}
 	w.Write(contents)
 }
