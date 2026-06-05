@@ -3,42 +3,39 @@ package pipelines
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/middleware"
-	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/reporesolver"
-	"tangled.org/core/eventconsumer"
 	"tangled.org/core/hostutil"
 	"tangled.org/core/idresolver"
+	"tangled.org/core/lexutil"
 	"tangled.org/core/orm"
 	"tangled.org/core/rbac"
-	spindlemodel "tangled.org/core/spindle/models"
 
+	"github.com/bluesky-social/indigo/atproto/syntax"
+	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
 )
 
 type Pipelines struct {
-	repoResolver     *reporesolver.RepoResolver
-	idResolver       *idresolver.Resolver
-	config           *config.Config
-	oauth            *oauth.OAuth
-	pages            *pages.Pages
-	spindlestream    *eventconsumer.Consumer
-	pipelineNotifier *StatusNotifier
-	db               *db.DB
-	enforcer         *rbac.Enforcer
-	logger           *slog.Logger
+	repoResolver *reporesolver.RepoResolver
+	idResolver   *idresolver.Resolver
+	config       *config.Config
+	oauth        *oauth.OAuth
+	pages        *pages.Pages
+	db           *db.DB
+	enforcer     *rbac.Enforcer
+	logger       *slog.Logger
 }
 
 func (p *Pipelines) Router(mw *middleware.Middleware) http.Handler {
@@ -48,7 +45,7 @@ func (p *Pipelines) Router(mw *middleware.Middleware) http.Handler {
 	r.Get("/{pipeline}/workflow/{workflow}/logs", p.Logs)
 	r.
 		With(mw.RepoPermissionMiddleware("repo:owner")).
-		Post("/{pipeline}/workflow/{workflow}/cancel", p.Cancel)
+		Post("/{pipeline}/workflow/{workflow}/cancel", p.CancelWorkflow)
 
 	return r
 }
@@ -57,8 +54,6 @@ func New(
 	oauth *oauth.OAuth,
 	repoResolver *reporesolver.RepoResolver,
 	pages *pages.Pages,
-	spindlestream *eventconsumer.Consumer,
-	pipelineNotifier *StatusNotifier,
 	idResolver *idresolver.Resolver,
 	db *db.DB,
 	config *config.Config,
@@ -66,16 +61,14 @@ func New(
 	logger *slog.Logger,
 ) *Pipelines {
 	return &Pipelines{
-		oauth:            oauth,
-		repoResolver:     repoResolver,
-		pages:            pages,
-		idResolver:       idResolver,
-		config:           config,
-		spindlestream:    spindlestream,
-		pipelineNotifier: pipelineNotifier,
-		db:               db,
-		enforcer:         enforcer,
-		logger:           logger,
+		oauth:        oauth,
+		repoResolver: repoResolver,
+		pages:        pages,
+		idResolver:   idResolver,
+		config:       config,
+		db:           db,
+		enforcer:     enforcer,
+		logger:       logger,
 	}
 }
 
@@ -103,28 +96,20 @@ func (p *Pipelines) Index(w http.ResponseWriter, r *http.Request) {
 		filterKind = "all"
 	}
 
-	ps, err := db.GetPipelineStatuses(
-		p.db,
-		30,
-		filters...,
-	)
+	// sh.tangled.ci.queryPipelines(repo, kind, limit=30)
+	xrpcc := indigoxrpc.Client{Host: f.Spindle}
+	out, err := tangled.CiQueryPipelines(r.Context(), &xrpcc, nil, "", 1, f.RepoDid)
 	if err != nil {
-		l.Error("failed to query db", "err", err)
-		return
-	}
-
-	total, err := db.GetPipelineCount(p.db, filters...)
-	if err != nil {
-		l.Error("failed to query db", "err", err)
-		return
+		l.Error("failed to fetch pipelines", "err", err)
+		panic("unimplemented") // spindle failure, appview should not fail.
 	}
 
 	p.pages.Pipelines(w, pages.PipelinesParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:   p.repoResolver.GetRepoInfo(r, user),
-		Pipelines:  ps,
+		Pipelines:  out.Pipelines,
 		FilterKind: filterKind,
-		Total:      total,
+		Total:      out.Total,
 	})
 }
 
@@ -135,44 +120,57 @@ func (p *Pipelines) Workflow(w http.ResponseWriter, r *http.Request) {
 	f, err := p.repoResolver.Resolve(r)
 	if err != nil {
 		l.Error("failed to get repo and knot", "err", err)
+		p.pages.Error404(w)
 		return
 	}
 
-	pipelineId := chi.URLParam(r, "pipeline")
-	if pipelineId == "" {
-		l.Error("empty pipeline ID")
-		return
-	}
-
-	workflow := chi.URLParam(r, "workflow")
-	if workflow == "" {
-		l.Error("empty workflow name")
-		return
-	}
-
-	ps, err := db.GetPipelineStatuses(
-		p.db,
-		1,
-		orm.FilterEq("p.repo_did", f.RepoDid),
-		orm.FilterEq("p.id", pipelineId),
-	)
+	pipelineId, err := syntax.ParseTID(chi.URLParam(r, "pipeline"))
 	if err != nil {
-		l.Error("failed to query db", "err", err)
+		l.Debug("invalid pipeline id", "id", pipelineId)
+		p.pages.Error404(w)
 		return
 	}
 
-	if len(ps) != 1 {
-		l.Error("invalid number of pipelines", "len", len(ps))
+	workflowName := chi.URLParam(r, "workflow")
+	if workflowName == "" {
+		l.Debug("empty workflow name")
+		p.pages.Error404(w)
 		return
 	}
 
-	singlePipeline := ps[0]
+	l = l.With("pipeline", pipelineId, "workflow", workflowName)
+
+	// TODO: change url path to:
+	// /{owner}/{slug}/pipelines/{spindle-did}/{pipeline-id}/workflow/{workflow-id}
+
+	xrpcc := &indigoxrpc.Client{Host: f.Spindle}
+	out, err := tangled.CiGetPipeline(r.Context(), xrpcc, pipelineId.String())
+	if err != nil {
+		// TODO(boltless): change behavior based on error
+		l.Debug("failed to get pipeline", "err", err)
+		p.pages.Error404(w)
+		return
+	}
+
+	// ensure workflow exists
+	exist := false
+	for _, workflow := range out.Workflows {
+		if workflow.Name == workflowName {
+			exist = true
+			break
+		}
+	}
+	if !exist {
+		l.Debug("workflow doesn't exist in pipeline")
+		p.pages.Error404(w)
+		return
+	}
 
 	p.pages.Workflow(w, pages.WorkflowParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:   p.repoResolver.GetRepoInfo(r, user),
-		Pipeline:   singlePipeline,
-		Workflow:   workflow,
+		Pipeline:   out,
+		Workflow:   workflowName,
 	})
 }
 
@@ -180,6 +178,25 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 }
+
+type webLogScheduler struct {
+	ch chan *tangled.CiPipelineSubscribeLogs_Event
+}
+
+var _ lexutil.Scheduler[tangled.CiPipelineSubscribeLogs_Event] = (*webLogScheduler)(nil)
+
+// AddWork implements [lexutil.Scheduler].
+func (w *webLogScheduler) AddWork(ctx context.Context, _ string, val *tangled.CiPipelineSubscribeLogs_Event) error {
+	select {
+	case w.ch <- val:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// Shutdown implements [lexutil.Scheduler].
+func (w *webLogScheduler) Shutdown() { close(w.ch) }
 
 func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 	l := p.logger.With("handler", "logs")
@@ -191,76 +208,91 @@ func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pipelineId := chi.URLParam(r, "pipeline")
-	workflow := chi.URLParam(r, "workflow")
-	if pipelineId == "" || workflow == "" {
-		http.Error(w, "missing pipeline ID or workflow", http.StatusBadRequest)
-		return
-	}
-
-	ps, err := db.GetPipelineStatuses(
-		p.db,
-		1,
-		orm.FilterEq("p.repo_did", f.RepoDid),
-		orm.FilterEq("p.id", pipelineId),
-	)
-	if err != nil || len(ps) != 1 {
-		l.Error("pipeline query failed", "err", err, "count", len(ps))
-		http.Error(w, "pipeline not found", http.StatusNotFound)
-		return
-	}
-
-	singlePipeline := ps[0]
-	spindle := f.Spindle
-	knot := f.Knot
-	rkey := singlePipeline.Rkey
-
-	statusCh := p.pipelineNotifier.Subscribe(singlePipeline.AtUri())
-	defer p.pipelineNotifier.Unsubscribe(singlePipeline.AtUri(), statusCh)
-
-	if spindle == "" || knot == "" || rkey == "" {
+	if f.Spindle == "" {
 		http.Error(w, "invalid repo info", http.StatusBadRequest)
 		return
 	}
 
-	url := SpindleURL(spindle, knot, rkey, workflow)
-	if url == "" {
-		http.Error(w, "invalid spindle hostname", http.StatusBadRequest)
+	pipelineId, err := syntax.ParseTID(chi.URLParam(r, "pipeline"))
+	if err != nil {
+		l.Debug("invalid pipeline id", "id", pipelineId)
+		http.Error(w, "invalid pipeline id", http.StatusBadRequest)
 		return
 	}
-	l = l.With("url", url)
+
+	workflowName := chi.URLParam(r, "workflow")
+	if workflowName == "" {
+		l.Debug("empty workflow name")
+		http.Error(w, "invalid workflow name", http.StatusBadRequest)
+		return
+	}
 
 	clientConn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		l.Error("websocket upgrade failed", "err", err)
 		return
 	}
-	defer func() {
-		_ = clientConn.WriteControl(
-			websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.CloseNormalClosure, "log stream complete"),
-			time.Now().Add(time.Second),
-		)
-		clientConn.Close()
-	}()
+	defer clientConn.Close()
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
-	l.Info("logs endpoint hit")
+	evChan := make(chan *tangled.CiPipelineSubscribeLogs_Event, 100)
+	done := make(chan error, 1)
+	sched := &webLogScheduler{ch: evChan}
+	xrpcc := &lexutil.Client{Client: indigoxrpc.Client{Host: f.Spindle}}
+	go func() {
+		done <- tangled.CiPipelineSubscribeLogs(ctx, xrpcc, pipelineId.String(), []string{workflowName}, sched)
+	}()
 
-	spindleConn, _, err := websocket.DefaultDialer.Dial(url, nil)
-	if err != nil {
-		l.Error("websocket dial failed", "err", err)
-		return
-	}
-	defer spindleConn.Close()
+	var lastWriteLk sync.Mutex
+	lastWrite := time.Now()
 
-	// create a channel for incoming messages
-	evChan := make(chan LogEvent, 100)
-	// start a goroutine to read from spindle
-	go ReadLogs(spindleConn, evChan)
+	// Start a goroutine to ping the client periodically to check if it's still
+	// alive. If the client doesn't respond to a ping within 5 seconds, we'll
+	// close the connection and teardown the consumer.
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				lastWriteLk.Lock()
+				lw := lastWrite
+				lastWriteLk.Unlock()
+				if time.Since(lw) < 30*time.Second {
+					continue
+				}
+				if err := clientConn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+					l.Warn("failed to ping client", "err", err)
+					cancel()
+					return
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 
+	clientConn.SetPingHandler(func(message string) error {
+		err := clientConn.WriteControl(websocket.PongMessage, []byte(message), time.Now().Add(60*time.Second))
+		if err == websocket.ErrCloseSent {
+			return nil
+		}
+		return err
+	})
+
+	// Start a goroutine to read messages from the client and discard them.
+	go func() {
+		for {
+			if _, _, err := clientConn.ReadMessage(); err != nil {
+				cancel()
+				return
+			}
+		}
+	}()
+
+	// Main loop: sole writer of data frames to the client.
 	stepStartTimes := make(map[int]time.Time)
 	stepAnsi := make(map[int]*ansiState)
 	var fragment bytes.Buffer
@@ -272,61 +304,55 @@ func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 
 		case ev, ok := <-evChan:
 			if !ok {
-				continue
-			}
-
-			if ev.Err != nil && ev.IsCloseError() {
-				l.Debug("graceful shutdown, tail complete", "err", err)
+				// Stream ended: Shutdown closed the upstream channel.
+				if err := <-done; !isExpectedClose(err) {
+					l.Error("spindle stream error", "err", err)
+				}
 				return
-			}
-			if ev.Err != nil {
-				l.Error("error reading from spindle", "err", err)
-				return
-			}
-
-			var logLine spindlemodel.LogLine
-			if err = json.Unmarshal(ev.Msg, &logLine); err != nil {
-				l.Error("failed to parse logline", "err", err)
-				continue
 			}
 
 			fragment.Reset()
 
-			switch logLine.Kind {
-			case spindlemodel.LogKindControl:
-				switch logLine.StepStatus {
-				case spindlemodel.StepStatusStart:
-					stepStartTimes[logLine.StepId] = logLine.Time
-					collapsed := false
-					if logLine.StepKind == spindlemodel.StepKindSystem {
-						collapsed = true
-					}
+			switch {
+			case ev.Error != nil:
+				l.Error("spindle error frame", "err", ev.Error.Error, "msg", ev.Error.Message)
+				return
+
+			case ev.Control != nil:
+				c := ev.Control
+				step := int(c.Step)
+				switch derefStr(c.Status) {
+				case "start":
+					t := parseRFC3339(c.Time)
+					stepStartTimes[step] = t
+					// "system" steps are injected by the CI runner; collapse them.
+					collapsed := derefStr(c.Kind) == "system"
 					err = p.pages.LogBlock(&fragment, pages.LogBlockParams{
-						Id:        logLine.StepId,
-						Name:      logLine.Content,
-						Command:   logLine.StepCommand,
+						Id:        step,
+						Name:      c.Content,
+						Command:   derefStr(c.Command),
 						Collapsed: collapsed,
-						StartTime: logLine.Time,
+						StartTime: t,
 					})
-				case spindlemodel.StepStatusEnd:
-					startTime := stepStartTimes[logLine.StepId]
-					endTime := logLine.Time
+				case "end":
 					err = p.pages.LogBlockEnd(&fragment, pages.LogBlockEndParams{
-						Id:        logLine.StepId,
-						StartTime: startTime,
-						EndTime:   endTime,
+						Id:        step,
+						StartTime: stepStartTimes[step],
+						EndTime:   parseRFC3339(c.Time),
 					})
 				}
 
-			case spindlemodel.LogKindData:
-				ansi, ok := stepAnsi[logLine.StepId]
+			case ev.Data != nil:
+				d := ev.Data
+				step := int(d.Step)
+				ansi, ok := stepAnsi[step]
 				if !ok {
 					ansi = NewAnsiState()
-					stepAnsi[logLine.StepId] = ansi
+					stepAnsi[step] = ansi
 				}
 				err = p.pages.LogLine(&fragment, pages.LogLineParams{
-					Id:      logLine.StepId,
-					Content: ansi.Render(logLine.Content),
+					Id:      step,
+					Content: ansi.Render(d.Content),
 				})
 			}
 			if err != nil {
@@ -338,95 +364,48 @@ func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 				l.Error("error writing to client", "err", err)
 				return
 			}
-
-		case _, ok := <-statusCh:
-			if !ok {
-				continue
-			}
-			fresh, err := db.GetPipelineStatuses(
-				p.db,
-				1,
-				orm.FilterEq("p.repo_did", f.RepoDid),
-				orm.FilterEq("p.id", pipelineId),
-			)
-			if err != nil || len(fresh) == 0 {
-				continue
-			}
-			for name, ws := range fresh[0].Statuses {
-				fragment.Reset()
-				if err = p.pages.WorkflowSymbolOOB(&fragment, pages.WorkflowSymbolOOBParams{
-					Name:     name,
-					Statuses: ws,
-				}); err != nil {
-					l.Error("failed to render workflow symbol OOB", "err", err)
-					continue
-				}
-				if err = clientConn.WriteMessage(websocket.TextMessage, fragment.Bytes()); err != nil {
-					l.Error("error writing workflow symbol to client", "err", err)
-					return
-				}
-			}
-
-		case <-time.After(30 * time.Second):
-			l.Debug("sent keepalive")
-			if err = clientConn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(time.Second)); err != nil {
-				l.Error("failed to write control", "err", err)
-				return
-			}
+			lastWriteLk.Lock()
+			lastWrite = time.Now()
+			lastWriteLk.Unlock()
 		}
 	}
 }
 
-func (p *Pipelines) Cancel(w http.ResponseWriter, r *http.Request) {
-	l := p.logger.With("handler", "Cancel")
-
-	var (
-		pipelineId = chi.URLParam(r, "pipeline")
-		workflow   = chi.URLParam(r, "workflow")
-	)
-	if pipelineId == "" || workflow == "" {
-		http.Error(w, "missing pipeline ID or workflow", http.StatusBadRequest)
-		return
-	}
+func (p *Pipelines) CancelWorkflow(w http.ResponseWriter, r *http.Request) {
+	l := p.logger.With("handler", "CancelWorkflow")
+	errorId := "workflow-error"
 
 	f, err := p.repoResolver.Resolve(r)
 	if err != nil {
 		l.Error("failed to get repo and knot", "err", err)
-		http.Error(w, "bad repo/knot", http.StatusBadRequest)
+		p.pages.Notice(w, errorId, "Failed to cancel workflow")
+		return
+	}
+	l = l.With("repo", f.RepoDid)
+
+	if f.Spindle == "" {
+		l.Debug("spindle is empty")
+		p.pages.Notice(w, errorId, "Failed to cancel workflow")
 		return
 	}
 
-	pipeline, err := func() (models.Pipeline, error) {
-		ps, err := db.GetPipelineStatuses(
-			p.db,
-			1,
-			orm.FilterEq("p.repo_did", f.RepoDid),
-			orm.FilterEq("p.id", pipelineId),
-		)
-		if err != nil {
-			return models.Pipeline{}, err
-		}
-		if len(ps) != 1 {
-			return models.Pipeline{}, fmt.Errorf("wrong pipeline count %d", len(ps))
-		}
-		return ps[0], nil
-	}()
+	pipelineId, err := syntax.ParseTID(chi.URLParam(r, "pipeline"))
 	if err != nil {
-		l.Error("pipeline query failed", "err", err)
-		http.Error(w, "pipeline not found", http.StatusNotFound)
-	}
-	var (
-		spindle = f.Spindle
-		knot    = f.Knot
-		rkey    = pipeline.Rkey
-	)
-
-	if spindle == "" || knot == "" || rkey == "" {
-		http.Error(w, "invalid repo info", http.StatusBadRequest)
+		l.Debug("invalid pipeline id", "id", pipelineId)
+		p.pages.Error404(w)
 		return
 	}
 
-	hostname, noTLS, err := hostutil.ParseHostname(spindle)
+	workflowName := chi.URLParam(r, "workflow")
+	if workflowName == "" {
+		l.Debug("empty workflow name")
+		p.pages.Error404(w)
+		return
+	}
+
+	l = l.With("pipeline", pipelineId, "workflow", workflowName)
+
+	hostname, noTLS, err := hostutil.ParseHostname(f.Spindle)
 	if err != nil {
 		http.Error(w, "invalid spindle hostname", http.StatusBadRequest)
 		return
@@ -440,20 +419,18 @@ func (p *Pipelines) Cancel(w http.ResponseWriter, r *http.Request) {
 		oauth.WithTimeout(time.Second*30), // workflow cleanup usually takes time
 	)
 
-	err = tangled.PipelineCancelPipeline(
+	if err := tangled.PipelineCancelPipeline(
 		r.Context(),
 		spindleClient,
 		&tangled.PipelineCancelPipeline_Input{
 			Repo:     string(f.RepoAt()),
-			Pipeline: pipeline.AtUri().String(),
-			Workflow: workflow,
+			Pipeline: pipelineId.String(),
+			Workflow: workflowName,
 		},
-	)
-	errorId := "workflow-error"
-	if err != nil {
+	); err != nil {
 		l.Error("failed to cancel workflow", "err", err)
 		p.pages.Notice(w, errorId, "Failed to cancel workflow")
 		return
 	}
-	l.Debug("canceled pipeline", "uri", pipeline.AtUri())
+	l.Debug("canceled workflow")
 }

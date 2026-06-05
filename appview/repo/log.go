@@ -11,7 +11,6 @@ import (
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/commitverify"
 	"tangled.org/core/appview/db"
-	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pages"
 	xrpcclient "tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/types"
@@ -178,7 +177,7 @@ func (rp *Repo) Log(w http.ResponseWriter, r *http.Request) {
 	for _, c := range xrpcResp.Commits {
 		shas = append(shas, c.Hash.String())
 	}
-	pipelines, err := getPipelineStatuses(rp.db, f, shas)
+	pipelines, err := getPipelineStatuses(r.Context(), f, shas)
 	if err != nil {
 		l.Error("failed to getPipelineStatuses", "err", err)
 		// non-fatal
@@ -250,14 +249,14 @@ func (rp *Repo) Commit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := rp.oauth.GetMultiAccountUser(r)
-	pipelines, err := getPipelineStatuses(rp.db, f, []string{result.Diff.Commit.This})
+	pipelines, err := getPipelineStatuses(r.Context(), f, []string{result.Diff.Commit.This})
 	if err != nil {
 		l.Error("failed to getPipelineStatuses", "err", err)
 		// non-fatal
 	}
-	var pipeline *models.Pipeline
+	var pipeline *tangled.CiDefs_Pipeline
 	if p, ok := pipelines[result.Diff.Commit.This]; ok {
-		pipeline = &p
+		pipeline = p
 	}
 
 	rp.pages.RepoCommit(w, pages.RepoCommitParams{

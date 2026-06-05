@@ -154,6 +154,8 @@ func (s *State) UserRouter(mw *middleware.Middleware) http.Handler {
 	r := chi.NewRouter()
 	r.Use(mw.InjectBaseParams)
 
+	// TODO: workflow status update requests (30s polling)
+
 	r.With(mw.ResolveIdent()).Route("/{user}", func(r chi.Router) {
 		r.Get("/", s.Profile)
 		r.Get("/feed.atom", s.AtomFeedPage)
@@ -407,7 +409,6 @@ func (s *State) RepoRouter(mw *middleware.Middleware) http.Handler {
 		s.oauth,
 		s.repoResolver,
 		s.pages,
-		s.spindlestream,
 		s.idResolver,
 		s.db,
 		s.config,
@@ -426,8 +427,6 @@ func (s *State) PipelinesRouter(mw *middleware.Middleware) http.Handler {
 		s.oauth,
 		s.repoResolver,
 		s.pages,
-		s.spindlestream,
-		s.pipelineNotifier,
 		s.idResolver,
 		s.db,
 		s.config,

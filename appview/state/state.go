@@ -31,7 +31,6 @@ import (
 	whnotify "tangled.org/core/appview/notify/webhook"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
-	"tangled.org/core/appview/pipelines"
 	pipelinessh "tangled.org/core/appview/pipelines/ssh"
 	"tangled.org/core/appview/reporesolver"
 	"tangled.org/core/appview/repoverify"
@@ -71,8 +70,6 @@ type State struct {
 	repoResolver     *reporesolver.RepoResolver
 	aclService       *knotacl.Service
 	knotstream       *eventconsumer.Consumer
-	spindlestream    *eventconsumer.Consumer
-	pipelineNotifier *pipelines.StatusNotifier
 	logger           *slog.Logger
 	cfClient         *cloudflare.Client
 	codesearch       *codesearch.CodeSearch
@@ -220,14 +217,6 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 	}
 	knotstream.Start(ctx)
 
-	pipelineNotifier := pipelines.NewStatusNotifier()
-
-	spindlestream, err := Spindlestream(ctx, config, d, enforcer, pipelineNotifier)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start spindlestream consumer: %w", err)
-	}
-	spindlestream.Start(ctx)
-
 	state := &State{
 		db:               d,
 		notifier:         notifier,
@@ -244,8 +233,6 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 		repoResolver:     repoResolver,
 		aclService:       aclService,
 		knotstream:       knotstream,
-		spindlestream:    spindlestream,
-		pipelineNotifier: pipelineNotifier,
 		logger:           logger,
 		cfClient:         cfClient,
 		codesearch:       &codesearch.CodeSearch{Host: config.CodeSearch.ZoektUrl},
@@ -263,7 +250,7 @@ func (s *State) Close() error {
 }
 
 func (s *State) NewSSHServer() *pipelinessh.Server {
-	return pipelinessh.New(s.db, s.config, s.pipelineNotifier, log.SubLogger(s.logger, "pipelinessh"))
+	return pipelinessh.New(s.db, s.config, log.SubLogger(s.logger, "pipelinessh"))
 }
 
 func (s *State) SecurityTxt(w http.ResponseWriter, r *http.Request) {

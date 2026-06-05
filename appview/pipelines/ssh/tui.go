@@ -1,7 +1,8 @@
 package ssh
 
 import (
-	"encoding/json"
+	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,11 +12,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/gorilla/websocket"
-	"tangled.org/core/appview/db"
-	"tangled.org/core/appview/models"
-	"tangled.org/core/appview/pipelines"
-	"tangled.org/core/orm"
-	spindlemodel "tangled.org/core/spindle/models"
+	"tangled.org/core/api/tangled"
+	extlexutil "tangled.org/core/lexutil"
 )
 
 var (
@@ -27,100 +25,104 @@ var (
 type tickMsg time.Time
 
 type statusUpdateMsg struct {
-	pipeline models.Pipeline
+	pipeline *tangled.CiDefs_Pipeline
 }
 
 type statusUpdateErrMsg struct{ err error }
 
 type pipelineModel struct {
-	renderer  *lipgloss.Renderer
-	server    *Server
-	pipeline  models.Pipeline
-	workflows []string
-	selected  int
-	logs      map[string]*workflowLogs
-	statusCh  chan struct{}
-	spinner   spinner.Model
-	width     int
-	height    int
+	renderer *lipgloss.Renderer
+	xrpcc    *extlexutil.Client
+	pipeline *tangled.CiDefs_Pipeline
+	selected int
+	logs     map[string]*workflowLogs
+
+	// pipeline log stream: cancel tears down the consumer goroutine on quit.
+	// the event/done channels are threaded through log messages, not stored here.
+	cancel     context.CancelFunc
+	streamDone bool
+	streamErr  error
+
+	spinner spinner.Model
+	width   int
+	height  int
 }
 
 type workflowLogs struct {
 	steps     []step
-	stepIndex map[int]int
+	stepIndex map[int64]int // stepId -> index map
 	vp        viewport.Model
 	ready     bool
-	done      bool
-	err       error
 }
 
-func newPipelineModel(renderer *lipgloss.Renderer, s *Server, pipeline models.Pipeline, width, height int) *pipelineModel {
-	workflows := pipeline.Workflows()
-	logs := make(map[string]*workflowLogs, len(workflows))
-	for _, wf := range workflows {
-		logs[wf] = &workflowLogs{stepIndex: make(map[int]int)}
+func newPipelineModel(renderer *lipgloss.Renderer, xrpcc *extlexutil.Client, pipeline *tangled.CiDefs_Pipeline, width, height int) *pipelineModel {
+	logs := make(map[string]*workflowLogs, len(pipeline.Workflows))
+	for _, wf := range pipeline.Workflows {
+		logs[wf.Name] = &workflowLogs{stepIndex: make(map[int64]int)}
 	}
-	statusCh := s.pipelineNotifier.Subscribe(pipeline.AtUri())
 	sp := spinner.New(spinner.WithSpinner(spinner.Line))
 	return &pipelineModel{
-		renderer:  renderer,
-		server:    s,
-		pipeline:  pipeline,
-		workflows: workflows,
-		logs:      logs,
-		statusCh:  statusCh,
-		spinner:   sp,
-		width:     width,
-		height:    height,
+		renderer: renderer,
+		xrpcc:    xrpcc,
+		pipeline: pipeline,
+		logs:     logs,
+		spinner:  sp,
+		width:    width,
+		height:   height,
 	}
 }
 
 func (m *pipelineModel) Init() tea.Cmd {
-	cmds := []tea.Cmd{tick(), m.spinner.Tick, m.waitForStatusUpdate(m.statusCh)}
-	for _, wf := range m.workflows {
-		cmds = append(cmds, m.connectCmd(wf))
-	}
-	return tea.Batch(cmds...)
+	return tea.Batch(tick(), m.spinner.Tick, m.subscribeCmd())
 }
 
 func tick() tea.Cmd {
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
-// waitForStatusUpdate blocks on the notifier channel, re-fetches pipeline statuses, and returns the result as a tea.Msg.
-func (m *pipelineModel) waitForStatusUpdate(ch chan struct{}) tea.Cmd {
-	knot := m.pipeline.Knot
-	rkey := m.pipeline.Rkey
+// subscribeCmd opens the ci.pipeline.subscribeLogs stream for current pipeline.
+// A consumer goroutine pushes decoded events onto the scheduler channel; the
+// returned command yields the first event into the bubbletea loop.
+func (m *pipelineModel) subscribeCmd() tea.Cmd {
+	// cancel existing subscriptions just in case
+	if m.cancel != nil {
+		m.cancel()
+	}
+	sched := newEventScheduler()
+	done := make(chan error, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cancel = cancel
+
+	pipelineId := m.pipeline.Id
+	go func() {
+		err := tangled.CiPipelineSubscribeLogs(ctx, m.xrpcc, pipelineId, nil, sched)
+		done <- err
+	}()
+
+	return readEventCmd(sched.ch, done)
+}
+
+func readEventCmd(events chan *tangled.CiPipelineSubscribeLogs_Event, done chan error) tea.Cmd {
 	return func() tea.Msg {
-		if _, ok := <-ch; !ok {
-			return nil
+		ev, ok := <-events
+		if !ok {
+			return logDoneMsg{err: <-done}
 		}
-		ps, err := db.GetPipelineStatuses(m.server.db, 1,
-			orm.FilterEq("p.knot", knot),
-			orm.FilterEq("p.rkey", rkey),
-		)
-		if err != nil || len(ps) == 0 {
-			return statusUpdateErrMsg{err: fmt.Errorf("refreshing pipeline: %w", err)}
-		}
-		return statusUpdateMsg{pipeline: ps[0]}
+		return logEventMsg{ev: ev, events: events, done: done}
 	}
 }
 
-// connectCmd dials the spindle websocket for the given workflow and starts streaming log events.
-func (m *pipelineModel) connectCmd(workflow string) tea.Cmd {
+// fetchStatusCmd re-fetches the pipeline
+func (m *pipelineModel) fetchStatusCmd() tea.Cmd {
+	pipelineId := m.pipeline.Id
 	return func() tea.Msg {
-		ws, ok := m.pipeline.Statuses[workflow]
-		if !ok || len(ws.Data) == 0 {
-			return logDoneMsg{workflow: workflow}
-		}
-		url := pipelines.SpindleURL(ws.Data[0].Spindle, m.pipeline.Knot, m.pipeline.Rkey, workflow)
-		conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		out, err := tangled.CiGetPipeline(ctx, m.xrpcc, pipelineId)
 		if err != nil {
-			return logDoneMsg{workflow: workflow, err: fmt.Errorf("connecting to spindle: %w", err)}
+			return statusUpdateErrMsg{err: fmt.Errorf("refreshing pipeline: %w", err)}
 		}
-		ch := make(chan pipelines.LogEvent, 100)
-		go pipelines.ReadLogs(conn, ch)
-		return readNextLogEvent(workflow, conn, ch)
+		return statusUpdateMsg{pipeline: out}
 	}
 }
 
@@ -153,6 +155,8 @@ func (m *pipelineModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resizeViewports()
 
 	case tickMsg:
+		// re-render running workflows so elapsed times advance
+		m.refreshRunning()
 		return m, tick()
 
 	case spinner.TickMsg:
@@ -163,13 +167,15 @@ func (m *pipelineModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
-			m.server.pipelineNotifier.Unsubscribe(m.pipeline.AtUri(), m.statusCh)
+			if m.cancel != nil {
+				m.cancel()
+			}
 			return m, tea.Quit
 		case "tab", "right", "l":
-			m.selected = (m.selected + 1) % len(m.workflows)
+			m.selected = (m.selected + 1) % len(m.pipeline.Workflows)
 			return m, nil
 		case "shift+tab", "left", "h":
-			m.selected = (m.selected - 1 + len(m.workflows)) % len(m.workflows)
+			m.selected = (m.selected - 1 + len(m.pipeline.Workflows)) % len(m.pipeline.Workflows)
 			return m, nil
 		}
 		if wl := m.selectedLogs(); wl != nil && wl.ready {
@@ -193,48 +199,46 @@ func (m *pipelineModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case logEventMsg:
-		return m, m.handleLogEvent(msg)
+		m.applyEvent(msg.ev)
+		return m, readEventCmd(msg.events, msg.done)
 
 	case logDoneMsg:
-		if wl, ok := m.logs[msg.workflow]; ok {
-			wl.done, wl.err = true, msg.err
-			m.initViewport(wl)
-			wl.vp.SetContent(renderLogs(m.renderer, wl, m.width))
-			wl.vp.GotoBottom()
+		m.streamDone = true
+		if !isExpectedClose(msg.err) {
+			m.streamErr = msg.err
 		}
+		m.refreshAll()
+		// resolve final workflow statuses once now that the stream has ended
+		return m, m.fetchStatusCmd()
 
 	case statusUpdateMsg:
-		// detect any workflows that are new since the last update
-		known := make(map[string]bool, len(m.workflows))
-		for _, wf := range m.workflows {
-			known[wf] = true
-		}
 		m.pipeline = msg.pipeline
-		var newCmds []tea.Cmd
-		for _, wf := range msg.pipeline.Workflows() {
-			if !known[wf] {
-				m.workflows = append(m.workflows, wf)
-				m.logs[wf] = &workflowLogs{stepIndex: make(map[int]int)}
-				newCmds = append(newCmds, m.connectCmd(wf))
+		known := make(map[string]bool, len(m.pipeline.Workflows))
+		for _, wf := range m.pipeline.Workflows {
+			known[wf.Name] = true
+		}
+		for name := range m.logs {
+			if !known[name] {
+				delete(m.logs, name)
 			}
 		}
-		// re-subscribe for the next update
-		newCmds = append(newCmds, m.waitForStatusUpdate(m.statusCh))
-		return m, tea.Batch(newCmds...)
+		if m.selected >= len(m.pipeline.Workflows) {
+			m.selected = max(len(m.pipeline.Workflows)-1, 0)
+		}
+		m.refreshAll()
 
 	case statusUpdateErrMsg:
-		// re-subscribe even on error so we don't stop listening
-		return m, m.waitForStatusUpdate(m.statusCh)
+		// best-effort final status refresh; ignore failures
 	}
 
 	return m, nil
 }
 
 func (m *pipelineModel) selectedLogs() *workflowLogs {
-	if len(m.workflows) == 0 {
+	if len(m.pipeline.Workflows) < 1+m.selected {
 		return nil
 	}
-	return m.logs[m.workflows[m.selected]]
+	return m.logs[m.pipeline.Workflows[m.selected].Name]
 }
 
 func (m *pipelineModel) initViewport(wl *workflowLogs) {
@@ -245,57 +249,100 @@ func (m *pipelineModel) initViewport(wl *workflowLogs) {
 	wl.ready = true
 }
 
-// handleLogEvent processes a single log event, updates the step state, and re-renders the viewport.
-func (m *pipelineModel) handleLogEvent(msg logEventMsg) tea.Cmd {
-	wl, ok := m.logs[msg.workflow]
+// ensureWorkflow returns the log state for a workflow, lazily creating its routing entry.
+func (m *pipelineModel) ensureWorkflow(name string) *workflowLogs {
+	wl, ok := m.logs[name]
 	if !ok {
-		return nil
+		wl = &workflowLogs{stepIndex: make(map[int64]int)}
+		m.logs[name] = wl
 	}
-	if msg.ev.Err != nil {
-		wl.done = true
-		if !msg.ev.IsCloseError() {
-			wl.err = msg.ev.Err
-		}
-		m.initViewport(wl)
-		wl.vp.SetContent(renderLogs(m.renderer, wl, m.width))
-		return nil
-	}
-	var line spindlemodel.LogLine
-	if err := json.Unmarshal(msg.ev.Msg, &line); err != nil {
-		return readNextCmd(msg.workflow, msg.conn, msg.ch)
-	}
-	applyLogLine(wl, line)
+	return wl
+}
+
+// renderWorkflow re-renders a workflow's viewport, preserving bottom-stickiness.
+func (m *pipelineModel) renderWorkflow(wl *workflowLogs) {
 	m.initViewport(wl)
 	atBottom := wl.vp.AtBottom()
 	wl.vp.SetContent(renderLogs(m.renderer, wl, m.width))
 	if atBottom {
 		wl.vp.GotoBottom()
 	}
-	return readNextCmd(msg.workflow, msg.conn, msg.ch)
 }
 
-// applyLogLine mutates wl by appending the log line to the appropriate step.
-func applyLogLine(wl *workflowLogs, line spindlemodel.LogLine) {
-	switch line.Kind {
-	case spindlemodel.LogKindControl:
-		switch line.StepStatus {
-		case spindlemodel.StepStatusStart:
-			idx := len(wl.steps)
-			wl.stepIndex[line.StepId] = idx
-			wl.steps = append(wl.steps, step{
-				id: line.StepId, name: line.Content, command: line.StepCommand,
-				kind: line.StepKind, startTime: line.Time,
-			})
-		case spindlemodel.StepStatusEnd:
-			if idx, ok := wl.stepIndex[line.StepId]; ok {
-				wl.steps[idx].endTime, wl.steps[idx].finished = line.Time, true
+// refreshAll re-renders every initialized viewport.
+func (m *pipelineModel) refreshAll() {
+	for _, wl := range m.logs {
+		m.renderWorkflow(wl)
+	}
+}
+
+// refreshRunning re-renders workflows with unfinished steps so elapsed times advance.
+func (m *pipelineModel) refreshRunning() {
+	if m.streamDone {
+		return
+	}
+	for _, wl := range m.logs {
+		if !wl.ready {
+			continue
+		}
+		for i := range wl.steps {
+			if !wl.steps[i].finished {
+				m.renderWorkflow(wl)
+				break
 			}
 		}
-	case spindlemodel.LogKindData:
-		if idx, ok := wl.stepIndex[line.StepId]; ok {
-			wl.steps[idx].lines = append(wl.steps[idx].lines, line.Content)
+	}
+}
+
+// applyEvent routes a decoded subscribeLogs event into the matching workflow.
+func (m *pipelineModel) applyEvent(ev *tangled.CiPipelineSubscribeLogs_Event) {
+	switch {
+	case ev.Error != nil:
+		if ev.Error.Message != "" {
+			m.streamErr = fmt.Errorf("%s: %s", ev.Error.Error, ev.Error.Message)
+		} else {
+			m.streamErr = fmt.Errorf("%s", ev.Error.Error)
+		}
+
+	case ev.Control != nil:
+		c := ev.Control
+		wl := m.ensureWorkflow(c.Workflow)
+		switch derefStr(c.Status) {
+		case "start":
+			wl.stepIndex[c.Step] = len(wl.steps)
+			wl.steps = append(wl.steps, step{
+				id: c.Step, name: c.Content, command: derefStr(c.Command), startTime: parseRFC3339(c.Time),
+			})
+		case "end":
+			if idx, ok := wl.stepIndex[c.Step]; ok {
+				wl.steps[idx].endTime, wl.steps[idx].finished = parseRFC3339(c.Time), true
+			}
+		}
+		m.renderWorkflow(wl)
+
+	case ev.Data != nil:
+		d := ev.Data
+		wl := m.ensureWorkflow(d.Workflow)
+		if idx, ok := wl.stepIndex[d.Step]; ok {
+			wl.steps[idx].lines = append(wl.steps[idx].lines, d.Content)
+		}
+		m.renderWorkflow(wl)
+	}
+}
+
+// isExpectedClose reports whether err is a clean websocket close (or nil).
+func isExpectedClose(err error) bool {
+	if err == nil {
+		return true
+	}
+	var ce *websocket.CloseError
+	if errors.As(err, &ce) {
+		switch ce.Code {
+		case websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseAbnormalClosure:
+			return true
 		}
 	}
+	return false
 }
 
 // renderLogs builds the full log content string for a workflow, used as viewport content.
@@ -303,7 +350,6 @@ func renderLogs(r *lipgloss.Renderer, wl *workflowLogs, width int) string {
 	headerStyle := r.NewStyle().Foreground(colorFg).Bold(true)
 	cmdStyle := r.NewStyle().Foreground(colorBlue).Width(width)
 	dimStyle := r.NewStyle().Faint(true)
-	now := time.Now()
 	var sb strings.Builder
 	for i := range wl.steps {
 		st := &wl.steps[i]
@@ -311,7 +357,7 @@ func renderLogs(r *lipgloss.Renderer, wl *workflowLogs, width int) string {
 		if st.finished {
 			dur = st.endTime.Sub(st.startTime).Round(time.Millisecond).String()
 		} else if !st.startTime.IsZero() {
-			dur = now.Sub(st.startTime).Round(time.Second).String()
+			dur = time.Since(st.startTime).Round(time.Second).String()
 		}
 		// build overlay: "── name ──...── dur ──"
 		nameStr := headerStyle.Render(st.name + " ")
@@ -330,9 +376,6 @@ func renderLogs(r *lipgloss.Renderer, wl *workflowLogs, width int) string {
 		}
 		sb.WriteString("\n")
 	}
-	if wl.done && wl.err != nil {
-		sb.WriteString("error: " + wl.err.Error() + "\n")
-	}
 	return sb.String()
 }
 
@@ -340,6 +383,9 @@ func (m *pipelineModel) View() string {
 	body := ""
 	if wl := m.selectedLogs(); wl != nil && wl.ready {
 		body = wl.vp.View()
+	}
+	if m.streamErr != nil {
+		body = lipgloss.JoinVertical(lipgloss.Left, body, m.renderer.NewStyle().Foreground(colorBlue).Render("stream error: "+m.streamErr.Error()))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, m.topbarView(), "", body)
 }
@@ -352,20 +398,10 @@ func (m *pipelineModel) topbarView() string {
 	now := time.Now()
 
 	var tabs strings.Builder
-	for i, wf := range m.workflows {
-		status := spindlemodel.StatusKindPending
-		elapsed := ""
-		if ws, ok := m.pipeline.Statuses[wf]; ok {
-			latest := ws.Latest()
-			status = latest.Status
-			if t := ws.TimeTaken(); t > 0 {
-				elapsed = t.Round(time.Second).String()
-			} else {
-				elapsed = now.Sub(latest.Created).Round(time.Second).String()
-			}
-		}
-		dim := r.NewStyle().Faint(true)
-		base := " " + statusIcon(status, m.spinner.View()) + " " + wf
+	for i, wf := range m.pipeline.Workflows {
+		status := wf.Status
+		elapsed := workflowElapsed(wf, now).Round(time.Second).String()
+		base := " " + statusIcon(status, m.spinner.View()) + " " + wf.Name
 		if i == m.selected {
 			tab := base
 			if elapsed != "" {
@@ -376,6 +412,7 @@ func (m *pipelineModel) topbarView() string {
 		} else {
 			tabs.WriteString(base)
 			if elapsed != "" {
+				dim := r.NewStyle().Faint(true)
 				tabs.WriteString(" " + dim.Render(elapsed))
 			}
 			tabs.WriteString(" ")
@@ -383,7 +420,7 @@ func (m *pipelineModel) topbarView() string {
 	}
 
 	tabsStr := tabs.String()
-	infoStr := triggerLine(r, m.pipeline.Trigger, m.pipeline.Sha) + " · " + helpText(r)
+	infoStr := triggerLine(r, m.pipeline.Trigger, m.pipeline.Commit) + " · " + helpText(r)
 
 	gap := max(m.width-lipgloss.Width(tabsStr)-lipgloss.Width(infoStr), 1)
 
@@ -410,40 +447,55 @@ func shortSha(sha string) string {
 	return sha
 }
 
-func triggerLine(r *lipgloss.Renderer, t *models.Trigger, sha string) string {
+func triggerLine(r *lipgloss.Renderer, t *tangled.CiDefs_Pipeline_Trigger, sha string) string {
 	hash := shortSha(sha)
 	dim := r.NewStyle().Faint(true)
 	if t == nil {
 		return dim.Render(hash)
 	}
-	if t.IsPush() {
-		return t.TargetRef() + dim.Render("@"+hash) + dim.Render(" (push)")
+	if t.CiTrigger_Push != nil {
+		return t.CiTrigger_Push.Ref + dim.Render("@"+hash) + dim.Render(" (push)")
 	}
-	if t.IsPullRequest() {
+	if t.CiTrigger_PullRequest != nil {
 		source := ""
-		if t.PRSourceBranch != nil {
-			source = *t.PRSourceBranch
+		if t.CiTrigger_PullRequest.SourceBranch != nil {
+			source = *t.CiTrigger_PullRequest.SourceBranch
 		}
-		return t.TargetRef() + dim.Render(" <- "+source+"@"+hash) + dim.Render(" (pull-request)")
+		return t.CiTrigger_PullRequest.TargetBranch + dim.Render(" <- "+source+"@"+hash) + dim.Render(" (pull-request)")
 	}
 	return dim.Render(hash)
 }
 
-func statusIcon(status spindlemodel.StatusKind, spinnerFrame string) string {
+func statusIcon(status string, spinnerFrame string) string {
 	switch status {
-	case spindlemodel.StatusKindSuccess:
+	case "success":
 		return "✓"
-	case spindlemodel.StatusKindFailed:
+	case "failed":
 		return "×"
-	case spindlemodel.StatusKindRunning:
+	case "running":
 		return spinnerFrame
-	case spindlemodel.StatusKindPending:
+	case "pending":
 		return "·"
-	case spindlemodel.StatusKindTimeout:
+	case "timeout":
 		return "⌀"
-	case spindlemodel.StatusKindCancelled:
+	case "cancelled":
 		return "-"
 	default:
 		return "?"
 	}
+}
+
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func parseRFC3339(s string) time.Time {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }

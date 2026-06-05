@@ -177,7 +177,7 @@ func (rp *Repo) Index(w http.ResponseWriter, r *http.Request) {
 	for _, c := range commitsTrunc {
 		shas = append(shas, c.Hash.String())
 	}
-	pipelines, err := getPipelineStatuses(rp.db, f, shas)
+	pipelines, err := getPipelineStatuses(r.Context(), f, shas)
 	if err != nil {
 		l.Error("failed to fetch pipeline statuses", "err", err)
 		// non-fatal

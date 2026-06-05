@@ -14,6 +14,7 @@ import (
 	"tangled.org/core/orm"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 )
 
 func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
@@ -261,20 +262,24 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 		stacks = append(stacks, stack)
 	}
 
-	ps, err := db.GetPipelineStatuses(
-		s.db,
-		len(shas),
-		orm.FilterEq("p.repo_did", f.RepoDid),
-		orm.FilterIn("p.sha", shas),
-	)
-	if err != nil {
-		l.Warn("failed to fetch pipeline statuses", "err", err)
-		// non-fatal
-	}
-	m := make(map[string]models.Pipeline)
-	for _, p := range ps {
-		m[p.Sha] = p
-	}
+	// commitId -> latest pipeline
+	pipelines := func(ctx context.Context, shas []string) map[string]tangled.CiDefs_Pipeline {
+		xrpcc := &indigoxrpc.Client{Host: f.Spindle}
+		out, err := tangled.CiQueryPipelines(ctx, xrpcc, shas, "", 0, f.RepoDid)
+		if err != nil {
+			l.Error("failed to fetch pipelines", "err", err)
+		}
+
+		m := make(map[string]tangled.CiDefs_Pipeline)
+
+		for _, pipeline := range out.Pipelines {
+			if pipeline == nil {
+				continue
+			}
+			m[pipeline.Commit] = *pipeline
+		}
+		return m
+	}(r.Context(), shas)
 
 	labelDefs, err := db.GetLabelDefinitions(
 		s.db,
@@ -317,7 +322,7 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 		FilterState:        filterState,
 		FilterQuery:        query.String(),
 		Stacks:             stacks,
-		Pipelines:          m,
+		Pipelines:          pipelines,
 		Page:               page,
 		PullCount:          totalPulls,
 		VouchRelationships: vouchRelationships,

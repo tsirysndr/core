@@ -1,6 +1,7 @@
 package pulls
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -150,8 +151,6 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 	// can be nil  if this pull is not stacked
 	stack, _ := r.Context().Value("stack").(models.Stack)
 
-	m := make(map[string]models.Pipeline)
-
 	var shas []string
 	for _, s := range pull.Submissions {
 		shas = append(shas, s.SourceRev)
@@ -160,20 +159,24 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		shas = append(shas, p.LatestSha())
 	}
 
-	ps, err := db.GetPipelineStatuses(
-		s.db,
-		len(shas),
-		orm.FilterEq("p.repo_did", f.RepoDid),
-		orm.FilterIn("p.sha", shas),
-	)
-	if err != nil {
-		l.Error("failed to fetch pipeline statuses", "err", err)
-		// non-fatal
-	}
+	// commitId -> latest pipeline
+	pipelines := func(ctx context.Context) map[string]tangled.CiDefs_Pipeline {
+		xrpcc := &indigoxrpc.Client{Host: f.Spindle}
+		out, err := tangled.CiQueryPipelines(ctx, xrpcc, shas, "", 0, f.RepoDid)
+		if err != nil {
+			l.Error("failed to fetch pipelines", "err", err)
+		}
 
-	for _, p := range ps {
-		m[p.Sha] = p
-	}
+		m := make(map[string]tangled.CiDefs_Pipeline)
+
+		for _, pipeline := range out.Pipelines {
+			if pipeline == nil {
+				continue
+			}
+			m[pipeline.Commit] = *pipeline
+		}
+		return m
+	}(r.Context())
 
 	entities := []syntax.ATURI{pull.AtUri()}
 	for _, s := range pull.Submissions {
@@ -256,7 +259,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		BranchDeleteStatus: nil,
 		MergeCheck:         types.MergeCheckResponse{},
 		ResubmitCheck:      pages.Unknown,
-		Pipelines:          m,
+		Pipelines:          pipelines,
 		Diff:               diff,
 		DiffOpts:           diffOpts,
 		ActiveRound:        roundIdInt,

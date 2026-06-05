@@ -1,14 +1,15 @@
 package repo
 
 import (
+	"context"
 	"maps"
 	"slices"
 	"sort"
 	"strings"
 
-	"tangled.org/core/appview/db"
+	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
+	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/models"
-	"tangled.org/core/orm"
 	"tangled.org/core/types"
 )
 
@@ -90,28 +91,24 @@ func balanceIndexItems(commitCount, branchCount, tagCount, fileCount int) (commi
 //
 // golang is so blessed that it requires 35 lines of imperative code for this
 func getPipelineStatuses(
-	d *db.DB,
+	ctx context.Context,
 	repo *models.Repo,
 	shas []string,
-) (map[string]models.Pipeline, error) {
-	m := make(map[string]models.Pipeline)
+) (map[string]*tangled.CiDefs_Pipeline, error) {
+	m := make(map[string]*tangled.CiDefs_Pipeline)
 
 	if len(shas) == 0 {
 		return m, nil
 	}
 
-	ps, err := db.GetPipelineStatuses(
-		d,
-		len(shas),
-		orm.FilterEq("p.repo_did", repo.RepoDid),
-		orm.FilterIn("p.sha", shas),
-	)
+	xrpcc := &indigoxrpc.Client{Host: repo.Spindle}
+	out, err := tangled.CiQueryPipelines(ctx, xrpcc, shas, "", 0, repo.RepoDid)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, p := range ps {
-		m[p.Sha] = p
+	for _, p := range out.Pipelines {
+		m[p.Commit] = p
 	}
 
 	return m, nil

@@ -10,18 +10,16 @@ import (
 	tea "github.com/charmbracelet/wish/bubbletea"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
-	"tangled.org/core/appview/pipelines"
 )
 
 type Server struct {
-	db               *db.DB
-	config           *config.Config
-	pipelineNotifier *pipelines.StatusNotifier
-	logger           *slog.Logger
+	db     *db.DB
+	config *config.Config
+	logger *slog.Logger
 }
 
-func New(db *db.DB, cfg *config.Config, pn *pipelines.StatusNotifier, logger *slog.Logger) *Server {
-	return &Server{db: db, config: cfg, pipelineNotifier: pn, logger: logger}
+func New(db *db.DB, cfg *config.Config, logger *slog.Logger) *Server {
+	return &Server{db: db, config: cfg, logger: logger}
 }
 
 func (s *Server) ListenAndServe(ctx context.Context) error {

@@ -1,15 +1,15 @@
 package pipelines
 
 import (
+	"errors"
 	"html/template"
-	"path"
 	"regexp"
 	"strings"
+	"time"
 
 	terminal "github.com/buildkite/terminal-to-html/v3"
 	"github.com/gorilla/websocket"
 	"tangled.org/core/appview/pages/markup/sanitizer"
-	"tangled.org/core/hostutil"
 )
 
 // matches any ANSI escape sequence: ESC [ <params> m
@@ -50,40 +50,32 @@ func (a *ansiState) Render(line string) template.HTML {
 	return template.HTML(sanitized)
 }
 
-type LogEvent struct {
-	Msg []byte
-	Err error
-}
-
-func (ev *LogEvent) IsCloseError() bool {
-	return websocket.IsCloseError(
-		ev.Err,
-		websocket.CloseNormalClosure,
-		websocket.CloseGoingAway,
-		websocket.CloseAbnormalClosure,
-	)
-}
-
-func ReadLogs(conn *websocket.Conn, ch chan LogEvent) {
-	defer close(ch)
-	for {
-		if conn == nil {
-			return
-		}
-		_, msg, err := conn.ReadMessage()
-		if err != nil {
-			ch <- LogEvent{Err: err}
-			return
-		}
-		ch <- LogEvent{Msg: msg}
+// isExpectedClose reports whether err is a clean websocket close (or nil).
+func isExpectedClose(err error) bool {
+	if err == nil {
+		return true
 	}
+	var ce *websocket.CloseError
+	if errors.As(err, &ce) {
+		switch ce.Code {
+		case websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseAbnormalClosure:
+			return true
+		}
+	}
+	return false
 }
 
-func SpindleURL(spindle, knot, rkey, workflow string) string {
-	url, err := hostutil.EnsureWsScheme(spindle)
-	if err != nil {
+func derefStr(s *string) string {
+	if s == nil {
 		return ""
 	}
+	return *s
+}
 
-	return url + path.Join("/logs", knot, rkey, workflow)
+func parseRFC3339(s string) time.Time {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }

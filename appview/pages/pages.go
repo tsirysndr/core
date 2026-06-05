@@ -891,7 +891,7 @@ type RepoIndexParams struct {
 	EmailToDid       map[string]string
 	VerifiedCommits  commitverify.VerifiedCommits
 	Languages        []types.RepoLanguageDetails
-	Pipelines        map[string]models.Pipeline
+	Pipelines        map[string]*tangled.CiDefs_Pipeline
 	NeedsKnotUpgrade bool
 	KnotUnreachable  bool
 	types.RepoIndexResponse
@@ -960,7 +960,7 @@ type RepoLogParams struct {
 	Active          string
 	EmailToDid      map[string]string
 	VerifiedCommits commitverify.VerifiedCommits
-	Pipelines       map[string]models.Pipeline
+	Pipelines       map[string]*tangled.CiDefs_Pipeline
 
 	types.RepoLogResponse
 }
@@ -975,7 +975,7 @@ type RepoCommitParams struct {
 	RepoInfo   repoinfo.RepoInfo
 	Active     string
 	EmailToDid map[string]string
-	Pipeline   *models.Pipeline
+	Pipeline   *tangled.CiDefs_Pipeline
 	DiffOpts   types.DiffOpts
 
 	// singular because it's always going to be just one
@@ -1376,7 +1376,7 @@ type RepoPullsParams struct {
 	FilterQuery        string
 	BaseFilterQuery    string
 	Stacks             []models.Stack
-	Pipelines          map[string]models.Pipeline
+	Pipelines          map[string]tangled.CiDefs_Pipeline
 	LabelDefs          map[string]*models.LabelDefinition
 	Page               pagination.Page
 	PullCount          int
@@ -1416,7 +1416,7 @@ type RepoSinglePullParams struct {
 	BranchDeleteStatus *models.BranchDeleteStatus
 	MergeCheck         types.MergeCheckResponse
 	ResubmitCheck      ResubmitResult
-	Pipelines          map[string]models.Pipeline
+	Pipelines          map[string]tangled.CiDefs_Pipeline
 	Diff               types.DiffRenderer
 	DiffOpts           types.DiffOpts
 	ActiveRound        int
@@ -1588,7 +1588,7 @@ func (p *Pages) RepoForks(w io.Writer, params RepoForksParams) error {
 type PipelinesParams struct {
 	BaseParams
 	RepoInfo   repoinfo.RepoInfo
-	Pipelines  []models.Pipeline
+	Pipelines  []*tangled.CiDefs_Pipeline
 	Active     string
 	FilterKind string
 	Total      int64
@@ -1642,7 +1642,7 @@ func (p *Pages) WorkflowSymbolOOB(w io.Writer, params WorkflowSymbolOOBParams) e
 type WorkflowParams struct {
 	BaseParams
 	RepoInfo repoinfo.RepoInfo
-	Pipeline models.Pipeline
+	Pipeline *tangled.CiDefs_Pipeline
 	Workflow string
 	LogUrl   string
 	Active   string

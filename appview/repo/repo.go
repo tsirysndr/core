@@ -29,7 +29,6 @@ import (
 	"tangled.org/core/appview/sites"
 	xrpcclient "tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/consts"
-	"tangled.org/core/eventconsumer"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/ogre"
 	"tangled.org/core/orm"
@@ -46,28 +45,26 @@ import (
 )
 
 type Repo struct {
-	repoResolver  *reporesolver.RepoResolver
-	idResolver    *idresolver.Resolver
-	config        *config.Config
-	oauth         *oauth.OAuth
-	pages         *pages.Pages
-	spindlestream *eventconsumer.Consumer
-	db            *db.DB
-	enforcer      *rbac.Enforcer
-	acl           *knotacl.Service
-	notifier      notify.Notifier
-	logger        *slog.Logger
-	serviceAuth   *serviceauth.ServiceAuth
-	cfClient      *cloudflare.Client
-	ogreClient    *ogre.Client
-	codesearch    *codesearch.CodeSearch
+	repoResolver *reporesolver.RepoResolver
+	idResolver   *idresolver.Resolver
+	config       *config.Config
+	oauth        *oauth.OAuth
+	pages        *pages.Pages
+	db           *db.DB
+	enforcer     *rbac.Enforcer
+	acl          *knotacl.Service
+	notifier     notify.Notifier
+	logger       *slog.Logger
+	serviceAuth  *serviceauth.ServiceAuth
+	cfClient     *cloudflare.Client
+	ogreClient   *ogre.Client
+	codesearch   *codesearch.CodeSearch
 }
 
 func New(
 	oauth *oauth.OAuth,
 	repoResolver *reporesolver.RepoResolver,
 	pages *pages.Pages,
-	spindlestream *eventconsumer.Consumer,
 	idResolver *idresolver.Resolver,
 	db *db.DB,
 	config *config.Config,
@@ -79,20 +76,19 @@ func New(
 	codesearch *codesearch.CodeSearch,
 ) *Repo {
 	return &Repo{
-		oauth:         oauth,
-		repoResolver:  repoResolver,
-		pages:         pages,
-		idResolver:    idResolver,
-		config:        config,
-		spindlestream: spindlestream,
-		db:            db,
-		notifier:      notifier,
-		enforcer:      enforcer,
-		acl:           acl,
-		logger:        logger,
-		cfClient:      cfClient,
-		ogreClient:    ogre.NewClient(config.Ogre.Host),
-		codesearch:    codesearch,
+		oauth:        oauth,
+		repoResolver: repoResolver,
+		pages:        pages,
+		idResolver:   idResolver,
+		config:       config,
+		db:           db,
+		notifier:     notifier,
+		enforcer:     enforcer,
+		acl:          acl,
+		logger:       logger,
+		cfClient:     cfClient,
+		ogreClient:   ogre.NewClient(config.Ogre.Host),
+		codesearch:   codesearch,
 	}
 }
 
@@ -171,23 +167,6 @@ func (rp *Repo) EditSpindle(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fail("Failed to update spindle, unable to save to PDS.", err)
 		return
-	}
-
-	oldSpindle := f.Spindle
-	if oldSpindle != "" && oldSpindle != newSpindle {
-		remaining, qErr := db.GetRepos(rp.db, orm.FilterEq("spindle", oldSpindle))
-		if qErr != nil {
-			l.Warn("failed to count repos using old spindle", "err", qErr)
-		} else if len(remaining) == 0 {
-			rp.spindlestream.RemoveSource(eventconsumer.NewSpindleSource(oldSpindle))
-		}
-	}
-
-	if !removingSpindle {
-		rp.spindlestream.AddSource(
-			context.Background(),
-			eventconsumer.NewSpindleSource(newSpindle),
-		)
 	}
 
 	rp.pages.HxRefresh(w)
