@@ -1,0 +1,50 @@
+{
+  "lexicon": 1,
+  "id": "sh.tangled.ci.trigger",
+  "defs": {
+    "push": {
+      "type": "object",
+      "required": ["ref", "newSha", "oldSha"],
+      "properties": {
+        "ref": {
+          "type": "string"
+        },
+        "newSha": {
+          "type": "string",
+          "minLength": 40,
+          "maxLength": 40
+        },
+        "oldSha": {
+          "type": "string",
+          "minLength": 40,
+          "maxLength": 40
+        }
+      }
+    },
+    "pullRequest": {
+      "type": "object",
+      "required": ["targetBranch", "sourceSha", "action"],
+      "description": "TODO: reference PR record with strongRef instead of embedding raw values",
+      "properties": {
+        "sourceBranch": {
+          "type": "string"
+        },
+        "targetBranch": {
+          "type": "string"
+        },
+        "sourceSha": {
+          "type": "string",
+          "minLength": 40,
+          "maxLength": 40
+        },
+        "action": {
+          "type": "string"
+        }
+      }
+    },
+    "manual": {
+      "type": "object",
+      "properties": {}
+    }
+  }
+}

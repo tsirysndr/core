@@ -15,6 +15,8 @@ const (
 func init() {
 	util.RegisterType("sh.tangled.pipeline", &Pipeline{})
 } //
+// DEPRECATED: use sh.tangled.ci.defs#pipeline instead
+//
 // RECORDTYPE: Pipeline
 type Pipeline struct {
 	LexiconTypeID   string                    `json:"$type,const=sh.tangled.pipeline" cborgen:"$type,const=sh.tangled.pipeline"`

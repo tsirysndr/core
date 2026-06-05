@@ -15,6 +15,8 @@ const (
 func init() {
 	util.RegisterType("sh.tangled.pipeline.status", &PipelineStatus{})
 } //
+// DEPRECATED: use sh.tangled.ci.defs#pipeline instead
+//
 // RECORDTYPE: PipelineStatus
 type PipelineStatus struct {
 	LexiconTypeID string `json:"$type,const=sh.tangled.pipeline.status" cborgen:"$type,const=sh.tangled.pipeline.status"`
