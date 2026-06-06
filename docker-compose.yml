@@ -264,6 +264,7 @@ services:
       MIRROR_KNOT_USE_SSL: "true"
       MIRROR_KNOT_SSRF: "true"
       MIRROR_RESYNC_PARALLELISM: "4"
+      MIRROR_SEARCH_ZOEKT_URL: https://zoekt.tngl.boltless.dev
     volumes:
       - knotmirror-data:/data
       - ./localinfra/certs/root.crt:/usr/local/share/ca-certificates/caddy.crt:ro
@@ -280,6 +281,29 @@ services:
         condition: service_started
       knotmirror-tap:
         condition: service_started
+    networks: [tngl]
+
+  zoekt-webserver:
+    platform: linux/amd64
+    image: ghcr.io/sourcegraph/zoekt:sha-893a523
+    volumes:
+      - zoekt-index:/data/index
+      - ./localinfra/certs/root.crt:/etc/ssl/certs/caddy.crt:ro
+    command: ["zoekt-webserver", "-index", "/data/index", "-pprof", "-rpc"]
+    networks: [tngl]
+
+  zoekt-tngl-indexserver:
+    build:
+      context: .
+      dockerfile: localinfra/zoekt-tngl-indexserver.Dockerfile
+    environment:
+      TANGLED_ZOEKT_INDEX_DIR: /data/index
+      TANGLED_ZOEKT_PLC_URL: https://plc.tngl.boltless.dev
+      TANGLED_ZOEKT_APPVIEW_URL: http://127.0.0.1:3000
+    volumes:
+      - zoekt-index:/data/index
+      - ./localinfra/certs/root.crt:/etc/ssl/certs/caddy.crt:ro
+    command: ["zoekt-tngl-indexserver", "serve"]
     networks: [tngl]
 
   tailwind:
@@ -354,6 +378,7 @@ services:
           - spindle.tngl.boltless.dev
           - tngl.boltless.dev
           - mirror.tngl.boltless.dev
+          - zoekt.tngl.boltless.dev
 
 volumes:
   caddy-data:
@@ -363,6 +388,7 @@ volumes:
   knot-data:
   knot-ssh-keys:
   knotmirror-data:
+  zoekt-index:
   spindle-data:
   spindle-logs:
   ncps-data:

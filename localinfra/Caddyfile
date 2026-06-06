@@ -53,6 +53,20 @@ mirror.tngl.boltless.dev {
     reverse_proxy knotmirror:7000
 }
 
+# zoekt (internal service)
+zoekt.tngl.boltless.dev {
+    tls internal
+
+    # TODO: replace this with -indexserver_proxy flag
+    handle_path /indexserver/* {
+        reverse_proxy zoekt-tngl-indexserver:6060
+    }
+
+    handle {
+        reverse_proxy zoekt-webserver:6070
+    }
+}
+
 # appview
 tngl.boltless.dev {
     tls internal
