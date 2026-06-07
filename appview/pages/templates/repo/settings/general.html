@@ -223,9 +223,13 @@
       Existing git remotes that use the old name will break. Use the
       stable, DID-based URLs below to avoid breakage on future renames.
     </p>
+    {{ $knot := .RepoInfo.Knot }}
+    {{ if eq $knot "knot1.tangled.sh" }}
+        {{ $knot = "tangled.org" }}
+    {{ end }}
     <ul class="text-gray-500 dark:text-gray-400 text-sm mb-2 font-mono">
-      <li>https://{{ .RepoInfo.Knot }}/{{ .RepoInfo.RepoDid }}</li>
-      <li>git@{{ .RepoInfo.Knot | stripPort }}:{{ .RepoInfo.RepoDid }}</li>
+      <li>https://{{ $knot }}/{{ .RepoInfo.RepoDid }}</li>
+      <li>git@{{ $knot | stripPort }}:{{ .RepoInfo.RepoDid }}</li>
     </ul>
     <input
       type="text"
