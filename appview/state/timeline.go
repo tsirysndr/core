@@ -49,14 +49,13 @@ func (s *State) HomeOrTimeline(w http.ResponseWriter, r *http.Request) {
 func (s *State) Timeline(w http.ResponseWriter, r *http.Request) {
 	user := s.oauth.GetMultiAccountUser(r)
 
-	// TODO: set this flag based on the UI
-	filtered := false
+	followingOnly := r.URL.Query().Get("following") == "true" && user != nil
 
 	var userDid string
 	if user != nil {
 		userDid = user.Did
 	}
-	timeline, err := db.MakeTimeline(s.db, 50, userDid, filtered)
+	timeline, err := db.MakeTimeline(s.db, 50, userDid, followingOnly)
 	if err != nil {
 		s.logger.Error("failed to make timeline", "err", err)
 		s.pages.Notice(w, "timeline", "Uh oh! Failed to load timeline.")
@@ -124,6 +123,7 @@ func (s *State) Timeline(w http.ResponseWriter, r *http.Request) {
 		VouchSuggestions: vouchSuggestions,
 		Notifications:    notifications,
 		Recents:          recents,
+		FollowingOnly:    followingOnly,
 		ShowNewsletter:   s.showNewsletter(user),
 	})
 }

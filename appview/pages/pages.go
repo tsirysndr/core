@@ -416,6 +416,7 @@ type TimelineParams struct {
 	VouchSuggestions []models.VouchSuggestion
 	Notifications    []*models.NotificationWithEntity
 	Recents          []RecentItem
+	FollowingOnly    bool
 	// ShowNewsletter controls whether the newsletter widget/CTA is rendered.
 	// For logged-in users it reflects their newsletter_preferences row; for
 	// anonymous visitors it is always true (dismissal falls back to

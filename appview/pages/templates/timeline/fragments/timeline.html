@@ -1,9 +1,39 @@
 {{ define "timeline/fragments/timeline" }}
-    <div class="py-4">
-        <h3 class="text-base dark:text-white flex items-center gap-2 px-4 py-2">
-          {{ i "gallery-vertical" "size-4 flex-shrink-0" }}
-          Timeline
-        </h3>
+    <div id="timeline-feed" class="py-4">
+        <div class="flex items-center justify-between pl-4 pb-4">
+          <h3 class="text-base dark:text-white flex items-center gap-2">
+            {{ i "gallery-vertical" "size-4 flex-shrink-0" }}
+            Timeline
+          </h3>
+          {{ if .LoggedInUser }}
+          <div class="btn-group grid grid-cols-2">
+            <a href="/timeline"
+               hx-get="/timeline"
+               hx-target="#timeline-feed"
+               hx-select="#timeline-feed"
+               hx-swap="outerHTML"
+               hx-push-url="true"
+               class="group btn-group-item inline-flex items-center justify-center {{ if not .FollowingOnly }}active{{ end }}">
+              <span class="relative inline-flex items-center justify-center">
+                <span class="group-[.htmx-request]:invisible">Global</span>
+                {{ i "loader-circle" "size-3.5 animate-spin absolute hidden group-[.htmx-request]:block" }}
+              </span>
+            </a>
+            <a href="/timeline?following=true"
+               hx-get="/timeline?following=true"
+               hx-target="#timeline-feed"
+               hx-select="#timeline-feed"
+               hx-swap="outerHTML"
+               hx-push-url="true"
+               class="group btn-group-item inline-flex items-center justify-center {{ if .FollowingOnly }}active{{ end }}">
+              <span class="relative inline-flex items-center justify-center">
+                <span class="group-[.htmx-request]:invisible">Following</span>
+                {{ i "loader-circle" "size-3.5 animate-spin absolute hidden group-[.htmx-request]:block" }}
+              </span>
+            </a>
+          </div>
+          {{ end }}
+        </div>
 
         <div class="flex flex-col gap-4">
           {{ range $i, $g := .Timeline }}
