@@ -1,4 +1,4 @@
-package state
+package timeline
 
 import (
 	"net/http"
@@ -13,41 +13,8 @@ import (
 	"tangled.org/core/orm"
 )
 
-func (s *State) Home(w http.ResponseWriter, r *http.Request) {
-	// TODO: set this flag based on the UI
-	filtered := false
-
-	user := s.oauth.GetMultiAccountUser(r)
-
-	timeline, err := db.MakeTimeline(s.db, 50, "", filtered)
-	if err != nil {
-		s.logger.Error("failed to make timeline", "err", err)
-		s.pages.Notice(w, "timeline", "Uh oh! Failed to load timeline.")
-		return
-	}
-
-	blueskyPosts, err := db.GetBlueskyPosts(s.db, 8)
-	if err != nil {
-		s.logger.Error("failed to get bluesky posts", "err", err)
-	}
-
-	s.pages.Home(w, pages.TimelineParams{
-		LoggedInUser:   user,
-		Timeline:       timeline,
-		BlueskyPosts:   blueskyPosts,
-		ShowNewsletter: s.showNewsletter(user),
-	})
-}
-func (s *State) HomeOrTimeline(w http.ResponseWriter, r *http.Request) {
-	if s.oauth.GetMultiAccountUser(r) != nil {
-		s.Timeline(w, r)
-		return
-	}
-	s.Home(w, r)
-}
-
-func (s *State) Timeline(w http.ResponseWriter, r *http.Request) {
-	user := s.oauth.GetMultiAccountUser(r)
+func (t *Timeline) Timeline(w http.ResponseWriter, r *http.Request) {
+	user := t.oauth.GetMultiAccountUser(r)
 
 	followingOnly := r.URL.Query().Get("following") == "true" && user != nil
 
@@ -55,20 +22,20 @@ func (s *State) Timeline(w http.ResponseWriter, r *http.Request) {
 	if user != nil {
 		userDid = user.Did
 	}
-	timeline, err := db.MakeTimeline(s.db, 50, userDid, followingOnly)
+	timeline, err := db.MakeTimeline(t.db, 50, userDid, followingOnly)
 	if err != nil {
-		s.logger.Error("failed to make timeline", "err", err)
-		s.pages.Notice(w, "timeline", "Uh oh! Failed to load timeline.")
+		t.logger.Error("failed to make timeline", "err", err)
+		t.pages.Notice(w, "timeline", "Uh oh! Failed to load timeline.")
 	}
 
-	repos, err := db.GetTopStarredReposLastWeek(s.db)
+	repos, err := db.GetTopStarredReposLastWeek(t.db)
 	if err != nil {
-		s.logger.Error("failed to get top starred repos", "err", err)
-		s.pages.Notice(w, "topstarredrepos", "Unable to load.")
+		t.logger.Error("failed to get top starred repos", "err", err)
+		t.pages.Notice(w, "topstarredrepos", "Unable to load.")
 		return
 	}
 
-	gfiLabel, err := db.GetLabelDefinition(s.db, orm.FilterEq("at_uri", s.config.Label.GoodFirstIssue))
+	gfiLabel, err := db.GetLabelDefinition(t.db, orm.FilterEq("at_uri", t.config.Label.GoodFirstIssue))
 	if err != nil {
 		// non-fatal
 	}
@@ -76,29 +43,29 @@ func (s *State) Timeline(w http.ResponseWriter, r *http.Request) {
 	var notifications []*models.NotificationWithEntity
 	if user != nil {
 		notifications, err = db.GetNotificationsWithEntities(
-			s.db,
+			t.db,
 			pagination.Page{Limit: 5, Offset: 0},
 			orm.FilterEq("recipient_did", user.Did),
 		)
 		if err != nil {
-			s.logger.Error("failed to get notifications for timeline", "err", err)
+			t.logger.Error("failed to get notifications for timeline", "err", err)
 		}
 	}
 
 	var vouchSuggestions []models.VouchSuggestion
 	if user != nil {
-		vouchSuggestions, err = db.GetVouchSuggestions(s.db, user.Did, 3)
+		vouchSuggestions, err = db.GetVouchSuggestions(t.db, user.Did, 3)
 		if err != nil {
-			s.logger.Error("failed to get vouch suggestions", "err", err)
+			t.logger.Error("failed to get vouch suggestions", "err", err)
 		}
 		if len(vouchSuggestions) > 0 {
 			suggestionDids := make([]syntax.DID, len(vouchSuggestions))
 			for i, sv := range vouchSuggestions {
 				suggestionDids[i] = syntax.DID(sv.Did)
 			}
-			relationships, err := db.GetVouchRelationshipsBatch(s.db, syntax.DID(user.Did), suggestionDids)
+			relationships, err := db.GetVouchRelationshipsBatch(t.db, syntax.DID(user.Did), suggestionDids)
 			if err != nil {
-				s.logger.Error("failed to get vouch relationships for suggestions", "err", err)
+				t.logger.Error("failed to get vouch relationships for suggestions", "err", err)
 			} else {
 				for i := range vouchSuggestions {
 					vouchSuggestions[i].VouchRelationship = relationships[vouchSuggestions[i].Did]
@@ -109,13 +76,13 @@ func (s *State) Timeline(w http.ResponseWriter, r *http.Request) {
 
 	var recents []pages.RecentItem
 	if user != nil {
-		recents, err = s.buildRecents(user.Did)
+		recents, err = t.buildRecents(user.Did)
 		if err != nil {
-			s.logger.Error("failed to build recents for timeline", "err", err)
+			t.logger.Error("failed to build recents for timeline", "err", err)
 		}
 	}
 
-	s.pages.Timeline(w, pages.TimelineParams{
+	t.pages.Timeline(w, pages.TimelineParams{
 		LoggedInUser:     user,
 		Timeline:         timeline,
 		Repos:            repos,
@@ -124,12 +91,13 @@ func (s *State) Timeline(w http.ResponseWriter, r *http.Request) {
 		Notifications:    notifications,
 		Recents:          recents,
 		FollowingOnly:    followingOnly,
-		ShowNewsletter:   s.showNewsletter(user),
+		RecentBlogPosts:  t.recentPosts,
+		ShowNewsletter:   t.showNewsletter(user),
 	})
 }
 
-func (s *State) buildRecents(userDid string) ([]pages.RecentItem, error) {
-	links, err := db.GetRecentLinks(s.db, orm.FilterEq("user_did", userDid))
+func (t *Timeline) buildRecents(userDid string) ([]pages.RecentItem, error) {
+	links, err := db.GetRecentLinks(t.db, orm.FilterEq("user_did", userDid))
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +121,7 @@ func (s *State) buildRecents(userDid string) ([]pages.RecentItem, error) {
 	// fetch repos by DID.
 	repoByDid := make(map[string]*models.Repo)
 	if len(repoDids) > 0 {
-		fetched, err := db.GetRepos(s.db, orm.FilterIn("repo_did", repoDids))
+		fetched, err := db.GetRepos(t.db, orm.FilterIn("repo_did", repoDids))
 		if err != nil {
 			return nil, err
 		}
@@ -165,7 +133,7 @@ func (s *State) buildRecents(userDid string) ([]pages.RecentItem, error) {
 	// fetch issues by aturi
 	issueByAtUri := make(map[string]*models.Issue)
 	if len(issueAtUris) > 0 {
-		issues, err := db.GetIssues(s.db, orm.FilterIn("at_uri", issueAtUris))
+		issues, err := db.GetIssues(t.db, orm.FilterIn("at_uri", issueAtUris))
 		if err != nil {
 			return nil, err
 		}
@@ -177,7 +145,7 @@ func (s *State) buildRecents(userDid string) ([]pages.RecentItem, error) {
 	// fetch pulls by aturi
 	pullByAtUri := make(map[string]*models.Pull)
 	if len(pullAtUris) > 0 {
-		fetched, err := db.GetPulls(s.db, orm.FilterIn("at_uri", pullAtUris))
+		fetched, err := db.GetPulls(t.db, orm.FilterIn("at_uri", pullAtUris))
 		if err != nil {
 			return nil, err
 		}
@@ -217,13 +185,13 @@ func (s *State) buildRecents(userDid string) ([]pages.RecentItem, error) {
 // Anonymous visitors always see it (they can dismiss via localStorage);
 // logged-in users whose newsletter_preferences row exists (either
 // subscribed or dismissed) do not.
-func (s *State) showNewsletter(user *oauth.MultiAccountUser) bool {
+func (t *Timeline) showNewsletter(user *oauth.MultiAccountUser) bool {
 	if user == nil {
 		return true
 	}
-	pref, err := db.GetNewsletterPref(s.db, user.Did)
+	pref, err := db.GetNewsletterPref(t.db, user.Did)
 	if err != nil {
-		s.logger.Error("failed to read newsletter preference", "did", user.Did, "err", err)
+		t.logger.Error("failed to read newsletter preference", "did", user.Did, "err", err)
 		return true
 	}
 	return pref == nil

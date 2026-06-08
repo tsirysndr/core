@@ -25,6 +25,7 @@ import (
 	"tangled.org/core/appview/spindles"
 	"tangled.org/core/appview/state/userutil"
 	avstrings "tangled.org/core/appview/strings"
+	avtimeline "tangled.org/core/appview/timeline"
 	"tangled.org/core/log"
 )
 
@@ -163,9 +164,10 @@ func (s *State) StandardRouter(mw *middleware.Middleware) http.Handler {
 
 	r.Handle("/static/*", s.pages.Static())
 
-	r.Get("/", s.HomeOrTimeline)
-	r.Get("/home", s.Home)
-	r.Get("/timeline", s.Timeline)
+	tl := avtimeline.New(s.oauth, s.db, s.config, s.pages, s.logger, "blog/posts")
+	r.Get("/", tl.HomeOrTimeline)
+	r.Get("/home", tl.Home)
+	r.Get("/timeline", tl.Timeline)
 	r.Get("/upgradeBanner", s.UpgradeBanner)
 	r.Post("/newsletter/signup", s.NewsletterSignup)
 	r.Post("/newsletter/dismiss", s.NewsletterDismiss)
