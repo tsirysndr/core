@@ -17,7 +17,7 @@ var FileTypePatterns = map[Format]*regexp.Regexp{
 	FormatMarkdown: regexp.MustCompile(`(?i)\.(md|markdown|mdown|mkdn|mkd)$`),
 }
 
-var ReadmePattern = regexp.MustCompile(`(?i)^readme(?:[._-].+)?$`)
+var ReadmePattern = regexp.MustCompile(`(?i)^readme(?:\.[^.]+)?$`)
 
 // IsReadmeFile reports whether name/mode identifies a readme blob. The git
 // mode is checked so directories or symlinks named "readme" are filtered out.

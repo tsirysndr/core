@@ -30,13 +30,16 @@ func TestIsReadmeFile(t *testing.T) {
 		{"readme", dirMode, false},
 		{"README.md", dirMode, false},
 
-		// readme is matched by convention, not by renderable format —
+		// readme is matched by convention, not by renderable format;
 		// unsupported markup falls through to plaintext in GetFormat.
 		{"README.rst", fileMode, true},
 		{"README.org", fileMode, true},
-		{"readme-old", fileMode, true},
-		{"readme_legacy", fileMode, true},
+		{"README.asciidoc", fileMode, true},
+		{"README.foo", fileMode, true},
 
+		{"README.Music.md", fileMode, false},
+		{"readme-old", fileMode, false},
+		{"readme_legacy", fileMode, false},
 		{"notreadme.md", fileMode, false},
 		{"READMEISH", fileMode, false},
 		{"README.md", "", false},
