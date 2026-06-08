@@ -14,9 +14,9 @@
 {{ end }}
 
 {{ define "content" }}
-<div id="timeline-grid" class="flex flex-col md:grid md:grid-cols-8">
+<div id="timeline-grid" class="flex flex-col md:grid md:grid-cols-8 md:items-start">
 
-    <div class="hidden md:flex md:col-span-2 md:flex-col md:gap-4 md:pt-4 md:px-4">
+    <div class="hidden md:flex md:col-span-2 md:flex-col md:gap-4 md:pt-4 md:px-4 md:sticky md:top-0 md:h-screen md:overflow-y-auto md:pb-4">
         {{ template "timeline/fragments/notifications" . }}
         {{ template "timeline/fragments/recents" . }}
     </div>
@@ -25,7 +25,7 @@
         {{ template "timeline/fragments/timeline" . }}
     </div>
 
-    <div class="order-1 md:order-none flex flex-col gap-4 md:col-start-7 md:row-start-1 md:col-span-2 md:pt-4 md:px-4">
+    <div class="order-1 md:order-none flex flex-col gap-4 md:col-start-7 md:row-start-1 md:col-span-2 md:pt-4 md:px-4 md:sticky md:top-0 md:h-screen md:overflow-y-auto md:pb-4">
         {{ if .ShowNewsletter }}
         <div id="newsletter-col" class="order-first md:order-last">
             {{ template "timeline/fragments/newsletterWidget" . }}
