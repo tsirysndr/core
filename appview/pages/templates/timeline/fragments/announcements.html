@@ -4,37 +4,52 @@
       {{ i "megaphone" "size-4 flex-shrink-0" }}
       Announcements
     </h3>
-    <div class="flex flex-col gap-3 p-2 bg-white dark:bg-gray-800">
+    <div class="flex flex-col p-0 bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
       {{ template "vouchAnnouncement" . }}
+      {{ if .RecentBlogPosts }}
+        {{ template "recentBlogPosts" . }}
+      {{ end }}
     </div>
   </div>
 {{ end }}
 
-{{ define "vouchAnnouncement" }}
-  <div class="relative overflow-hidden border border-indigo-200 dark:border-indigo-700 bg-gradient-to-b from-white to-indigo-50 dark:from-indigo-950 dark:to-indigo-900 rounded-sm p-6">
-<div class="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(165,180,252,0.35),transparent_70%)] dark:bg-[radial-gradient(ellipse_at_bottom_left,rgba(99,102,241,0.2),transparent_70%)]"></div>
-    <div class="relative z-10">
-      <p class="font-semibold text-indigo-800 dark:text-indigo-300 mb-1">Build a web of trust</p>
-      <p class="text-indigo-700 dark:text-indigo-400">
-        Vouch for trustworthy users that make open-source a better place. Visit a user's
-        profile to vouch for them.
-      </p>
-
-      <div class="mt-3 flex items-center justify-between">
-        <a class="mt-3 no-underline inline-flex items-center gap-1 text-sm font-medium text-indigo-700 dark:text-indigo-300 hover:text-indigo-900 dark:hover:text-indigo-100 hover:underline" href="https://blog.tangled.org/vouching">
-          Read more
-        </a>
-        {{ if and .LoggedInUser .VouchSuggestions }}
-          <a class="md:hidden mt-3 no-underline inline-flex items-center gap-1 text-sm font-medium text-indigo-700 dark:text-indigo-300 hover:text-indigo-900 dark:hover:text-indigo-100 hover:underline" href="/{{ .LoggedInUser.Did }}?tab=vouches">
-            View suggestions {{ i "arrow-right" "size-3.5" }}
-          </a>
-        {{ end }}
-      </div>
-
-    </div>
-
-    <div class="pointer-events-none absolute -bottom-8 -right-16 text-indigo-200 dark:text-indigo-700 opacity-60">
-      {{ i "shield-plus" "size-48" }}
-    </div>
+{{ define "recentBlogPosts" }}
+  <div class="flex flex-col hidden md:block">
+    {{ range .RecentBlogPosts }}
+      <a href="https://blog.tangled.org/{{ .Slug }}" class="text-sm no-underline hover:no-underline hover:bg-gray-100/50 dark:hover:bg-gray-700/50 overflow-hidden p-4 flex flex-col gap-0.5">
+        <span class="truncate text-xs text-gray-500 dark:text-gray-400">{{ .Date.Format "January 2, 2006" }}</span>
+        <span class="truncate dark:text-white">{{ .Title }}</span>
+        {{ if .Subtitle }}<span class="line-clamp-1 text-sm text-gray-500 dark:text-gray-400">{{ .Subtitle }}</span>{{ end }}
+      </a>
+    {{ end }}
   </div>
+{{ end }}
+
+{{ define "vouchAnnouncement" }}
+<div class="relative overflow-hidden bg-gradient-to-b from-white to-indigo-50 dark:from-indigo-950 dark:to-indigo-900 rounded-sm p-4">
+  <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(165,180,252,0.35),transparent_70%)] dark:bg-[radial-gradient(ellipse_at_bottom_left,rgba(99,102,241,0.2),transparent_70%)]"></div>
+  <div class="relative z-10">
+    <p class="font-semibold text-indigo-800 dark:text-indigo-300 mb-1">Build a web of trust</p>
+    <p class="text-indigo-700 dark:text-indigo-400">
+    Vouch for trustworthy users that make open-source a better place. Visit a user's
+    profile to vouch for them.
+    </p>
+
+    <div class="mt-3 flex items-center justify-between">
+      <a class="mt-3 no-underline inline-flex items-center gap-1 text-sm font-medium text-indigo-700 dark:text-indigo-300 hover:text-indigo-900 dark:hover:text-indigo-100 hover:underline" href="https://blog.tangled.org/vouching">
+        Read more
+      </a>
+      {{ if and .LoggedInUser .VouchSuggestions }}
+      <a class="md:hidden mt-3 no-underline inline-flex items-center gap-1 text-sm font-medium text-indigo-700 dark:text-indigo-300 hover:text-indigo-900 dark:hover:text-indigo-100 hover:underline" href="/{{ .LoggedInUser.Did }}?tab=vouches">
+        View suggestions {{ i "arrow-right" "size-3.5" }}
+      </a>
+      {{ end }}
+    </div>
+
+  </div>
+
+  <div class="pointer-events-none absolute -bottom-8 -right-16 text-indigo-200 dark:text-indigo-700 opacity-60">
+    {{ i "shield-plus" "size-48" }}
+  </div>
+</div>
 {{ end }}

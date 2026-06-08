@@ -407,6 +407,13 @@ type RecentItem struct {
 	Pull  *models.Pull
 }
 
+type BlogPost struct {
+	Slug     string
+	Title    string
+	Subtitle string
+	Date     time.Time
+}
+
 type TimelineParams struct {
 	LoggedInUser     *oauth.MultiAccountUser
 	Timeline         []models.TimelineGroup
@@ -417,6 +424,7 @@ type TimelineParams struct {
 	Notifications    []*models.NotificationWithEntity
 	Recents          []RecentItem
 	FollowingOnly    bool
+	RecentBlogPosts  []BlogPost
 	// ShowNewsletter controls whether the newsletter widget/CTA is rendered.
 	// For logged-in users it reflects their newsletter_preferences row; for
 	// anonymous visitors it is always true (dismissal falls back to

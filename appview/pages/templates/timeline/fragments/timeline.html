@@ -35,6 +35,7 @@
           {{ end }}
         </div>
 
+        {{ if .Timeline }}
         <div class="flex flex-col gap-4">
           {{ range $i, $g := .Timeline }}
             <div class="relative">
@@ -54,6 +55,24 @@
             </div>
           {{ end }}
         </div>
+        {{ else }}
+          <div class="px-4 py-8 text-sm text-center text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-gray-700 rounded-sm ">
+            <div class="w-10 h-10 mx-auto mb-3 text-gray-300 dark:text-gray-600">
+              {{ if .FollowingOnly }}
+                {{ i "user-round-x" "size-10" }}
+              {{ else }}
+                {{ i "radio" "size-10" }}
+              {{ end }}
+            </div>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+              {{ if .FollowingOnly }}
+                Follow some users to see their activity here.
+              {{ else }}
+                Nothing here yet.
+              {{ end }}
+            </p>
+          </div>
+        {{ end }}
     </div>
 {{ end }}
 

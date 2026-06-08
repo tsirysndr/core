@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/adrg/frontmatter"
 	"github.com/go-chi/chi/v5"
@@ -17,10 +18,11 @@ import (
 )
 
 type postMeta struct {
-	Slug  string `yaml:"slug"`
-	Title string `yaml:"title"`
-	Date  string `yaml:"date"`
-	Draft bool   `yaml:"draft"`
+	Slug     string `yaml:"slug"`
+	Title    string `yaml:"title"`
+	Subtitle string `yaml:"subtitle"`
+	Date     string `yaml:"date"`
+	Draft    bool   `yaml:"draft"`
 }
 
 type Timeline struct {
@@ -99,7 +101,8 @@ func loadRecentPosts(postsDir string, logger *slog.Logger) []pages.BlogPost {
 
 	result := make([]pages.BlogPost, len(posts))
 	for i, p := range posts {
-		result[i] = pages.BlogPost{Slug: p.Slug, Title: p.Title, Date: p.Date}
+		t, _ := time.Parse("2006-01-02", p.Date)
+		result[i] = pages.BlogPost{Slug: p.Slug, Title: p.Title, Subtitle: p.Subtitle, Date: t}
 	}
 	return result
 }

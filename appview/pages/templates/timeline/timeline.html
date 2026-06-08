@@ -32,15 +32,17 @@
         </div>
         {{ end }}
 
-        {{ template "timeline/fragments/announcements" . }}
+        {{ template "timeline/fragments/trending" . }}
+
+        <div class="hidden md:block">
+          {{ template "timeline/fragments/announcements" . }}
+        </div>
 
         {{ if and .LoggedInUser .VouchSuggestions }}
         <div class="hidden md:block">
             {{ template "timeline/fragments/vouchSuggestions" . }}
         </div>
         {{ end }}
-
-        {{ template "timeline/fragments/trending" . }}
     </div>
 </div>
 
