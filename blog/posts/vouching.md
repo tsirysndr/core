@@ -2,8 +2,8 @@
 atroot: true
 template:
 slug: vouching
-title: combat LLM spam by building a web of trust
-subtitle: vouching on tangled!
+title: Combat LLM spam by building a web of trust
+subtitle: Vouching on Tangled!
 image: https://assets.tangled.network/vouch.png
 date: 2026-05-01
 authors:

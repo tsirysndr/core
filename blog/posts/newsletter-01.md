@@ -2,8 +2,8 @@
 atroot: true
 template:
 slug: newsletter-01
-title: newsletter 01 — hello!
-subtitle: kicking off our newsletter!
+title: Newsletter 01 — Hello!
+subtitle: Kicking off our newsletter!
 image: https://assets.tangled.network/blog/newsletter-01.png
 date: 2026-04-16
 authors:

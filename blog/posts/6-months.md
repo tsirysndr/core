@@ -3,7 +3,7 @@ atroot: true
 template:
 slug: 6-months
 title: 6 months of Tangled
-subtitle: a quick recap, and notes on the future
+subtitle: A quick recap, and notes on the future
 date: 2025-10-21
 image: https://assets.tangled.network/blog/6-months.png
 authors:

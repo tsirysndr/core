@@ -2,8 +2,8 @@
 atroot: true
 template:
 slug: federation
-title: we need a federation of forges
-subtitle: git is decentralized, but what of the rest?
+title: We need a federation of forges
+subtitle: Git is decentralized, but what of the rest?
 image: https://assets.tangled.network/blog/federation/Light-OG.png
 date: 2026-04-29
 authors:
@@ -36,7 +36,7 @@ for  code transfer and one for communication:
   ActivityPub](https://forgefed.org/blog/actor-programming/)
   (comms)
 - We are building Tangled: git (code transfer) + [AT
-  protocol](https://atproto.com/) (comms)
+  Protocol](https://atproto.com/) (comms)
 
 Tangled federates events among git servers (called "knots").
 You can collaborate on repositories on any server and you

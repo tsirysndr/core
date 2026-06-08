@@ -2,8 +2,8 @@
 atroot: true
 template:
 slug: ssh
-title: tail CI logs over SSH
-subtitle: never leave your terminal to check on CI!
+title: Tail CI logs over SSH
+subtitle: Never leave your terminal to check on CI!
 image: https://assets.tangled.network/blog/pty/astral-projection.webp
 date: 2026-05-28
 authors:

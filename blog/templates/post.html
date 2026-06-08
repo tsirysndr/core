@@ -1,4 +1,4 @@
-{{ define "title" }}{{ .Post.Meta.Title }} — tangled blog{{ end }}
+{{ define "title" }}{{ .Post.Meta.Title }} — Tangled's Blog{{ end }}
 
 {{ define "extrameta" }}
 <meta name="description" content="{{ .Post.Meta.Subtitle }}"/>
@@ -32,7 +32,7 @@
     <header class="not-prose mb-4">
       {{ $authors := .Post.Meta.Authors }}
       <div class="flex items-center gap-2 mb-1 text-sm text-gray-600 dark:text-gray-400">
-        <a href="/" class="flex items-center gap-1 text-gray-600 dark:text-gray-400">{{ i "arrow-left" "size-4" }} all posts</a>
+        <a href="/" class="flex items-center gap-1 text-gray-600 dark:text-gray-400">{{ i "arrow-left" "size-4" }} All posts</a>
         ·
         <p>
           {{ $date := .Post.ParsedDate }}

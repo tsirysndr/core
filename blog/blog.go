@@ -115,7 +115,7 @@ func parsePosts(postsDir string, includeDrafts bool) ([]Post, error) {
 
 func AtomFeed(posts []Post, baseURL string) (string, error) {
 	feed := &feeds.Feed{
-		Title:   "the tangled blog",
+		Title:   "The Tangled Blog",
 		Link:    &feeds.Link{Href: baseURL},
 		Author:  &feeds.Author{Name: "Tangled"},
 		Created: time.Now(),

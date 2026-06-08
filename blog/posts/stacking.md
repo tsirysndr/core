@@ -2,8 +2,8 @@
 atroot: true
 template:
 slug: stacking
-title: jujutsu on tangled
-subtitle: tangled now supports jujutsu change-ids!
+title: Jujutsu on Tangled
+subtitle: Tangled now supports jujutsu change-ids!
 date: 2025-06-02
 image: https://assets.tangled.network/blog/interdiff_difference.jpeg
 authors:

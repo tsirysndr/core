@@ -2,8 +2,8 @@
 atroot: true
 template:
 slug: intro
-title: introducing tangled
-subtitle: a git collaboration platform, built on atproto
+title: Introducing Tangled
+subtitle: A git collaboration platform, built on AT Protocol
 date: 2025-03-02
 authors:
   - name: Anirudh
@@ -21,7 +21,7 @@ coding can be social and fun again.
 There are several models for decentralized code collaboration platforms,
 ranging from ActivityPub's (Forgejo) federated model, to Radicle's
 entirely P2P model. Our approach attempts to be the best of both worlds
-by adopting atproto -- a protocol for building decentralized social
+by adopting AT Protocol -- a protocol for building decentralized social
 applications with a central identity.
 
 ![tangled architecture](https://assets.tangled.network/blog/arch.svg)
@@ -51,7 +51,7 @@ should feel natural and stay out of the way. Tangled's architecture
 enables common workflows to work as you'd expect, all while remaining
 decentralized.
 
-We believe that atproto has greatly simplified one of the hardest parts
+We believe that AT Protocol has greatly simplified one of the hardest parts
 of social media: having your friends on it. Today, we're rolling out
 invite-only access to Tangled -- join us on IRC at `#tangled` on
 [libera.chat](https://libera.chat) and we'll get you set up.

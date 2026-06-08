@@ -2,8 +2,8 @@
 atroot: true
 template:
 slug: ci
-title: introducing spindle
-subtitle: tangled's new CI runner is now generally available
+title: Introducing spindle
+subtitle: Tangled's new CI runner is now generally available
 date: 2025-08-06
 authors:
   - name: Anirudh
@@ -176,7 +176,7 @@ to help debug workflows that don't trigger!
 
 ## pipeline secrets
 
-Secrets are a bit tricky since atproto has no notion of
+Secrets are a bit tricky since AT Protocol has no notion of
 private data. Secrets are instead written directly from the
 appview to the spindle instance using [service
 auth](https://docs.bsky.app/docs/api/com-atproto-server-get-service-auth).

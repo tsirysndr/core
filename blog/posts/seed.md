@@ -2,8 +2,8 @@
 atroot: true
 template:
 slug: seed
-title: announcing our €3,8M seed round
-subtitle: and more on what's next
+title: Announcing our €3,8M seed round
+subtitle: And more on what's next
 date: 2026-03-02
 image: https://assets.tangled.network/blog/seed.png
 authors:

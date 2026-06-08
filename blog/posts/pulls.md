@@ -2,8 +2,8 @@
 atroot: true
 template:
 slug: pulls
-title: the lifecycle of a pull request
-subtitle: we shipped a bunch of PR features recently; here's how we built it
+title: The lifecycle of a pull request
+subtitle: We shipped a bunch of PR features recently; here's how we built it
 date: 2025-04-16
 image: https://assets.tangled.network/blog/hidden-ref.png
 authors:
@@ -117,7 +117,7 @@ latest state of the target branch.
 
 And just like earlier, we produce the patch by diffing your
 feature branch with the hidden tracking ref. Also, the entire pull
-request is stored as [an atproto record][atproto-record] and updated
+request is stored as [an AT Protocol record][atproto-record] and updated
 each time the patch changes.
 
 [atproto-record]: https://pdsls.dev/at://did:plc:qfpnj4og54vl56wngdriaxug/sh.tangled.repo.pull/3lmwniim2i722

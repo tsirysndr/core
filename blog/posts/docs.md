@@ -2,8 +2,8 @@
 atroot: true
 template:
 slug: docs
-title: we rolled our own documentation site
-subtitle: you don't need mintlify
+title: We rolled our own documentation site
+subtitle: You don't need Mintlify
 date: 2026-01-12
 authors:
   - name: Akshay
@@ -39,7 +39,7 @@ I took the time to evaluate several documentation engine
 solutions:
 
 - [Mintlify](https://www.mintlify.com/): It is quite obvious
-  from their homepage that mintlify is performing an AI
+  from their homepage that Mintlify is performing an AI
   pivot for the sake of doing so.
 - [Docusaurus](https://docusaurus.io/): The generated
   documentation site is quite nice, but the value of pages
