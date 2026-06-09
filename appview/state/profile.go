@@ -187,7 +187,7 @@ func (s *State) profileOverview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = s.pages.ProfileOverview(w, pages.ProfileOverviewParams{
-		LoggedInUser:       s.oauth.GetMultiAccountUser(r),
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		Card:               profile,
 		Repos:              pinnedRepos,
 		CollaboratingRepos: pinnedCollaboratingRepos,
@@ -336,7 +336,7 @@ func (s *State) reposPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = s.pages.ProfileRepos(w, pages.ProfileReposParams{
-		LoggedInUser: loggedInUser,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		Repos:        repos,
 		StarStatuses: starStatuses,
 		Card:         profile,
@@ -375,7 +375,7 @@ func (s *State) starredPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = s.pages.ProfileStarred(w, pages.ProfileStarredParams{
-		LoggedInUser: s.oauth.GetMultiAccountUser(r),
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		Repos:        repos,
 		Total:        int(profile.Stats.StarredCount),
 		Card:         profile,
@@ -405,7 +405,7 @@ func (s *State) stringsPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = s.pages.ProfileStrings(w, pages.ProfileStringsParams{
-		LoggedInUser: s.oauth.GetMultiAccountUser(r),
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		Strings:      strings,
 		Card:         profile,
 	})
@@ -502,7 +502,7 @@ func (s *State) vouchesPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = s.pages.ProfileVouches(w, pages.ProfileVouchesParams{
-		LoggedInUser:   loggedInUser,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		Vouches:        vouches,
 		Suggestions:    suggestions,
 		Card:           profile,
@@ -596,7 +596,7 @@ func (s *State) followPage(
 			profile.Did = did
 		}
 		followCards[i] = pages.FollowCard{
-			LoggedInUser:   loggedInUser,
+			BaseParams: pages.BaseParamsFromContext(r.Context()),
 			UserDid:        did,
 			FollowStatus:   followStatus,
 			FollowersCount: followStats.Followers,
@@ -618,7 +618,7 @@ func (s *State) followersPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.pages.ProfileFollowers(w, pages.ProfileFollowersParams{
-		LoggedInUser: s.oauth.GetMultiAccountUser(r),
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		Followers:    followPage.Follows,
 		Card:         followPage.Card,
 	})
@@ -632,7 +632,7 @@ func (s *State) followingPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.pages.ProfileFollowing(w, pages.ProfileFollowingParams{
-		LoggedInUser: s.oauth.GetMultiAccountUser(r),
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		Following:    followPage.Follows,
 		Card:         followPage.Card,
 	})
@@ -1008,7 +1008,7 @@ func (s *State) ProfilePopover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.pages.ProfilePopoverFragment(w, pages.ProfilePopoverParams{
-		LoggedInUser:      loggedInUser,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		UserDid:           did,
 		Profile:           profile,
 		FollowStatus:      followStatus,
@@ -1039,7 +1039,7 @@ func (s *State) EditBioFragment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.pages.EditBioFragment(w, pages.EditBioParams{
-		LoggedInUser: user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		Profile:      profile,
 		AlsoKnownAs:  alsoKnownAs,
 	})
@@ -1083,7 +1083,7 @@ func (s *State) EditPinsFragment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.pages.EditPinsFragment(w, pages.EditPinsParams{
-		LoggedInUser: user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		Profile:      profile,
 		AllRepos:     allRepos,
 	})

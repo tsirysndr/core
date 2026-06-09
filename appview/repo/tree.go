@@ -128,7 +128,7 @@ func (rp *Repo) Tree(w http.ResponseWriter, r *http.Request) {
 
 	user := rp.oauth.GetMultiAccountUser(r)
 	rp.pages.RepoTree(w, pages.RepoTreeParams{
-		LoggedInUser:   user,
+		BaseParams:     pages.BaseParamsFromContext(r.Context()),
 		BreadCrumbs:    breadcrumbs,
 		Path:           treePath,
 		RepoInfo:       rp.repoResolver.GetRepoInfo(r, user),

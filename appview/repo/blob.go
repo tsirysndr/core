@@ -203,7 +203,7 @@ func (rp *Repo) Blob(w http.ResponseWriter, r *http.Request) {
 
 	user := rp.oauth.GetMultiAccountUser(r)
 	rp.pages.RepoBlob(w, pages.RepoBlobParams{
-		LoggedInUser:   user,
+		BaseParams:     pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:       rp.repoResolver.GetRepoInfo(r, user),
 		BreadCrumbs:    breadcrumbs,
 		BlobView:       blobView,

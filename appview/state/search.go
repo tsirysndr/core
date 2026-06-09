@@ -142,7 +142,7 @@ func (s *State) Search(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = s.pages.SearchRepos(w, pages.SearchReposParams{
-		LoggedInUser: s.oauth.GetMultiAccountUser(r),
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		Repos:        repos,
 		Page:         page,
 		FilterQuery:  query.String(),

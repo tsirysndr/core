@@ -127,7 +127,7 @@ func (rp *Repo) AttachArtifact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rp.pages.RepoArtifactFragment(w, pages.RepoArtifactParams{
-		LoggedInUser: user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
 		Artifact:     artifact,
 	})

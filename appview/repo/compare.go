@@ -84,7 +84,7 @@ func (rp *Repo) CompareNew(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rp.pages.RepoCompareNew(w, pages.RepoCompareNewParams{
-		LoggedInUser: user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
 		Branches:     branches,
 		Tags:         tags.Tags,
@@ -201,7 +201,7 @@ func (rp *Repo) Compare(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rp.pages.RepoCompare(w, pages.RepoCompareParams{
-		LoggedInUser: user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
 		Branches:     branches.Branches,
 		Tags:         tags.Tags,

@@ -185,7 +185,7 @@ func (rp *Repo) Log(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rp.pages.RepoLog(w, pages.RepoLogParams{
-		LoggedInUser:    user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		TagMap:          tagMap,
 		RepoInfo:        rp.repoResolver.GetRepoInfo(r, user),
 		RepoLogResponse: xrpcResp,
@@ -261,7 +261,7 @@ func (rp *Repo) Commit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rp.pages.RepoCommit(w, pages.RepoCommitParams{
-		LoggedInUser:       user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:           rp.repoResolver.GetRepoInfo(r, user),
 		RepoCommitResponse: result,
 		EmailToDid:         emailToDidMap,

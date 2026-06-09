@@ -166,7 +166,7 @@ func (rp *Issues) RepoSingleIssue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = rp.pages.RepoSingleIssue(w, pages.RepoSingleIssueParams{
-		LoggedInUser:       user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:           rp.repoResolver.GetRepoInfo(r, user),
 		Issue:              issue,
 		CommentList:        models.NewCommentList(issue.Comments),
@@ -195,7 +195,7 @@ func (rp *Issues) EditIssue(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		rp.pages.EditIssueFragment(w, pages.EditIssueParams{
-			LoggedInUser: user,
+			BaseParams: pages.BaseParamsFromContext(r.Context()),
 			RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
 			Issue:        issue,
 		})
@@ -632,7 +632,7 @@ func (rp *Issues) RepoIssues(w http.ResponseWriter, r *http.Request) {
 	}
 	baseFilterQuery := strings.Join(baseFilterParts, " ")
 	rp.pages.RepoIssues(w, pages.RepoIssuesParams{
-		LoggedInUser:       rp.oauth.GetMultiAccountUser(r),
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:           repoInfo,
 		Issues:             issues,
 		IssueCount:         totalIssues,
@@ -660,7 +660,7 @@ func (rp *Issues) NewIssue(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		rp.pages.RepoNewIssue(w, pages.RepoNewIssueParams{
-			LoggedInUser: user,
+			BaseParams: pages.BaseParamsFromContext(r.Context()),
 			RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
 		})
 	case http.MethodPost:

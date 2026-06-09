@@ -69,7 +69,7 @@ func (s *Spindles) spindles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.Pages.Spindles(w, pages.SpindlesParams{
-		LoggedInUser: user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		Spindles:     all,
 		Tab:          "spindles",
 	})
@@ -126,7 +126,7 @@ func (s *Spindles) dashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.Pages.SpindleDashboard(w, pages.SpindleDashboardParams{
-		LoggedInUser: user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		Spindle:      spindle,
 		Members:      members,
 		Repos:        repoMap,

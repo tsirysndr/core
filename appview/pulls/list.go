@@ -310,7 +310,7 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = s.pages.RepoPulls(w, pages.RepoPullsParams{
-		LoggedInUser:       s.oauth.GetMultiAccountUser(r),
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:           repoInfo,
 		Pulls:              pulls,
 		LabelDefs:          defs,

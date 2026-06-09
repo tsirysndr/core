@@ -14,7 +14,6 @@ import (
 
 func (s *State) GoodFirstIssues(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "GoodFirstIssues")
-	user := s.oauth.GetMultiAccountUser(r)
 
 	page := pagination.FromContext(r.Context())
 
@@ -36,7 +35,7 @@ func (s *State) GoodFirstIssues(w http.ResponseWriter, r *http.Request) {
 
 	if len(repoLabels) == 0 {
 		s.pages.GoodFirstIssues(w, pages.GoodFirstIssuesParams{
-			LoggedInUser: user,
+			BaseParams: pages.BaseParamsFromContext(r.Context()),
 			RepoGroups:   []*models.RepoGroup{},
 			LabelDefs:    make(map[string]*models.LabelDefinition),
 			Page:         page,
@@ -145,7 +144,7 @@ func (s *State) GoodFirstIssues(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.pages.GoodFirstIssues(w, pages.GoodFirstIssuesParams{
-		LoggedInUser: user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoGroups:   paginatedGroups,
 		LabelDefs:    labelDefsMap,
 		Page:         page,

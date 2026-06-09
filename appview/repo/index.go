@@ -58,7 +58,7 @@ func (rp *Repo) Index(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		l.Error("failed to build index response", "err", err)
 		rp.pages.RepoIndexPage(w, pages.RepoIndexParams{
-			LoggedInUser:    user,
+			BaseParams: pages.BaseParamsFromContext(r.Context()),
 			KnotUnreachable: true,
 			RepoInfo:        rp.repoResolver.GetRepoInfo(r, user),
 		})
@@ -171,7 +171,7 @@ func (rp *Repo) Index(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rp.pages.RepoIndexPage(w, pages.RepoIndexParams{
-		LoggedInUser:      user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:          rp.repoResolver.GetRepoInfo(r, user),
 		TagMap:            tagMap,
 		RepoIndexResponse: *result,

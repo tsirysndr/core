@@ -77,13 +77,13 @@ func (s *State) EditCommentFragment(w http.ResponseWriter, r *http.Request) {
 
 func (s *State) NewReplyCommentFragment(w http.ResponseWriter, r *http.Request) {
 	s.pages.ReplyCommentFragment(w, pages.ReplyCommentFragmentParams{
-		LoggedInUser: s.oauth.GetMultiAccountUser(r),
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 	})
 }
 
 func (s *State) ReplyPlaceholderFragment(w http.ResponseWriter, r *http.Request) {
 	s.pages.ReplyPlaceholderFragment(w, pages.ReplyPlaceholderFragmentParams{
-		LoggedInUser: s.oauth.GetMultiAccountUser(r),
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 	})
 }
 

@@ -82,8 +82,14 @@ func (t *Timeline) Timeline(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var canFocus bool
+	if user != nil {
+		focusCount, _ := db.CountFocusNotifs(t.db, user.Did)
+		canFocus = focusCount > 1
+	}
+
 	err = t.pages.Timeline(w, pages.TimelineParams{
-		LoggedInUser:     user,
+		BaseParams:       pages.BaseParamsFromContext(r.Context()),
 		Timeline:         timeline,
 		Repos:            repos,
 		GfiLabel:         gfiLabel,
@@ -93,6 +99,7 @@ func (t *Timeline) Timeline(w http.ResponseWriter, r *http.Request) {
 		FollowingOnly:    followingOnly,
 		RecentBlogPosts:  t.recentPosts,
 		ShowNewsletter:   t.showNewsletter(user),
+		CanFocus:         canFocus,
 	})
 	if err != nil {
 		t.logger.Error("failed to render timeline", "err", err)

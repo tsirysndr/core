@@ -297,23 +297,20 @@ Crawl-delay: 1
 }
 
 func (s *State) TermsOfService(w http.ResponseWriter, r *http.Request) {
-	user := s.oauth.GetMultiAccountUser(r)
 	s.pages.TermsOfService(w, pages.TermsOfServiceParams{
-		LoggedInUser: user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 	})
 }
 
 func (s *State) PrivacyPolicy(w http.ResponseWriter, r *http.Request) {
-	user := s.oauth.GetMultiAccountUser(r)
 	s.pages.PrivacyPolicy(w, pages.PrivacyPolicyParams{
-		LoggedInUser: user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 	})
 }
 
 func (s *State) Brand(w http.ResponseWriter, r *http.Request) {
-	user := s.oauth.GetMultiAccountUser(r)
 	s.pages.Brand(w, pages.BrandParams{
-		LoggedInUser: user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 	})
 }
 
@@ -458,7 +455,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 		knots := s.aclService.KnotsForUser(r.Context(), user.Did)
 
 		s.pages.NewRepo(w, pages.NewRepoParams{
-			LoggedInUser: user,
+			BaseParams: pages.BaseParamsFromContext(r.Context()),
 			Knots:        knots,
 		})
 

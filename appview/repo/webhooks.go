@@ -45,7 +45,7 @@ func (rp *Repo) Webhooks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rp.pages.RepoWebhooksSettings(w, pages.RepoWebhooksSettingsParams{
-		LoggedInUser:      user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:          rp.repoResolver.GetRepoInfo(r, user),
 		Webhooks:          webhooks,
 		WebhookDeliveries: deliveriesMap,
@@ -365,7 +365,7 @@ func (rp *Repo) WebhookDeliveries(w http.ResponseWriter, r *http.Request) {
 	user := rp.oauth.GetMultiAccountUser(r)
 
 	rp.pages.WebhookDeliveriesList(w, pages.WebhookDeliveriesListParams{
-		LoggedInUser: user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
 		Webhook:      webhook,
 		Deliveries:   deliveries,

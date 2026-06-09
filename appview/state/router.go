@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/appview/db"
+	"tangled.org/core/appview/focus"
 	"tangled.org/core/appview/issues"
 	"tangled.org/core/appview/knotacl"
 	"tangled.org/core/appview/knots"
@@ -127,6 +128,7 @@ func (s *State) Router() http.Handler {
 
 func (s *State) UserRouter(mw *middleware.Middleware) http.Handler {
 	r := chi.NewRouter()
+	r.Use(mw.InjectBaseParams)
 
 	r.With(mw.ResolveIdent()).Route("/{user}", func(r chi.Router) {
 		r.Get("/", s.Profile)
@@ -162,6 +164,7 @@ func (s *State) UserRouter(mw *middleware.Middleware) http.Handler {
 
 func (s *State) StandardRouter(mw *middleware.Middleware) http.Handler {
 	r := chi.NewRouter()
+	r.Use(mw.InjectBaseParams)
 
 	r.Handle("/static/*", s.pages.Static())
 
@@ -248,6 +251,7 @@ func (s *State) StandardRouter(mw *middleware.Middleware) http.Handler {
 	r.Mount("/settings/spindles", s.SpindlesRouter())
 
 	r.Mount("/notifications", s.NotificationsRouter(mw))
+	r.Mount("/focus", s.FocusRouter(mw))
 
 	r.Mount("/signup", s.SignupRouter())
 	r.Mount("/", s.oauth.Router())
@@ -428,6 +432,11 @@ func (s *State) LabelsRouter() http.Handler {
 func (s *State) NotificationsRouter(mw *middleware.Middleware) http.Handler {
 	notifs := notifications.New(s.db, s.oauth, s.pages, log.SubLogger(s.logger, "notifications"))
 	return notifs.Router(mw)
+}
+
+func (s *State) FocusRouter(mw *middleware.Middleware) http.Handler {
+	f := focus.New(s.db, s.oauth, s.idResolver, s.pages, log.SubLogger(s.logger, "focus"))
+	return f.Router(mw)
 }
 
 func (s *State) SignupRouter() http.Handler {

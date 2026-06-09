@@ -67,7 +67,7 @@ func (rp *Repo) Tags(w http.ResponseWriter, r *http.Request) {
 	user := rp.oauth.GetMultiAccountUser(r)
 
 	rp.pages.RepoTags(w, pages.RepoTagsParams{
-		LoggedInUser:      user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:          rp.repoResolver.GetRepoInfo(r, user),
 		RepoTagsResponse:  result,
 		ArtifactMap:       artifactMap,
@@ -142,7 +142,7 @@ func (rp *Repo) Tag(w http.ResponseWriter, r *http.Request) {
 
 	user := rp.oauth.GetMultiAccountUser(r)
 	rp.pages.RepoTag(w, pages.RepoTagParams{
-		LoggedInUser:    user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:        rp.repoResolver.GetRepoInfo(r, user),
 		RepoTagResponse: result,
 		ArtifactMap:     artifactMap,

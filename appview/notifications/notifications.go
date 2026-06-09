@@ -153,7 +153,7 @@ func (n *Notifications) notificationsPage(w http.ResponseWriter, r *http.Request
 	}
 
 	err = n.pages.Notifications(w, pages.NotificationsParams{
-		LoggedInUser:      user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		MobileGroups:      pages.GroupNotificationsByDate(notifications),
 		WorkGroups:        pages.GroupNotificationsByDate(workNotifications),
 		SocialGroups:      pages.GroupNotificationsByDate(socialNotifications),
@@ -187,7 +187,7 @@ func (n *Notifications) previewHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = n.pages.NotificationPreview(w, pages.NotificationPreviewParams{
-		LoggedInUser:   user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		Notifications:  notifications,
 		ReadFilter:     readFilter,
 		CategoryFilter: categoryFilter,

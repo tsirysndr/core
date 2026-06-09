@@ -79,7 +79,7 @@ func (s *Strings) timeline(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.Pages.StringsTimeline(w, pages.StringTimelineParams{
-		LoggedInUser: s.OAuth.GetMultiAccountUser(r),
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		Strings:      strings,
 	})
 }
@@ -192,7 +192,7 @@ func (s *Strings) contents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = s.Pages.SingleString(w, pages.SingleStringParams{
-		LoggedInUser: user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RenderToggle: renderToggle,
 		ShowRendered: showRendered,
 		String:       &string,
@@ -263,7 +263,7 @@ func (s *Strings) edit(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		// return the form with prefilled fields
 		s.Pages.PutString(w, pages.PutStringParams{
-			LoggedInUser: s.OAuth.GetMultiAccountUser(r),
+			BaseParams: pages.BaseParamsFromContext(r.Context()),
 			Action:       "edit",
 			String:       first,
 		})
@@ -348,7 +348,7 @@ func (s *Strings) create(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		s.Pages.PutString(w, pages.PutStringParams{
-			LoggedInUser: s.OAuth.GetMultiAccountUser(r),
+			BaseParams: pages.BaseParamsFromContext(r.Context()),
 			Action:       "new",
 		})
 	case http.MethodPost:

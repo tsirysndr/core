@@ -664,7 +664,7 @@ func (rp *Repo) LabelPanel(w http.ResponseWriter, r *http.Request) {
 
 	user := rp.oauth.GetMultiAccountUser(r)
 	rp.pages.LabelPanel(w, pages.LabelPanelParams{
-		LoggedInUser: user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
 		Defs:         defs,
 		Subject:      subject.String(),
@@ -712,7 +712,7 @@ func (rp *Repo) EditLabelPanel(w http.ResponseWriter, r *http.Request) {
 
 	user := rp.oauth.GetMultiAccountUser(r)
 	rp.pages.EditLabelPanel(w, pages.EditLabelPanelParams{
-		LoggedInUser: user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
 		Defs:         defs,
 		Subject:      subject.String(),
@@ -1425,7 +1425,7 @@ func (rp *Repo) ForkRepo(w http.ResponseWriter, r *http.Request) {
 		knots := rp.acl.KnotsForUser(r.Context(), user.Did)
 
 		rp.pages.ForkRepo(w, pages.ForkRepoParams{
-			LoggedInUser: user,
+			BaseParams: pages.BaseParamsFromContext(r.Context()),
 			Knots:        knots,
 			RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
 		})
@@ -1697,7 +1697,7 @@ func (rp *Repo) Stars(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rp.pages.RepoStars(w, pages.RepoStarsParams{
-		LoggedInUser: user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
 		Starrers:     starrers,
 		Page:         page,
@@ -1733,7 +1733,7 @@ func (rp *Repo) Forks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = rp.pages.RepoForks(w, pages.RepoForksParams{
-		LoggedInUser: user,
+		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
 		Forks:        forks,
 		Page:         page,

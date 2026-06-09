@@ -95,6 +95,34 @@ func AuthMiddleware(o *oauth.OAuth) middlewareFunc {
 	}
 }
 
+func (m *Middleware) InjectBaseParams(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := m.oauth.GetMultiAccountUser(r)
+		bp := pages.BaseParams{
+			LoggedInUser: user,
+		}
+		if user != nil {
+			if focusing, _ := db.GetFocusStatus(m.db, user.Did); focusing {
+				if item, _ := db.GetNextFocusItem(m.db, user.Did); item != nil {
+					count, _ := db.CountFocusNotifs(m.db, user.Did)
+					bp.FocusParams = pages.FocusParams{
+						Focusing:            true,
+						FocusLink:           item.URL(m.idResolver),
+						FocusNotificationID: item.ID,
+						CurrentPath:         r.URL.Path,
+						FocusCount:          int(count),
+					}
+				} else {
+					// queue exhausted — auto-exit focus mode
+					_ = db.EndFocus(m.db, user.Did)
+				}
+			}
+		}
+		ctx := pages.BaseParamsIntoContext(r.Context(), bp)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 func Paginate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		page := pagination.FirstPage()
