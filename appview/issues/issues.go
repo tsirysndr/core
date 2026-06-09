@@ -99,17 +99,17 @@ func (rp *Issues) RepoSingleIssue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if user != nil {
-		repoDid := f.RepoDid
 		userDid := user.Did
+		repoDid := f.RepoDid
 		issueId := issue.IssueId
-		go func() {
-			if err := db.MarkNotificationsReadForIssue(rp.db, userDid, repoDid, issueId); err != nil {
-				l.Error("failed to mark issue notifications as read", "err", err)
-			}
-		}()
-
 		atUri := issue.AtUri().String()
+		focusing := pages.BaseParamsFromContext(r.Context()).FocusParams.Focusing
 		go func() {
+			if !focusing {
+				if err := db.MarkNotificationsReadForIssue(rp.db, userDid, repoDid, issueId); err != nil {
+					l.Error("failed to mark issue notifications as read", "err", err)
+				}
+			}
 			if err := db.UpsertRecentLink(rp.db, userDid, models.RecentLinkTypeIssue, atUri); err != nil {
 				l.Error("failed to upsert recent link", "err", err)
 			}

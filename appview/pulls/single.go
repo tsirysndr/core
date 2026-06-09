@@ -102,17 +102,17 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 	l = l.With("pull_id", pull.PullId, "pull_owner", pull.OwnerDid)
 
 	if user != nil {
-		repoDid := f.RepoDid
 		userDid := user.Did
+		repoDid := f.RepoDid
 		pullId := pull.PullId
-		go func() {
-			if err := db.MarkNotificationsReadForPull(s.db, userDid, repoDid, pullId); err != nil {
-				l.Error("failed to mark pull notifications as read", "err", err)
-			}
-		}()
-
 		atUri := pull.AtUri().String()
+		focusing := pages.BaseParamsFromContext(r.Context()).FocusParams.Focusing
 		go func() {
+			if !focusing {
+				if err := db.MarkNotificationsReadForPull(s.db, userDid, repoDid, pullId); err != nil {
+					l.Error("failed to mark pull notifications as read", "err", err)
+				}
+			}
 			if err := db.UpsertRecentLink(s.db, userDid, models.RecentLinkTypePull, atUri); err != nil {
 				l.Error("failed to upsert recent link", "err", err)
 			}
