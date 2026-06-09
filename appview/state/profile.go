@@ -187,7 +187,7 @@ func (s *State) profileOverview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = s.pages.ProfileOverview(w, pages.ProfileOverviewParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
+		BaseParams:         pages.BaseParamsFromContext(r.Context()),
 		Card:               profile,
 		Repos:              pinnedRepos,
 		CollaboratingRepos: pinnedCollaboratingRepos,
@@ -336,7 +336,7 @@ func (s *State) reposPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = s.pages.ProfileRepos(w, pages.ProfileReposParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
+		BaseParams:   pages.BaseParamsFromContext(r.Context()),
 		Repos:        repos,
 		StarStatuses: starStatuses,
 		Card:         profile,
@@ -376,10 +376,10 @@ func (s *State) starredPage(w http.ResponseWriter, r *http.Request) {
 
 	err = s.pages.ProfileStarred(w, pages.ProfileStarredParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		Repos:        repos,
-		Total:        int(profile.Stats.StarredCount),
-		Card:         profile,
-		Page:         page,
+		Repos:      repos,
+		Total:      int(profile.Stats.StarredCount),
+		Card:       profile,
+		Page:       page,
 	})
 	if err != nil {
 		l.Error("failed to render", "err", err)
@@ -406,8 +406,8 @@ func (s *State) stringsPage(w http.ResponseWriter, r *http.Request) {
 
 	err = s.pages.ProfileStrings(w, pages.ProfileStringsParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		Strings:      strings,
-		Card:         profile,
+		Strings:    strings,
+		Card:       profile,
 	})
 }
 
@@ -502,7 +502,7 @@ func (s *State) vouchesPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = s.pages.ProfileVouches(w, pages.ProfileVouchesParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
+		BaseParams:     pages.BaseParamsFromContext(r.Context()),
 		Vouches:        vouches,
 		Suggestions:    suggestions,
 		Card:           profile,
@@ -596,7 +596,7 @@ func (s *State) followPage(
 			profile.Did = did
 		}
 		followCards[i] = pages.FollowCard{
-			BaseParams: pages.BaseParamsFromContext(r.Context()),
+			BaseParams:     pages.BaseParamsFromContext(r.Context()),
 			UserDid:        did,
 			FollowStatus:   followStatus,
 			FollowersCount: followStats.Followers,
@@ -619,8 +619,8 @@ func (s *State) followersPage(w http.ResponseWriter, r *http.Request) {
 
 	s.pages.ProfileFollowers(w, pages.ProfileFollowersParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		Followers:    followPage.Follows,
-		Card:         followPage.Card,
+		Followers:  followPage.Follows,
+		Card:       followPage.Card,
 	})
 }
 
@@ -633,8 +633,8 @@ func (s *State) followingPage(w http.ResponseWriter, r *http.Request) {
 
 	s.pages.ProfileFollowing(w, pages.ProfileFollowingParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		Following:    followPage.Follows,
-		Card:         followPage.Card,
+		Following:  followPage.Follows,
+		Card:       followPage.Card,
 	})
 }
 
@@ -1008,7 +1008,7 @@ func (s *State) ProfilePopover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.pages.ProfilePopoverFragment(w, pages.ProfilePopoverParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
+		BaseParams:        pages.BaseParamsFromContext(r.Context()),
 		UserDid:           did,
 		Profile:           profile,
 		FollowStatus:      followStatus,
@@ -1039,9 +1039,9 @@ func (s *State) EditBioFragment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.pages.EditBioFragment(w, pages.EditBioParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		Profile:      profile,
-		AlsoKnownAs:  alsoKnownAs,
+		BaseParams:  pages.BaseParamsFromContext(r.Context()),
+		Profile:     profile,
+		AlsoKnownAs: alsoKnownAs,
 	})
 }
 
@@ -1084,8 +1084,8 @@ func (s *State) EditPinsFragment(w http.ResponseWriter, r *http.Request) {
 
 	s.pages.EditPinsFragment(w, pages.EditPinsParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		Profile:      profile,
-		AllRepos:     allRepos,
+		Profile:    profile,
+		AllRepos:   allRepos,
 	})
 }
 

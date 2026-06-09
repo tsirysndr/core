@@ -66,7 +66,7 @@ func (s *Pulls) PullActions(w http.ResponseWriter, r *http.Request) {
 		}
 
 		s.pages.PullActionsFragment(w, pages.PullActionsParams{
-			BaseParams: pages.BaseParamsFromContext(r.Context()),
+			BaseParams:         pages.BaseParamsFromContext(r.Context()),
 			RepoInfo:           s.repoResolver.GetRepoInfo(r, user),
 			Pull:               pull,
 			RoundNumber:        roundNumber,
@@ -251,7 +251,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 	}
 
 	err = s.pages.RepoSinglePull(w, pages.RepoSinglePullParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
+		BaseParams:         pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:           s.repoResolver.GetRepoInfo(r, user),
 		Pull:               pull,
 		Stack:              stack,

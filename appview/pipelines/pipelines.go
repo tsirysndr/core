@@ -120,10 +120,10 @@ func (p *Pipelines) Index(w http.ResponseWriter, r *http.Request) {
 
 	p.pages.Pipelines(w, pages.PipelinesParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		RepoInfo:     p.repoResolver.GetRepoInfo(r, user),
-		Pipelines:    ps,
-		FilterKind:   filterKind,
-		Total:        total,
+		RepoInfo:   p.repoResolver.GetRepoInfo(r, user),
+		Pipelines:  ps,
+		FilterKind: filterKind,
+		Total:      total,
 	})
 }
 
@@ -169,9 +169,9 @@ func (p *Pipelines) Workflow(w http.ResponseWriter, r *http.Request) {
 
 	p.pages.Workflow(w, pages.WorkflowParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		RepoInfo:     p.repoResolver.GetRepoInfo(r, user),
-		Pipeline:     singlePipeline,
-		Workflow:     workflow,
+		RepoInfo:   p.repoResolver.GetRepoInfo(r, user),
+		Pipeline:   singlePipeline,
+		Workflow:   workflow,
 	})
 }
 

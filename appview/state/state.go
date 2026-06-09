@@ -456,7 +456,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 
 		s.pages.NewRepo(w, pages.NewRepoParams{
 			BaseParams: pages.BaseParamsFromContext(r.Context()),
-			Knots:        knots,
+			Knots:      knots,
 		})
 
 	case http.MethodPost:

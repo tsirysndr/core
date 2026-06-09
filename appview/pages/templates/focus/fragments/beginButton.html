@@ -1,0 +1,10 @@
+{{ define "focus/fragments/beginButton" }}
+  {{ if and .CanFocus (not .FocusParams.Focusing) }}
+    <form method="POST" action="/focus/begin">
+      <button type="submit"
+              class="flex btn-primary items-center gap-2">
+        {{ i "telescope" "size-4" }} Focus &amp; reply
+      </button>
+    </form>
+  {{ end }}
+{{ end }}

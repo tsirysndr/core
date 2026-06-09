@@ -77,6 +77,9 @@ func (p *Pages) funcMap() template.FuncMap {
 		"resolve": func(s string) string {
 			return p.DisplayHandle(context.Background(), s)
 		},
+		"resolver": func() *idresolver.Resolver {
+			return p.resolver
+		},
 		"primaryHandle": func(s string) string {
 			return primaryHandle(p.resolver, s)
 		},
@@ -383,6 +386,7 @@ func (p *Pages) funcMap() template.FuncMap {
 			// returns false for other "zero" values
 			return t == nil
 		},
+		"hasPrefix": strings.HasPrefix,
 		"list": func(args ...any) []any {
 			return args
 		},

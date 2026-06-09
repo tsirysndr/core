@@ -142,14 +142,14 @@ func (s *State) Search(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = s.pages.SearchRepos(w, pages.SearchReposParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		Repos:        repos,
-		Page:         page,
-		FilterQuery:  query.String(),
-		SortParam:    sortParam,
-		TimeTaken:    searchDuration,
-		ResultCount:  resultCount,
-		DocCount:     docCount,
+		BaseParams:  pages.BaseParamsFromContext(r.Context()),
+		Repos:       repos,
+		Page:        page,
+		FilterQuery: query.String(),
+		SortParam:   sortParam,
+		TimeTaken:   searchDuration,
+		ResultCount: resultCount,
+		DocCount:    docCount,
 	})
 	if err != nil {
 		l.Error("failed to render page", "err", err)

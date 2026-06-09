@@ -1,14 +1,16 @@
 {{ define "timeline/fragments/notifications" }}
   <div class="border border-gray-200 dark:border-gray-700 rounded-sm divide-y divide-gray-200 dark:divide-gray-700">
-    <a href="/notifications" class="flex items-center justify-between bg-white/50 dark:bg-gray-800/50 no-underline hover:no-underline">
-      <h3 class="text-base dark:text-white flex items-center gap-2 px-4 py-2">
-        {{ i "bell" "size-4 flex-shrink-0" }}
-        Notifications
-      </h3>
-      <span class="text-sm font-normal flex items-center gap-1 pr-4">
+    <div class="flex items-center justify-between bg-white/50 dark:bg-gray-800/50">
+      <a href="/notifications" class="flex items-center gap-2 px-4 py-2 no-underline hover:no-underline flex-1">
+        <h3 class="text-base dark:text-white flex items-center gap-2">
+          {{ i "bell" "size-4 flex-shrink-0" }}
+          Notifications
+        </h3>
+      </a>
+      <a href="/notifications" class="text-sm font-normal flex items-center gap-1 pr-4 text-gray-500 dark:text-gray-400 no-underline hover:no-underline">
         View all {{ i "arrow-right" "size-3.5" }}
-      </span>
-    </a>
+      </a>
+    </div>
 
     {{ if not .LoggedInUser }}
       <div class="px-4 py-8 text-sm text-center text-gray-400 dark:text-gray-500">

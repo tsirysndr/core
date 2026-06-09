@@ -125,7 +125,7 @@ func (s *Settings) sitesSettings(w http.ResponseWriter, r *http.Request) {
 	isTnglHandle, _ := s.isTnglHandle(r.Context(), syntax.DID(user.Did))
 
 	s.Pages.UserSiteSettings(w, pages.UserSiteSettingsParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
+		BaseParams:   pages.BaseParamsFromContext(r.Context()),
 		Claim:        claim,
 		SitesDomain:  s.Config.Sites.Domain,
 		IsTnglHandle: isTnglHandle,
@@ -270,7 +270,7 @@ func (s *Settings) profileSettings(w http.ResponseWriter, r *http.Request) {
 	isDeactivated := s.isAccountDeactivated(r.Context(), syntax.DID(user.Did))
 
 	s.Pages.UserProfileSettings(w, pages.UserProfileSettingsParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
+		BaseParams:          pages.BaseParamsFromContext(r.Context()),
 		PunchcardPreference: punchcardPreferences,
 		IsTnglSh:            isTnglSh,
 		IsDeactivated:       isDeactivated,
@@ -289,8 +289,8 @@ func (s *Settings) notificationsSettings(w http.ResponseWriter, r *http.Request)
 	}
 
 	s.Pages.UserNotificationSettings(w, pages.UserNotificationSettingsParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		Preferences:  prefs,
+		BaseParams:  pages.BaseParamsFromContext(r.Context()),
+		Preferences: prefs,
 	})
 }
 
@@ -330,7 +330,7 @@ func (s *Settings) keysSettings(w http.ResponseWriter, r *http.Request) {
 
 	s.Pages.UserKeysSettings(w, pages.UserKeysSettingsParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		PubKeys:      pubKeys,
+		PubKeys:    pubKeys,
 	})
 }
 
@@ -343,7 +343,7 @@ func (s *Settings) emailsSettings(w http.ResponseWriter, r *http.Request) {
 
 	s.Pages.UserEmailsSettings(w, pages.UserEmailsSettingsParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		Emails:       emails,
+		Emails:     emails,
 	})
 }
 

@@ -217,12 +217,13 @@
             @apply hover:bg-gray-50 dark:hover:bg-gray-700
           hover:before:shadow-[inset_0_-2px_0_0_theme(colors.gray.300)] dark:hover:before:shadow-[inset_0_-2px_0_0_theme(colors.gray.800)]
           active:before:shadow-[inset_0_2px_2px_0_theme(colors.gray.200)] dark:active:before:shadow-[inset_0_2px_2px_0_theme(colors.gray.900)]
+          active:translate-y-0.5
           disabled:cursor-not-allowed disabled:opacity-50;
         }
 
         .btn-flat {
             @apply inline-flex items-center justify-center
-          min-h-7 px-2 py-[6px]
+          min-h-[30px] px-2 py-[6px]
           rounded
           text-sm text-gray-900 dark:text-gray-100 cursor-pointer
           transition-colors duration-150 ease-in-out
@@ -249,6 +250,17 @@
         before:shadow-none
         hover:before:shadow-none
         active:before:shadow-none;
+        }
+
+        .btn-primary {
+            @apply btn text-white
+          bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600
+          border border-indigo-700 hover:border-indigo-800 dark:border-indigo-600 dark:hover:border-indigo-700
+          focus-visible:outline-indigo-500
+          disabled:bg-indigo-400 dark:disabled:bg-indigo-400
+          before:shadow-[inset_0_-2px_0_0_theme(colors.gray.900/25%)]
+          hover:before:shadow-[inset_0_-2px_0_0_theme(colors.gray.900/25%)]
+          active:before:shadow-[inset_0_2px_2px_0_theme(colors.gray.900/50%)];
         }
 
         .btn-cancel {

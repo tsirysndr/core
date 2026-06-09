@@ -85,11 +85,11 @@ func (rp *Repo) CompareNew(w http.ResponseWriter, r *http.Request) {
 
 	rp.pages.RepoCompareNew(w, pages.RepoCompareNewParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
-		Branches:     branches,
-		Tags:         tags.Tags,
-		Base:         base,
-		Head:         head,
+		RepoInfo:   rp.repoResolver.GetRepoInfo(r, user),
+		Branches:   branches,
+		Tags:       tags.Tags,
+		Base:       base,
+		Head:       head,
 	})
 }
 
@@ -202,13 +202,13 @@ func (rp *Repo) Compare(w http.ResponseWriter, r *http.Request) {
 
 	rp.pages.RepoCompare(w, pages.RepoCompareParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
-		Branches:     branches.Branches,
-		Tags:         tags.Tags,
-		Base:         base,
-		Head:         head,
-		Diff:         &diff,
-		DiffOpts:     diffOpts,
+		RepoInfo:   rp.repoResolver.GetRepoInfo(r, user),
+		Branches:   branches.Branches,
+		Tags:       tags.Tags,
+		Base:       base,
+		Head:       head,
+		Diff:       &diff,
+		DiffOpts:   diffOpts,
 	})
 
 }

@@ -80,7 +80,7 @@ func (s *Strings) timeline(w http.ResponseWriter, r *http.Request) {
 
 	s.Pages.StringsTimeline(w, pages.StringTimelineParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		Strings:      strings,
+		Strings:    strings,
 	})
 }
 
@@ -192,7 +192,7 @@ func (s *Strings) contents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = s.Pages.SingleString(w, pages.SingleStringParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
+		BaseParams:   pages.BaseParamsFromContext(r.Context()),
 		RenderToggle: renderToggle,
 		ShowRendered: showRendered,
 		String:       &string,
@@ -264,8 +264,8 @@ func (s *Strings) edit(w http.ResponseWriter, r *http.Request) {
 		// return the form with prefilled fields
 		s.Pages.PutString(w, pages.PutStringParams{
 			BaseParams: pages.BaseParamsFromContext(r.Context()),
-			Action:       "edit",
-			String:       first,
+			Action:     "edit",
+			String:     first,
 		})
 	case http.MethodPost:
 		fail := func(msg string, err error) {
@@ -349,7 +349,7 @@ func (s *Strings) create(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		s.Pages.PutString(w, pages.PutStringParams{
 			BaseParams: pages.BaseParamsFromContext(r.Context()),
-			Action:       "new",
+			Action:     "new",
 		})
 	case http.MethodPost:
 		fail := func(msg string, err error) {

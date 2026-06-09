@@ -665,10 +665,10 @@ func (rp *Repo) LabelPanel(w http.ResponseWriter, r *http.Request) {
 	user := rp.oauth.GetMultiAccountUser(r)
 	rp.pages.LabelPanel(w, pages.LabelPanelParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
-		Defs:         defs,
-		Subject:      subject.String(),
-		State:        state,
+		RepoInfo:   rp.repoResolver.GetRepoInfo(r, user),
+		Defs:       defs,
+		Subject:    subject.String(),
+		State:      state,
 	})
 }
 
@@ -713,10 +713,10 @@ func (rp *Repo) EditLabelPanel(w http.ResponseWriter, r *http.Request) {
 	user := rp.oauth.GetMultiAccountUser(r)
 	rp.pages.EditLabelPanel(w, pages.EditLabelPanelParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
-		Defs:         defs,
-		Subject:      subject.String(),
-		State:        state,
+		RepoInfo:   rp.repoResolver.GetRepoInfo(r, user),
+		Defs:       defs,
+		Subject:    subject.String(),
+		State:      state,
 	})
 }
 
@@ -1426,8 +1426,8 @@ func (rp *Repo) ForkRepo(w http.ResponseWriter, r *http.Request) {
 
 		rp.pages.ForkRepo(w, pages.ForkRepoParams{
 			BaseParams: pages.BaseParamsFromContext(r.Context()),
-			Knots:        knots,
-			RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
+			Knots:      knots,
+			RepoInfo:   rp.repoResolver.GetRepoInfo(r, user),
 		})
 
 	case http.MethodPost:
@@ -1698,10 +1698,10 @@ func (rp *Repo) Stars(w http.ResponseWriter, r *http.Request) {
 
 	rp.pages.RepoStars(w, pages.RepoStarsParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
-		Starrers:     starrers,
-		Page:         page,
-		TotalCount:   totalCount,
+		RepoInfo:   rp.repoResolver.GetRepoInfo(r, user),
+		Starrers:   starrers,
+		Page:       page,
+		TotalCount: totalCount,
 	})
 }
 
@@ -1734,10 +1734,10 @@ func (rp *Repo) Forks(w http.ResponseWriter, r *http.Request) {
 
 	err = rp.pages.RepoForks(w, pages.RepoForksParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		RepoInfo:     rp.repoResolver.GetRepoInfo(r, user),
-		Forks:        forks,
-		Page:         page,
-		TotalCount:   totalCount,
+		RepoInfo:   rp.repoResolver.GetRepoInfo(r, user),
+		Forks:      forks,
+		Page:       page,
+		TotalCount: totalCount,
 	})
 	if err != nil {
 		l.Error("failed to render page", "err", err)

@@ -1,0 +1,52 @@
+{{ define "focus/pill" }}
+    {{ if .Focusing }}
+    {{ $offFocus := and .FocusLink .CurrentPath (not (hasPrefix .CurrentPath .FocusLink)) }}
+    <div id="focus-pill" class="fixed bottom-0 left-1/2 -translate-x-1/2 z-50 select-none">
+      {{ if $offFocus }}<a href="{{ .FocusLink }}" class="absolute inset-0 z-0 no-underline" aria-label="Return to focus"></a>{{ end }}
+      <div class="relative flex items-center gap-12 bg-indigo-600 text-sm text-white rounded-t-lg px-4 py-2 shadow-lg">
+
+      <form method="POST" action="/focus/end" class="relative z-10 inline m-0">
+        <button type="submit" class="flex items-center gap-1 text-white hover:text-indigo-200 bg-transparent border-0 p-0 cursor-pointer text-sm">
+          {{ i "x" "size-4" }} Exit
+        </button>
+      </form>
+
+      {{ $remaining := sub .FocusCount 1 }}
+      {{ if $offFocus }}
+        <span class="flex items-center gap-2 whitespace-nowrap animate-pulse">
+          {{ i "route-off" "size-4" }}
+          Off track
+          {{ if gt $remaining 0 }}
+            <span class="opacity-75">{{ $remaining }} remaining</span>
+          {{ end }}
+        </span>
+      {{ else }}
+        <span class="flex items-center gap-2 whitespace-nowrap">
+          {{ i "telescope" "size-4" }}
+          Focusing
+          {{ if gt $remaining 0 }}
+            <span class="opacity-75">{{ $remaining }} remaining</span>
+          {{ end }}
+        </span>
+      {{ end }}
+
+      {{ if $offFocus }}
+        <a href="{{ .FocusLink }}" class="flex items-center gap-1 text-white hover:text-indigo-200 no-underline hover:no-underline bg-transparent border-0 p-0 cursor-pointer text-sm">
+          Return {{ i "undo-2" "size-4" }}
+        </a>
+      {{ else }}
+        <form method="POST" action="/focus/next" class="inline m-0">
+          <input type="hidden" name="current_id" value="{{ .FocusNotificationID }}">
+          <button type="submit" class="flex items-center gap-1 text-white hover:text-indigo-200 bg-transparent border-0 p-0 cursor-pointer text-sm">
+            {{ if le .FocusCount 1 }}
+              {{ i "check" "size-4" }} Finish
+            {{ else }}
+              Next {{ i "arrow-right" "size-4" }}
+            {{ end }}
+          </button>
+        </form>
+      {{ end }}
+      </div>
+    </div>
+  {{ end }}
+{{ end }}

@@ -26,7 +26,7 @@ func (t *Timeline) Home(w http.ResponseWriter, r *http.Request) {
 	}
 
 	t.pages.Home(w, pages.TimelineParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
+		BaseParams:      pages.BaseParamsFromContext(r.Context()),
 		Timeline:        timeline,
 		BlueskyPosts:    blueskyPosts,
 		RecentBlogPosts: t.recentPosts,

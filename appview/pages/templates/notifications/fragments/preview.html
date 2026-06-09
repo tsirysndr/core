@@ -1,8 +1,8 @@
 {{ define "notifications/fragments/preview" }}
-  <div class="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex-wrap gap-2">
-    {{ $read := .ReadFilter }}
-    {{ $cat := .CategoryFilter }}
+  {{ $read := .ReadFilter }}
+  {{ $cat := .CategoryFilter }}
 
+  <div class="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex-wrap gap-2">
     <div class="flex items-center gap-2 flex-wrap">
       <div class="btn-group">
         <a href="#"
@@ -30,17 +30,21 @@
       </button>
     </div>
 
-    <div class="btn-group">
-      {{ range $k, $label := list "all" "work" "social" }}
-        <a href="#"
-           hx-get="/notifications/preview?read={{ $read }}&category={{ $label }}"
-           hx-target="#notif-popup"
-           hx-swap="innerHTML"
-           class="btn-group-item {{ if eq $label $cat }}active{{ end }} capitalize">
-          {{ $label }}
-        </a>
-      {{ end }}
-    </div>
+    {{ if and .CanFocus (not .FocusParams.Focusing) }}
+      {{ template "focus/fragments/beginButton" . }}
+    {{ else if not .FocusParams.Focusing }}
+      <div class="btn-group">
+        {{ range $k, $label := list "all" "work" "social" }}
+          <a href="#"
+             hx-get="/notifications/preview?read={{ $read }}&category={{ $label }}"
+             hx-target="#notif-popup"
+             hx-swap="innerHTML"
+             class="btn-group-item {{ if eq $label $cat }}active{{ end }} capitalize">
+            {{ $label }}
+          </a>
+        {{ end }}
+      </div>
+    {{ end }}
 
   </div>
 

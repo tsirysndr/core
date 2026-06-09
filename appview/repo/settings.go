@@ -241,7 +241,7 @@ func (rp *Repo) sitesSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rp.pages.RepoSiteSettings(w, pages.RepoSiteSettingsParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
+		BaseParams:       pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:         rp.repoResolver.GetRepoInfo(r, user),
 		Branches:         result.Branches,
 		SiteConfig:       siteConfig,
@@ -436,7 +436,7 @@ func (rp *Repo) generalSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rp.pages.RepoGeneralSettings(w, pages.RepoGeneralSettingsParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
+		BaseParams:         pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:           rp.repoResolver.GetRepoInfo(r, user),
 		Branches:           result.Branches,
 		Labels:             labels,
@@ -459,7 +459,7 @@ func (rp *Repo) accessSettings(w http.ResponseWriter, r *http.Request) {
 	collaborators := rp.acl.Collaborators(r.Context(), f)
 
 	rp.pages.RepoAccessSettings(w, pages.RepoAccessSettingsParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
+		BaseParams:            pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:              rp.repoResolver.GetRepoInfo(r, user),
 		Collaborators:         collaborators,
 		CanRemoveCollaborator: knotcompat.KnotHasCapability(r.Context(), f.Knot, rp.config.Core.Dev, consts.CapKnotACL),
@@ -519,7 +519,7 @@ func (rp *Repo) pipelineSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rp.pages.RepoPipelineSettings(w, pages.RepoPipelineSettingsParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
+		BaseParams:     pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:       rp.repoResolver.GetRepoInfo(r, user),
 		Spindles:       spindles,
 		CurrentSpindle: f.Spindle,

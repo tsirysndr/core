@@ -306,7 +306,7 @@ func (s *Pulls) composeParams(r *http.Request, repo *models.Repo) (pages.RepoNew
 	}
 
 	return pages.RepoNewPullParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
+		BaseParams:       pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:         repoInfo,
 		Branches:         branches,
 		SourceBranches:   sourceBranchList,

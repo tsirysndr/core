@@ -37,10 +37,10 @@ func (s *Pulls) PullComment(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		s.pages.PullNewCommentFragment(w, pages.PullNewCommentParams{
-			BaseParams: pages.BaseParamsFromContext(r.Context()),
-			RepoInfo:     s.repoResolver.GetRepoInfo(r, user),
-			Pull:         pull,
-			RoundNumber:  roundNumber,
+			BaseParams:  pages.BaseParamsFromContext(r.Context()),
+			RepoInfo:    s.repoResolver.GetRepoInfo(r, user),
+			Pull:        pull,
+			RoundNumber: roundNumber,
 		})
 		return
 	}

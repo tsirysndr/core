@@ -152,8 +152,13 @@ func (n *Notifications) notificationsPage(w http.ResponseWriter, r *http.Request
 		l.Error("failed to count social unread", "err", err)
 	}
 
+	focusCount, err := db.CountFocusNotifs(n.db, user.Did)
+	if err != nil {
+		l.Error("failed to count focus notifs", "err", err)
+	}
+
 	err = n.pages.Notifications(w, pages.NotificationsParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
+		BaseParams:        pages.BaseParamsFromContext(r.Context()),
 		MobileGroups:      pages.GroupNotificationsByDate(notifications),
 		WorkGroups:        pages.GroupNotificationsByDate(workNotifications),
 		SocialGroups:      pages.GroupNotificationsByDate(socialNotifications),
@@ -163,6 +168,7 @@ func (n *Notifications) notificationsPage(w http.ResponseWriter, r *http.Request
 		Total:             total,
 		ReadFilter:        readFilter,
 		CategoryFilter:    categoryFilter,
+		CanFocus:          focusCount > 1,
 	})
 	if err != nil {
 		l.Error("failed to render page", "err", err)
@@ -186,11 +192,17 @@ func (n *Notifications) previewHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	focusCount, err := db.CountFocusNotifs(n.db, user.Did)
+	if err != nil {
+		l.Error("failed to count focus notifs", "err", err)
+	}
+
 	err = n.pages.NotificationPreview(w, pages.NotificationPreviewParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
+		BaseParams:     pages.BaseParamsFromContext(r.Context()),
 		Notifications:  notifications,
 		ReadFilter:     readFilter,
 		CategoryFilter: categoryFilter,
+		CanFocus:       focusCount > 1,
 	})
 	if err != nil {
 		l.Error("failed to render notification preview", "err", err)

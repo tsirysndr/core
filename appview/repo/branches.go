@@ -38,7 +38,7 @@ func (rp *Repo) Branches(w http.ResponseWriter, r *http.Request) {
 	sortBranches(result.Branches)
 	user := rp.oauth.GetMultiAccountUser(r)
 	rp.pages.RepoBranches(w, pages.RepoBranchesParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
+		BaseParams:           pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:             rp.repoResolver.GetRepoInfo(r, user),
 		RepoBranchesResponse: result,
 	})

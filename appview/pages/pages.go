@@ -42,6 +42,19 @@ type baseParamsCtxKey struct{}
 
 type BaseParams struct {
 	LoggedInUser *oauth.MultiAccountUser
+	FocusParams  FocusParams
+}
+
+type FocusParams struct {
+	Focusing            bool
+	FocusLink           string
+	FocusNotificationID int64
+	CurrentPath         string // r.URL.Path, for off-focus detection in templates
+	FocusCount          int    // total unread focus-eligible items remaining
+}
+
+func (p *Pages) Resolver() *idresolver.Resolver {
+	return p.resolver
 }
 
 func BaseParamsIntoContext(ctx context.Context, bp BaseParams) context.Context {
@@ -384,7 +397,7 @@ func (p *Pages) TermsOfService(w io.Writer, params TermsOfServiceParams) error {
 
 type PrivacyPolicyParams struct {
 	BaseParams
-	Content      template.HTML
+	Content template.HTML
 }
 
 func (p *Pages) PrivacyPolicy(w io.Writer, params PrivacyPolicyParams) error {
@@ -458,11 +471,11 @@ func (p *Pages) Timeline(w io.Writer, params TimelineParams) error {
 
 type GoodFirstIssuesParams struct {
 	BaseParams
-	Issues       []models.Issue
-	RepoGroups   []*models.RepoGroup
-	LabelDefs    map[string]*models.LabelDefinition
-	GfiLabel     *models.LabelDefinition
-	Page         pagination.Page
+	Issues     []models.Issue
+	RepoGroups []*models.RepoGroup
+	LabelDefs  map[string]*models.LabelDefinition
+	GfiLabel   *models.LabelDefinition
+	Page       pagination.Page
 }
 
 func (p *Pages) GoodFirstIssues(w io.Writer, params GoodFirstIssuesParams) error {
@@ -550,11 +563,10 @@ func (p *Pages) NotificationPreview(w io.Writer, params NotificationPreviewParam
 	return p.executePlain("notifications/fragments/preview", w, params)
 }
 
-
 type UserKeysSettingsParams struct {
 	BaseParams
-	PubKeys      []models.PublicKey
-	Tab          string
+	PubKeys []models.PublicKey
+	Tab     string
 }
 
 func (p *Pages) UserKeysSettings(w io.Writer, params UserKeysSettingsParams) error {
@@ -564,8 +576,8 @@ func (p *Pages) UserKeysSettings(w io.Writer, params UserKeysSettingsParams) err
 
 type UserEmailsSettingsParams struct {
 	BaseParams
-	Emails       []models.Email
-	Tab          string
+	Emails []models.Email
+	Tab    string
 }
 
 func (p *Pages) UserEmailsSettings(w io.Writer, params UserEmailsSettingsParams) error {
@@ -575,8 +587,8 @@ func (p *Pages) UserEmailsSettings(w io.Writer, params UserEmailsSettingsParams)
 
 type UserNotificationSettingsParams struct {
 	BaseParams
-	Preferences  *models.NotificationPreferences
-	Tab          string
+	Preferences *models.NotificationPreferences
+	Tab         string
 }
 
 func (p *Pages) UserNotificationSettings(w io.Writer, params UserNotificationSettingsParams) error {
@@ -620,8 +632,8 @@ func (p *Pages) NewsletterResponse(w io.Writer, params NewsletterResponseParams)
 
 type KnotsParams struct {
 	BaseParams
-	Knots        []KnotListingParams
-	Tab          string
+	Knots []KnotListingParams
+	Tab   string
 }
 
 func (p *Pages) Knots(w io.Writer, params KnotsParams) error {
@@ -654,8 +666,8 @@ func (p *Pages) KnotListing(w io.Writer, params KnotListingParams) error {
 
 type SpindlesParams struct {
 	BaseParams
-	Spindles     []models.Spindle
-	Tab          string
+	Spindles []models.Spindle
+	Tab      string
 }
 
 func (p *Pages) Spindles(w io.Writer, params SpindlesParams) error {
@@ -674,10 +686,10 @@ func (p *Pages) SpindleListing(w io.Writer, params SpindleListingParams) error {
 
 type SpindleDashboardParams struct {
 	BaseParams
-	Spindle      models.Spindle
-	Members      []string
-	Repos        map[string][]models.Repo
-	Tab          string
+	Spindle models.Spindle
+	Members []string
+	Repos   map[string][]models.Repo
+	Tab     string
 }
 
 func (p *Pages) SpindleDashboard(w io.Writer, params SpindleDashboardParams) error {
@@ -686,7 +698,7 @@ func (p *Pages) SpindleDashboard(w io.Writer, params SpindleDashboardParams) err
 
 type NewRepoParams struct {
 	BaseParams
-	Knots        []string
+	Knots []string
 }
 
 func (p *Pages) NewRepo(w io.Writer, params NewRepoParams) error {
@@ -695,8 +707,8 @@ func (p *Pages) NewRepo(w io.Writer, params NewRepoParams) error {
 
 type ForkRepoParams struct {
 	BaseParams
-	Knots        []string
-	RepoInfo     repoinfo.RepoInfo
+	Knots    []string
+	RepoInfo repoinfo.RepoInfo
 }
 
 func (p *Pages) ForkRepo(w io.Writer, params ForkRepoParams) error {
@@ -767,11 +779,11 @@ func (p *Pages) ProfileRepos(w io.Writer, params ProfileReposParams) error {
 
 type ProfileStarredParams struct {
 	BaseParams
-	Repos        []models.Repo
-	Card         *ProfileCard
-	Page         pagination.Page
-	Total        int
-	Active       string
+	Repos  []models.Repo
+	Card   *ProfileCard
+	Page   pagination.Page
+	Total  int
+	Active string
 }
 
 func (p *Pages) ProfileStarred(w io.Writer, params ProfileStarredParams) error {
@@ -781,9 +793,9 @@ func (p *Pages) ProfileStarred(w io.Writer, params ProfileStarredParams) error {
 
 type ProfileStringsParams struct {
 	BaseParams
-	Strings      []models.String
-	Card         *ProfileCard
-	Active       string
+	Strings []models.String
+	Card    *ProfileCard
+	Active  string
 }
 
 func (p *Pages) ProfileStrings(w io.Writer, params ProfileStringsParams) error {
@@ -809,7 +821,7 @@ func (p *Pages) ProfileVouches(w io.Writer, params ProfileVouchesParams) error {
 }
 
 type FollowCard struct {
-	UserDid        string
+	UserDid string
 	BaseParams
 	FollowStatus   models.FollowStatus
 	FollowersCount int64
@@ -819,9 +831,9 @@ type FollowCard struct {
 
 type ProfileFollowersParams struct {
 	BaseParams
-	Followers    []FollowCard
-	Card         *ProfileCard
-	Active       string
+	Followers []FollowCard
+	Card      *ProfileCard
+	Active    string
 }
 
 func (p *Pages) ProfileFollowers(w io.Writer, params ProfileFollowersParams) error {
@@ -831,9 +843,9 @@ func (p *Pages) ProfileFollowers(w io.Writer, params ProfileFollowersParams) err
 
 type ProfileFollowingParams struct {
 	BaseParams
-	Following    []FollowCard
-	Card         *ProfileCard
-	Active       string
+	Following []FollowCard
+	Card      *ProfileCard
+	Active    string
 }
 
 func (p *Pages) ProfileFollowing(w io.Writer, params ProfileFollowingParams) error {
@@ -871,8 +883,8 @@ func (p *Pages) ProfilePopoverFragment(w io.Writer, params ProfilePopoverParams)
 
 type EditBioParams struct {
 	BaseParams
-	Profile      *models.Profile
-	AlsoKnownAs  []string
+	Profile     *models.Profile
+	AlsoKnownAs []string
 }
 
 func (p *Pages) EditBioFragment(w io.Writer, params EditBioParams) error {
@@ -881,8 +893,8 @@ func (p *Pages) EditBioFragment(w io.Writer, params EditBioParams) error {
 
 type EditPinsParams struct {
 	BaseParams
-	Profile      *models.Profile
-	AllRepos     []PinnedRepo
+	Profile  *models.Profile
+	AllRepos []PinnedRepo
 }
 
 type PinnedRepo struct {
@@ -980,11 +992,11 @@ func (p *Pages) RepoLog(w io.Writer, params RepoLogParams) error {
 
 type RepoCommitParams struct {
 	BaseParams
-	RepoInfo     repoinfo.RepoInfo
-	Active       string
-	EmailToDid   map[string]string
-	Pipeline     *models.Pipeline
-	DiffOpts     types.DiffOpts
+	RepoInfo   repoinfo.RepoInfo
+	Active     string
+	EmailToDid map[string]string
+	Pipeline   *models.Pipeline
+	DiffOpts   types.DiffOpts
 
 	// singular because it's always going to be just one
 	VerifiedCommit commitverify.VerifiedCommits
@@ -1061,8 +1073,8 @@ func (p *Pages) RepoTree(w io.Writer, params RepoTreeParams) error {
 
 type RepoBranchesParams struct {
 	BaseParams
-	RepoInfo     repoinfo.RepoInfo
-	Active       string
+	RepoInfo repoinfo.RepoInfo
+	Active   string
 	types.RepoBranchesResponse
 }
 
@@ -1073,8 +1085,8 @@ func (p *Pages) RepoBranches(w io.Writer, params RepoBranchesParams) error {
 
 type RepoTagsParams struct {
 	BaseParams
-	RepoInfo     repoinfo.RepoInfo
-	Active       string
+	RepoInfo repoinfo.RepoInfo
+	Active   string
 	types.RepoTagsResponse
 	ArtifactMap       map[plumbing.Hash][]models.Artifact
 	DanglingArtifacts []models.Artifact
@@ -1087,8 +1099,8 @@ func (p *Pages) RepoTags(w io.Writer, params RepoTagsParams) error {
 
 type RepoTagParams struct {
 	BaseParams
-	RepoInfo     repoinfo.RepoInfo
-	Active       string
+	RepoInfo repoinfo.RepoInfo
+	Active   string
 	types.RepoTagResponse
 	ArtifactMap       map[plumbing.Hash][]models.Artifact
 	DanglingArtifacts []models.Artifact
@@ -1101,8 +1113,8 @@ func (p *Pages) RepoTag(w io.Writer, params RepoTagParams) error {
 
 type RepoArtifactParams struct {
 	BaseParams
-	RepoInfo     repoinfo.RepoInfo
-	Artifact     models.Artifact
+	RepoInfo repoinfo.RepoInfo
+	Artifact models.Artifact
 }
 
 func (p *Pages) RepoArtifactFragment(w io.Writer, params RepoArtifactParams) error {
@@ -1217,9 +1229,9 @@ func (p *Pages) RepoWebhooksSettings(w io.Writer, params RepoWebhooksSettingsPar
 
 type WebhookDeliveriesListParams struct {
 	BaseParams
-	RepoInfo     repoinfo.RepoInfo
-	Webhook      *models.Webhook
-	Deliveries   []models.WebhookDelivery
+	RepoInfo   repoinfo.RepoInfo
+	Webhook    *models.Webhook
+	Deliveries []models.WebhookDelivery
 }
 
 func (p *Pages) WebhookDeliveriesList(w io.Writer, params WebhookDeliveriesListParams) error {
@@ -1269,12 +1281,12 @@ func (p *Pages) RepoIssues(w io.Writer, params RepoIssuesParams) error {
 
 type RepoSingleIssueParams struct {
 	BaseParams
-	RepoInfo     repoinfo.RepoInfo
-	Active       string
-	Issue        *models.Issue
-	CommentList  []models.CommentListItem
-	Backlinks    []models.RichReferenceLink
-	LabelDefs    map[string]*models.LabelDefinition
+	RepoInfo    repoinfo.RepoInfo
+	Active      string
+	Issue       *models.Issue
+	CommentList []models.CommentListItem
+	Backlinks   []models.RichReferenceLink
+	LabelDefs   map[string]*models.LabelDefinition
 
 	Reactions          map[syntax.ATURI]map[models.ReactionKind]models.ReactionDisplayData
 	UserReacted        map[syntax.ATURI]map[models.ReactionKind]bool
@@ -1288,9 +1300,9 @@ func (p *Pages) RepoSingleIssue(w io.Writer, params RepoSingleIssueParams) error
 
 type EditIssueParams struct {
 	BaseParams
-	RepoInfo     repoinfo.RepoInfo
-	Issue        *models.Issue
-	Action       string
+	RepoInfo repoinfo.RepoInfo
+	Issue    *models.Issue
+	Action   string
 }
 
 func (p *Pages) EditIssueFragment(w io.Writer, params EditIssueParams) error {
@@ -1313,10 +1325,10 @@ func (p *Pages) ThreadReactionFragment(w io.Writer, params ThreadReactionFragmen
 
 type RepoNewIssueParams struct {
 	BaseParams
-	RepoInfo     repoinfo.RepoInfo
-	Issue        *models.Issue // existing issue if any -- passed when editing
-	Active       string
-	Action       string
+	RepoInfo repoinfo.RepoInfo
+	Issue    *models.Issue // existing issue if any -- passed when editing
+	Active   string
+	Action   string
 }
 
 func (p *Pages) RepoNewIssue(w io.Writer, params RepoNewIssueParams) error {
@@ -1468,9 +1480,9 @@ func (p *Pages) PullActionsFragment(w io.Writer, params PullActionsParams) error
 
 type PullNewCommentParams struct {
 	BaseParams
-	RepoInfo     repoinfo.RepoInfo
-	Pull         *models.Pull
-	RoundNumber  int
+	RepoInfo    repoinfo.RepoInfo
+	Pull        *models.Pull
+	RoundNumber int
 }
 
 func (p *Pages) PullNewCommentFragment(w io.Writer, params PullNewCommentParams) error {
@@ -1479,14 +1491,14 @@ func (p *Pages) PullNewCommentFragment(w io.Writer, params PullNewCommentParams)
 
 type RepoCompareParams struct {
 	BaseParams
-	RepoInfo     repoinfo.RepoInfo
-	Forks        []models.Repo
-	Branches     []types.Branch
-	Tags         []*types.TagReference
-	Base         string
-	Head         string
-	Diff         *types.NiceDiff
-	DiffOpts     types.DiffOpts
+	RepoInfo repoinfo.RepoInfo
+	Forks    []models.Repo
+	Branches []types.Branch
+	Tags     []*types.TagReference
+	Base     string
+	Head     string
+	Diff     *types.NiceDiff
+	DiffOpts types.DiffOpts
 
 	Active string
 }
@@ -1498,12 +1510,12 @@ func (p *Pages) RepoCompare(w io.Writer, params RepoCompareParams) error {
 
 type RepoCompareNewParams struct {
 	BaseParams
-	RepoInfo     repoinfo.RepoInfo
-	Forks        []models.Repo
-	Branches     []types.Branch
-	Tags         []*types.TagReference
-	Base         string
-	Head         string
+	RepoInfo repoinfo.RepoInfo
+	Forks    []models.Repo
+	Branches []types.Branch
+	Tags     []*types.TagReference
+	Base     string
+	Head     string
 
 	Active string
 }
@@ -1515,9 +1527,9 @@ func (p *Pages) RepoCompareNew(w io.Writer, params RepoCompareNewParams) error {
 
 type RepoCompareAllowPullParams struct {
 	BaseParams
-	RepoInfo     repoinfo.RepoInfo
-	Base         string
-	Head         string
+	RepoInfo repoinfo.RepoInfo
+	Base     string
+	Head     string
 }
 
 func (p *Pages) RepoCompareAllowPullFragment(w io.Writer, params RepoCompareAllowPullParams) error {
@@ -1535,10 +1547,10 @@ func (p *Pages) RepoCompareDiffFragment(w io.Writer, params RepoCompareDiffFragm
 
 type LabelPanelParams struct {
 	BaseParams
-	RepoInfo     repoinfo.RepoInfo
-	Defs         map[string]*models.LabelDefinition
-	Subject      string
-	State        models.LabelState
+	RepoInfo repoinfo.RepoInfo
+	Defs     map[string]*models.LabelDefinition
+	Subject  string
+	State    models.LabelState
 }
 
 func (p *Pages) LabelPanel(w io.Writer, params LabelPanelParams) error {
@@ -1547,11 +1559,11 @@ func (p *Pages) LabelPanel(w io.Writer, params LabelPanelParams) error {
 
 type EditLabelPanelParams struct {
 	BaseParams
-	RepoInfo     repoinfo.RepoInfo
-	Defs         map[string]*models.LabelDefinition
-	Subject      string
-	State        models.LabelState
-	Prefix       string
+	RepoInfo repoinfo.RepoInfo
+	Defs     map[string]*models.LabelDefinition
+	Subject  string
+	State    models.LabelState
+	Prefix   string
 }
 
 func (p *Pages) EditLabelPanel(w io.Writer, params EditLabelPanelParams) error {
@@ -1560,11 +1572,11 @@ func (p *Pages) EditLabelPanel(w io.Writer, params EditLabelPanelParams) error {
 
 type RepoStarsParams struct {
 	BaseParams
-	RepoInfo     repoinfo.RepoInfo
-	Active       string
-	Starrers     []models.Star
-	Page         pagination.Page
-	TotalCount   int
+	RepoInfo   repoinfo.RepoInfo
+	Active     string
+	Starrers   []models.Star
+	Page       pagination.Page
+	TotalCount int
 }
 
 func (p *Pages) RepoStars(w io.Writer, params RepoStarsParams) error {
@@ -1574,11 +1586,11 @@ func (p *Pages) RepoStars(w io.Writer, params RepoStarsParams) error {
 
 type RepoForksParams struct {
 	BaseParams
-	RepoInfo     repoinfo.RepoInfo
-	Active       string
-	Forks        []models.Repo
-	Page         pagination.Page
-	TotalCount   int
+	RepoInfo   repoinfo.RepoInfo
+	Active     string
+	Forks      []models.Repo
+	Page       pagination.Page
+	TotalCount int
 }
 
 func (p *Pages) RepoForks(w io.Writer, params RepoForksParams) error {
@@ -1588,11 +1600,11 @@ func (p *Pages) RepoForks(w io.Writer, params RepoForksParams) error {
 
 type PipelinesParams struct {
 	BaseParams
-	RepoInfo     repoinfo.RepoInfo
-	Pipelines    []models.Pipeline
-	Active       string
-	FilterKind   string
-	Total        int64
+	RepoInfo   repoinfo.RepoInfo
+	Pipelines  []models.Pipeline
+	Active     string
+	FilterKind string
+	Total      int64
 }
 
 func (p *Pages) Pipelines(w io.Writer, params PipelinesParams) error {
@@ -1642,11 +1654,11 @@ func (p *Pages) WorkflowSymbolOOB(w io.Writer, params WorkflowSymbolOOBParams) e
 
 type WorkflowParams struct {
 	BaseParams
-	RepoInfo     repoinfo.RepoInfo
-	Pipeline     models.Pipeline
-	Workflow     string
-	LogUrl       string
-	Active       string
+	RepoInfo repoinfo.RepoInfo
+	Pipeline models.Pipeline
+	Workflow string
+	LogUrl   string
+	Active   string
 }
 
 func (p *Pages) Workflow(w io.Writer, params WorkflowParams) error {
@@ -1656,7 +1668,7 @@ func (p *Pages) Workflow(w io.Writer, params WorkflowParams) error {
 
 type PutStringParams struct {
 	BaseParams
-	Action       string
+	Action string
 
 	// this is supplied in the case of editing an existing string
 	String models.String
@@ -1668,8 +1680,8 @@ func (p *Pages) PutString(w io.Writer, params PutStringParams) error {
 
 type StringsDashboardParams struct {
 	BaseParams
-	Card         ProfileCard
-	Strings      []models.String
+	Card    ProfileCard
+	Strings []models.String
 }
 
 func (p *Pages) StringsDashboard(w io.Writer, params StringsDashboardParams) error {
@@ -1678,7 +1690,7 @@ func (p *Pages) StringsDashboard(w io.Writer, params StringsDashboardParams) err
 
 type StringTimelineParams struct {
 	BaseParams
-	Strings      []models.String
+	Strings []models.String
 }
 
 func (p *Pages) StringsTimeline(w io.Writer, params StringTimelineParams) error {
@@ -1708,13 +1720,13 @@ func (p *Pages) SingleString(w io.Writer, params SingleStringParams) error {
 
 type SearchReposParams struct {
 	BaseParams
-	Repos        []models.Repo
-	Page         pagination.Page
-	ResultCount  int
-	FilterQuery  string
-	SortParam    string
-	TimeTaken    time.Duration
-	DocCount     int64
+	Repos       []models.Repo
+	Page        pagination.Page
+	ResultCount int
+	FilterQuery string
+	SortParam   string
+	TimeTaken   time.Duration
+	DocCount    int64
 }
 
 func (p *Pages) SearchRepos(w io.Writer, params SearchReposParams) error {

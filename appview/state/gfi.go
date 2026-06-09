@@ -36,10 +36,10 @@ func (s *State) GoodFirstIssues(w http.ResponseWriter, r *http.Request) {
 	if len(repoLabels) == 0 {
 		s.pages.GoodFirstIssues(w, pages.GoodFirstIssuesParams{
 			BaseParams: pages.BaseParamsFromContext(r.Context()),
-			RepoGroups:   []*models.RepoGroup{},
-			LabelDefs:    make(map[string]*models.LabelDefinition),
-			Page:         page,
-			GfiLabel:     gfiLabelDef,
+			RepoGroups: []*models.RepoGroup{},
+			LabelDefs:  make(map[string]*models.LabelDefinition),
+			Page:       page,
+			GfiLabel:   gfiLabelDef,
 		})
 		return
 	}
@@ -145,9 +145,9 @@ func (s *State) GoodFirstIssues(w http.ResponseWriter, r *http.Request) {
 
 	s.pages.GoodFirstIssues(w, pages.GoodFirstIssuesParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		RepoGroups:   paginatedGroups,
-		LabelDefs:    labelDefsMap,
-		Page:         page,
-		GfiLabel:     gfiLabelDef,
+		RepoGroups: paginatedGroups,
+		LabelDefs:  labelDefsMap,
+		Page:       page,
+		GfiLabel:   gfiLabelDef,
 	})
 }

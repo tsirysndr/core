@@ -310,7 +310,7 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = s.pages.RepoPulls(w, pages.RepoPullsParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
+		BaseParams:         pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:           repoInfo,
 		Pulls:              pulls,
 		LabelDefs:          defs,

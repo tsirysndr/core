@@ -10,27 +10,11 @@
     (dict "Key" "unread" "Value" "Unread" "Icon" "glasses")
   }}
 
-  {{/* Mobile controls: single row */}}
-  <div class="md:hidden px-4 pb-4 flex items-center justify-between">
-    <div class="flex items-center gap-2">
-      {{ template "fragments/tabSelector" (dict "Name" "read" "Values" $readVals "Active" .ReadFilter) }}
-      <button
-        hx-post="/notifications/read-all"
-        hx-swap="none"
-        hx-on::after-request="window.location.reload()"
-        class="btn-flat flex items-center gap-2 text-sm">
-        {{ i "check-check" "size-4" }} Mark all read
-      </button>
-    </div>
-    <a href="/settings/notifications" class="btn-flat">
-      {{ i "cog" "size-5" }}
-    </a>
-  </div>
-
   {{/* Desktop controls: single row */}}
-  <div class="hidden md:flex md:px-0 pb-4 items-center justify-between gap-4">
+  <div class="flex md:px-0 px-4 pb-4 items-center justify-between gap-4">
     <div class="flex items-center gap-2">
       {{ template "fragments/tabSelector" (dict "Name" "read" "Values" $readVals "Active" .ReadFilter) }}
+      {{ template "focus/fragments/beginButton" . }}
       <button
         hx-post="/notifications/read-all"
         hx-swap="none"
@@ -40,7 +24,8 @@
       </button>
     </div>
     <a href="/settings/notifications" class="flex items-center gap-2 text-sm">
-      {{ i "cog" "w-4 h-4" }} Preferences
+      {{ i "cog" "w-4 h-4" }} 
+      <span class="hidden md:inline">Preferences</span>
     </a>
   </div>
 
