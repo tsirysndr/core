@@ -2178,6 +2178,22 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "delete-unused-pipeline-statuses", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			delete from pipeline_statuses as p
+			where p.status = 'pending'
+			and exists (
+				select 1 from pipeline_statuses as q
+				where q.pipeline_knot = p.pipeline_knot
+				and q.pipeline_rkey = p.pipeline_rkey
+				and q.workflow      = p.workflow
+				and q.status        = 'pending'
+				and q.created       < p.created
+			);
+		`)
+		return err
+	})
+
 	orm.RunMigration(conn, logger, "timeline-query-indexes", func(tx *sql.Tx) error {
 		_, err := tx.Exec(`
 			-- following timeline: stars by a set of users, newest first
@@ -2192,17 +2208,11 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
-	orm.RunMigration(conn, logger, "delete-unused-pipeline-statuses", func(tx *sql.Tx) error {
+	orm.RunMigration(conn, logger, "add-focusing-table", func(tx *sql.Tx) error {
 		_, err := tx.Exec(`
-			delete from pipeline_statuses as p
-			where p.status = 'pending'
-			and exists (
-				select 1 from pipeline_statuses as q
-				where q.pipeline_knot = p.pipeline_knot
-				and q.pipeline_rkey = p.pipeline_rkey
-				and q.workflow      = p.workflow
-				and q.status        = 'pending'
-				and q.created       < p.created
+			create table if not exists focusing (
+				did     text primary key,
+				started text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 			);
 		`)
 		return err
