@@ -1,9 +1,12 @@
 package models
 
 import (
+	"context"
+	"fmt"
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	"tangled.org/core/idresolver"
 )
 
 type NotificationType string
@@ -106,6 +109,36 @@ type NotificationWithEntity struct {
 	Repo  *Repo
 	Issue *Issue
 	Pull  *Pull
+}
+
+// URL returns the navigable path for the notification, resolving DIDs to
+// handles via the provided resolver.
+func (n *NotificationWithEntity) URL(res *idresolver.Resolver) string {
+	resolve := func(did string) string {
+		if id, err := res.ResolveIdent(context.Background(), did); err == nil && !id.Handle.IsInvalidHandle() {
+			return id.Handle.String()
+		}
+		return did
+	}
+
+	switch n.Type {
+	case NotificationTypeFollowed:
+		return "/" + resolve(n.ActorDid)
+	}
+	if n.Repo == nil {
+		return ""
+	}
+	repoHandle := resolve(n.Repo.Did)
+	slug := n.Repo.Slug()
+	switch {
+	case n.Issue != nil:
+		return fmt.Sprintf("/%s/%s/issues/%d", repoHandle, slug, n.Issue.IssueId)
+	case n.Pull != nil:
+		return fmt.Sprintf("/%s/%s/pulls/%d", repoHandle, slug, n.Pull.PullId)
+	default:
+		// repo_starred and other repo-level types
+		return fmt.Sprintf("/%s/%s", repoHandle, slug)
+	}
 }
 
 type NotificationPreferences struct {

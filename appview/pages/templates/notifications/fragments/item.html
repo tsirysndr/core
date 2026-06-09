@@ -1,5 +1,5 @@
 {{define "notifications/fragments/item"}}
-  <a href="{{ template "notificationUrl" . }}"
+  <a href="{{ .URL resolver }}"
      onclick="if(!event.target.closest('button'))navigator.sendBeacon('/notifications/{{ .ID }}/read')"
      class="block no-underline hover:no-underline group">
     <div
@@ -132,20 +132,4 @@
   {{ else if .Pull }}
     <div class="row-start-2 col-start-2 text-sm text-gray-700 dark:text-gray-300 truncate">{{ .Pull.Title }}</div>
   {{ end }}
-{{ end }}
-
-{{ define "notificationUrl" }}
-  {{ $url := "" }}
-  {{ if eq .Type "repo_starred" }}
-    {{$url = printf "/%s/%s" (resolve .Repo.Did) .Repo.Slug}}
-  {{ else if .Issue }}
-    {{$url = printf "/%s/%s/issues/%d" (resolve .Repo.Did) .Repo.Slug .Issue.IssueId}}
-  {{ else if .Pull }}
-    {{$url = printf "/%s/%s/pulls/%d" (resolve .Repo.Did) .Repo.Slug .Pull.PullId}}
-  {{ else if eq .Type "followed" }}
-    {{$url = printf "/%s" (resolve .ActorDid)}}
-  {{ else }}
-  {{ end }}
-
-  {{ $url }}
 {{ end }}
