@@ -5,7 +5,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -40,7 +39,7 @@ func New(
 	config *config.Config,
 	pages *pages.Pages,
 	logger *slog.Logger,
-	postsDir string,
+	postsFS fs.FS,
 ) *Timeline {
 	t := &Timeline{
 		oauth:  oauth,
@@ -49,7 +48,7 @@ func New(
 		pages:  pages,
 		logger: logger,
 	}
-	t.recentPosts = loadRecentPosts(postsDir, logger)
+	t.recentPosts = loadRecentPosts(postsFS, logger)
 	return t
 }
 
@@ -61,11 +60,10 @@ func (t *Timeline) Router() http.Handler {
 	return r
 }
 
-func loadRecentPosts(postsDir string, logger *slog.Logger) []pages.BlogPost {
-	fsys := os.DirFS(postsDir)
-	entries, err := fs.ReadDir(fsys, ".")
+func loadRecentPosts(postsFS fs.FS, logger *slog.Logger) []pages.BlogPost {
+	entries, err := fs.ReadDir(postsFS, "posts")
 	if err != nil {
-		logger.Warn("failed to read blog posts dir", "dir", postsDir, "err", err)
+		logger.Warn("failed to read blog posts", "err", err)
 		return nil
 	}
 
@@ -74,7 +72,7 @@ func loadRecentPosts(postsDir string, logger *slog.Logger) []pages.BlogPost {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
 			continue
 		}
-		data, err := fs.ReadFile(fsys, entry.Name())
+		data, err := fs.ReadFile(postsFS, "posts/"+entry.Name())
 		if err != nil {
 			continue
 		}

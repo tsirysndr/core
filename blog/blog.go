@@ -3,6 +3,7 @@ package blog
 import (
 	"bytes"
 	"cmp"
+	"embed"
 	"html/template"
 	"io"
 	"io/fs"
@@ -18,6 +19,9 @@ import (
 	"tangled.org/core/appview/pages/markup"
 	textension "tangled.org/core/appview/pages/markup/extension"
 )
+
+//go:embed posts
+var PostsFS embed.FS
 
 type Author struct {
 	Name   string `yaml:"name"`

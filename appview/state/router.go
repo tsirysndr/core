@@ -26,6 +26,7 @@ import (
 	"tangled.org/core/appview/state/userutil"
 	avstrings "tangled.org/core/appview/strings"
 	avtimeline "tangled.org/core/appview/timeline"
+	"tangled.org/core/blog"
 	"tangled.org/core/log"
 )
 
@@ -164,7 +165,7 @@ func (s *State) StandardRouter(mw *middleware.Middleware) http.Handler {
 
 	r.Handle("/static/*", s.pages.Static())
 
-	tl := avtimeline.New(s.oauth, s.db, s.config, s.pages, s.logger, "blog/posts")
+	tl := avtimeline.New(s.oauth, s.db, s.config, s.pages, s.logger, blog.PostsFS)
 	r.Get("/", tl.HomeOrTimeline)
 	r.Get("/home", tl.Home)
 	r.Get("/timeline", tl.Timeline)
