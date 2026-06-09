@@ -16,6 +16,7 @@ type Config struct {
 	KnotSSRF            bool          `env:"MIRROR_KNOT_SSRF, default=false"`
 	GitRepoBasePath     string        `env:"MIRROR_GIT_BASEPATH, default=repos"`
 	GitRepoFetchTimeout time.Duration `env:"MIRROR_GIT_FETCH_TIMEOUT, default=600s"`
+	Search              SearchConfig  `env:",prefix=MIRROR_SEARCH_"`
 	ResyncParallelism   int           `env:"MIRROR_RESYNC_PARALLELISM, default=5"`
 	Slurper             SlurperConfig `env:",prefix=MIRROR_SLURPER_"`
 	UseSSL              bool          `env:"MIRROR_USE_SSL, default=false"`
@@ -35,6 +36,10 @@ func (c *Config) BaseUrl() string {
 type SlurperConfig struct {
 	PersistCursorPeriod time.Duration `env:"PERSIST_CURSOR_PERIOD, default=4s"`
 	ConcurrencyPerHost  int           `env:"CONCURRENCY, default=4"`
+}
+
+type SearchConfig struct {
+	ZoektUrl string `env:"ZOEKT_URL"` // base url to zoekt node. skipped when empty
 }
 
 func Load(ctx context.Context) (*Config, error) {

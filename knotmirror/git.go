@@ -17,6 +17,11 @@ import (
 	"tangled.org/core/knotmirror/models"
 )
 
+type branch struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
 type GitMirrorManager interface {
 	Exist(repo *models.Repo) (bool, error)
 	// Clone clones the repository as a mirror
@@ -25,6 +30,7 @@ type GitMirrorManager interface {
 	Fetch(ctx context.Context, repo *models.Repo) error
 	// Sync mirrors the repository. It will clone the repository if repository doesn't exist.
 	Sync(ctx context.Context, repo *models.Repo) error
+	DefaultBranch(ctx context.Context, repo *models.Repo) (branch, error)
 	Delete(repo *models.Repo) error
 }
 
@@ -147,6 +153,33 @@ func (c *CliGitMirrorManager) Sync(ctx context.Context, repo *models.Repo) error
 		}
 	}
 	return nil
+}
+
+func (c *CliGitMirrorManager) DefaultBranch(ctx context.Context, repo *models.Repo) (branch, error) {
+	path := c.makeRepoPath(repo)
+
+	nameCmd := exec.CommandContext(ctx, "git", "-C", path, "symbolic-ref", "--short", "HEAD")
+	nameOut, err := nameCmd.Output()
+	if err != nil {
+		return branch{}, err
+	}
+
+	// --verify --quiet exits 1 with no output on an empty repo (unborn HEAD).
+	revCmd := exec.CommandContext(ctx, "git", "-C", path, "rev-parse", "--verify", "--quiet", "HEAD")
+	revOut, err := revCmd.Output()
+	if err != nil {
+		return branch{}, err
+	}
+
+	version := strings.TrimSpace(string(revOut))
+	if version == "" {
+		return branch{}, errors.New("git: no commits")
+	}
+
+	return branch{
+		Name:    strings.TrimSpace(string(nameOut)),
+		Version: version,
+	}, nil
 }
 
 func (c *CliGitMirrorManager) Delete(repo *models.Repo) error {
@@ -286,6 +319,21 @@ func (c *GoGitMirrorManager) Sync(ctx context.Context, repo *models.Repo) error 
 		}
 	}
 	return nil
+}
+
+func (c *GoGitMirrorManager) DefaultBranch(ctx context.Context, repo *models.Repo) (branch, error) {
+	gr, err := git.PlainOpen(c.makeRepoPath(repo))
+	if err != nil {
+		return branch{}, fmt.Errorf("opening local repo: %w", err)
+	}
+	ref, err := gr.Head()
+	if err != nil {
+		return branch{}, fmt.Errorf("resolving HEAD: %w", err)
+	}
+	return branch{
+		Name:    ref.Name().Short(),
+		Version: ref.Hash().String(),
+	}, nil
 }
 
 func (c *GoGitMirrorManager) Delete(repo *models.Repo) error {

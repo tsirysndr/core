@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -258,6 +259,24 @@ func (r *Resyncer) doResync(ctx context.Context, repoDid syntax.DID) (bool, erro
 		return false, err
 	}
 
+	// request index to zoekt server
+	// NOTE: indexing after full git resync is bad design. We are doing _after_ the sync because knotstream event doesn't include repository refs.
+	// NOTE: and zoekt indexer should directly subscribe to the knot. remove this when we have knotrelay.
+	if r.cfg.Search.ZoektUrl != "" {
+		go func() {
+			idxCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			defaultBranch, err := r.gitm.DefaultBranch(idxCtx, repo)
+			if err != nil {
+				r.logger.Warn("resolving default branch for indexing failed", "did", repo.RepoDid, "error", err)
+				return
+			}
+			if err := r.requestIndex(idxCtx, repo.RepoDid, []branch{defaultBranch}); err != nil {
+				r.logger.Warn("requesting zoekt index failed", "did", repo.RepoDid, "err", err)
+			}
+		}()
+	}
+
 	// queue repo_stats_update job
 	r.indexer.AddTask(context.TODO(), &knotstream.Task{Key: repo.RepoDid.String()})
 
@@ -395,4 +414,33 @@ func backoff(retries int, max int) time.Duration {
 	dur := min(1<<retries, max)
 	jitter := time.Millisecond * time.Duration(rand.Intn(1000))
 	return time.Second*time.Duration(dur) + jitter
+}
+
+func (r *Resyncer) requestIndex(ctx context.Context, repoDid syntax.DID, branches []branch) error {
+	r.logger.Info("requesting index", "repo", repoDid, "branches", branches)
+	body, err := json.Marshal(map[string]any{
+		"repo":     repoDid.String(),
+		"branches": branches,
+	})
+	if err != nil {
+		return fmt.Errorf("marshaling index request: %w", err)
+	}
+
+	endpoint := r.cfg.Search.ZoektUrl + "/indexserver/admin/enqueueIndex"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := r.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("requesting zoekt index: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("non-ok status: %d", resp.StatusCode)
+	}
+	return nil
 }
