@@ -49,7 +49,7 @@
       {{ template "user/fragments/pic" (list .Repo.Did "size-7") }}
     </span>
     <span class="col-start-2 row-start-1 row-span-2 self-center truncate font-medium dark:text-white">{{ $repoOwner }}/{{ .Repo.Name }}</span>
-    <span class="col-start-3 row-start-1 row-span-2 self-center text-gray-500 dark:text-gray-400 text-xs shrink-0">{{ template "repo/fragments/shortTime" .Link.Visited }}</span>
+    <span class="col-start-3 row-start-1 row-span-2 self-center text-gray-500 dark:text-gray-400 text-sm shrink-0">{{ template "repo/fragments/shortTime" .Link.Visited }}</span>
   </a>
 {{ end }}
 
@@ -62,8 +62,8 @@
       {{ template "recentIconCircle" (dict "color" "text-gray-500 dark:text-gray-400" "icon" "ban") }}
     {{ end }}
     <span class="col-start-2 row-start-1 truncate dark:text-white">{{ .Issue.Title }}</span>
-    <span class="col-start-2 row-start-2 truncate text-xs text-gray-500 dark:text-gray-400">{{ $repoOwner }}/{{ .Issue.Repo.Name }}</span>
-    <span class="col-start-3 row-start-1 self-center text-gray-500 dark:text-gray-400 text-xs shrink-0">{{ template "repo/fragments/shortTime" .Link.Visited }}</span>
+    <span class="col-start-2 row-start-2 truncate text-sm text-gray-500 dark:text-gray-400">{{ $repoOwner }}/{{ .Issue.Repo.Name }}</span>
+    <span class="col-start-3 row-start-1 self-center text-gray-500 dark:text-gray-400 text-sm shrink-0">{{ template "repo/fragments/shortTime" .Link.Visited }}</span>
   </a>
 {{ end }}
 
@@ -78,7 +78,7 @@
       {{ template "recentIconCircle" (dict "color" "text-gray-600 dark:text-gray-300" "icon" "git-pull-request-closed") }}
     {{ end }}
     <span class="col-start-2 row-start-1 truncate dark:text-white">{{ .Pull.Title }}</span>
-    <span class="col-start-2 row-start-2 truncate text-xs text-gray-500 dark:text-gray-400">{{ $repoOwner }}/{{ .Pull.Repo.Name }}</span>
-    <span class="col-start-3 row-start-1 self-center text-gray-500 dark:text-gray-400 text-xs shrink-0">{{ template "repo/fragments/shortTime" .Link.Visited }}</span>
+    <span class="col-start-2 row-start-2 truncate text-sm text-gray-500 dark:text-gray-400">{{ $repoOwner }}/{{ .Pull.Repo.Name }}</span>
+    <span class="col-start-3 row-start-1 self-center text-gray-500 dark:text-gray-400 text-sm shrink-0">{{ template "repo/fragments/shortTime" .Link.Visited }}</span>
   </a>
 {{ end }}

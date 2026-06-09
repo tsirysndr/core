@@ -40,7 +40,7 @@
         <a href="/{{ $repoOwner }}/{{ .Slug }}" class="absolute inset-0 no-underline" aria-label="{{ $repoOwner }}/{{ .Name }}"></a>
         <span class="text-sm font-medium dark:text-white truncate block">{{ $repoOwner }}/{{ .Name }}</span>
         {{ with .Description }}
-          <span class="text-xs text-gray-500 dark:text-gray-400 truncate line-clamp-1 block">{{ . | description }}</span>
+          <span class="text-sm text-gray-500 dark:text-gray-400 truncate line-clamp-1 block">{{ . | description }}</span>
         {{ end }}
       </td>
       <td class="pl-2 pr-4 py-3 text-gray-400 text-sm whitespace-nowrap font-mono align-top">
