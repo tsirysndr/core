@@ -1140,11 +1140,12 @@ func (p *Pages) RepoGeneralSettings(w io.Writer, params RepoGeneralSettingsParam
 }
 
 type RepoAccessSettingsParams struct {
-	LoggedInUser  *oauth.MultiAccountUser
-	RepoInfo      repoinfo.RepoInfo
-	Active        string
-	Tab           string
-	Collaborators []Collaborator
+	LoggedInUser          *oauth.MultiAccountUser
+	RepoInfo              repoinfo.RepoInfo
+	Active                string
+	Tab                   string
+	Collaborators         []Collaborator
+	CanRemoveCollaborator bool
 }
 
 func (p *Pages) RepoAccessSettings(w io.Writer, params RepoAccessSettingsParams) error {

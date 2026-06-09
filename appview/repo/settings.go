@@ -13,11 +13,13 @@ import (
 	"tangled.org/core/api/tangled"
 
 	"tangled.org/core/appview/db"
+	"tangled.org/core/appview/knotcompat"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/sites"
 	xrpcclient "tangled.org/core/appview/xrpcclient"
+	"tangled.org/core/consts"
 	"tangled.org/core/orm"
 	"tangled.org/core/types"
 
@@ -457,9 +459,10 @@ func (rp *Repo) accessSettings(w http.ResponseWriter, r *http.Request) {
 	collaborators := rp.acl.Collaborators(r.Context(), f)
 
 	rp.pages.RepoAccessSettings(w, pages.RepoAccessSettingsParams{
-		LoggedInUser:  user,
-		RepoInfo:      rp.repoResolver.GetRepoInfo(r, user),
-		Collaborators: collaborators,
+		LoggedInUser:          user,
+		RepoInfo:              rp.repoResolver.GetRepoInfo(r, user),
+		Collaborators:         collaborators,
+		CanRemoveCollaborator: knotcompat.KnotHasCapability(r.Context(), f.Knot, rp.config.Core.Dev, consts.CapKnotACL),
 	})
 }
 

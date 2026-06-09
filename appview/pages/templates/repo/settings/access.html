@@ -42,7 +42,7 @@
             <p class="text-sm text-gray-500 dark:text-gray-400">{{ .Role }}</p>
           </div>
 
-          {{ if and (eq .Role "collaborator") $.RepoInfo.Roles.CollaboratorInviteAllowed }}
+          {{ if and (eq .Role "collaborator") $.RepoInfo.Roles.CollaboratorInviteAllowed $.CanRemoveCollaborator }}
             <button
               hx-delete="/{{ $.RepoInfo.FullName }}/settings/collaborator"
               hx-vals='{"collaborator": "{{ .Did }}"}'
