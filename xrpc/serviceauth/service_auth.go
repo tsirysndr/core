@@ -8,12 +8,17 @@ import (
 	"strings"
 
 	"github.com/bluesky-social/indigo/atproto/auth"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/log"
 	xrpcerr "tangled.org/core/xrpc/errors"
 )
 
 const ActorDid string = "ActorDid"
+
+func DidWeb(hostname string) syntax.DID {
+	return syntax.DID("did:web:" + strings.ReplaceAll(hostname, ":", "%3A"))
+}
 
 type ServiceAuth struct {
 	logger      *slog.Logger

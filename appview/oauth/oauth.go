@@ -24,6 +24,7 @@ import (
 	"tangled.org/core/appview/db"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/rbac"
+	"tangled.org/core/xrpc/serviceauth"
 )
 
 const (
@@ -399,7 +400,7 @@ func WithTimeout(timeout time.Duration) ServiceClientOpt {
 }
 
 func (s *ServiceClientOpts) Audience() string {
-	return fmt.Sprintf("did:web:%s", s.service)
+	return serviceauth.DidWeb(s.service).String()
 }
 
 func (s *ServiceClientOpts) Host() string {

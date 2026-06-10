@@ -2,10 +2,10 @@ package config
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/sethvargo/go-envconfig"
+	"tangled.org/core/xrpc/serviceauth"
 )
 
 type Repo struct {
@@ -36,7 +36,7 @@ type Git struct {
 }
 
 func (s Server) Did() syntax.DID {
-	return syntax.DID(fmt.Sprintf("did:web:%s", s.Hostname))
+	return serviceauth.DidWeb(s.Hostname)
 }
 
 type Config struct {
