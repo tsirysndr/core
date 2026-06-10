@@ -38,7 +38,7 @@ git clone --depth=1 "$ACTOR_TYPEAHEAD_REPO" "$TMP/actor-typeahead"
 cp -f "$TMP/actor-typeahead/actor-typeahead.js" "$OUT/"
 
 (cd "$REPO_ROOT" && go build -o "$TMP/dolly" ./cmd/dolly)
-TEMPLATE="$REPO_ROOT/appview/pages/templates/fragments/dolly/logo.html"
-"$TMP/dolly" -template "$TEMPLATE" -output "$OUT/logos/dolly.png" -size 180x180
-"$TMP/dolly" -template "$TEMPLATE" -output "$OUT/logos/dolly.ico" -size 48x48
+TEMPLATE="$REPO_ROOT/appview/pages/templates/fragments/dolly"
+"$TMP/dolly" -template "$TEMPLATE" -output "$OUT/logos/dolly.png" -size 180
+"$TMP/dolly" -template "$TEMPLATE" -output "$OUT/logos/dolly.ico" -size 48
 "$TMP/dolly" -template "$TEMPLATE" -output "$OUT/logos/dolly.svg" -color currentColor -favicon

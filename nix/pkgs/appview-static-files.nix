@@ -30,8 +30,8 @@ runCommandLocal "appview-static-files" {
   cp -f ${ibm-plex-mono-src}/fonts/complete/woff2/IBMPlexMono*.woff2 fonts/
   cp -f ${actor-typeahead-src}/actor-typeahead.js .
 
-  ${dolly}/bin/dolly -output logos/dolly.png -size 180x180
-  ${dolly}/bin/dolly -output logos/dolly.ico -size 48x48
+  ${dolly}/bin/dolly -output logos/dolly.png -size 180
+  ${dolly}/bin/dolly -output logos/dolly.ico -size 48
   ${dolly}/bin/dolly -output logos/dolly.svg -color currentColor -favicon
   # tailwindcss -c $src/tailwind.config.js -i $src/input.css -o tw.css won't work
   # for whatever reason (produces broken css), so we are doing this instead

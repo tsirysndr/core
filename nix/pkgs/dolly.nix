@@ -11,6 +11,7 @@
       ../../ico
       ../../cmd/dolly/main.go
       ../../appview/pages/templates/fragments/dolly/logo.html
+      ../../appview/pages/templates/fragments/dolly/logotype.html
     ];
   };
   dolly-unwrapped = buildGoApplication {
@@ -23,6 +24,6 @@
 in
   writeShellScriptBin "dolly" ''
     exec ${dolly-unwrapped}/bin/dolly \
-    -template ${src}/appview/pages/templates/fragments/dolly/logo.html \
+    -template ${src}/appview/pages/templates/fragments/dolly \
     "$@"
   ''

@@ -54,8 +54,8 @@ runCommandLocal "docs" {} ''
   cp -f ${ibm-plex-mono-src}/fonts/complete/woff2/IBMPlexMono*.woff2 $out/static/fonts/
 
   # favicons
-  ${dolly}/bin/dolly -output $out/static/logos/dolly.png -size 180x180
-  ${dolly}/bin/dolly -output $out/static/logos/dolly.ico -size 48x48
+  ${dolly}/bin/dolly -output $out/static/logos/dolly.png -size 180
+  ${dolly}/bin/dolly -output $out/static/logos/dolly.ico -size 48
   ${dolly}/bin/dolly -output $out/static/logos/dolly.svg -color currentColor -favicon
 
   # styles
