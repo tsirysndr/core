@@ -245,7 +245,7 @@ func (s *State) reposPage(w http.ResponseWriter, r *http.Request) {
 	query := searchquery.Parse(params.Get("q"))
 
 	var language string
-	if lang := query.Get("language"); lang != nil {
+	if lang := cmp.Or(query.Get("language"), query.Get("lang")); lang != nil {
 		language = *lang
 	}
 
