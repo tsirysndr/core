@@ -153,10 +153,29 @@
         tap = self.callPackage ./nix/pkgs/tap.nix {};
         knotmirror = self.callPackage ./nix/pkgs/knotmirror.nix {};
         bobbin = self.callPackage ./nix/pkgs/bobbin.nix {};
+        zoekt-webserver = self.callPackage ./nix/pkgs/zoekt-webserver.nix {};
+        zoekt-tngl-indexserver = self.callPackage ./nix/pkgs/zoekt-tngl-indexserver.nix {};
       });
   in {
     overlays.default = final: prev: {
-      inherit (mkPackageSet final) lexgen goat sqlite-lib spindle shuttle knot-unwrapped knot appview docs dolly tap knotmirror bobbin;
+      inherit
+        (mkPackageSet final)
+        lexgen
+        goat
+        sqlite-lib
+        spindle
+        shuttle
+        knot-unwrapped
+        knot
+        appview
+        docs
+        dolly
+        tap
+        knotmirror
+        bobbin
+        zoekt-webserver
+        zoekt-tngl-indexserver
+        ;
     };
 
     packages = forAllSystems (system: let
@@ -184,6 +203,8 @@
         tap
         knotmirror
         bobbin
+        zoekt-webserver
+        zoekt-tngl-indexserver
         ;
 
       pkgsStatic-appview = staticPackages.appview;
@@ -509,6 +530,16 @@
 
       services.tangled.knotmirror.tap-package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.tap;
       services.tangled.knotmirror.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.knotmirror;
+    };
+    nixosModules.zoekt-tnglserver = {
+      lib,
+      pkgs,
+      ...
+    }: {
+      imports = [./nix/modules/zoekt-tnglserver.nix];
+
+      services.tangled.zoekt.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.zoekt-tngl-indexserver;
+      services.tangled.zoekt.zoekt-webserver-package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.zoekt-webserver;
     };
     nixosModules.knot = {
       lib,
