@@ -5,13 +5,11 @@
       Trending
     </h3>
     {{ if .Repos }}
-    <table class="w-full py-1 bg-white dark:bg-gray-800">
-      <tbody>
+    <div class="w-full py-1 bg-white dark:bg-gray-800">
       {{ range $index, $repo := .Repos }}
         {{ template "singleLineRepo" (list $ $repo) }}
       {{ end }}
-      </tbody>
-    </table>
+    </div>
     {{ else }}
     <div class="p-6 text-sm text-gray-500 dark:text-gray-400 text-center">
       No trending repositories this week
@@ -25,25 +23,26 @@
   {{ $repo := index . 1 }}
   {{ with $repo }}
     {{ $repoOwner := resolve .Did }}
-    <tr class="relative hover:bg-gray-100/50 dark:hover:bg-gray-700/50 group">
-      <td class="pl-4 pr-2 py-3 text-right text-gray-400 tabular-nums whitespace-nowrap align-top">
-        <div class="flex text-sm items-center justify-end gap-1">
-          {{ i "star" "w-3 h-3 fill-current shrink-0" }}
-          {{ if .RepoStats }}
-            <span>{{ scaleFmt .RepoStats.StarCount }}</span>
-          {{ else }}
-            <span>0</span>
-          {{ end }}
-        </div>
-      </td>
-      <td class="px-2 py-3 w-full max-w-0">
-        <a href="/{{ $repoOwner }}/{{ .Slug }}" class="absolute inset-0 no-underline" aria-label="{{ $repoOwner }}/{{ .Name }}"></a>
+    {{/* a real anchor per row: a stretched (absolute inset-0) link inside a
+         position:relative table row breaks hit-testing on safari, which does
+         not support positioned table rows as containing blocks */}}
+    <a href="/{{ $repoOwner }}/{{ .Slug }}"
+       class="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] gap-x-4 px-4 py-3 no-underline hover:no-underline hover:bg-gray-100/50 dark:hover:bg-gray-700/50">
+      <div class="flex text-sm items-start justify-end gap-1 text-gray-400 tabular-nums whitespace-nowrap">
+        {{ i "star" "w-3 h-3 fill-current shrink-0 mt-1" }}
+        {{ if .RepoStats }}
+          <span>{{ scaleFmt .RepoStats.StarCount }}</span>
+        {{ else }}
+          <span>0</span>
+        {{ end }}
+      </div>
+      <div class="min-w-0">
         <span class="text-sm font-medium dark:text-white truncate block">{{ $repoOwner }}/{{ .Name }}</span>
         {{ with .Description }}
           <span class="text-sm text-gray-500 dark:text-gray-400 truncate line-clamp-1 block">{{ . | description }}</span>
         {{ end }}
-      </td>
-      <td class="pl-2 pr-4 py-3 text-gray-400 text-sm whitespace-nowrap font-mono align-top">
+      </div>
+      <div class="text-gray-400 text-sm whitespace-nowrap font-mono">
         {{ if and .RepoStats .RepoStats.Language }}
           {{ $lang := .RepoStats.Language }}
           {{ $display := $lang }}
@@ -55,8 +54,8 @@
             <span>{{ $display }}</span>
           </div>
         {{ end }}
-      </td>
-    </tr>
+      </div>
+    </a>
   {{ end }}
 {{ end }}
 
