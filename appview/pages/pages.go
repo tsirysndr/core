@@ -298,6 +298,9 @@ func (p *Pages) executeProfile(name string, w io.Writer, params any) error {
 type DollyParams struct {
 	Classes   string
 	FillColor string
+	// Favicon embeds a prefers-color-scheme style block so the SVG
+	// adapts to dark mode when used as a standalone favicon document.
+	Favicon bool
 }
 
 func (p *Pages) Dolly(w io.Writer, params DollyParams) error {
@@ -306,7 +309,7 @@ func (p *Pages) Dolly(w io.Writer, params DollyParams) error {
 
 func (p *Pages) Favicon(w io.Writer) error {
 	return p.Dolly(w, DollyParams{
-		Classes: "text-black dark:text-white",
+		Favicon: true,
 	})
 }
 

@@ -56,7 +56,7 @@ runCommandLocal "docs" {} ''
   # favicons
   ${dolly}/bin/dolly -output $out/static/logos/dolly.png -size 180x180
   ${dolly}/bin/dolly -output $out/static/logos/dolly.ico -size 48x48
-  ${dolly}/bin/dolly -output $out/static/logos/dolly.svg -color currentColor
+  ${dolly}/bin/dolly -output $out/static/logos/dolly.svg -color currentColor -favicon
 
   # styles
   cd ${src} && ${tailwindcss}/bin/tailwindcss -i input.css -o $out/stylesheet.css

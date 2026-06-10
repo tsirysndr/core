@@ -23,7 +23,7 @@ steps:
     command: |
       ./dolly.out -template appview/pages/templates/fragments/dolly/logo.html -output appview/pages/static/logos/dolly.png -size 180x180
       ./dolly.out -template appview/pages/templates/fragments/dolly/logo.html -output appview/pages/static/logos/dolly.ico -size 48x48
-      ./dolly.out -template appview/pages/templates/fragments/dolly/logo.html -output appview/pages/static/logos/dolly.svg -color currentColor
+      ./dolly.out -template appview/pages/templates/fragments/dolly/logo.html -output appview/pages/static/logos/dolly.svg -color currentColor -favicon
 
   - name: generate css
     command: |

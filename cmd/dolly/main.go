@@ -26,12 +26,14 @@ func main() {
 		fillColor    string
 		output       string
 		templatePath string
+		favicon      bool
 	)
 
 	flag.StringVar(&templatePath, "template", "", "Path to dolly go-html template")
 	flag.StringVar(&size, "size", "512x512", "Output size in format WIDTHxHEIGHT (e.g., 512x512)")
 	flag.StringVar(&fillColor, "color", "#000000", "Fill color in hex format (e.g., #FF5733)")
 	flag.StringVar(&output, "output", "dolly.svg", "Output file path (format detected from extension: .svg, .png, or .ico)")
+	flag.BoolVar(&favicon, "favicon", false, "Embed a prefers-color-scheme style block so the SVG reacts to dark mode (SVG output only)")
 	flag.Parse()
 
 	if templatePath == "" {
@@ -65,7 +67,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	svgData, err := dolly(string(tpl), fillColor)
+	if favicon && format != "svg" {
+		fmt.Fprintf(os.Stderr, "-favicon is only supported for .svg output\n")
+		os.Exit(1)
+	}
+
+	svgData, err := dolly(string(tpl), fillColor, favicon)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating SVG: %v\n", err)
 		os.Exit(1)
@@ -97,7 +104,7 @@ func main() {
 	fmt.Printf("Successfully generated %s (%dx%d)\n", output, width, height)
 }
 
-func dolly(tplString, hexColor string) ([]byte, error) {
+func dolly(tplString, hexColor string, favicon bool) ([]byte, error) {
 	tpl, err := template.New("dolly").Parse(tplString)
 	if err != nil {
 		return nil, err
@@ -107,6 +114,7 @@ func dolly(tplString, hexColor string) ([]byte, error) {
 	if err := tpl.ExecuteTemplate(&svgData, "fragments/dolly/logo", map[string]any{
 		"FillColor": hexColor,
 		"Classes":   "",
+		"Favicon":   favicon,
 	}); err != nil {
 		return nil, err
 	}
