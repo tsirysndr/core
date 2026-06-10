@@ -44,22 +44,26 @@ func (f *fakeLatch) markCount() int {
 	return len(f.marks)
 }
 
-func probeReturning(v bool, calls *int) func() bool {
-	return func() bool {
+func probeReturning(s CapStatus, calls *int) func() CapStatus {
+	return func() CapStatus {
 		*calls++
-		return v
+		return s
 	}
+}
+
+func isNativeForTest(g *nativeGate, host string, probe func() CapStatus) bool {
+	return g.status(host, probe) == CapPresent
 }
 
 func TestNativeGateMemoSkipsSecondProbe(t *testing.T) {
 	g := &nativeGate{}
 	calls := 0
-	probe := probeReturning(true, &calls)
+	probe := probeReturning(CapPresent, &calls)
 
-	if !g.isNative("clam.nel.pet", probe) {
+	if !isNativeForTest(g, "clam.nel.pet", probe) {
 		t.Fatal("first probe true: want native")
 	}
-	if !g.isNative("clam.nel.pet", probe) {
+	if !isNativeForTest(g, "clam.nel.pet", probe) {
 		t.Fatal("memoized: want native")
 	}
 	if calls != 1 {
@@ -74,7 +78,7 @@ func TestNativeGateLatchHitSkipsProbe(t *testing.T) {
 	g.use(fl)
 
 	calls := 0
-	if !g.isNative("whelk.nel.pet", probeReturning(false, &calls)) {
+	if !isNativeForTest(g, "whelk.nel.pet", probeReturning(CapAbsent, &calls)) {
 		t.Fatal("latched native: want native even though the probe would fail")
 	}
 	if calls != 0 {
@@ -91,15 +95,15 @@ func TestNativeGateProbeMarksLatchOnce(t *testing.T) {
 	g.use(fl)
 
 	calls := 0
-	probe := probeReturning(true, &calls)
-	if !g.isNative("limpet.nel.pet", probe) {
+	probe := probeReturning(CapPresent, &calls)
+	if !isNativeForTest(g, "limpet.nel.pet", probe) {
 		t.Fatal("probe true: want native")
 	}
 	if fl.markCount() != 1 {
 		t.Fatalf("marks = %d, want 1; a first successful probe must latch the host", fl.markCount())
 	}
 
-	g.isNative("limpet.nel.pet", probe)
+	isNativeForTest(g, "limpet.nel.pet", probe)
 	if fl.markCount() != 1 {
 		t.Fatalf("marks = %d, want 1; the memo must prevent a second mark", fl.markCount())
 	}
@@ -111,7 +115,7 @@ func TestNativeGateProbeFalseDoesNotMark(t *testing.T) {
 	g.use(fl)
 
 	calls := 0
-	if g.isNative("clam.nel.pet", probeReturning(false, &calls)) {
+	if isNativeForTest(g, "clam.nel.pet", probeReturning(CapAbsent, &calls)) {
 		t.Fatal("probe false on a fresh host: want not native")
 	}
 	if fl.markCount() != 0 {
@@ -125,14 +129,14 @@ func TestNativeGateDurableAcrossMemoReset(t *testing.T) {
 	warm := &nativeGate{}
 	warm.use(fl)
 	calls := 0
-	if !warm.isNative("whelk.nel.pet", probeReturning(true, &calls)) {
+	if !isNativeForTest(warm, "whelk.nel.pet", probeReturning(CapPresent, &calls)) {
 		t.Fatal("warm gate probe true: want native")
 	}
 
 	restarted := &nativeGate{}
 	restarted.use(fl)
 	cold := 0
-	if !restarted.isNative("whelk.nel.pet", probeReturning(false, &cold)) {
+	if !isNativeForTest(restarted, "whelk.nel.pet", probeReturning(CapAbsent, &cold)) {
 		t.Fatal("after restart the durable latch must resolve native without a probe")
 	}
 	if cold != 0 {
@@ -147,10 +151,10 @@ func TestNativeGateNegativeMemoThrottlesLatchReads(t *testing.T) {
 	g.use(fl)
 
 	calls := 0
-	probe := probeReturning(false, &calls)
+	probe := probeReturning(CapAbsent, &calls)
 
 	for range 5 {
-		if g.isNative("clam.nel.pet", probe) {
+		if isNativeForTest(g, "clam.nel.pet", probe) {
 			t.Fatal("a probe-false host must not be native")
 		}
 	}
@@ -162,7 +166,7 @@ func TestNativeGateNegativeMemoThrottlesLatchReads(t *testing.T) {
 	}
 
 	now = now.Add(versionProbeFresh + time.Second)
-	if g.isNative("clam.nel.pet", probe) {
+	if isNativeForTest(g, "clam.nel.pet", probe) {
 		t.Fatal("still not native after the window")
 	}
 	if fl.readCount() != 2 {
@@ -180,7 +184,7 @@ func TestNativeGateNegativeMemoNeverShadowsLatchedNative(t *testing.T) {
 	g.use(fl)
 
 	calls := 0
-	if g.isNative("whelk.nel.pet", probeReturning(false, &calls)) {
+	if isNativeForTest(g, "whelk.nel.pet", probeReturning(CapAbsent, &calls)) {
 		t.Fatal("probe false on a fresh host: want not native")
 	}
 
@@ -189,8 +193,35 @@ func TestNativeGateNegativeMemoNeverShadowsLatchedNative(t *testing.T) {
 	fl.mu.Unlock()
 
 	now = now.Add(versionProbeFresh + time.Second)
-	if !g.isNative("whelk.nel.pet", probeReturning(false, &calls)) {
+	if !isNativeForTest(g, "whelk.nel.pet", probeReturning(CapAbsent, &calls)) {
 		t.Fatal("once the negative memo expires a latched host must resolve native again")
+	}
+}
+
+func TestNativeGateUnknownDistinctFromAbsent(t *testing.T) {
+	now := time.Now()
+	g := &nativeGate{now: func() time.Time { return now }}
+	fl := newFakeLatch()
+	g.use(fl)
+
+	calls := 0
+	probe := probeReturning(CapUnknown, &calls)
+
+	for range 3 {
+		if got := g.status("clam.nel.pet", probe); got != CapUnknown {
+			t.Fatalf("status = %v, want CapUnknown for a failed probe", got)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("probe calls = %d, want 1; a memoized unknown must throttle re-probes within the window", calls)
+	}
+	if fl.markCount() != 0 {
+		t.Fatalf("marks = %d, want 0; an unknown probe must never latch", fl.markCount())
+	}
+
+	now = now.Add(versionProbeFresh + time.Second)
+	if got := g.status("clam.nel.pet", probeReturning(CapAbsent, &calls)); got != CapAbsent {
+		t.Fatalf("status = %v, want CapAbsent once a fresh probe reaches the knot", got)
 	}
 }
 

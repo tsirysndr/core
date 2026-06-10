@@ -553,7 +553,13 @@ func (k *Knots) addMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if knotcompat.KnotHasCapability(r.Context(), domain, k.Config.Core.Dev, consts.CapKnotACL) {
+	capStatus := knotcompat.KnotCapability(r.Context(), domain, k.Config.Core.Dev, consts.CapKnotACL)
+	if capStatus == knotcompat.CapUnknown {
+		l.Error("knot capability probe failed")
+		k.Pages.Notice(w, noticeId, "Could not reach the knot to add the member. Try again later.")
+		return
+	}
+	if capStatus == knotcompat.CapPresent {
 		client, err := k.OAuth.ServiceClient(
 			r,
 			oauth.WithService(domain),
@@ -660,7 +666,13 @@ func (k *Knots) removeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if knotcompat.KnotHasCapability(r.Context(), domain, k.Config.Core.Dev, consts.CapKnotACL) {
+	capStatus := knotcompat.KnotCapability(r.Context(), domain, k.Config.Core.Dev, consts.CapKnotACL)
+	if capStatus == knotcompat.CapUnknown {
+		l.Error("knot capability probe failed")
+		k.Pages.Notice(w, noticeId, "Could not reach the knot to remove the member. Try again later.")
+		return
+	}
+	if capStatus == knotcompat.CapPresent {
 		client, err := k.OAuth.ServiceClient(
 			r,
 			oauth.WithService(domain),

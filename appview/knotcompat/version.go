@@ -82,6 +82,19 @@ func (c *versionProbeCache) supports(now time.Time, host string, minMajor, minMi
 
 var probeCache = &versionProbeCache{entries: map[string]versionProbeEntry{}}
 
+type CapStatus int
+
+const (
+	CapUnknown CapStatus = iota
+	CapAbsent
+	CapPresent
+)
+
+type negEntry struct {
+	status CapStatus
+	until  time.Time
+}
+
 type NativeLatch interface {
 	IsNative(host string) bool
 	MarkNative(host string)
@@ -117,29 +130,30 @@ func (g *nativeGate) currentLatch() NativeLatch {
 	return nil
 }
 
-func (g *nativeGate) isNative(host string, probe func() bool) bool {
+func (g *nativeGate) status(host string, probe func() CapStatus) CapStatus {
 	if _, ok := g.memo.Load(host); ok {
-		return true
+		return CapPresent
 	}
-	if until, ok := g.negMemo.Load(host); ok {
-		if g.clock().Before(until.(time.Time)) {
-			return false
+	if v, ok := g.negMemo.Load(host); ok {
+		e := v.(negEntry)
+		if g.clock().Before(e.until) {
+			return e.status
 		}
 		g.negMemo.Delete(host)
 	}
 	if l := g.currentLatch(); l != nil && l.IsNative(host) {
 		g.memo.Store(host, struct{}{})
-		return true
+		return CapPresent
 	}
-	if !probe() {
-		g.negMemo.Store(host, g.clock().Add(versionProbeFresh))
-		return false
+	if s := probe(); s != CapPresent {
+		g.negMemo.Store(host, negEntry{status: s, until: g.clock().Add(versionProbeFresh)})
+		return s
 	}
 	g.memo.Store(host, struct{}{})
 	if l := g.currentLatch(); l != nil {
 		l.MarkNative(host)
 	}
-	return true
+	return CapPresent
 }
 
 var nativeProbeGate = &nativeGate{}
@@ -152,13 +166,17 @@ func KnotSupports114(ctx context.Context, host string, dev bool) bool {
 	return knotSupportsVersion(ctx, host, dev, 1, 14, true)
 }
 
-func KnotHasCapability(ctx context.Context, host string, dev bool, capability consts.Capability) bool {
-	return nativeProbeGate.isNative(host, func() bool {
+func KnotCapability(ctx context.Context, host string, dev bool, capability consts.Capability) CapStatus {
+	return nativeProbeGate.status(host, func() CapStatus {
 		return knotDeclares(ctx, host, dev, capability)
 	})
 }
 
-func knotDeclares(ctx context.Context, host string, dev bool, capability consts.Capability) bool {
+func KnotHasCapability(ctx context.Context, host string, dev bool, capability consts.Capability) bool {
+	return KnotCapability(ctx, host, dev, capability) == CapPresent
+}
+
+func knotDeclares(ctx context.Context, host string, dev bool, capability consts.Capability) CapStatus {
 	scheme := "https"
 	if dev {
 		scheme = "http"
@@ -173,9 +191,12 @@ func knotDeclares(ctx context.Context, host string, dev bool, capability consts.
 
 	resp, err := tangled.KnotVersion(ctx, client)
 	if err != nil || resp == nil {
-		return false
+		return CapUnknown
 	}
-	return slices.Contains(resp.Capabilities, string(capability))
+	if slices.Contains(resp.Capabilities, string(capability)) {
+		return CapPresent
+	}
+	return CapAbsent
 }
 
 func knotSupportsVersion(ctx context.Context, host string, dev bool, minMajor, minMinor int, failOpen bool) bool {

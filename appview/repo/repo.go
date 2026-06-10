@@ -759,7 +759,12 @@ func (rp *Repo) AddCollaborator(w http.ResponseWriter, r *http.Request) {
 	l = l.With("collaborator", collaboratorIdent.Handle)
 	l = l.With("knot", f.Knot)
 
-	if knotcompat.KnotHasCapability(r.Context(), f.Knot, rp.config.Core.Dev, consts.CapKnotACL) {
+	capStatus := knotcompat.KnotCapability(r.Context(), f.Knot, rp.config.Core.Dev, consts.CapKnotACL)
+	if capStatus == knotcompat.CapUnknown {
+		fail("Could not reach the knot to add the collaborator. Try again later.", nil)
+		return
+	}
+	if capStatus == knotcompat.CapPresent {
 		if f.RepoDid == "" {
 			fail("This repository is missing its DID and cannot manage collaborators.", nil)
 			return
@@ -927,7 +932,12 @@ func (rp *Repo) RemoveCollaborator(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if knotcompat.KnotHasCapability(r.Context(), f.Knot, rp.config.Core.Dev, consts.CapKnotACL) {
+	capStatus := knotcompat.KnotCapability(r.Context(), f.Knot, rp.config.Core.Dev, consts.CapKnotACL)
+	if capStatus == knotcompat.CapUnknown {
+		fail("Could not reach the knot to remove the collaborator. Try again later.", nil)
+		return
+	}
+	if capStatus == knotcompat.CapPresent {
 		if f.RepoDid == "" {
 			fail("This repository is missing its DID and cannot manage collaborators.", nil)
 			return
