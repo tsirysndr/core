@@ -48,11 +48,6 @@
                   <a href="/{{ .RepoInfo.FullName }}/raw/{{ pathEscape .Ref }}/{{ .Path }}">View raw</a>
                 {{ end }}
 
-                {{ if (or .BlobView.ContentType.HasTextView .BlobView.ContentType.IsImage) }}
-                  <span class="select-none px-1 md:px-2 [&:before]:content-['·']"></span>
-                  {{ template "repo/fragments/copyFileButton" (dict "Url" (printf "/%s/raw/%s/%s" .RepoInfo.FullName (pathEscape .Ref) .Path)) }}
-                {{ end }}
-
                 {{ if (and .BlobView.ContentType.HasTextView .BlobView.ContentType.HasRenderedView) }}
                   <span class="select-none px-1 md:px-2 [&:before]:content-['·']"></span>
                   <a href="/{{ .RepoInfo.FullName }}/blob/{{ pathEscape .Ref }}/{{ .Path }}?code={{ .ShowRendered }}" hx-boost="true">
@@ -130,7 +125,6 @@
       </p>
     {{ end }}
     {{ template "fragments/multiline-select" }}
-    {{ template "repo/fragments/copyFileScript" }}
     <script>
       (() => {
         const abortController = new AbortController();
