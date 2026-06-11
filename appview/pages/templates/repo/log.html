@@ -34,7 +34,9 @@
               {{ if $verified }}
                   {{ $hashStyle = "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-2 rounded" }}
               {{ end }}
-              <a href="/{{ $.RepoInfo.FullName }}/commit/{{ $commit.Hash.String }}" class="no-underline hover:underline {{ $hashStyle }} px-2 py-1/2 rounded flex items-center gap-2">
+              <a href="/{{ $.RepoInfo.FullName }}/commit/{{ $commit.Hash.String }}"
+                 {{ if $commit.ChangeId }}title="jj change id: {{ $commit.ChangeId }}"{{ end }}
+                 class="no-underline hover:underline {{ $hashStyle }} px-2 py-1/2 rounded flex items-center gap-2">
                   {{ slice $commit.Hash.String 0 8 }}
                   {{ if $verified }}
                   {{ i "shield-check" "w-4 h-4" }}
@@ -140,6 +142,7 @@
                     {{ end }}
                     <span class="font-mono">
                         <a href="/{{ $.RepoInfo.FullName }}/commit/{{ $commit.Hash.String }}"
+                           {{ if $commit.ChangeId }}title="jj change id: {{ $commit.ChangeId }}"{{ end }}
                            class="no-underline hover:underline {{ $hashStyle }} px-2 py-1 rounded flex items-center gap-2">
                            {{ slice $commit.Hash.String 0 8 }}
                            {{ if $verified }}

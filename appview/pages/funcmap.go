@@ -104,6 +104,13 @@ func (p *Pages) funcMap() template.FuncMap {
 			}
 			return s[:30] + "…"
 		},
+		// short prefix of a commit hash or jj change id, safe on short input
+		"shortId": func(s string) string {
+			if len(s) <= 8 {
+				return s
+			}
+			return s[:8]
+		},
 		"splitOn": func(s, sep string) []string {
 			return strings.Split(s, sep)
 		},

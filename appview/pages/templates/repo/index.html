@@ -213,6 +213,7 @@
           {{ end }}
           <span class="font-mono">
               <a href="/{{ $.RepoInfo.FullName }}/commit/{{ .Hash.String }}"
+                 {{ if .ChangeId }}title="jj change id: {{ .ChangeId }}"{{ end }}
                  class="no-underline hover:underline {{ $hashStyle }} px-2 py-1 rounded flex items-center gap-2">
                  {{ slice .Hash.String 0 8 }}
                  {{ if $verified }}

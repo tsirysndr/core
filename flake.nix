@@ -320,6 +320,9 @@
               rootDir=$(jj --ignore-working-copy root || git rev-parse --show-toplevel) || (echo "error: can't find repo root?"; exit 1)
               cd "$rootDir"
 
+              # Reset TMPDIR in case it points to a stale nix-shell temp dir
+              export TMPDIR=/tmp
+
               mkdir -p nix/vm-data/{knot,repos,spindle,spindle-logs}
 
               export TANGLED_VM_DATA_DIR="$rootDir/nix/vm-data"

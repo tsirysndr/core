@@ -28,25 +28,67 @@
     </div>
   </div>
 
-  <div class="flex flex-wrap items-center space-x-2 text-sm">
-      <p class="flex flex-wrap items-center gap-1 text-gray-500 dark:text-gray-300">
-          {{ template "attribution" . }}
+  <div class="flex flex-col gap-2 text-sm pt-4">
+    {{ $showCommitter := ne $commit.Author.Email $commit.Committer.Email }}
+    <div class="flex flex-col gap-1 font-mono text-gray-500 dark:text-gray-300">
+      <span class="inline-flex items-center flex-wrap">
+        <span class="w-24 text-gray-400 dark:text-gray-500 select-none">author</span>
+        {{ template "attributedUser" (list $commit.Author.Email $commit.Author.Name $.EmailToDid) }}
+      </span>
 
-          <span class="px-1 select-none before:content-['\00B7']"></span>
-            <span class="inline-flex flex-wrap items-center gap-1">
-              {{ template "repo/fragments/time" $commit.Committer.When }}
-              <span class="text-gray-500 dark:text-gray-400">({{ $commit.Committer.When | longTimeFmt }})</span>
-            </span>
-          <span class="px-1 select-none before:content-['\00B7']"></span>
+      {{ range $commit.CoAuthors }}
+      <span class="inline-flex items-center flex-wrap">
+        <span class="w-24 text-gray-400 dark:text-gray-500 select-none">co-author</span>
+        {{ template "attributedUser" (list .Email .Name $.EmailToDid) }}
+      </span>
+      {{ end }}
 
-          <a href="/{{ $repo }}/commit/{{ $commit.This }}" class="no-underline hover:underline text-gray-500 dark:text-gray-300">{{ slice $commit.This 0 8 }}</a>
+      {{ if $showCommitter }}
+      <span class="inline-flex items-center flex-wrap">
+        <span class="w-24 text-gray-400 dark:text-gray-500 select-none">committer</span>
+        {{ template "attributedUser" (list $commit.Committer.Email $commit.Committer.Name $.EmailToDid) }}
+      </span>
+      {{ end }}
 
-          {{ if $commit.Parent }}
-            {{ i "arrow-left" "w-3 h-3 mx-1" }}
-            <a href="/{{ $repo }}/commit/{{ $commit.Parent }}" class="no-underline hover:underline text-gray-500 dark:text-gray-300">{{ slice $commit.Parent 0 8 }}</a>
-          {{ end }}
-      </p>
+      <span class="inline-flex items-center flex-wrap">
+        <span class="w-24 text-gray-400 dark:text-gray-500 select-none">date</span>
+        <span class="inline-flex items-center flex-wrap gap-1">
+          {{ template "repo/fragments/time" $commit.Committer.When }}
+          <span class="text-gray-500 dark:text-gray-400">({{ $commit.Committer.When | longTimeFmt }})</span>
+        </span>
+      </span>
 
+      <span class="inline-flex items-center flex-wrap">
+        <span class="w-24 text-gray-400 dark:text-gray-500 select-none">commit</span>
+        <a href="/{{ $repo }}/commit/{{ $commit.This }}" class="no-underline hover:underline break-all">
+          <span class="md:hidden">{{ shortId $commit.This }}</span>
+          <span class="hidden md:inline">{{ $commit.This }}</span>
+        </a>
+      </span>
+
+      {{ if $commit.Parent }}
+      <span class="inline-flex items-center flex-wrap">
+        <span class="w-24 text-gray-400 dark:text-gray-500 select-none">parent</span>
+        <a href="/{{ $repo }}/commit/{{ $commit.Parent }}" class="no-underline hover:underline break-all">
+          <span class="md:hidden">{{ shortId $commit.Parent }}</span>
+          <span class="hidden md:inline">{{ $commit.Parent }}</span>
+        </a>
+      </span>
+      {{ end }}
+
+      {{ if $commit.ChangeId }}
+        <span class="inline-flex items-center flex-wrap">
+          <span class="w-24 text-gray-400 dark:text-gray-500 select-none">change-id</span>
+          <span class="break-all">
+            <span class="md:hidden">{{ shortId $commit.ChangeId }}</span>
+            <span class="hidden md:inline">{{ $commit.ChangeId }}</span>
+          </span>
+        </span>
+      {{ end }}
+    </div>
+
+    {{ if or (.VerifiedCommit.IsVerified $commit.This) $.Pipeline }}
+    <div class="flex flex-wrap items-center space-x-2">
       {{ if .VerifiedCommit.IsVerified $commit.This }}
       <div class="group relative inline-block text-sm">
           <div class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-2 py-1 rounded cursor-pointer">
@@ -75,28 +117,12 @@
           {{ template "repo/pipelines/fragments/pipelineSymbolLong" (dict "Pipeline" $.Pipeline "RepoInfo" $.RepoInfo) }}
         {{ end }}
       </div>
+    </div>
+    {{ end }}
   </div>
 
 </section>
 {{end}}
-
-{{ define "attribution" }}
-  {{ $commit := .Diff.Commit }}
-  {{ $showCommitter := true }}
-  {{ if eq $commit.Author.Email $commit.Committer.Email }}
-    {{ $showCommitter = false }}
-  {{ end }}
-
-  {{ if $showCommitter }}
-    <span>authored by</span> {{ template "attributedUser" (list $commit.Author.Email $commit.Author.Name $.EmailToDid) }}
-    {{ range $commit.CoAuthors }}
-      {{ template "attributedUser" (list .Email .Name $.EmailToDid) }}
-    {{ end }}
-    <span>and committed by</span> {{ template "attributedUser" (list $commit.Committer.Email $commit.Committer.Name $.EmailToDid) }}
-  {{ else }}
-    {{ template "attributedUser" (list $commit.Author.Email $commit.Author.Name $.EmailToDid )}}
-  {{ end }}
-{{ end }}
 
 {{ define "attributedUser" }}
   {{ $email := index . 0 }}
@@ -129,4 +155,3 @@
 {{ define "contentAfter" }}
   {{ template "repo/fragments/diff" (list .Diff .DiffOpts) }}
 {{end}}
-
