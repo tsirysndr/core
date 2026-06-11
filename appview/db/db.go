@@ -2178,6 +2178,20 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "timeline-query-indexes", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			-- following timeline: stars by a set of users, newest first
+			create index if not exists idx_stars_did_type_created on stars(did, subject_type, created);
+			-- follower counts and reverse lookups (no index on subject_did before)
+			create index if not exists idx_follows_subject_did on follows(subject_did);
+			-- global timeline: newest follows without a full sort
+			create index if not exists idx_follows_followed_at on follows(followed_at);
+			-- global timeline: newest repos without a full sort
+			create index if not exists idx_repos_created on repos(created);
+		`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,

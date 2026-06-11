@@ -8,40 +8,39 @@ import (
 	"tangled.org/core/orm"
 )
 
+// followingFilter compiles to `key in (select subject_did from follows ...)`,
+// keeping the following-set check inside sqlite rather than materializing the
+// followed dids into a huge placeholder list.
+func followingFilter(key, loggedInUserDid string) orm.Filter {
+	return orm.FilterInSubquery(key, "select subject_did from follows where user_did = ?", loggedInUserDid)
+}
+
 // TODO: this gathers heterogenous events from different sources and aggregates
 // them in code; if we did this entirely in sql, we could order and limit and paginate easily
 func MakeTimeline(e Execer, limit int, loggedInUserDid string, limitToUsersIsFollowing bool) ([]models.TimelineGroup, error) {
 	var events []models.TimelineEvent
-
-	var userIsFollowing []string
-	if limitToUsersIsFollowing {
-		following, err := GetFollowing(e, loggedInUserDid)
-		if err != nil {
-			return nil, err
-		}
-
-		userIsFollowing = make([]string, 0, len(following))
-		for _, follow := range following {
-			userIsFollowing = append(userIsFollowing, follow.SubjectDid)
-		}
-	}
 
 	// Fetch more events than we need to so that when we collapse each individual
 	// event into groups, we can still be relatively confident that we will have
 	// `limit` groups to fill the timeline with. Adjust multiplier as necessary.
 	fetchLimit := limit * 2
 
-	repos, err := getTimelineRepos(e, fetchLimit, loggedInUserDid, userIsFollowing)
+	var followingOnly string
+	if limitToUsersIsFollowing {
+		followingOnly = loggedInUserDid
+	}
+
+	repos, err := getTimelineRepos(e, fetchLimit, loggedInUserDid, followingOnly)
 	if err != nil {
 		return nil, err
 	}
 
-	stars, err := getTimelineStars(e, fetchLimit, loggedInUserDid, userIsFollowing)
+	stars, err := getTimelineStars(e, fetchLimit, loggedInUserDid, followingOnly)
 	if err != nil {
 		return nil, err
 	}
 
-	follows, err := getTimelineFollows(e, fetchLimit, loggedInUserDid, userIsFollowing)
+	follows, err := getTimelineFollows(e, fetchLimit, loggedInUserDid, followingOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -122,10 +121,10 @@ func getRepoStarInfo(repo *models.Repo, starStatuses map[string]bool) (bool, int
 	return isStarred, starCount
 }
 
-func getTimelineRepos(e Execer, limit int, loggedInUserDid string, userIsFollowing []string) ([]models.TimelineEvent, error) {
+func getTimelineRepos(e Execer, limit int, loggedInUserDid string, followingOnly string) ([]models.TimelineEvent, error) {
 	filters := make([]orm.Filter, 0)
-	if userIsFollowing != nil {
-		filters = append(filters, orm.FilterIn("did", userIsFollowing))
+	if followingOnly != "" {
+		filters = append(filters, followingFilter("did", followingOnly))
 	}
 
 	repos, err := GetReposPaginated(e, pagination.Page{Limit: limit}, filters...)
@@ -182,10 +181,10 @@ func getTimelineRepos(e Execer, limit int, loggedInUserDid string, userIsFollowi
 	return events, nil
 }
 
-func getTimelineStars(e Execer, limit int, loggedInUserDid string, userIsFollowing []string) ([]models.TimelineEvent, error) {
+func getTimelineStars(e Execer, limit int, loggedInUserDid string, followingOnly string) ([]models.TimelineEvent, error) {
 	filters := make([]orm.Filter, 0)
-	if userIsFollowing != nil {
-		filters = append(filters, orm.FilterIn("did", userIsFollowing))
+	if followingOnly != "" {
+		filters = append(filters, followingFilter("did", followingOnly))
 	}
 
 	stars, err := GetRepoStars(e, pagination.Page{Limit: limit}, filters...)
@@ -218,10 +217,10 @@ func getTimelineStars(e Execer, limit int, loggedInUserDid string, userIsFollowi
 	return events, nil
 }
 
-func getTimelineFollows(e Execer, limit int, loggedInUserDid string, userIsFollowing []string) ([]models.TimelineEvent, error) {
+func getTimelineFollows(e Execer, limit int, loggedInUserDid string, followingOnly string) ([]models.TimelineEvent, error) {
 	filters := make([]orm.Filter, 0)
-	if userIsFollowing != nil {
-		filters = append(filters, orm.FilterIn("user_did", userIsFollowing))
+	if followingOnly != "" {
+		filters = append(filters, followingFilter("user_did", followingOnly))
 	}
 
 	follows, err := GetFollows(e, limit, filters...)

@@ -93,7 +93,23 @@ func FilterContains(key string, arg any) Filter {
 	return newFilter(key, "like", fmt.Sprintf("%%%v%%", arg))
 }
 
+// FilterInSubquery compiles to `key in (subquery)`, binding args within the
+// subquery. Prefer this over FilterIn with a large materialized list: it
+// keeps the query text constant and lets sqlite plan a semi-join.
+func FilterInSubquery(key, subquery string, args ...any) Filter {
+	return newFilter(key, "in", subqueryArg{query: subquery, args: args})
+}
+
+type subqueryArg struct {
+	query string
+	args  []any
+}
+
 func (f Filter) Condition() string {
+	if sub, ok := f.arg.(subqueryArg); ok {
+		return fmt.Sprintf("%s %s (%s)", f.Key, f.Cmp, sub.query)
+	}
+
 	rv := reflect.ValueOf(f.arg)
 	kind := rv.Kind()
 
@@ -116,6 +132,10 @@ func (f Filter) Condition() string {
 }
 
 func (f Filter) Arg() []any {
+	if sub, ok := f.arg.(subqueryArg); ok {
+		return sub.args
+	}
+
 	rv := reflect.ValueOf(f.arg)
 	kind := rv.Kind()
 	if (kind == reflect.Slice && rv.Type().Elem().Kind() != reflect.Uint8) || kind == reflect.Array {
