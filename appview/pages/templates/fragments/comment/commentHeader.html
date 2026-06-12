@@ -2,27 +2,23 @@
   <div
     class="flex flex-wrap items-center gap-2 text-sm text-gray-500 dark:text-gray-400 "
     hx-target="next .comment-body"
+    id="comment-header-{{ .Comment.Rkey }}"
+    {{ if .HxSwapOob }}hx-swap-oob="outerHTML"{{ end }}
   >
     {{ $handle := resolve .Comment.Did.String }}
     <a class="text-gray-500 dark:text-gray-400 hover:text-gray-500 dark:hover:text-gray-300" href="/{{ $handle }}">{{ $handle }}</a>
-    {{ template "hats" $ }}
     <span class="before:content-['·']"></span>
     {{ template "timestamp" . }}
     {{ $isCommentOwner := and .LoggedInUser (eq .LoggedInUser.Did .Comment.Did.String) }}
     {{ if and $isCommentOwner (not .Comment.Deleted) }}
-      {{ if not .Comment.IsLegacy }}
-        {{ template "editCommentBtn" . }}
-      {{ end }}
-      {{ template "deleteCommentBtn" . }}
+      <div class="ml-auto flex items-center gap-4 opacity-0 group-hover/comment:opacity-100">
+        {{ if not .Comment.IsLegacy }}
+          {{ template "editCommentBtn" . }}
+        {{ end }}
+        {{ template "deleteCommentBtn" . }}
+      </div>
     {{ end }}
   </div>
-{{ end }}
-
-{{ define "hats" }}
-  {{ $isIssueAuthor := eq .Comment.Did .Issue.Did }}
-  {{ if $isIssueAuthor }}
-    (author)
-  {{ end }}
 {{ end }}
 
 {{ define "timestamp" }}
@@ -41,21 +37,23 @@
 
 {{ define "editCommentBtn" }}
   <a
-    class="text-gray-500 dark:text-gray-400 flex gap-1 items-center group cursor-pointer"
+    class="text-gray-500 dark:text-gray-400 flex gap-1 items-center group cursor-pointer hover:no-underline no-underline"
     hx-get="/comment/edit?aturi={{ .Comment.AtUri }}"
   >
     {{ i "pencil" "size-3 inline group-[.htmx-request]:hidden" }}
     {{ i "loader-circle" "size-3 animate-spin hidden group-[.htmx-request]:inline" }}
+    edit
   </a>
 {{ end }}
 
 {{ define "deleteCommentBtn" }}
   <a
-    class="text-gray-500 dark:text-gray-400 flex gap-1 items-center group cursor-pointer"
+    class="text-red-500 dark:text-red-400 hover:text-red-600 hover:dark:text-red-300 flex gap-1 items-center group cursor-pointer hover:no-underline no-underline"
     hx-delete="/comment?aturi={{ .Comment.AtUri }}"
     hx-confirm="Are you sure you want to delete your comment?"
   >
     {{ i "trash-2" "size-3 inline group-[.htmx-request]:hidden" }}
     {{ i "loader-circle" "size-3 animate-spin hidden group-[.htmx-request]:inline" }}
+    delete
   </a>
 {{ end }}

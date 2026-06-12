@@ -595,7 +595,6 @@
     </summary>
     <div>
       {{ range $item.Comments }}
-        {{/* template "submissionComment" . */}}
         {{ template "comment"
           (dict "LoggedInUser"      $root.LoggedInUser
                 "Reactions"         (index (asReactionMapMap $root.Reactions) .FeedCommentAtUri)
@@ -636,7 +635,7 @@
 {{ end }}
 
 {{ define "comment" }}
-<div class="flex gap-2 -ml-4 py-4 w-full mx-auto">
+<div class="flex gap-2 -ml-4 py-4 w-full mx-auto group/comment">
   <!-- left column: profile picture -->
   <div class="flex-shrink-0 h-fit relative">
     {{ template "user/fragments/picLink" (list .Comment.Did.String "size-8") }}

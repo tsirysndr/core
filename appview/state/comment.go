@@ -460,4 +460,8 @@ func (s *State) DeleteComment(w http.ResponseWriter, r *http.Request) {
 	s.pages.CommentBodyFragment(w, pages.CommentBodyFragmentParams{
 		Comment: comment,
 	})
+	s.pages.CommentHeaderFragment(w, pages.CommentHeaderFragmentParams{
+		Comment:   comment,
+		HxSwapOob: true,
+	})
 }

@@ -42,7 +42,7 @@
 {{ end }}
 
 {{ define "topLevelComment" }}
-<div class="rounded px-6 py-4 bg-white dark:bg-gray-800 flex gap-2 ">
+<div class="rounded px-6 py-4 bg-white dark:bg-gray-800 flex gap-2 group/comment">
   <div class="flex-shrink-0">
     {{ template "user/fragments/picLink" (list .Comment.Did.String "size-8 mr-1" .VouchRelationship) }}
   </div>
@@ -54,7 +54,7 @@
 {{ end }}
 
 {{ define "replyComment" }}
-<div class="py-4 pr-4 w-full mx-auto flex gap-2 ">
+<div class="py-4 pr-4 w-full mx-auto flex gap-2 group/comment">
   <div class="flex-shrink-0">
     {{ template "user/fragments/picLink" (list .Comment.Did.String "size-8 mr-1" .VouchRelationship) }}
   </div>

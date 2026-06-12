@@ -1731,6 +1731,17 @@ func (p *Pages) CommentBodyFragment(w io.Writer, params CommentBodyFragmentParam
 	return p.executePlain("fragments/comment/commentBody", w, params)
 }
 
+type CommentHeaderFragmentParams struct {
+	Comment     models.Comment
+	Reactions   map[models.ReactionKind]models.ReactionDisplayData
+	UserReacted map[models.ReactionKind]bool
+	HxSwapOob   bool
+}
+
+func (p *Pages) CommentHeaderFragment(w io.Writer, params CommentHeaderFragmentParams) error {
+	return p.executePlain("fragments/comment/commentHeader", w, params)
+}
+
 type EditCommentFragmentParams struct {
 	Comment models.Comment
 }
