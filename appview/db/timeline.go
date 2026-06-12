@@ -142,15 +142,15 @@ func getTimelineRepos(e Execer, limit int, loggedInUserDid string, followingOnly
 
 	var origRepos []models.Repo
 	if args != nil {
-		origRepos, err = GetRepos(e, orm.FilterIn("at_uri", args))
+		origRepos, err = GetRepos(e, orm.FilterIn("repo_did", args))
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	uriToRepo := make(map[string]models.Repo)
+	didToRepo := make(map[string]models.Repo)
 	for _, r := range origRepos {
-		uriToRepo[r.RepoAt().String()] = r
+		didToRepo[r.RepoDid] = r
 	}
 
 	starStatuses, err := fetchStarStatuses(e, loggedInUserDid, repos)
@@ -162,7 +162,7 @@ func getTimelineRepos(e Execer, limit int, loggedInUserDid string, followingOnly
 	for _, r := range repos {
 		var source *models.Repo
 		if r.Source != "" {
-			if origRepo, ok := uriToRepo[r.Source]; ok {
+			if origRepo, ok := didToRepo[r.Source]; ok {
 				source = &origRepo
 			}
 		}

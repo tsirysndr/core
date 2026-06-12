@@ -82,7 +82,7 @@ func (t *Timeline) Timeline(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	t.pages.Timeline(w, pages.TimelineParams{
+	err = t.pages.Timeline(w, pages.TimelineParams{
 		LoggedInUser:     user,
 		Timeline:         timeline,
 		Repos:            repos,
@@ -94,6 +94,9 @@ func (t *Timeline) Timeline(w http.ResponseWriter, r *http.Request) {
 		RecentBlogPosts:  t.recentPosts,
 		ShowNewsletter:   t.showNewsletter(user),
 	})
+	if err != nil {
+		t.logger.Error("failed to render timeline", "err", err)
+	}
 }
 
 func (t *Timeline) buildRecents(userDid string) ([]pages.RecentItem, error) {
