@@ -19,7 +19,7 @@
 {{ end }}
 
 {{ define "editActions" }}
-  <div class="flex flex-wrap items-center justify-end gap-2 text-gray-500 dark:text-gray-400 text-sm pt-2">
+  <div class="flex flex-wrap items-stretch justify-end gap-2 text-gray-500 dark:text-gray-400 text-sm pt-2">
     {{ template "cancel" . }}
     {{ template "save" . }}
   </div>
@@ -28,7 +28,7 @@
 {{ define "save" }}
   <button
     type="submit"
-    class="btn-create py-0 flex gap-1 items-center group text-sm"
+    class="btn-create flex gap-1 items-center group text-sm"
   >
     {{ i "check" "size-4" }}
     Save
@@ -38,7 +38,7 @@
 
 {{ define "cancel" }}
   <button
-    class="btn py-0 text-red-500 dark:text-red-400 flex gap-1 items-center group"
+    class="btn-flat text-red-500 dark:text-red-400 flex gap-1 items-center group"
     hx-get="/comment?aturi={{ .Comment.AtUri }}"
     hx-target="closest form"
     hx-swap="outerHTML"

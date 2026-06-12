@@ -20,7 +20,7 @@
 {{ end }}
 
 {{ define "replyActions" }}
-  <div class="flex flex-wrap items-center justify-end gap-2 text-gray-500 dark:text-gray-400">
+  <div class="flex flex-wrap items-stretch justify-end gap-2 text-gray-500 dark:text-gray-400">
     <div id="comment-error" class="error ml-auto"></div>
     {{ template "cancel" . }}
     {{ template "reply" . }}
@@ -29,7 +29,7 @@
 
 {{ define "cancel" }}
   <button
-    class="btn text-red-500 dark:text-red-400 flex gap-2 items-center group"
+    class="btn-flat text-red-500 dark:text-red-400 flex gap-2 items-center group"
     hx-get="/comment/reply/placeholder"
     hx-target="closest form"
     hx-swap="outerHTML"
@@ -42,7 +42,7 @@
 {{ define "reply" }}
   <button
     type="submit"
-    class="btn-create flex items-center gap-2 no-underline hover:no-underline"
+    class="btn-create-flat flex items-center gap-2 no-underline hover:no-underline"
   >
     {{ i "reply" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
     {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
