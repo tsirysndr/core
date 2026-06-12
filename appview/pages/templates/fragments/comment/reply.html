@@ -4,6 +4,7 @@
     hx-post="/comment"
     hx-swap="none"
     hx-trigger="submit, keydown[(ctrlKey || metaKey) && key=='Enter'] from:find textarea"
+    hx-on::before-request="this.querySelector('#comment-error').innerHTML = ''"
     hx-on::after-request="if(event.detail.successful) this.reset()"
     hx-disabled-elt="find button[type='submit']"
   >
@@ -14,13 +15,13 @@
       placeholder="Leave a reply..."
       autofocus
       rows="3"></textarea>
-    <div id="comment-error" class="error"></div>
     {{ template "replyActions" . }}
   </form>
 {{ end }}
 
 {{ define "replyActions" }}
-  <div class="flex flex-wrap items-stretch justify-end gap-2 text-gray-500 dark:text-gray-400 text-sm">
+  <div class="flex flex-wrap items-center justify-end gap-2 text-gray-500 dark:text-gray-400">
+    <div id="comment-error" class="error ml-auto"></div>
     {{ template "cancel" . }}
     {{ template "reply" . }}
   </div>
