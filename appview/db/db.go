@@ -2192,6 +2192,22 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "delete-unused-pipeline-statuses", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			delete from pipeline_statuses as p
+			where p.status = 'pending'
+			and exists (
+				select 1 from pipeline_statuses as q
+				where q.pipeline_knot = p.pipeline_knot
+				and q.pipeline_rkey = p.pipeline_rkey
+				and q.workflow      = p.workflow
+				and q.status        = 'pending'
+				and q.created       < p.created
+			);
+		`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,
