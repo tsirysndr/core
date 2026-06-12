@@ -10,12 +10,17 @@
     <span class="before:content-['·']"></span>
     {{ template "timestamp" . }}
     {{ $isCommentOwner := and .LoggedInUser (eq .LoggedInUser.Did .Comment.Did.String) }}
-    {{ if and $isCommentOwner (not .Comment.Deleted) }}
+    {{ if not .Comment.Deleted }}
       <div class="ml-auto flex items-center gap-4 opacity-0 group-hover/comment:opacity-100">
-        {{ if not .Comment.IsLegacy }}
-          {{ template "editCommentBtn" . }}
+        {{ if .LoggedInUser }}
+          {{ template "repo/fragments/reactionsPopup" (dict "CommentRkey" (string .Comment.Rkey) "Scope" "header") }}
         {{ end }}
-        {{ template "deleteCommentBtn" . }}
+        {{ if $isCommentOwner }}
+          {{ if not .Comment.IsLegacy }}
+            {{ template "editCommentBtn" . }}
+          {{ end }}
+          {{ template "deleteCommentBtn" . }}
+        {{ end }}
       </div>
     {{ end }}
   </div>
@@ -40,9 +45,8 @@
     class="text-gray-500 dark:text-gray-400 flex gap-1 items-center group cursor-pointer hover:no-underline no-underline"
     hx-get="/comment/edit?aturi={{ .Comment.AtUri }}"
   >
-    {{ i "pencil" "size-3 inline group-[.htmx-request]:hidden" }}
-    {{ i "loader-circle" "size-3 animate-spin hidden group-[.htmx-request]:inline" }}
-    edit
+    {{ i "pencil" "size-4 inline group-[.htmx-request]:hidden" }}
+    {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
   </a>
 {{ end }}
 
@@ -52,8 +56,7 @@
     hx-delete="/comment?aturi={{ .Comment.AtUri }}"
     hx-confirm="Are you sure you want to delete your comment?"
   >
-    {{ i "trash-2" "size-3 inline group-[.htmx-request]:hidden" }}
-    {{ i "loader-circle" "size-3 animate-spin hidden group-[.htmx-request]:inline" }}
-    delete
+    {{ i "trash-2" "size-4 inline group-[.htmx-request]:hidden" }}
+    {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
   </a>
 {{ end }}

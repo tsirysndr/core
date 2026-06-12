@@ -1279,10 +1279,12 @@ func (p *Pages) EditIssueFragment(w io.Writer, params EditIssueParams) error {
 }
 
 type ThreadReactionFragmentParams struct {
-	Kind      models.ReactionKind
-	Count     int
-	Users     []string
-	IsReacted bool
+	Kind        models.ReactionKind
+	Count       int
+	Users       []string
+	IsReacted   bool
+	CommentRkey string
+	SubjectUri  string
 }
 
 func (p *Pages) ThreadReactionFragment(w io.Writer, params ThreadReactionFragmentParams) error {

@@ -3,47 +3,26 @@
     {{- $reactions   := .Reactions -}}
     {{- $userReacted := .UserReacted -}}
     {{- $threadAt    := .ThreadAt -}}
+    {{- $parts       := splitOn (string $threadAt) "/" -}}
+    {{- $commentRkey := index $parts (sub (len $parts) 1) -}}
 
     <input name="subject-uri" type="hidden" value="{{ $threadAt }}">
-
-    {{ template "reactionsPopup" }}
 
     {{ range $kind := const.OrderedReactionKinds }}
       {{ $reactionData := index $reactions $kind }}
       {{ template "repo/fragments/reaction"
         (dict
-          "Kind"      $kind
-          "Count"     $reactionData.Count
-          "IsReacted" (index $userReacted $kind)
-          "Users"     $reactionData.Users) }}
+          "Kind"        $kind
+          "Count"       $reactionData.Count
+          "IsReacted"   (index $userReacted $kind)
+          "Users"       $reactionData.Users
+          "CommentRkey" $commentRkey
+          "SubjectUri"  $threadAt) }}
     {{ end }}
-  </div>
-{{ end }}
 
-{{ define "reactionsPopup" }}
-  <details class="relative inline-block">
-    <summary
-      class="flex justify-center items-center min-w-8 min-h-8 rounded border border-gray-200 dark:border-gray-700
-      hover:bg-gray-50
-      hover:border-gray-300
-      dark:hover:bg-gray-700
-      dark:hover:border-gray-600
-      cursor-pointer list-none"
-    >
-      {{ i "smile" "size-4" }}
-    </summary>
-      <div
-        class="absolute flex left-0 z-10 mt-4 rounded bg-white dark:bg-gray-800 dark:text-white border border-gray-200 dark:border-gray-700 shadow-lg"
-      >
-        {{ range $kind := const.OrderedReactionKinds }}
-        <button
-          id="reactBtn-{{ $kind }}"
-          class="size-12 hover:bg-gray-100 dark:hover:bg-gray-700"
-          hx-on:click="this.parentElement.parentElement.removeAttribute('open')"
-        >
-          {{ $kind }}
-        </button>
-        {{ end }}
-      </div>
-  </details>
+    {{ if or (not .HideIfEmpty) (gt (len $reactions) 0) }}
+      {{ template "repo/fragments/reactionsPopup" (dict "CommentRkey" $commentRkey "Scope" "body") }}
+    {{ end }}
+
+  </div>
 {{ end }}

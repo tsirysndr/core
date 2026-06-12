@@ -81,10 +81,12 @@ func (s *State) React(w http.ResponseWriter, r *http.Request) {
 		l.Info("created atproto record", "uri", resp.Uri)
 
 		s.pages.ThreadReactionFragment(w, pages.ThreadReactionFragmentParams{
-			Kind:      reactionKind,
-			Count:     reactionMap[reactionKind].Count,
-			Users:     reactionMap[reactionKind].Users,
-			IsReacted: true,
+			Kind:        reactionKind,
+			Count:       reactionMap[reactionKind].Count,
+			Users:       reactionMap[reactionKind].Users,
+			IsReacted:   true,
+			CommentRkey: subjectUri.RecordKey().String(),
+			SubjectUri:  subject,
 		})
 
 		return
@@ -119,10 +121,12 @@ func (s *State) React(w http.ResponseWriter, r *http.Request) {
 		}
 
 		s.pages.ThreadReactionFragment(w, pages.ThreadReactionFragmentParams{
-			Kind:      reactionKind,
-			Count:     reactionMap[reactionKind].Count,
-			Users:     reactionMap[reactionKind].Users,
-			IsReacted: false,
+			Kind:        reactionKind,
+			Count:       reactionMap[reactionKind].Count,
+			Users:       reactionMap[reactionKind].Users,
+			IsReacted:   false,
+			CommentRkey: subjectUri.RecordKey().String(),
+			SubjectUri:  subject,
 		})
 
 		return
