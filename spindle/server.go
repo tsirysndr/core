@@ -194,7 +194,9 @@ func New(ctx context.Context, cfg *config.Config, engines map[string]models.Engi
 	}
 	for _, knot := range knownKnots {
 		logger.Info("adding source start", "knot", knot)
-		ccfg.Sources[eventconsumer.NewKnotSource(knot)] = struct{}{}
+		src := eventconsumer.NewKnotSource(knot)
+		eventconsumer.MigrateLegacyCursor(cursorStore, src)
+		ccfg.Sources[src] = struct{}{}
 	}
 	spindle.ks = eventconsumer.NewConsumer(*ccfg)
 

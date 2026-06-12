@@ -28,7 +28,7 @@ func bootstrapStream(
 	srcs := make(map[ec.Source]struct{}, len(hosts))
 	for _, h := range hosts {
 		src := ec.Source{Kind: kind, Host: h}
-		migrateLegacyCursor(&cursorStore, src)
+		ec.MigrateLegacyCursor(&cursorStore, src)
 		srcs[src] = struct{}{}
 	}
 
@@ -44,13 +44,4 @@ func bootstrapStream(
 		URLFunc:           ec.DefaultURL(dev),
 		CursorStore:       &cursorStore,
 	})
-}
-
-func migrateLegacyCursor(store cursor.Store, src ec.Source) {
-	if store.Get(src.Key()) != 0 {
-		return
-	}
-	if legacy := store.Get(src.Host); legacy != 0 {
-		store.Set(src.Key(), legacy)
-	}
 }
