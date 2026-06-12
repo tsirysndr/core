@@ -143,20 +143,18 @@ func (rp *Repo) Blob(w http.ResponseWriter, r *http.Request) {
 			}, nil
 		}
 
-		// skip large blobs
-		if blobResp.ContentLength > maxBlobSize || blobResp.ContentLength < 0 {
+		content, err := io.ReadAll(io.LimitReader(blobResp.Body, maxBlobSize+1))
+		if err != nil {
+			return models.BlobView{}, err
+		}
+
+		if int64(len(content)) > maxBlobSize {
 			return models.BlobView{
 				ContentType:  contentType,
 				ContentSrc:   blobUrl,
 				FileTooLarge: true,
 				SizeHint:     uint64(max(blobResp.ContentLength, 0)),
 			}, nil
-		}
-
-		// just in case, check the size again
-		content, err := io.ReadAll(io.LimitReader(blobResp.Body, maxBlobSize))
-		if err != nil {
-			return models.BlobView{}, err
 		}
 
 		contentStr := string(content)
@@ -166,7 +164,7 @@ func (rp *Repo) Blob(w http.ResponseWriter, r *http.Request) {
 			Contents:     contentStr,
 			FileTooLarge: false,
 			Lines:        countLines(contentStr),
-			SizeHint:     uint64(max(blobResp.ContentLength, 0)),
+			SizeHint:     uint64(len(content)),
 		}, nil
 	}()
 	if err != nil {
