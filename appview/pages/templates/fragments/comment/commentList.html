@@ -1,9 +1,7 @@
 {{ define "fragments/comment/commentList" }}
-  <div class="flex flex-col gap-4">
-    {{ range $item := .CommentList }}
-      {{ template "commentListItem" (list $ .) }}
-    {{ end }}
-  </div>
+  {{ range $item := .CommentList }}
+    {{ template "commentListItem" (list $ .) }}
+  {{ end }}
 {{ end }}
 
 {{ define "commentListItem" }}
