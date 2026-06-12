@@ -88,11 +88,11 @@
   {{ end }}
 
   {{ if $showCommitter }}
-    authored by {{ template "attributedUser" (list $commit.Author.Email $commit.Author.Name $.EmailToDid) }}
-    {{ range $commit.CoAuthors }} 
+    <span>authored by</span> {{ template "attributedUser" (list $commit.Author.Email $commit.Author.Name $.EmailToDid) }}
+    {{ range $commit.CoAuthors }}
       {{ template "attributedUser" (list .Email .Name $.EmailToDid) }}
     {{ end }}
-    and committed by  {{ template "attributedUser" (list $commit.Committer.Email $commit.Committer.Name $.EmailToDid) }}
+    <span>and committed by</span> {{ template "attributedUser" (list $commit.Committer.Email $commit.Committer.Name $.EmailToDid) }}
   {{ else }}
     {{ template "attributedUser" (list $commit.Author.Email $commit.Author.Name $.EmailToDid )}}
   {{ end }}
