@@ -84,6 +84,10 @@ mkdir -p /etc/ssh/keys
 [ -f /etc/ssh/keys/ssh_host_ecdsa_key ]   || ssh-keygen -t ecdsa   -f /etc/ssh/keys/ssh_host_ecdsa_key   -q -N ""
 [ -f /etc/ssh/keys/ssh_host_ed25519_key ] || ssh-keygen -t ed25519 -f /etc/ssh/keys/ssh_host_ed25519_key -q -N ""
 
+if [ -f /usr/local/share/ca-certificates/caddy.crt ]; then
+    update-ca-certificates
+fi
+
 /usr/sbin/sshd -D -e &
 exec su-exec git /usr/local/bin/knot server
 EOF

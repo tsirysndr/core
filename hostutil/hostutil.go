@@ -54,3 +54,27 @@ func ParseHostname(raw string) (hostname string, noSSL bool, err error) {
 	// lower-case in response
 	return h.Normalize().String(), noSSL, nil
 }
+
+func EnsureHttpScheme(host string) (string, error) {
+	hostname, noSSL, err := ParseHostname(host)
+	if err != nil {
+		return "", err
+	}
+	if noSSL {
+		return "http://" + hostname, nil
+	} else {
+		return "https://" + hostname, nil
+	}
+}
+
+func EnsureWsScheme(host string) (string, error) {
+	hostname, noSSL, err := ParseHostname(host)
+	if err != nil {
+		return "", err
+	}
+	if noSSL {
+		return "ws://" + hostname, nil
+	} else {
+		return "wss://" + hostname, nil
+	}
+}

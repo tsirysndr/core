@@ -101,6 +101,12 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			created integer not null -- unix nanos
 		);
 
+		create table if not exists nixos_toplevel_cache (
+			config_key text primary key,
+			toplevel text not null,
+			updated_at text not null
+		);
+
 		create table if not exists migrations (
 			id integer primary key autoincrement,
 			name text unique

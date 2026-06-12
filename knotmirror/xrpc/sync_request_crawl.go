@@ -11,8 +11,8 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/bluesky-social/indigo/xrpc"
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/hostutil"
 	"tangled.org/core/knotmirror/db"
-	"tangled.org/core/knotmirror/hostutil"
 	"tangled.org/core/knotmirror/models"
 )
 

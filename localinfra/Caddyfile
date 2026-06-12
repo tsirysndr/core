@@ -37,6 +37,16 @@ knot.tngl.boltless.dev {
     reverse_proxy knot:5555
 }
 
+# spindle
+http://spindle.tngl.boltless.dev {
+    reverse_proxy spindle:6555
+}
+
+spindle.tngl.boltless.dev {
+    tls internal
+    reverse_proxy spindle:6555
+}
+
 # knotmirror
 mirror.tngl.boltless.dev {
     tls internal

@@ -4,6 +4,8 @@
   hostSystem,
   self,
 }: let
+  lib = nixpkgs.lib;
+
   envVar = name: let
     var = builtins.getEnv name;
   in
@@ -19,8 +21,21 @@
 
   plcUrl = envVarOr "TANGLED_VM_PLC_URL" "https://plc.directory";
   jetstream = envVarOr "TANGLED_VM_JETSTREAM_ENDPOINT" "wss://jetstream1.us-west.bsky.network/subscribe";
+
+  checkFile = value: path:
+    if builtins.pathExists path
+    then lib.hasPrefix value (builtins.readFile path)
+    else false;
+  _nestedVirt =
+    (checkFile "1" /sys/module/kvm_amd/parameters/nested)
+    || (checkFile "Y" /sys/module/kvm_intel/parameters/nested);
+  nestedVirtWarning = ''
+    KVM nested virtualisation is not enabled on this host.
+    You should enable it if you can for better performance when testing the QEMU spindle engine!
+  '';
+  nestedVirt = lib.warnIf (!_nestedVirt) nestedVirtWarning _nestedVirt;
 in
-  nixpkgs.lib.nixosSystem {
+  lib.nixosSystem {
     inherit system;
     modules = [
       self.nixosModules.knot
@@ -36,9 +51,11 @@ in
           host.pkgs = import nixpkgs {system = hostSystem;};
 
           graphics = false;
-          memorySize = 2048;
-          diskSize = 10 * 1024;
+          memorySize = 3072;
+          diskSize = 20 * 1024;
           cores = 2;
+          qemu.options = lib.optionals nestedVirt ["-enable-kvm" "-cpu host"];
+
           forwardPorts = [
             # ssh
             {
@@ -101,6 +118,12 @@ in
             };
           };
         };
+        systemd.tmpfiles.rules = [
+          "L+ /var/lib/spindle/images/nixos-x86_64 - - - - ${self.packages.${system}.spindle-nixos-image}"
+          "L+ /var/lib/spindle/images/nixos - - - - /var/lib/spindle/images/nixos-x86_64"
+          "L+ /var/lib/spindle/images/alpine-x86_64 - - - - ${self.packages.${system}.spindle-alpine-image}"
+          "L+ /var/lib/spindle/images/alpine - - - - /var/lib/spindle/images/alpine-x86_64"
+        ];
         # This is fine because any and all ports that are forwarded to host are explicitly marked above, we don't need a separate guest firewall
         networking.firewall.enable = false;
         services.timesyncd.enable = lib.mkForce true;
@@ -141,7 +164,30 @@ in
 
           pipelines = {
             logBucket = envVarOr "SPINDLE_S3_LOG_BUCKET" "";
+            microvm = {
+              enableKVM = nestedVirt;
+            };
           };
+
+          cache = {
+            readUrls = ["http://127.0.0.1:8501"];
+            trustedPublicKeys = ["cache.local:F7YqpMzuBdILYd/v+wMZN2YKxCzliXQyFmeezOxw7rU="];
+            uploadUrl = "http://127.0.0.1:8501/upload";
+          };
+        };
+        services.ncps = {
+          enable = true;
+          cache = {
+            allowPutVerb = true;
+            allowDeleteVerb = true;
+            hostName = "cache.local";
+            secretKeyPath = pkgs.writeText "ncps-secret-key" "cache.local:hay0+jvBNguou2tNt19FvrBCogHwHc+mqQe3bww5ZX4XtiqkzO4F0gth3+/7Axk3ZgrELOWJdDIWZ57M7HDutQ==";
+            upstream = {
+              urls = ["https://cache.nixos.org"];
+              publicKeys = ["cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="];
+            };
+          };
+          server.addr = "127.0.0.1:8501";
         };
         services.postgresql = {
           enable = true;
@@ -191,7 +237,7 @@ in
           };
         in {
           knot = mkDataSyncScripts "/mnt/knot-data" config.services.tangled.knot.stateDir;
-          spindle = mkDataSyncScripts "/mnt/spindle-data" (builtins.dirOf config.services.tangled.spindle.server.dbPath);
+          spindle = mkDataSyncScripts "/mnt/spindle-data" (dirOf config.services.tangled.spindle.server.dbPath);
           knotmirror.after = ["postgresql.target"];
           tap-knotmirror.after = ["postgresql.target"];
         };

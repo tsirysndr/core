@@ -33,7 +33,7 @@ func Spindlestream(ctx context.Context, c *config.Config, d *db.DB, enforcer *rb
 
 	return bootstrapStream(
 		ctx, "spindlestream", ec.KindSpindle, hosts, c.Redis.Addr,
-		c.Spindlestream, c.Core.Dev,
+		c.Spindlestream,
 		spindleIngester(d, pn),
 	), nil
 }

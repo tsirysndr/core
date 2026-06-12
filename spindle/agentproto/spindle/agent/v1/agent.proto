@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package spindle.agent.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "tangled.org/core/spindle/agentproto/gen;agentv1";
+
+message Hello {
+  uint32 protocol_version = 1;
+  string agent_version = 2;
+  string boot_id = 3;
+  string nix_version = 4;
+}
+
+message Init {
+  string job_id = 1;
+  repeated string cache_trusted_public_keys = 2;
+  uint32 cache_read_proxy_port = 3;
+  uint32 cache_upload_proxy_port = 4;
+  uint32 dns_proxy_port = 5;
+}
+
+message ExecStart {
+  repeated string argv = 1;
+  repeated string env = 2;
+  string cwd = 3;
+  string user = 4;
+  uint32 timeout_seconds = 5;
+}
+
+message ExecStdout {
+  string data = 1;
+}
+
+message ExecStderr {
+  string data = 1;
+}
+
+message ExecExit {
+  int32 exit_code = 1;
+  string error = 2;
+  // set when the guest killed the step on its own timeout timer, so the host
+  // can classify it as a timeout rather than inferring failure from exit_code.
+  bool timed_out = 3;
+}
+
+message ActivateConfig {
+  string config_key = 1;
+  string base_config_hash = 2;
+  string user_config = 3;
+  string toplevel = 4;
+  uint32 timeout_seconds = 5;
+}
+
+message ActivateConfigResult {
+  string config_key = 1;
+  string toplevel = 2;
+  string error = 3;
+}
+
+message BuiltPaths {
+  repeated string paths = 1;
+  string reason = 2;
+}
+
+message CacheDrain {
+  uint32 timeout_seconds = 1;
+}
+
+message CacheDrainResult {
+  string error = 1;
+  uint32 cache_queued = 2;
+  uint32 cache_active = 3;
+  uint32 cache_uploaded = 4;
+  uint32 cache_failed = 5;
+}
+
+message Poweroff {}
+
+message PoweroffResult {
+  string error = 1;
+}
+
+message Message {
+  option (buf.validate.message).oneof = {
+    fields: [
+      "hello", "init", "exec_start", "exec_stdout", "exec_stderr", "exec_exit",
+      "activate_config", "activate_config_result", "built_paths", "cache_drain",
+      "cache_drain_result", "poweroff", "poweroff_result"
+    ],
+    required: true
+  };
+
+  string id = 1 [(buf.validate.field).string.min_len = 1];
+
+  Hello hello = 2;
+  Init init = 3;
+  ExecStart exec_start = 4;
+  ExecStdout exec_stdout = 5;
+  ExecStderr exec_stderr = 6;
+  ExecExit exec_exit = 7;
+  ActivateConfig activate_config = 8;
+  ActivateConfigResult activate_config_result = 9;
+  BuiltPaths built_paths = 10;
+  CacheDrain cache_drain = 11;
+  CacheDrainResult cache_drain_result = 12;
+  Poweroff poweroff = 13;
+  PoweroffResult poweroff_result = 14;
+}

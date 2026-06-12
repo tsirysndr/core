@@ -41,6 +41,10 @@ export TANGLED_OAUTH_CLIENT_KID="$(cat $KID)"
 [ -r /shared/label-defaults ] && export TANGLED_LABEL_DEFAULTS="$(cat /shared/label-defaults)"
 [ -r /shared/label-gfi ]      && export TANGLED_LABEL_GFI="$(cat /shared/label-gfi)"
 
+if [ -f /usr/local/share/ca-certificates/caddy.crt ]; then
+    update-ca-certificates
+fi
+
 exec air -c /src/.air/appview.toml
 EOF
 RUN chmod +x /usr/local/bin/appview-entrypoint.sh

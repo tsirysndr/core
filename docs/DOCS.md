@@ -760,7 +760,8 @@ simple format. They're located in the `.tangled/workflows`
 directory at the root of your repository, and are defined
 using YAML.
 
-The fields are:
+A workflow has a set of common fields that apply no matter
+which engine you pick:
 
 - [Trigger](#trigger): A **required** field that defines
   when a workflow should be triggered.
@@ -768,12 +769,14 @@ The fields are:
   engine a workflow should run on.
 - [Clone options](#clone-options): An **optional** field
   that defines how the repository should be cloned.
-- [Dependencies](#dependencies): An **optional** field that
-  allows you to list dependencies you may need.
 - [Environment](#environment): An **optional** field that
   allows you to define environment variables.
 - [Steps](#steps): An **optional** field that allows you to
   define what steps should run in the workflow.
+
+On top of these, each engine has its own options for things
+like dependencies and images. See [Engines](#engines) for
+the per-engine fields.
 
 ### Trigger
 
@@ -853,12 +856,21 @@ supported engines are:
   search for packages on https://search.nixos.org, and
   there's a pretty good chance the package(s) you're looking
   for will be there.
+  See [Nixery engine](#nixery-engine).
+- `microvm`: Runs the whole workflow inside its own
+  microVM. Has configuration features for NixOS images
+  that will let you enable services, do Docker-in-VM, etc.
+  See [microVM engine](#microvm-engine).
 
 Example:
 
 ```yaml
 engine: "nixery"
 ```
+
+Each engine also adds its own workflow fields (dependencies,
+images, services, and so on). These are documented under
+[Engines](#engines).
 
 ### Clone options
 
@@ -890,41 +902,6 @@ clone:
   depth: 1
   submodules: false
 ```
-
-### Dependencies
-
-Usually when you're running a workflow, you'll need
-additional dependencies. The `dependencies` field lets you
-define which dependencies to get, and from where. It's a
-key-value map, with the key being the registry to fetch
-dependencies from, and the value being the list of
-dependencies to fetch.
-
-The registry URL syntax can be found [on the nix
-manual](https://nix.dev/manual/nix/2.18/command-ref/new-cli/nix3-registry-add).
-
-Say you want to fetch Node.js and Go from `nixpkgs`, and a
-package called `my_pkg` you've made from your own registry
-at your repository at
-`https://tangled.org/@example.com/my_pkg`. You can define
-those dependencies like so:
-
-```yaml
-dependencies:
-  # nixpkgs
-  nixpkgs:
-    - nodejs
-    - go
-  # unstable
-  nixpkgs/nixpkgs-unstable:
-    - bun
-  # custom registry
-  git+https://tangled.org/@example.com/my_pkg:
-    - my_pkg
-```
-
-Now these dependencies are available to use in your
-workflow!
 
 ### Environment
 
@@ -992,9 +969,9 @@ following fields:
 - `command`: This field allows you to define a command to
   run in that step. The step is run in a Bash shell, and the
   logs from the command will be visible in the pipelines
-  page on the Tangled website. The
-  [dependencies](#dependencies) you added will be available
-  to use here.
+  page on the Tangled website. Any dependencies you added in
+  your engine's section (see [Engines](#engines)) will be
+  available to use here.
 - `environment`: Similar to the global
   [environment](#environment) config, this **optional**
   field is a key-value map that allows you to set
@@ -1018,7 +995,49 @@ steps:
       NODE_ENV: "production"
 ```
 
-### Complete workflow
+## Engines
+
+The common fields above apply to every workflow. Each engine
+then adds its own fields on top. Pick an engine with the
+[`engine`](#engine) field and use the matching section below.
+
+### Nixery engine
+
+#### Dependencies
+
+When you're running a workflow you'll usually need additional
+dependencies. The `dependencies` field lets you define which
+dependencies to get, and from where. It's a key-value map,
+with the key being the registry to fetch dependencies from,
+and the value being the list of dependencies to fetch.
+
+The registry URL syntax can be found [on the nix
+manual](https://nix.dev/manual/nix/2.18/command-ref/new-cli/nix3-registry-add).
+
+Say you want to fetch Node.js and Go from `nixpkgs`, and a
+package called `my_pkg` you've made from your own registry
+at your repository at
+`https://tangled.org/@example.com/my_pkg`. You can define
+those dependencies like so:
+
+```yaml
+dependencies:
+  # nixpkgs
+  nixpkgs:
+    - nodejs
+    - go
+  # unstable
+  nixpkgs/nixpkgs-unstable:
+    - bun
+  # custom registry
+  git+https://tangled.org/@example.com/my_pkg:
+    - my_pkg
+```
+
+Now these dependencies are available to use in your
+workflow!
+
+#### Complete nixery workflow
 
 ```yaml
 # .tangled/workflows/build.yml
@@ -1068,12 +1087,116 @@ If you want another example of a workflow, you can look at
 the one [Tangled uses to build the
 project](https://tangled.org/@tangled.org/core/blob/master/.tangled/workflows/build.yml).
 
+### microVM engine
+
+#### Image
+
+A workflow picks the image to boot with the top-level `image`
+field:
+
+```yaml
+engine: microvm
+image: nixos
+```
+
+There are two flavours of images:
+
+- **NixOS images** (e.g. `nixos`): the whole guest is built
+  with Nix, so you can configure it from the workflow file
+  itself. The `dependencies`, `services`, `virtualisation`,
+  `registry` and `caches` fields below are all understood
+  here, and the guest builds and activates that configuration
+  before any of your steps run.
+- **Non-NixOS images** (e.g. `alpine`): there's no NixOS to
+  configure, so the workflow-level config fields above have
+  no effect. You still get a full machine to run steps in.
+
+The available image names depend on what the spindle operator
+has installed. `nixos` and `alpine` are examples. If `image`
+is omitted, the spindle's configured default image is used.
+
+#### Dependencies
+
+On the microVM engine, `dependencies` is a flat list of
+packages that get added to the guest's `PATH` (via
+`environment.systemPackages`). This field only applies to
+**NixOS images**, for other images you can use the package
+manager included in a step.
+
+A bare name like `go` is looked up in nixpkgs. You can also
+point at any flake with the `flakeref#attr` syntax, so
+`github:nixos/nixpkgs#hello` pulls `hello` straight out of
+that flake.
+
+```yaml
+dependencies:
+  - go
+  - github:nixos/nixpkgs#hello
+```
+
+#### Registry
+
+The `registry` field remaps flake references, the same way
+`nix registry` does. This lets you pin or alias the flakes
+used by `dependencies`.
+
+For example, pin `nixpkgs` to `nixos-unstable` so that the
+bare `go` above resolves from unstable, and alias your own
+flake so you can use `myflake#tool` in `dependencies`:
+
+```yaml
+registry:
+  nixpkgs: github:nixos/nixpkgs/nixos-unstable
+  myflake: github:me/x
+```
+
+#### Caches
+
+The `caches` field is a map of Nix binary cache URL to its
+trusted public key. These are fed into the spindle's read
+proxy, so the guest can substitute prebuilt paths from them
+instead of building everything from scratch.
+
+```yaml
+caches:
+  https://nix-community.cachix.org: "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+```
+
+#### Services and virtualisation
+
+The `services` and `virtualisation` fields are passed straight
+through to NixOS. Anything you could write under
+`services.*` or `virtualisation.*` in a NixOS configuration,
+you can write here, and it's brought up before any of your
+steps run.
+
+As a convenience, `true` works as shorthand for
+`.enable = true` anywhere an `enable` option exists (e.g.
+`virtualisation.docker: true`).
+
+```yaml
+services:
+  postgresql:
+    enable: true
+    ensureDatabases: ["spindle-workflow"]
+    ensureUsers:
+      - name: spindle-workflow
+        ensureDBOwnership: true
+
+virtualisation:
+  docker: true
+```
+
 ## Self-hosting guide
 
 ### Prerequisites
 
 - Go
-- Docker (the only supported backend currently)
+- For the **nixery** engine: Docker (or Podman with Docker
+  compatibility enabled).
+- For the **microVM** engine: a Linux host with KVM, plus the
+  microVM host dependencies described in [Running microVM
+  workflows](#running-microvm-workflows).
 
 ### Configuration
 
@@ -1089,6 +1212,57 @@ Spindle is configured using environment variables. The following environment var
 - `SPINDLE_SERVER_DOCKER_SOCKET`: Path to Docker socket to expose to invoked Spindle containers (default: `""`).
 - `SPINDLE_PIPELINES_NIXERY`: The Nixery URL (default: `"nixery.tangled.sh"`).
 - `SPINDLE_PIPELINES_WORKFLOW_TIMEOUT`: The default workflow timeout (default: `"5m"`).
+
+For the microVM engine, the following are also available
+(prefix `SPINDLE_MICROVM_PIPELINES_`):
+
+- `SPINDLE_MICROVM_PIPELINES_IMAGE_DIR`: Directory containing
+  microVM images (**required** to use the engine). See
+  [Running microVM workflows](#running-microvm-workflows).
+- `SPINDLE_MICROVM_PIPELINES_DEFAULT_IMAGE`: Image used when a
+  workflow doesn't set `image` (default: `"nixos-x86_64"`).
+- `SPINDLE_MICROVM_PIPELINES_OVERLAY_DIR`: Where per-workflow
+  temporary disks are created (default: the system temp dir).
+- `SPINDLE_MICROVM_PIPELINES_ENABLE_KVM`: Use KVM hardware
+  acceleration (default: `true`). Without KVM, guests fall
+  back to slow software emulation.
+- `SPINDLE_MICROVM_PIPELINES_WORKFLOW_TIMEOUT`: Default
+  workflow timeout (default: `"5m"`).
+
+Optional resource limits (a value of `0` disables that
+limit). The limits cap usage across all running microVM
+workflows:
+
+- `SPINDLE_MICROVM_PIPELINES_MAX_TOTAL_MEMORY_MIB`
+- `SPINDLE_MICROVM_PIPELINES_MAX_TOTAL_VCPUS`
+- `SPINDLE_MICROVM_PIPELINES_MAX_TOTAL_DISK_MIB`
+
+Optional cgroup enforcement:
+
+- `SPINDLE_MICROVM_PIPELINES_ENABLE_CGROUPS`: Place each
+  workflow's QEMU and slirp4netns in a per-workflow cgroup=
+  (default: `false`).
+- `SPINDLE_MICROVM_PIPELINES_CGROUP_PARENT`: Parent cgroup;
+  `self` resolves the spindle service's own cgroup (default:
+  `"self"`).
+- `SPINDLE_MICROVM_PIPELINES_CGROUP_PIDS_MAX`: Max processes
+  per workflow cgroup (default: `4096`).
+- `SPINDLE_MICROVM_PIPELINES_CGROUP_SWAP_MAX_MIB`: Max swap
+  per workflow cgroup (default: `0`, no swap).
+- `SPINDLE_MICROVM_PIPELINES_CGROUP_SUPERVISOR_MEMORY_MIN_MIB`:
+  Memory protected for spindle itself so it isn't OOM-killed
+  before the workflows (default: `512`).
+
+To push paths built inside microVMs back to a shared Nix
+cache (and read from it), configure the cache (prefix
+`SPINDLE_NIX_CACHE_`):
+
+- `SPINDLE_NIX_CACHE_READ_URLS`: Comma-separated binary cache
+  URLs the guest reads from.
+- `SPINDLE_NIX_CACHE_TRUSTED_PUBLIC_KEYS`: Comma-separated
+  trusted public keys for those caches.
+- `SPINDLE_NIX_CACHE_UPLOAD_URL`: Cache URL that paths built
+  in the guest are uploaded to.
 
 ### Running spindle
 
@@ -1122,6 +1296,70 @@ Spindle is configured using environment variables. The following environment var
 
 Spindle will now start, connect to the Jetstream server, and begin processing pipelines.
 
+### Running microVM workflows
+
+The microVM engine needs a few extra things on the host, and
+it needs images to boot.
+
+#### Host dependencies
+
+microVM workflows depend on a handful of host tools and
+devices. spindle checks for the ones an image needs right
+before it launches, so a missing dependency surfaces as a
+clear error. You'll need:
+
+- `qemu`: the runner. The QEMU binary for the image's arch
+  must be present (e.g. `qemu-system-x86_64`).
+- `mkfs.ext4` (from `e2fsprogs`): to format the per-workflow
+  writable volumes.
+- [`slirp4netns`](https://github.com/rootless-containers/slirp4netns#install),
+  `ip` (from `iproute2`), `mount` and `unshare` (from `util-linux`):
+  used to sandbox guest networking.
+- `/dev/kvm`: for hardware acceleration (unless you disable
+  KVM with `SPINDLE_MICROVM_PIPELINES_ENABLE_KVM=false`).
+- `/dev/vhost-vsock`: the guest agent talks to spindle over
+  vsock.
+
+On NixOS, the [spindle
+module](https://tangled.org/tangled.org/core/blob/master/nix/modules/spindle.nix)
+puts `qemu`, `e2fsprogs`, `slirp4netns`, `iproute2` and
+`util-linux` on the service's `PATH` for you.
+
+#### Building images
+
+Images are built with Nix. The flake exposes packages for the
+two stock images (use the `-tarball` prefixed ones for a gzipped
+tarball you can copy to another host):
+
+```shell
+# a NixOS image
+nix build .#spindle-nixos-image
+# an Alpine image
+nix build .#spindle-alpine-image
+```
+
+#### Installing images
+
+Spindle looks for images in
+`SPINDLE_MICROVM_PIPELINES_IMAGE_DIR`. An image is resolved by
+the name a workflow puts in its `image` field, matched
+literally against what's on disk:
+
+1. a directory `<name>/` containing a `spec.json` (next to the
+   kernel/initrd/store-disk), or
+2. a flat `<name>.json` self-contained spec.
+
+Resolution depends only on the name and what's on disk, never
+on the host doing the resolving, so the same workflow resolves
+to the same image on every spindle. If you keep multiple
+arches side by side, you can name them `<name>-<arch>` (e.g.
+`nixos-x86_64`, `alpine-aarch64`); the suffix is just part of
+the name. To make a name like `nixos` work if you are hosting
+multiple arches, you can use symlinks.
+
+On NixOS, you'll most likely want to use `systemd.tmpfiles.rules`
+to set these up declaratively.
+
 ## Architecture
 
 Spindle is a small CI runner service. Here's a high-level overview of how it operates:
@@ -1135,16 +1373,24 @@ Spindle is a small CI runner service. Here's a high-level overview of how it ope
 - The spindle engine then handles execution of the pipeline, with results and
   logs beamed on the spindle event stream over WebSocket
 
-### The engine
+### The engines
 
-At present, the only supported backend is Docker (and Podman, if Docker
-compatibility is enabled, so that `/run/docker.sock` is created). spindle
-executes each step in the pipeline in a fresh container, with state persisted
-across steps within the `/tangled/workspace` directory.
+Spindle has two execution backends, picked per-workflow with
+the [`engine`](#engine) field:
 
-The base image for the container is constructed on the fly using
-[Nixery](https://nixery.dev), which is handy for caching layers for frequently
-used packages.
+- **nixery**: executes each step in a fresh Docker container
+  (Podman works too, if Docker compatibility is enabled so
+  that `/run/docker.sock` is created), with state persisted
+  across steps within the `/tangled/workspace` directory. The
+  base image for the container is constructed on the fly using
+  [Nixery](https://nixery.dev), which is/rhandy for caching
+  layers for frequently used packages.
+- **microvm**: runs the whole workflow inside its own
+  microVM, supporting different images, with extra
+  configuration for NixOS images (e.g. services in workflow file)
+  See the [engine
+  README](https://tangled.org/tangled.org/core/blob/master/spindle/engines/microvm/README.md)
+  for the architecture in depth.
 
 The pipeline manifest is [specified here](https://docs.tangled.org/spindles.html#pipelines).
 

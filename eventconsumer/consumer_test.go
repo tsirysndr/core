@@ -69,7 +69,7 @@ func startEventServer(t *testing.T, src *memSrc) (Source, *notifier.Notifier) {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	addr := strings.TrimPrefix(srv.URL, "http://")
-	return Source{Kind: "test", Host: addr}, &n
+	return Source{Kind: "test", Host: addr, NoTLS: true}, &n
 }
 
 func TestConsumer_DrainAdvancesCursor(t *testing.T) {
@@ -95,7 +95,6 @@ func TestConsumer_DrainAdvancesCursor(t *testing.T) {
 		QueueSize:         16,
 		ConnectionTimeout: 2 * time.Second,
 		CursorStore:       store,
-		URLFunc:           DefaultURL(true),
 		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 	c := NewConsumer(cfg)
@@ -158,7 +157,6 @@ func TestConsumer_CursorMonotonic_OutOfOrderWorkers(t *testing.T) {
 		QueueSize:         16,
 		ConnectionTimeout: 2 * time.Second,
 		CursorStore:       store,
-		URLFunc:           DefaultURL(true),
 		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 	c := NewConsumer(cfg)
@@ -203,7 +201,6 @@ func TestConsumer_StopTerminatesWithoutCtxCancel(t *testing.T) {
 		QueueSize:         8,
 		ConnectionTimeout: 2 * time.Second,
 		CursorStore:       &cursor.MemoryStore{},
-		URLFunc:           DefaultURL(true),
 		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 	c := NewConsumer(cfg)
@@ -249,7 +246,6 @@ func TestConsumer_ResumesFromStoredCursor(t *testing.T) {
 		QueueSize:         16,
 		ConnectionTimeout: 2 * time.Second,
 		CursorStore:       store,
-		URLFunc:           DefaultURL(true),
 		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 	c := NewConsumer(cfg)

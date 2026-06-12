@@ -39,7 +39,6 @@ func drainProcessed(t *testing.T, store cursor.Store, source Source) []int64 {
 		QueueSize:         16,
 		ConnectionTimeout: 2 * time.Second,
 		CursorStore:       store,
-		URLFunc:           DefaultURL(true),
 		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 

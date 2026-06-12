@@ -113,7 +113,7 @@ func (m *pipelineModel) connectCmd(workflow string) tea.Cmd {
 		if !ok || len(ws.Data) == 0 {
 			return logDoneMsg{workflow: workflow}
 		}
-		url := pipelines.SpindleURL(m.server.config.Core.Dev, ws.Data[0].Spindle, m.pipeline.Knot, m.pipeline.Rkey, workflow)
+		url := pipelines.SpindleURL(ws.Data[0].Spindle, m.pipeline.Knot, m.pipeline.Rkey, workflow)
 		conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 		if err != nil {
 			return logDoneMsg{workflow: workflow, err: fmt.Errorf("connecting to spindle: %w", err)}

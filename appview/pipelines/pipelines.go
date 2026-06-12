@@ -18,6 +18,7 @@ import (
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/reporesolver"
 	"tangled.org/core/eventconsumer"
+	"tangled.org/core/hostutil"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/orm"
 	"tangled.org/core/rbac"
@@ -222,7 +223,11 @@ func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	url := SpindleURL(p.config.Core.Dev, spindle, knot, rkey, workflow)
+	url := SpindleURL(spindle, knot, rkey, workflow)
+	if url == "" {
+		http.Error(w, "invalid spindle hostname", http.StatusBadRequest)
+		return
+	}
 	l = l.With("url", url)
 
 	clientConn, err := upgrader.Upgrade(w, r, nil)
@@ -421,11 +426,17 @@ func (p *Pipelines) Cancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	hostname, noTLS, err := hostutil.ParseHostname(spindle)
+	if err != nil {
+		http.Error(w, "invalid spindle hostname", http.StatusBadRequest)
+		return
+	}
+
 	spindleClient, err := p.oauth.ServiceClient(
 		r,
-		oauth.WithService(f.Spindle),
+		oauth.WithService(hostname),
 		oauth.WithLxm(tangled.PipelineCancelPipelineNSID),
-		oauth.WithDev(p.config.Core.Dev),
+		oauth.WithDev(noTLS),
 		oauth.WithTimeout(time.Second*30), // workflow cleanup usually takes time
 	)
 

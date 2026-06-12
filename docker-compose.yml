@@ -50,6 +50,7 @@ services:
       PDS_URL: http://pds:3000
       OWNER_USER: alice
       KNOT_HOSTNAME: knot.tngl.boltless.dev
+      SPINDLE_HOSTNAME: spindle.tngl.boltless.dev
     volumes:
       - ./localinfra/scripts/init-accounts.sh:/init.sh:ro
       - init-state:/shared
@@ -85,7 +86,7 @@ services:
       JETSTREAM_WS_URL: wss://pds.tngl.boltless.dev/xrpc/com.atproto.sync.subscribeRepos
     volumes:
       - jetstream-data:/data
-      - ./localinfra/certs/root.crt:/etc/ssl/certs/caddy.crt:ro
+      - ./localinfra/certs/root.crt:/etc/ssl/certs/ca-certificates.crt:ro
     depends_on:
       pds:
         condition: service_healthy
@@ -113,7 +114,7 @@ services:
       - knot-data:/home/git
       - knot-ssh-keys:/etc/ssh/keys
       - init-state:/shared:ro
-      - ./localinfra/certs/root.crt:/etc/ssl/certs/caddy.crt:ro
+      - ./localinfra/certs/root.crt:/usr/local/share/ca-certificates/caddy.crt:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:5555/"]
       interval: 2s
@@ -131,6 +132,57 @@ services:
         condition: service_completed_successfully
     networks: [tngl]
 
+  spindle:
+    build:
+      context: .
+      dockerfile: localinfra/spindle.Dockerfile
+    restart: unless-stopped
+    environment:
+      SPINDLE_SERVER_HOSTNAME: spindle.tngl.boltless.dev
+      SPINDLE_SERVER_LISTEN_ADDR: 0.0.0.0:6555
+      SPINDLE_SERVER_DB_PATH: /var/lib/spindle/spindle.db
+      SPINDLE_SERVER_PLC_URL: https://plc.tngl.boltless.dev
+      SPINDLE_SERVER_JETSTREAM_ENDPOINT: wss://jetstream.tngl.boltless.dev/subscribe
+      SPINDLE_SERVER_DEV: "true"
+      SPINDLE_SERVER_DEV_EXTRA_HOSTS: knot.tngl.boltless.dev,mirror.tngl.boltless.dev
+      SPINDLE_SERVER_TAP_DB_PATH: /var/lib/spindle/tap.db
+      SPINDLE_SERVER_TAP_RELAY_URL: https://pds.tngl.boltless.dev
+      SPINDLE_MICROVM_PIPELINES_IMAGE_DIR: /var/lib/spindle/images
+      SPINDLE_MICROVM_PIPELINES_OVERLAY_DIR: /var/lib/spindle/overlays
+      SPINDLE_MICROVM_PIPELINES_AGENT_PORT: "11240"
+      SPINDLE_S3_LOG_BUCKET: ""
+    devices:
+      - /dev/vsock:/dev/vsock
+      - /dev/kvm:/dev/kvm
+      - /dev/vhost-vsock:/dev/vhost-vsock
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    security_opt:
+      - label=disable
+      - seccomp=unconfined
+    volumes:
+      - spindle-data:/var/lib/spindle
+      - spindle-logs:/var/log/spindle
+      - ./out/localinfra-spindle-images:/var/lib/spindle/images:ro
+      - init-state:/shared:ro
+      - ./localinfra/certs/root.crt:/usr/local/share/ca-certificates/caddy.crt:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:6555/"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+    depends_on:
+      plc:
+        condition: service_started
+      jetstream:
+        condition: service_started
+      init-accounts:
+        condition: service_completed_successfully
+    networks: [tngl]
+
   knotmirror-tap:
     image: ghcr.io/bluesky-social/indigo/tap:sha-4f47add43060c27e8a37d9d76482ecddf001fcd8 # 0.1.10
     restart: unless-stopped
@@ -144,7 +196,7 @@ services:
       TAP_RESYNC_PARALLELISM: "10"
       TAP_RETRY_TIMEOUT: 60s
     volumes:
-      - ./localinfra/certs/root.crt:/etc/ssl/certs/caddy.crt:ro
+      - ./localinfra/certs/root.crt:/etc/ssl/certs/ca-certificates.crt:ro
     depends_on:
       postgres:
         condition: service_started
@@ -171,7 +223,7 @@ services:
       MIRROR_RESYNC_PARALLELISM: "4"
     volumes:
       - knotmirror-data:/data
-      - ./localinfra/certs/root.crt:/etc/ssl/certs/caddy.crt:ro
+      - ./localinfra/certs/root.crt:/usr/local/share/ca-certificates/caddy.crt:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:7000/"]
       interval: 2s
@@ -202,7 +254,8 @@ services:
       - ./blog/templates:/build/blog/templates:ro
       - ./blog/posts:/build/blog/posts:ro
       - ./appview/pages/static:/build/appview/pages/static
-    command: ["-i", "input.css", "-o", "appview/pages/static/tw.css", "--watch=always"]
+    command:
+      ["-i", "input.css", "-o", "appview/pages/static/tw.css", "--watch=always"]
     network_mode: none
 
   appview:
@@ -226,7 +279,7 @@ services:
       - go-mod-cache:/go/mod
       - appview-data:/var/lib/appview
       - init-state:/shared:ro
-      - ./localinfra/certs/root.crt:/etc/ssl/certs/caddy.crt:ro
+      - ./localinfra/certs/root.crt:/usr/local/share/ca-certificates/caddy.crt:ro
     depends_on:
       redis:
         condition: service_started
@@ -267,6 +320,8 @@ volumes:
   knot-data:
   knot-ssh-keys:
   knotmirror-data:
+  spindle-data:
+  spindle-logs:
   init-state:
   go-cache:
   go-mod-cache:

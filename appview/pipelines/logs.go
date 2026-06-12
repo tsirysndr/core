@@ -2,12 +2,14 @@ package pipelines
 
 import (
 	"html/template"
+	"path"
 	"regexp"
 	"strings"
 
 	terminal "github.com/buildkite/terminal-to-html/v3"
 	"github.com/gorilla/websocket"
 	"tangled.org/core/appview/pages/markup"
+	"tangled.org/core/hostutil"
 )
 
 // matches any ANSI escape sequence: ESC [ <params> m
@@ -79,10 +81,11 @@ func ReadLogs(conn *websocket.Conn, ch chan LogEvent) {
 	}
 }
 
-func SpindleURL(dev bool, spindle, knot, rkey, workflow string) string {
-	scheme := "wss"
-	if dev {
-		scheme = "ws"
+func SpindleURL(spindle, knot, rkey, workflow string) string {
+	url, err := hostutil.EnsureWsScheme(spindle)
+	if err != nil {
+		return ""
 	}
-	return scheme + "://" + strings.Join([]string{spindle, "logs", knot, rkey, workflow}, "/")
+
+	return url + path.Join("/logs", knot, rkey, workflow)
 }

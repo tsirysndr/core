@@ -55,7 +55,7 @@ func TestColdStart_SpindleEventsRebuildPipelineStatuses(t *testing.T) {
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	source := ec.Source{Kind: "test", Host: strings.TrimPrefix(srv.URL, "http://")}
+	source := ec.Source{Kind: "test", Host: strings.TrimPrefix(srv.URL, "http://"), NoTLS: true}
 
 	appviewDB, err := db.Make(ctx, filepath.Join(t.TempDir(), "appview.db"))
 	if err != nil {
@@ -72,7 +72,6 @@ func TestColdStart_SpindleEventsRebuildPipelineStatuses(t *testing.T) {
 		QueueSize:         16,
 		ConnectionTimeout: 2 * time.Second,
 		CursorStore:       &cursor.MemoryStore{},
-		URLFunc:           ec.DefaultURL(true),
 		Logger:            logger,
 	}
 	c := ec.NewConsumer(cfg)

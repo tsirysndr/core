@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo=$(cd "$(dirname "$0")/../.." && pwd)
+image_root="${1:-$repo/out/localinfra-spindle-images}"
+
+mkdir -p "$image_root"
+
+extract_image() {
+    local package="$1"
+    local name="$2"
+    shift 2
+
+    local tarball
+    tarball=$(nix build "$repo#$package" --no-link --print-out-paths)
+
+    [ -d "$image_root/$name" ] && chmod -R +w "$image_root/$name" || true
+    rm -rf "$image_root/$name"
+    mkdir -p "$image_root/$name"
+    tar -C "$image_root/$name" -xzf "$tarball"
+
+    local alias
+    for alias in "$@"; do
+        rm -rf "$image_root/$alias"
+        ln -s "$name" "$image_root/$alias"
+    done
+}
+
+extract_image spindle-nixos-image-tarball nixos-x86_64 nixos
+extract_image spindle-alpine-image-tarball alpine-x86_64 alpine
+
+echo "prepared spindle microVM images in $image_root"

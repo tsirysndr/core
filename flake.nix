@@ -3,6 +3,10 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    microvm = {
+      url = "github:microvm-nix/microvm.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     fenix = {
       url = "github:nix-community/fenix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -69,6 +73,7 @@
     ibm-plex-mono-src,
     actor-typeahead-src,
     mermaid-src,
+    microvm,
     ...
   }: let
     supportedSystems = ["x86_64-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin"];
@@ -84,13 +89,41 @@
             root = ./.;
             fileset = fs.difference (fs.intersection (fs.gitTracked ./.) (fs.fileFilter (file: !(file.hasExt "nix")) ./.)) (fs.maybeMissing ./.jj);
           };
+        rustSrc = let
+          fs = pkgs.lib.fileset;
+        in
+          fs.toSource {
+            root = ./.;
+            fileset =
+              fs.intersection
+              (fs.fromSource self.src)
+              (fs.unions [
+                ./Cargo.toml
+                ./Cargo.lock
+                ./shuttle
+                ./bobbin
+              ]);
+          };
         buildGoApplication =
           (self.callPackage "${gomod2nix}/builder" {
             gomod2nix = gomod2nix.legacyPackages.${pkgs.stdenv.hostPlatform.system}.gomod2nix;
           }).buildGoApplication;
         rustPlatform = pkgs.makeRustPlatform {
-          inherit (fenix.packages.${pkgs.system}.stable) rustc cargo;
+          inherit (fenix.packages.${pkgs.stdenv.hostPlatform.system}.stable) rustc cargo;
         };
+        rustPlatformStatic = let
+          system = pkgs.stdenv.hostPlatform.system;
+          muslTarget = pkgs.pkgsStatic.stdenv.hostPlatform.rust.rustcTarget;
+          toolchain = fenix.packages.${system}.combine [
+            fenix.packages.${system}.stable.cargo
+            fenix.packages.${system}.stable.rustc
+            fenix.packages.${system}.targets.${muslTarget}.stable.rust-std
+          ];
+        in
+          pkgs.pkgsStatic.makeRustPlatform {
+            cargo = toolchain;
+            rustc = toolchain;
+          };
         modules = ./nix/gomod2nix.toml;
         sqlite-lib = self.callPackage ./nix/pkgs/sqlite-lib.nix {
           inherit sqlite-lib-src;
@@ -107,6 +140,13 @@
           inherit (pkgs) pagefind;
         };
         spindle = self.callPackage ./nix/pkgs/spindle.nix {};
+        shuttle = self.callPackage ./nix/pkgs/shuttle.nix {
+          src = self.rustSrc;
+        };
+        shuttle-static = self.callPackage ./nix/pkgs/shuttle.nix {
+          src = self.rustSrc;
+          rustPlatform = self.rustPlatformStatic;
+        };
         knot-unwrapped = self.callPackage ./nix/pkgs/knot-unwrapped.nix {};
         knot = self.callPackage ./nix/pkgs/knot.nix {};
         dolly = self.callPackage ./nix/pkgs/dolly.nix {};
@@ -116,11 +156,12 @@
       });
   in {
     overlays.default = final: prev: {
-      inherit (mkPackageSet final) lexgen goat sqlite-lib spindle knot-unwrapped knot appview docs dolly tap knotmirror bobbin;
+      inherit (mkPackageSet final) lexgen goat sqlite-lib spindle shuttle knot-unwrapped knot appview docs dolly tap knotmirror bobbin;
     };
 
     packages = forAllSystems (system: let
       pkgs = nixpkgsFor.${system};
+      linuxPkgs = nixpkgsFor."x86_64-linux";
       packages = mkPackageSet pkgs;
       staticPackages = mkPackageSet pkgs.pkgsStatic;
       crossPackages = mkPackageSet pkgs.pkgsCross.gnu64.pkgsStatic;
@@ -137,6 +178,8 @@
         knot-unwrapped
         sqlite-lib
         docs
+        shuttle
+        shuttle-static
         dolly
         tap
         knotmirror
@@ -189,6 +232,48 @@
           # };
         };
       };
+
+      spindle-nixos-image = linuxPkgs.callPackage ./nix/pkgs/spindle-nixos-image.nix {
+        nixosSystem = self.nixosConfigurations.spindle-nixos;
+      };
+      spindle-nixos-image-tarball = linuxPkgs.runCommand "spindle-nixos-image-tarball.tar.gz" {} ''
+        tar -S -C ${self.packages.${system}.spindle-nixos-image} -h -czf $out .
+      '';
+
+      spindle-alpine-image = let
+        branch = "3.24";
+        version = "${branch}.0";
+        arch = "x86_64";
+        cdn = "https://dl-cdn.alpinelinux.org/alpine/v${branch}/releases/${arch}";
+
+        shuttle = (mkPackageSet linuxPkgs).shuttle-static;
+      in
+        linuxPkgs.callPackage ./nix/pkgs/spindle-alpine-image.nix {
+          inherit arch shuttle;
+          repositories = [
+            "https://dl-cdn.alpinelinux.org/alpine/v${branch}/main"
+            "https://dl-cdn.alpinelinux.org/alpine/v${branch}/community"
+          ];
+          rootfs = linuxPkgs.fetchurl {
+            url = "${cdn}/alpine-minirootfs-${version}-${arch}.tar.gz";
+            hash = "sha256-3poRwODn6clNs+2K97RQ6vwLE2h71+kZnVUFDyCqCok=";
+          };
+          kernel = linuxPkgs.fetchurl {
+            url = "${cdn}/netboot-${version}/vmlinuz-virt";
+            hash = "sha256-Hmv5Ancgx1w+0NeRcfIbV5HuQMqXldB8fG4E3F6irpA=";
+          };
+          initramfs = linuxPkgs.fetchurl {
+            url = "${cdn}/netboot-${version}/initramfs-virt";
+            hash = "sha256-ZCWGSaVMOYOmLz1Gwsf2RhYarMqk+tFVA6MMDWiHVJQ=";
+          };
+          modloop = linuxPkgs.fetchurl {
+            url = "${cdn}/netboot-${version}/modloop-virt";
+            hash = "sha256-p3yO7yU28k04iT01sOzhDmEYi+Yl7VZs5r3RYsWCBX0=";
+          };
+        };
+      spindle-alpine-image-tarball = linuxPkgs.runCommand "spindle-alpine-image-tarball.tar.gz" {} ''
+        tar -S -C ${self.packages.${system}.spindle-alpine-image} -h -czf $out .
+      '';
     });
     defaultPackage = forAllSystems (system: self.packages.${system}.appview);
     devShells = forAllSystems (system: let
@@ -219,6 +304,15 @@
           pkgs.redis
           pkgs.worker-build
           pkgs.cargo-generate
+          pkgs.qemu
+          pkgs.cdrkit
+          pkgs.parted
+          pkgs.buf
+          pkgs.protobuf
+          pkgs.protoc-gen-prost
+          pkgs.protoc-gen-prost-crate
+          pkgs.protoc-gen-prost-serde
+          pkgs.protoc-gen-go
           (fenix.packages.${system}.combine [
             fenix.packages.${system}.stable.cargo
             fenix.packages.${system}.stable.rustc
@@ -231,6 +325,10 @@
           packages'.lexgen
           packages'.treefmt-wrapper
           packages'.tap
+          pkgs.e2fsprogs
+          pkgs.slirp4netns
+          pkgs.iproute2
+          pkgs.util-linux
         ];
         shellHook = ''
           mkdir -p appview/pages/static
@@ -305,6 +403,24 @@
           cd "$docsOut"
           exec ${pkgs.python3}/bin/python3 -m http.server 1414
         '');
+      };
+      regenerate-proto = {
+        type = "app";
+        program =
+          (pkgs.writeShellApplication {
+            name = "regenerate-proto";
+            runtimeInputs = with pkgs; [git buf coreutils];
+            text = ''
+              rootDir=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+              cd "$rootDir"
+              echo ">>> regenerating protobuf files.."
+              buf generate
+              echo ">>> generating file descriptor set for shuttle..."
+              buf build -o shuttle/src/gen/file_descriptor_set.bin
+              echo ">>> done"
+            '';
+          })
+          + "/bin/regenerate-proto";
       };
       vm = let
         guestSystem =
@@ -409,7 +525,27 @@
 
       services.tangled.spindle.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.spindle;
     };
+    nixosModules.shuttle = {
+      lib,
+      pkgs,
+      ...
+    }: {
+      imports = [./nix/modules/shuttle.nix];
+
+      services.tangled.shuttle.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.shuttle;
+    };
+
+    nixosModules.spindle-nixos = import ./nix/microvm/spindle-vm.nix {inherit self microvm;} ./nix/microvm/qemu.nix;
 
     formatter = forAllSystems (system: self.packages.${system}.treefmt-wrapper);
+
+    nixosConfigurations = let
+      spindleNixosBase = nixpkgs.lib.nixosSystem {
+        system = "x86_64-linux";
+        modules = [self.nixosModules.spindle-nixos];
+      };
+    in {
+      spindle-nixos = spindleNixosBase;
+    };
   };
 }

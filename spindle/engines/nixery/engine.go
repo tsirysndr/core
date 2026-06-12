@@ -39,6 +39,8 @@ type Engine struct {
 	l      *slog.Logger
 	cfg    *config.Config
 
+	slotter engine.WorkflowSlotter
+
 	cleanupMu sync.Mutex
 	cleanup   map[string][]cleanupFunc
 }
@@ -168,14 +170,27 @@ func New(ctx context.Context, cfg *config.Config) (*Engine, error) {
 	l := log.FromContext(ctx).With("component", "spindle")
 
 	e := &Engine{
-		docker: dcli,
-		l:      l,
-		cfg:    cfg,
+		docker:  dcli,
+		l:       l,
+		cfg:     cfg,
+		slotter: engine.NewSemaphoreSlotter(cfg.NixeryPipelines.MaxConcurrentWorkflows),
 	}
 
 	e.cleanup = make(map[string][]cleanupFunc)
 
 	return e, nil
+}
+
+func (e *Engine) AcquireWorkflowSlot(
+	ctx context.Context,
+	wid models.WorkflowId,
+	wf *models.Workflow,
+) (engine.WorkflowSlot, error) {
+	if e.slotter == nil {
+		return engine.NoopSlot{}, nil
+	}
+
+	return e.slotter.AcquireWorkflowSlot(ctx, wid, wf)
 }
 
 func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *models.Workflow, wfLogger models.WorkflowLogger) error {
@@ -235,6 +250,11 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 	l.Info("creating container")
 	wfLogger.DataWriter(setupStepIdx, "stdout").Write([]byte("Creating container..."))
 
+	extraHosts := []string{"host.docker.internal:host-gateway"}
+	for _, h := range e.cfg.Server.DevExtraHosts {
+		extraHosts = append(extraHosts, h+":host-gateway")
+	}
+
 	resp, err := e.docker.ContainerCreate(ctx, &container.Config{
 		Image:      addl.image,
 		Cmd:        []string{"cat"},
@@ -265,7 +285,7 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 		CapDrop:        []string{"ALL"},
 		CapAdd:         []string{"CAP_DAC_OVERRIDE", "CAP_CHOWN", "CAP_FOWNER", "CAP_SETUID", "CAP_SETGID"},
 		SecurityOpt:    []string{"no-new-privileges"},
-		ExtraHosts:     []string{"host.docker.internal:host-gateway"},
+		ExtraHosts:     extraHosts,
 		Resources: container.Resources{
 			Memory: e.cfg.NixeryPipelines.MaxJobMemoryMB * 1024 * 1024,
 		},

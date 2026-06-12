@@ -17,7 +17,6 @@ func bootstrapStream(
 	hosts []string,
 	redisAddr string,
 	streamCfg config.ConsumerConfig,
-	dev bool,
 	processFn ec.ProcessFunc,
 ) *ec.Consumer {
 	logger := log.SubLogger(log.FromContext(ctx), name)
@@ -41,7 +40,6 @@ func bootstrapStream(
 		WorkerCount:       streamCfg.WorkerCount,
 		QueueSize:         streamCfg.QueueSize,
 		Logger:            logger,
-		URLFunc:           ec.DefaultURL(dev),
 		CursorStore:       &cursorStore,
 	})
 }

@@ -56,7 +56,7 @@ func Knotstream(ctx context.Context, c *config.Config, d *db.DB, acl *knotacl.Se
 
 	return bootstrapStream(
 		ctx, "knotstream", ec.KindKnot, hosts, c.Redis.Addr,
-		c.Knotstream, c.Core.Dev,
+		c.Knotstream,
 		knotIngester(d, acl, enforcer, posthog, notifier, c.Core.Dev, c, cfClient),
 	), nil
 }

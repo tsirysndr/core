@@ -14,12 +14,10 @@ To make that work:
 - atproto_pds (<https://pds.tngl.boltless.dev>)
 - jetstream (<https://jetstream.tngl.boltless.dev>)
 - knot (<https://knot.tngl.boltless.dev>)
+- spindle (<https://spindle.tngl.boltless.dev>)
 - knotmirror (<https://knotmirror.tngl.boltless.dev>)
 - appview (<https://tngl.boltless.dev>) (live reloading)
 - caddy reverse proxy
-
-> [!NOTE]
-> Spindle is not included yet.
 
 ## Setup
 
@@ -44,5 +42,10 @@ To make that work:
     ```
   - Depending on your browser you may have to import the certificate into your browser profiles too as some have their own certs do not use your system ones
 3. run `./localinfra/scripts/appview-static-files.sh`
-4. `docker compose up`
-5. AppView will be running on `127.0.0.1:3000` with two test users: `alice.pds.tngl.boltless.dev` and `bob.pds.tngl.boltless.dev`. Both with password `password`.
+4. Prepare the spindle microVM images:
+    ```bash
+    ./localinfra/scripts/prepare-spindle-images.sh
+    ```
+    This writes the image directory under `out/localinfra-spindle-images`.
+5. `docker compose up`
+6. AppView will be running on `127.0.0.1:3000` with two test users: `alice.pds.tngl.boltless.dev` and `bob.pds.tngl.boltless.dev`. Both with password `password`.

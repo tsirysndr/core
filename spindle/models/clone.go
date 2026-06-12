@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/hostutil"
 	"tangled.org/core/workflow"
 )
 
@@ -55,7 +56,7 @@ func BuildCloneStep(twf tangled.Pipeline_Workflow, tr tangled.Pipeline_TriggerMe
 		}
 	}
 
-	repoURL := BuildRepoURL(tr.Repo, dev)
+	repoURL := BuildRepoURL(tr.Repo)
 
 	var cloneOpts tangled.Pipeline_CloneOpts
 	if twf.Clone != nil {
@@ -63,13 +64,20 @@ func BuildCloneStep(twf tangled.Pipeline_Workflow, tr tangled.Pipeline_TriggerMe
 	}
 	fetchArgs := buildFetchArgs(cloneOpts, commitSHA)
 
+	// In dev mode we point at Caddy via host-gateway with a self-signed cert,
+	// so skip the TLS check for the fetch call.
+	fetchCmd := "git fetch"
+	if dev {
+		fetchCmd = "git -c http.sslVerify=false fetch"
+	}
+
 	return CloneStep{
 		kind: StepKindSystem,
 		name: "Clone repository into workspace",
 		commands: []string{
 			"git init",
 			fmt.Sprintf("git remote add origin %s", repoURL),
-			fmt.Sprintf("git fetch %s", strings.Join(fetchArgs, " ")),
+			fmt.Sprintf("%s %s", fetchCmd, strings.Join(fetchArgs, " ")),
 			"git checkout FETCH_HEAD",
 		},
 	}
@@ -102,21 +110,18 @@ func extractCommitSHA(tr tangled.Pipeline_TriggerMetadata) (string, error) {
 }
 
 // BuildRepoURL constructs the repository URL from repo metadata.
-func BuildRepoURL(repo *tangled.Pipeline_TriggerRepo, devMode bool) string {
-	scheme := "https://"
-	if devMode {
-		scheme = "http://"
+func BuildRepoURL(repo *tangled.Pipeline_TriggerRepo) string {
+	if repo == nil {
+		return ""
 	}
 
-	// Get host from knot
-	host := repo.Knot
-
-	// In dev mode, replace localhost with host.docker.internal for Docker networking
-	if devMode && strings.Contains(host, "localhost") {
-		host = strings.ReplaceAll(host, "localhost", "host.docker.internal")
+	host, noSSL, _ := hostutil.ParseHostname(repo.Knot)
+	scheme := "https"
+	if noSSL {
+		scheme = "http"
 	}
 
-	return fmt.Sprintf("%s%s/%s", scheme, host, *repo.RepoDid)
+	return fmt.Sprintf("%s://%s/%s", scheme, host, *repo.RepoDid)
 }
 
 // buildFetchArgs constructs the arguments for git fetch based on clone options

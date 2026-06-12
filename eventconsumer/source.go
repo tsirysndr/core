@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"tangled.org/core/eventconsumer/cursor"
+	"tangled.org/core/hostutil"
 )
 
 type Kind string
@@ -15,12 +16,19 @@ const (
 )
 
 type Source struct {
-	Kind Kind
-	Host string
+	Kind  Kind
+	Host  string
+	NoTLS bool // use TLS by default
 }
 
-func NewKnotSource(host string) Source    { return Source{Kind: KindKnot, Host: host} }
-func NewSpindleSource(host string) Source { return Source{Kind: KindSpindle, Host: host} }
+func NewKnotSource(host string) Source {
+	host, noTLS, _ := hostutil.ParseHostname(host)
+	return Source{Kind: KindKnot, Host: host, NoTLS: noTLS}
+}
+func NewSpindleSource(host string) Source {
+	host, noTLS, _ := hostutil.ParseHostname(host)
+	return Source{Kind: KindSpindle, Host: host, NoTLS: noTLS}
+}
 
 func (s Source) Key() string { return string(s.Kind) + ":" + s.Host }
 
@@ -33,21 +41,19 @@ func MigrateLegacyCursor(store cursor.Store, s Source) {
 	}
 }
 
-func DefaultURL(dev bool) func(Source, int64) (*url.URL, error) {
+func (s Source) URL(cursor int64) (*url.URL, error) {
 	scheme := "wss"
-	if dev {
+	if s.NoTLS {
 		scheme = "ws"
 	}
-	return func(s Source, cursor int64) (*url.URL, error) {
-		u, err := url.Parse(scheme + "://" + s.Host + "/events")
-		if err != nil {
-			return nil, err
-		}
-		if cursor != 0 {
-			q := url.Values{}
-			q.Add("cursor", strconv.FormatInt(cursor, 10))
-			u.RawQuery = q.Encode()
-		}
-		return u, nil
+	u, err := url.Parse(scheme + "://" + s.Host + "/events")
+	if err != nil {
+		return nil, err
 	}
+	if cursor != 0 {
+		q := url.Values{}
+		q.Add("cursor", strconv.FormatInt(cursor, 10))
+		u.RawQuery = q.Encode()
+	}
+	return u, nil
 }

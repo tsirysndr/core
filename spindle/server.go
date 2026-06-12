@@ -9,6 +9,7 @@ import (
 	"maps"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/go-chi/chi/v5"
@@ -25,6 +26,7 @@ import (
 	"tangled.org/core/spindle/db"
 	"tangled.org/core/spindle/engine"
 	"tangled.org/core/spindle/engines/dummy"
+	"tangled.org/core/spindle/engines/microvm"
 	"tangled.org/core/spindle/engines/nixery"
 	"tangled.org/core/spindle/models"
 	"tangled.org/core/spindle/queue"
@@ -41,33 +43,27 @@ const (
 )
 
 type Spindle struct {
-	jc          *jetstream.JetstreamClient
-	tap         *Tap
-	embedTap    *embeddedTap
-	db          *db.DB
-	e           *rbac.Enforcer
-	l           *slog.Logger
-	n           *notifier.Notifier
-	engs        map[string]models.Engine
-	jq          *queue.Queue
-	cfg         *config.Config
-	ks          *eventconsumer.Consumer
-	res         *idresolver.Resolver
-	vault       secrets.Manager
-	motd        []byte
-	motdMu      sync.RWMutex
-	workflowSem chan struct{}
-	rootCtx     context.Context
+	jc       *jetstream.JetstreamClient
+	tap      *Tap
+	embedTap *embeddedTap
+	db       *db.DB
+	e        *rbac.Enforcer
+	l        *slog.Logger
+	n        *notifier.Notifier
+	engs     map[string]models.Engine
+	jq       *queue.Queue
+	cfg      *config.Config
+	ks       *eventconsumer.Consumer
+	res      *idresolver.Resolver
+	vault    secrets.Manager
+	motd     []byte
+	motdMu   sync.RWMutex
+	rootCtx  context.Context
 }
 
 // New creates a new Spindle server with the provided configuration and engines.
-func New(ctx context.Context, cfg *config.Config, engines map[string]models.Engine) (*Spindle, error) {
+func New(ctx context.Context, cfg *config.Config, d *db.DB, engines map[string]models.Engine) (*Spindle, error) {
 	logger := log.FromContext(ctx)
-
-	d, err := db.Make(ctx, cfg.Server.DBPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to setup db: %w", err)
-	}
 
 	e, err := rbac.NewEnforcer(cfg.Server.DBPath)
 	if err != nil {
@@ -109,9 +105,6 @@ func New(ctx context.Context, cfg *config.Config, engines map[string]models.Engi
 	jq := queue.NewQueue(cfg.Server.QueueSize, cfg.Server.MaxJobCount)
 	logger.Info("initialized queue", "queueSize", cfg.Server.QueueSize, "numWorkers", cfg.Server.MaxJobCount)
 
-	workflowSem := make(chan struct{}, cfg.Server.MaxConcurrentWorkflows)
-	logger.Info("initialized workflow semaphore", "maxConcurrentWorkflows", cfg.Server.MaxConcurrentWorkflows)
-
 	collections := []string{
 		tangled.SpindleMemberNSID,
 		tangled.RepoNSID,
@@ -145,19 +138,18 @@ func New(ctx context.Context, cfg *config.Config, engines map[string]models.Engi
 	resolver := idresolver.DefaultResolver(cfg.Server.PlcUrl)
 
 	spindle := &Spindle{
-		jc:          jc,
-		e:           e,
-		db:          d,
-		l:           logger,
-		n:           &n,
-		engs:        engines,
-		jq:          jq,
-		cfg:         cfg,
-		res:         resolver,
-		vault:       vault,
-		motd:        defaultMotd,
-		workflowSem: workflowSem,
-		rootCtx:     ctx,
+		jc:      jc,
+		e:       e,
+		db:      d,
+		l:       logger,
+		n:       &n,
+		engs:    engines,
+		jq:      jq,
+		cfg:     cfg,
+		res:     resolver,
+		vault:   vault,
+		motd:    defaultMotd,
+		rootCtx: ctx,
 	}
 
 	err = e.AddSpindle(rbacDomain)
@@ -185,9 +177,15 @@ func New(ctx context.Context, cfg *config.Config, engines map[string]models.Engi
 	// job in the above registered queue.
 	ccfg := eventconsumer.NewConsumerConfig()
 	ccfg.Logger = log.SubLogger(logger, "eventconsumer")
-	ccfg.URLFunc = eventconsumer.DefaultURL(cfg.Server.Dev)
 	ccfg.ProcessFunc = spindle.processPipeline
 	ccfg.CursorStore = cursorStore
+	if cfg.Server.Dev {
+		ccfg.RetryInterval = 5 * time.Second
+		ccfg.MaxRetryInterval = 10 * time.Second
+	} else {
+		ccfg.RetryInterval = 1 * time.Minute
+		ccfg.MaxRetryInterval = 10 * time.Minute
+	}
 	knownKnots, err := d.Knots()
 	if err != nil {
 		return nil, err
@@ -330,14 +328,25 @@ func Run(ctx context.Context) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	d, err := db.Make(ctx, cfg.Server.DBPath)
+	if err != nil {
+		return fmt.Errorf("failed to setup db: %w", err)
+	}
+
 	nixeryEng, err := nixery.New(ctx, cfg)
 	if err != nil {
 		return err
 	}
 
-	s, err := New(ctx, cfg, map[string]models.Engine{
-		"nixery": nixeryEng,
-		"dummy":  dummy.New(log.FromContext(ctx)),
+	microvmEng, err := microvm.New(ctx, cfg, d)
+	if err != nil {
+		return err
+	}
+
+	s, err := New(ctx, cfg, d, map[string]models.Engine{
+		"nixery":  nixeryEng,
+		"microvm": microvmEng,
+		"dummy":   dummy.New(log.FromContext(ctx)),
 	})
 	if err != nil {
 		return err
@@ -413,7 +422,7 @@ func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source,
 		workflows := make(map[models.Engine][]models.Workflow)
 
 		// Build pipeline environment variables once for all workflows
-		pipelineEnv := models.PipelineEnvVars(tpl.TriggerMetadata, pipelineId, s.cfg.Server.Dev)
+		pipelineEnv := models.PipelineEnvVars(tpl.TriggerMetadata, pipelineId)
 
 		for _, w := range tpl.Workflows {
 			if w != nil {
@@ -467,9 +476,9 @@ func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source,
 			}
 		}
 
-		ok := s.jq.Enqueue(queue.Job{
+		ok := s.jq.Enqueue(repoDid, queue.Job{
 			Run: func() error {
-				engine.StartWorkflows(log.SubLogger(s.l, "engine"), s.vault, s.cfg, s.db, s.n, s.workflowSem, ctx, &models.Pipeline{
+				engine.StartWorkflows(log.SubLogger(s.l, "engine"), s.vault, s.cfg, s.db, s.n, ctx, &models.Pipeline{
 					RepoDid:   repoDid,
 					Workflows: workflows,
 				}, pipelineId)

@@ -166,6 +166,7 @@ func TestBuildCloneStep_SkipFlag(t *testing.T) {
 
 func TestBuildCloneStep_DevMode(t *testing.T) {
 	twf := tangled.Pipeline_Workflow{
+		Engine: "nixery",
 		Clone: &tangled.Pipeline_CloneOpts{
 			Depth: 1,
 			Skip:  false,
@@ -177,7 +178,7 @@ func TestBuildCloneStep_DevMode(t *testing.T) {
 			NewSha: "abc123",
 		},
 		Repo: &tangled.Pipeline_TriggerRepo{
-			Knot:    "localhost:3000",
+			Knot:    "knot.tngl.boltless.dev",
 			Did:     "did:plc:user123",
 			Repo:    sp("my-repo"),
 			RepoDid: sp("did:plc:boltless"),
@@ -186,11 +187,10 @@ func TestBuildCloneStep_DevMode(t *testing.T) {
 
 	step := BuildCloneStep(twf, tr, true)
 
-	// In dev mode, should use http:// and replace localhost with host.docker.internal
+	// In dev mode, sslVerify should be disabled
 	allCmds := strings.Join(step.Commands(), " ")
-	expectedURL := "http://host.docker.internal:3000/did:plc:boltless"
-	if !strings.Contains(allCmds, expectedURL) {
-		t.Errorf("Expected dev mode URL '%s' in commands", expectedURL)
+	if !strings.Contains(allCmds, "git -c http.sslVerify=false fetch") {
+		t.Error("Expected sslVerify to be disabled in dev mode clone commands")
 	}
 }
 

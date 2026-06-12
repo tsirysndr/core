@@ -4,6 +4,8 @@ tmp
 *.db-*
 .bin/
 appview/pages/static/*
+spindle/spindle
+spindle/spindle-microvm-run
 result
 !.gitkeep
 !appview/pages/static/topbar-search.js

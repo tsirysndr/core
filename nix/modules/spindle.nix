@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  pkgs,
   ...
 }: let
   cfg = config.services.tangled.spindle;
@@ -75,12 +76,6 @@ in
             description = "Maximum number of jobs queue up";
           };
 
-          maxConcurrentWorkflows = mkOption {
-            type = types.int;
-            default = 8;
-            description = "Maximum number of workflow containers running simultaneously (controls total memory usage)";
-          };
-
           secrets = {
             provider = mkOption {
               type = types.str;
@@ -136,28 +131,155 @@ in
         };
 
         pipelines = {
-          nixery = mkOption {
-            type = types.str;
-            default = "nixery.tangled.sh"; # note: this is *not* on tangled.org yet
-            description = "Nixery instance to use";
-          };
-
-          workflowTimeout = mkOption {
-            type = types.str;
-            default = "5m";
-            description = "Timeout for each step of a pipeline";
-          };
-
-          maxJobMemoryMb = mkOption {
-            type = types.int;
-            default = 6144;
-            description = "Memory limit per workflow container in MiB (default 6 GiB)";
-          };
-
           logBucket = mkOption {
             type = types.str;
             default = "tangled-logs";
             description = "S3 bucket for workflow logs";
+          };
+          workflowTimeout = mkOption {
+            type = types.str;
+            default = "5m";
+            description = "Timeout for each workflow step";
+          };
+
+          nixery = {
+            nixery = mkOption {
+              type = types.str;
+              default = "nixery.tangled.sh"; # note: this is *not* on tangled.org yet
+              description = "Nixery instance to use";
+            };
+
+            maxJobMemoryMb = mkOption {
+              type = types.int;
+              default = 6144;
+              description = "Memory limit per nixery workflow container in MiB (default 6 GiB)";
+            };
+            maxConcurrentWorkflows = mkOption {
+              type = types.int;
+              default = 8;
+              description = "Maximum number of nixery workflows running simultaneously. Zero disables this limit.";
+            };
+          };
+
+          microvm = {
+            enableKVM = mkOption {
+              type = types.bool;
+              default = true;
+              description = "Enable KVM hardware acceleration";
+            };
+
+            imageDir = mkOption {
+              type = types.str;
+              default = "/var/lib/spindle/images";
+              description = "Directory containing microVM image spec JSONs or image spec directories";
+            };
+            overlayDir = mkOption {
+              type = types.str;
+              default = "/tmp";
+              description = "Directory to store microVM temporary overlay files";
+            };
+            defaultImage = mkOption {
+              type = types.str;
+              default = "nixos";
+              description = "Default microVM image spec to use if none is specified in workflow";
+            };
+            agentPort = mkOption {
+              type = types.port;
+              default = 10240;
+              description = "Host vsock port the microVM agent connects back to";
+            };
+
+            limits = {
+              total = {
+                memoryMiB = mkOption {
+                  type = types.int;
+                  default = 0;
+                  description = "Maximum declared guest memory in MiB allowed across all running microVM workflows. Zero disables this limit.";
+                };
+                vcpus = mkOption {
+                  type = types.int;
+                  default = 0;
+                  description = "Maximum declared vCPUs allowed across all running microVM workflows. Zero disables this limit.";
+                };
+                diskMiB = mkOption {
+                  type = types.int;
+                  default = 0;
+                  description = "Maximum declared disk in MiB allowed across all running microVM workflows. Zero disables this limit.";
+                };
+              };
+
+              workflow = {
+                memoryMiB = mkOption {
+                  type = types.int;
+                  default = 0;
+                  description = "Maximum declared guest memory in MiB allowed for a single microVM workflow. Zero disables this limit.";
+                };
+                vcpus = mkOption {
+                  type = types.int;
+                  default = 0;
+                  description = "Maximum declared vCPUs allowed for a single microVM workflow. Zero disables this limit.";
+                };
+                diskMiB = mkOption {
+                  type = types.int;
+                  default = 0;
+                  description = "Maximum declared disk in MiB allowed for a single microVM workflow. Zero disables this limit.";
+                };
+              };
+            };
+
+            cgroup = {
+              enable = mkOption {
+                type = types.bool;
+                default = false;
+                description = "Enable cgroup v2 containment for microVM processes.";
+              };
+              parent = mkOption {
+                type = types.str;
+                default = "self";
+                description = "Parent cgroup for microVM workflow cgroups. Use 'self' to resolve the spindle service cgroup.";
+              };
+              pidsMax = mkOption {
+                type = types.int;
+                default = 4096;
+                description = "Maximum number of processes allowed in each microVM workflow cgroup.";
+              };
+              swapMaxMiB = mkOption {
+                type = types.int;
+                default = 0;
+                description = "Maximum swap in MiB allowed in each microVM workflow cgroup. Zero disables swap.";
+              };
+              supervisorMinMiB = mkOption {
+                type = types.int;
+                default = 512;
+                description = ''
+                  Amount of memory in MiB that will be protected by the cgroup for the spindle
+                  (allowing it to not get OOMed first.)
+                '';
+              };
+            };
+          };
+        };
+
+        cache = {
+          readUrls = mkOption {
+            type = types.listOf types.str;
+            default = [];
+            example = ["http://ncps.internal:8501"];
+            description = "Nix binary cache URLs the Spindle guest should read from.";
+          };
+
+          trustedPublicKeys = mkOption {
+            type = types.listOf types.str;
+            default = [];
+            example = ["ncps.internal-1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="];
+            description = "Public keys trusted for the configured Nix binary caches.";
+          };
+
+          uploadUrl = mkOption {
+            type = types.str;
+            default = "";
+            example = "http://ncps.internal:8501/upload";
+            description = "Optional cache upload URL used by live cache import paths.";
           };
         };
 
@@ -177,45 +299,91 @@ in
       };
     };
 
-    config = mkIf cfg.enable {
-      virtualisation.docker.enable = true;
+    config = let
+      deps = [
+        pkgs.qemu
+        pkgs.e2fsprogs
+        pkgs.slirp4netns
+        pkgs.iproute2
+        pkgs.util-linux
+      ];
+    in
+      mkIf cfg.enable {
+        environment.systemPackages = [
+          (pkgs.writeShellScriptBin "spindle" ''
+            export PATH="${lib.makeBinPath deps}:$PATH"
+            ${lib.optionalString (cfg.environmentFile != null) "set -a; source ${cfg.environmentFile}; set +a"}
+            ${lib.concatMapStringsSep "\n" (
+                e: "export ${e}"
+              )
+              config.systemd.services.spindle.serviceConfig.Environment}
+            exec ${cfg.package}/bin/spindle "$@"
+          '')
+        ];
 
-      systemd.services.spindle = {
-        description = "spindle service";
-        after = ["network.target" "docker.service"];
-        wantedBy = ["multi-user.target"];
-        serviceConfig = {
-          LogsDirectory = "spindle";
-          StateDirectory = "spindle";
-          EnvironmentFile = mkIf (cfg.environmentFile != null) cfg.environmentFile;
+        virtualisation.docker.enable = true;
 
-          Environment = [
-            "SPINDLE_SERVER_LISTEN_ADDR=${cfg.server.listenAddr}"
-            "SPINDLE_SERVER_DB_PATH=${cfg.server.dbPath}"
-            "SPINDLE_SERVER_HOSTNAME=${cfg.server.hostname}"
-            "SPINDLE_SERVER_PLC_URL=${cfg.server.plcUrl}"
-            "SPINDLE_SERVER_JETSTREAM_ENDPOINT=${cfg.server.jetstreamEndpoint}"
-            "SPINDLE_SERVER_DEV=${lib.boolToString cfg.server.dev}"
-            "SPINDLE_SERVER_OWNER=${cfg.server.owner}"
-            "SPINDLE_SERVER_MAX_JOB_COUNT=${toString cfg.server.maxJobCount}"
-            "SPINDLE_SERVER_QUEUE_SIZE=${toString cfg.server.queueSize}"
-            "SPINDLE_SERVER_MAX_CONCURRENT_WORKFLOWS=${toString cfg.server.maxConcurrentWorkflows}"
-            "SPINDLE_SERVER_SECRETS_PROVIDER=${cfg.server.secrets.provider}"
-            "SPINDLE_SERVER_SECRETS_OPENBAO_PROXY_ADDR=${cfg.server.secrets.openbao.proxyAddr}"
-            "SPINDLE_SERVER_SECRETS_OPENBAO_MOUNT=${cfg.server.secrets.openbao.mount}"
-            "SPINDLE_SERVER_TAP_EMBED=${lib.boolToString cfg.server.tap.embed}"
-            "SPINDLE_SERVER_TAP_URL=${cfg.server.tap.url}"
-            "SPINDLE_SERVER_TAP_BIND=${cfg.server.tap.bind}"
-            "SPINDLE_SERVER_TAP_DB_PATH=${cfg.server.tap.dbPath}"
-            "SPINDLE_SERVER_TAP_RELAY_URL=${cfg.server.tap.relayUrl}"
-            "SPINDLE_NIXERY_PIPELINES_NIXERY=${cfg.pipelines.nixery}"
-            "SPINDLE_NIXERY_PIPELINES_WORKFLOW_TIMEOUT=${cfg.pipelines.workflowTimeout}"
-            "SPINDLE_NIXERY_PIPELINES_MAX_JOB_MEMORY_MB=${toString cfg.pipelines.maxJobMemoryMb}"
-            "SPINDLE_S3_LOG_BUCKET=${cfg.pipelines.logBucket}"
+        systemd.services.spindle = {
+          description = "spindle service";
+          after = [
+            "network.target"
+            "docker.service"
           ];
-          ExecStart = "${cfg.package}/bin/spindle";
-          Restart = "always";
+          wantedBy = ["multi-user.target"];
+          path = deps;
+          serviceConfig = {
+            LogsDirectory = "spindle";
+            StateDirectory = "spindle";
+            Delegate = cfg.pipelines.microvm.cgroup.enable;
+            EnvironmentFile = mkIf (cfg.environmentFile != null) cfg.environmentFile;
+
+            Environment = [
+              "SPINDLE_SERVER_LISTEN_ADDR=${cfg.server.listenAddr}"
+              "SPINDLE_SERVER_DB_PATH=${cfg.server.dbPath}"
+              "SPINDLE_SERVER_HOSTNAME=${cfg.server.hostname}"
+              "SPINDLE_SERVER_PLC_URL=${cfg.server.plcUrl}"
+              "SPINDLE_SERVER_JETSTREAM_ENDPOINT=${cfg.server.jetstreamEndpoint}"
+              "SPINDLE_SERVER_DEV=${lib.boolToString cfg.server.dev}"
+              "SPINDLE_SERVER_OWNER=${cfg.server.owner}"
+              "SPINDLE_SERVER_MAX_JOB_COUNT=${toString cfg.server.maxJobCount}"
+              "SPINDLE_SERVER_QUEUE_SIZE=${toString cfg.server.queueSize}"
+              "SPINDLE_SERVER_SECRETS_PROVIDER=${cfg.server.secrets.provider}"
+              "SPINDLE_SERVER_SECRETS_OPENBAO_PROXY_ADDR=${cfg.server.secrets.openbao.proxyAddr}"
+              "SPINDLE_SERVER_SECRETS_OPENBAO_MOUNT=${cfg.server.secrets.openbao.mount}"
+              "SPINDLE_SERVER_TAP_EMBED=${lib.boolToString cfg.server.tap.embed}"
+              "SPINDLE_SERVER_TAP_URL=${cfg.server.tap.url}"
+              "SPINDLE_SERVER_TAP_BIND=${cfg.server.tap.bind}"
+              "SPINDLE_SERVER_TAP_DB_PATH=${cfg.server.tap.dbPath}"
+              "SPINDLE_SERVER_TAP_RELAY_URL=${cfg.server.tap.relayUrl}"
+              "SPINDLE_NIXERY_PIPELINES_NIXERY=${cfg.pipelines.nixery.nixery}"
+              "SPINDLE_NIXERY_PIPELINES_WORKFLOW_TIMEOUT=${cfg.pipelines.workflowTimeout}"
+              "SPINDLE_NIXERY_PIPELINES_MAX_JOB_MEMORY_MB=${toString cfg.pipelines.nixery.maxJobMemoryMb}"
+              "SPINDLE_NIXERY_PIPELINES_MAX_CONCURRENT_WORKFLOWS=${toString cfg.pipelines.nixery.maxConcurrentWorkflows}"
+              "SPINDLE_MICROVM_PIPELINES_IMAGE_DIR=${cfg.pipelines.microvm.imageDir}"
+              "SPINDLE_MICROVM_PIPELINES_OVERLAY_DIR=${cfg.pipelines.microvm.overlayDir}"
+              "SPINDLE_MICROVM_PIPELINES_DEFAULT_IMAGE=${cfg.pipelines.microvm.defaultImage}"
+              "SPINDLE_MICROVM_PIPELINES_AGENT_PORT=${toString cfg.pipelines.microvm.agentPort}"
+              "SPINDLE_MICROVM_PIPELINES_ENABLE_KVM=${lib.boolToString cfg.pipelines.microvm.enableKVM}"
+              "SPINDLE_MICROVM_PIPELINES_WORKFLOW_TIMEOUT=${cfg.pipelines.workflowTimeout}"
+              "SPINDLE_MICROVM_PIPELINES_MAX_TOTAL_MEMORY_MIB=${toString cfg.pipelines.microvm.limits.total.memoryMiB}"
+              "SPINDLE_MICROVM_PIPELINES_MAX_TOTAL_VCPUS=${toString cfg.pipelines.microvm.limits.total.vcpus}"
+              "SPINDLE_MICROVM_PIPELINES_MAX_TOTAL_DISK_MIB=${toString cfg.pipelines.microvm.limits.total.diskMiB}"
+              "SPINDLE_MICROVM_PIPELINES_MAX_WORKFLOW_MEMORY_MIB=${toString cfg.pipelines.microvm.limits.workflow.memoryMiB}"
+              "SPINDLE_MICROVM_PIPELINES_MAX_WORKFLOW_VCPUS=${toString cfg.pipelines.microvm.limits.workflow.vcpus}"
+              "SPINDLE_MICROVM_PIPELINES_MAX_WORKFLOW_DISK_MIB=${toString cfg.pipelines.microvm.limits.workflow.diskMiB}"
+              "SPINDLE_MICROVM_PIPELINES_ENABLE_CGROUPS=${lib.boolToString cfg.pipelines.microvm.cgroup.enable}"
+              "SPINDLE_MICROVM_PIPELINES_CGROUP_PARENT=${cfg.pipelines.microvm.cgroup.parent}"
+              "SPINDLE_MICROVM_PIPELINES_CGROUP_PIDS_MAX=${toString cfg.pipelines.microvm.cgroup.pidsMax}"
+              "SPINDLE_MICROVM_PIPELINES_CGROUP_SWAP_MAX_MIB=${toString cfg.pipelines.microvm.cgroup.swapMaxMiB}"
+              "SPINDLE_MICROVM_PIPELINES_CGROUP_SUPERVISOR_MEMORY_MIN_MIB=${toString cfg.pipelines.microvm.cgroup.supervisorMinMiB}"
+              "SPINDLE_NIX_CACHE_READ_URLS=${concatStringsSep "," cfg.cache.readUrls}"
+              "SPINDLE_NIX_CACHE_TRUSTED_PUBLIC_KEYS=${concatStringsSep "," cfg.cache.trustedPublicKeys}"
+              "SPINDLE_NIX_CACHE_UPLOAD_URL=${cfg.cache.uploadUrl}"
+              "SPINDLE_S3_LOG_BUCKET=${cfg.pipelines.logBucket}"
+            ];
+            ExecStart = "${cfg.package}/bin/spindle";
+            Restart = "always";
+          };
         };
       };
-    };
   }

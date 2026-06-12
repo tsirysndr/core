@@ -27,7 +27,7 @@ func TestPipelineEnvVars_PushBranch(t *testing.T) {
 		Knot: "example.com",
 		Rkey: "123123",
 	}
-	env := PipelineEnvVars(tr, id, false)
+	env := PipelineEnvVars(tr, id)
 
 	// Check standard CI variable
 	if env["CI"] != "true" {
@@ -90,7 +90,7 @@ func TestPipelineEnvVars_PushTag(t *testing.T) {
 		Knot: "example.com",
 		Rkey: "123123",
 	}
-	env := PipelineEnvVars(tr, id, false)
+	env := PipelineEnvVars(tr, id)
 
 	if env["TANGLED_REF"] != "refs/tags/v1.2.3" {
 		t.Errorf("Expected TANGLED_REF='refs/tags/v1.2.3', got '%s'", env["TANGLED_REF"])
@@ -123,7 +123,7 @@ func TestPipelineEnvVars_PullRequest(t *testing.T) {
 		Knot: "example.com",
 		Rkey: "123123",
 	}
-	env := PipelineEnvVars(tr, id, false)
+	env := PipelineEnvVars(tr, id)
 
 	// Check ref variables for PR
 	if env["TANGLED_REF"] != "refs/heads/feature-branch" {
@@ -179,7 +179,7 @@ func TestPipelineEnvVars_ManualWithInputs(t *testing.T) {
 		Knot: "example.com",
 		Rkey: "123123",
 	}
-	env := PipelineEnvVars(tr, id, false)
+	env := PipelineEnvVars(tr, id)
 
 	// Check manual input variables
 	if env["TANGLED_INPUT_VERSION"] != "1.0.0" {
@@ -216,10 +216,9 @@ func TestPipelineEnvVars_DevMode(t *testing.T) {
 		Knot: "example.com",
 		Rkey: "123123",
 	}
-	env := PipelineEnvVars(tr, id, true)
+	env := PipelineEnvVars(tr, id)
 
-	// Dev mode should use http:// and replace localhost with host.docker.internal
-	expectedURL := "http://host.docker.internal:3000/did:plc:boltless"
+	expectedURL := "http://localhost:3000/did:plc:boltless"
 	if env["TANGLED_REPO_URL"] != expectedURL {
 		t.Errorf("Expected TANGLED_REPO_URL='%s', got '%s'", expectedURL, env["TANGLED_REPO_URL"])
 	}
@@ -230,7 +229,7 @@ func TestPipelineEnvVars_NilTrigger(t *testing.T) {
 		Knot: "example.com",
 		Rkey: "123123",
 	}
-	env := PipelineEnvVars(nil, id, false)
+	env := PipelineEnvVars(nil, id)
 
 	if env != nil {
 		t.Error("Expected nil env for nil trigger")
@@ -252,7 +251,7 @@ func TestPipelineEnvVars_NilPushData(t *testing.T) {
 		Knot: "example.com",
 		Rkey: "123123",
 	}
-	env := PipelineEnvVars(tr, id, false)
+	env := PipelineEnvVars(tr, id)
 
 	// Should still have repo variables
 	if env["TANGLED_REPO_KNOT"] != "example.com" {

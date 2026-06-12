@@ -10,7 +10,7 @@ import (
 
 // PipelineEnvVars extracts environment variables from pipeline trigger metadata.
 // These are framework-provided variables that are injected into workflow steps.
-func PipelineEnvVars(tr *tangled.Pipeline_TriggerMetadata, pipelineId PipelineId, devMode bool) map[string]string {
+func PipelineEnvVars(tr *tangled.Pipeline_TriggerMetadata, pipelineId PipelineId) map[string]string {
 	if tr == nil {
 		return nil
 	}
@@ -34,7 +34,7 @@ func PipelineEnvVars(tr *tangled.Pipeline_TriggerMetadata, pipelineId PipelineId
 			env["TANGLED_REPO_REPO_DID"] = *tr.Repo.RepoDid
 		}
 		env["TANGLED_REPO_DEFAULT_BRANCH"] = tr.Repo.DefaultBranch
-		env["TANGLED_REPO_URL"] = BuildRepoURL(tr.Repo, devMode)
+		env["TANGLED_REPO_URL"] = BuildRepoURL(tr.Repo)
 	}
 
 	switch workflow.TriggerKind(tr.Kind) {

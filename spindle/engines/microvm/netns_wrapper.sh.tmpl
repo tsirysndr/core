@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+
+pid_file="$1"; shift
+ip="$1"; shift
+mount="$1"; shift
+resolv_conf="$1"; shift
+
+printf '%s\n' "$$" > "$pid_file"
+
+while ! "$ip" link show {{.TapName}} >/dev/null 2>&1; do
+	sleep 0.02
+done
+
+"$mount" --bind "$resolv_conf" /etc/resolv.conf
+
+# fail if we can't add a route, ipv6 is skipped if not enabled on host
+for route in{{range .BlockedRoutes}} {{.}}{{end}}; do
+	case "$route" in
+	*:*) [ -d /proc/sys/net/ipv6 ] || continue ;;
+	esac
+	"$ip" route add blackhole "$route"
+done
+
+exec "$@"

@@ -20,7 +20,11 @@ var (
 	ErrWorkflowFailed = errors.New("workflow failed")
 )
 
-func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, db *db.DB, n *notifier.Notifier, workflowSem chan struct{}, ctx context.Context, pipeline *models.Pipeline, pipelineId models.PipelineId) {
+type workflowFinalizer interface {
+	FinalizeWorkflow(ctx context.Context, wid models.WorkflowId, wf *models.Workflow, wfLogger models.WorkflowLogger) error
+}
+
+func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, db *db.DB, n *notifier.Notifier, ctx context.Context, pipeline *models.Pipeline, pipelineId models.PipelineId) {
 	l.Info("starting all workflows in parallel", "pipeline", pipelineId)
 
 	// extract secrets
@@ -74,15 +78,27 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 					defer wfLogger.Close()
 				}
 
+				l.Info("waiting for slot", "wid", wid)
+				slot := WorkflowSlot(NoopSlot{})
+				if s, ok := eng.(WorkflowSlotter); ok {
+					var err error
+					slot, err = s.AcquireWorkflowSlot(ctx, wid, &w)
+					if err != nil {
+						l.Error("failed to acquire slot", "wid", wid, "err", err)
+						dbErr := db.StatusFailed(wid, err.Error(), -1, n)
+						if dbErr != nil {
+							l.Error("failed to set workflow status to failed", "wid", wid, "err", dbErr)
+						}
+						return
+					}
+				}
+				defer slot.Release()
+
 				err = db.StatusRunning(wid, n)
 				if err != nil {
 					l.Error("failed to set workflow status to running", "wid", wid, "err", err)
 					return
 				}
-
-				// acquire semaphore slot before starting the container
-				workflowSem <- struct{}{}
-				defer func() { <-workflowSem }()
 
 				err = eng.SetupWorkflow(ctx, wid, &w, wfLogger)
 				if err != nil {
@@ -134,6 +150,16 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 							if dbErr != nil {
 								l.Error("failed to set workflow status to failed", "wid", wid, "err", dbErr)
 							}
+						}
+						return
+					}
+				}
+
+				if finalizer, ok := eng.(workflowFinalizer); ok {
+					if err := finalizer.FinalizeWorkflow(ctx, wid, &w, wfLogger); err != nil {
+						dbErr := db.StatusFailed(wid, err.Error(), -1, n)
+						if dbErr != nil {
+							l.Error("failed to set workflow status to failed", "wid", wid, "err", dbErr)
 						}
 						return
 					}

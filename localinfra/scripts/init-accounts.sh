@@ -187,5 +187,6 @@ printf '[env] wrote label-defaults, label-gfi\n' >&2
 JWT=$(login "$OWNER_DID")
 
 put_record "$JWT" "$OWNER_DID" "sh.tangled.knot" $KNOT_HOSTNAME "{\"createdAt\": \"${CREATED_AT}\"}"
+put_record "$JWT" "$OWNER_DID" "sh.tangled.spindle" "$SPINDLE_HOSTNAME" "{\"createdAt\": \"${CREATED_AT}\"}"
 
 printf 'done.\n' >&2

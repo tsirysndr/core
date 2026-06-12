@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"sync"
 	"time"
 
@@ -29,7 +28,6 @@ type ConsumerConfig struct {
 	QueueSize         int
 	Logger            *slog.Logger
 	CursorStore       cursor.Store
-	URLFunc           func(Source, int64) (*url.URL, error)
 
 	Dialer            *websocket.Dialer
 	RequestHeader     http.Header
@@ -92,9 +90,6 @@ func NewConsumer(cfg ConsumerConfig) *Consumer {
 	}
 	if cfg.CursorStore == nil {
 		cfg.CursorStore = &cursor.MemoryStore{}
-	}
-	if cfg.URLFunc == nil {
-		cfg.URLFunc = DefaultURL(false)
 	}
 	dialer := cfg.Dialer
 	if dialer == nil {
@@ -263,7 +258,7 @@ func (c *Consumer) startConnectionLoop(ctx context.Context, source Source) {
 func (c *Consumer) runConnection(ctx context.Context, source Source) error {
 	cursor := c.cfg.CursorStore.Get(source.Key())
 
-	u, err := c.cfg.URLFunc(source, cursor)
+	u, err := source.URL(cursor)
 	if err != nil {
 		return err
 	}

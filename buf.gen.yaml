@@ -1,0 +1,11 @@
+version: v2
+plugins:
+  - local: protoc-gen-go
+    out: .
+    opt:
+      - paths=import
+      - module=tangled.org/core
+  - local: protoc-gen-prost
+    out: shuttle/src/gen
+    opt:
+      - bytes=.
