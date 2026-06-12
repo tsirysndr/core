@@ -186,7 +186,8 @@ func ReadBatchLine(reader io.Reader) (sha []byte, typ string, size int64, err er
 // can lead to panic.
 func ReadCommit(oid plumbing.Hash, reader io.Reader) (*object.Commit, error) {
 	commit := &object.Commit{
-		Hash: oid,
+		Hash:         oid,
+		ExtraHeaders: make(map[string][]byte),
 	}
 
 	payloadSB := new(strings.Builder)
@@ -231,13 +232,9 @@ readLoop:
 				continue
 			}
 
-			split := bytes.SplitN(trimmed, []byte{' '}, 2)
-			var data []byte
-			if len(split) > 1 {
-				data = split[1]
-			}
+			k, data, _ := bytes.Cut(line, []byte{' '})
 
-			switch string(split[0]) {
+			switch string(k) {
 			case "tree":
 				commit.TreeHash = plumbing.NewHash(string(data))
 				_, _ = payloadSB.Write(line)
@@ -257,6 +254,7 @@ readLoop:
 				_ = signatureSB.WriteByte('\n')
 				pgpsig = true
 			default:
+				commit.ExtraHeaders[string(k)] = bytes.TrimSpace(data)
 				// If the first line is not any of the known headers, then it is probably the prefix added when git cat-file is called with --batch, and that is not part of the payload
 				if !firstLine {
 					// Every subsequent header field is added to the payload
@@ -271,6 +269,7 @@ readLoop:
 		firstLine = false
 	}
 	commit.Message = messageSB.String()
+	// TODO: pass raw payload so we can verify it without reconstructing the payload
 	commit.PGPSignature = signatureSB.String()
 
 	return commit, nil
