@@ -580,8 +580,8 @@
   {{ $c := len $item.Comments }}
   <details class="relative ml-10 group/comments group/collapse" {{ if or (eq $c 0) (eq $root.ActiveRound $round) }}open{{ end }}>
     <summary class="cursor-pointer list-none">
-      <div class="hidden group-open/comments:block absolute -left-8 top-0 bottom-0 w-16 transition-colors flex items-center justify-center group/border z-4">
-        <div class="absolute left-1/2 -translate-x-1/2 top-0 bottom-0 w-0.5 group-open/comments:bg-gray-200 dark:group-open/comments:bg-gray-700 group-hover/border:bg-gray-400 dark:group-hover/border:bg-gray-500 group-hover/collapse:bg-gray-400 dark:group-hover/collapse:bg-gray-500 transition-colors"> </div>
+      <div class="collapse-trigger hidden group-open/comments:block absolute -left-8 top-0 bottom-0 w-16 transition-colors flex items-center justify-center group/border z-4">
+        <div class="absolute left-1/2 -translate-x-1/2 top-0 bottom-0 w-0.5 group-open/comments:bg-gray-200 dark:group-open/comments:bg-gray-700 group-has-[.collapse-trigger:hover]/collapse:bg-gray-400 dark:group-has-[.collapse-trigger:hover]/collapse:bg-gray-500 transition-colors"> </div>
       </div>
       <div class="group-open/comments:hidden block relative group/summary py-4">
         <div class="absolute -left-8 top-0 bottom-0 w-16 transition-colors flex items-center justify-center z-4">
@@ -604,7 +604,7 @@
       {{ end }}
     </div>
     {{ if gt $c 0}}
-      <button class="flex items-center gap-2 -ml-2 relative cursor-pointer text-sm text-gray-500 dark:text-gray-400 group-hover/collapse:text-gray-600 dark:group-hover/collapse:text-gray-300 mt-4 pb-4 transition-colors" hx-on:click="this.closest('details').open = false">
+      <button class="collapse-trigger flex items-center gap-2 -ml-2 relative cursor-pointer text-sm text-gray-500 dark:text-gray-400 group-has-[.collapse-trigger:hover]/collapse:text-gray-600 dark:group-has-[.collapse-trigger:hover]/collapse:text-gray-300 mt-4 pb-4 transition-colors" hx-on:click="this.closest('details').open = false">
         <span class="bg-gray-50 dark:bg-slate-900 dark:rounded-full">{{ i "circle-chevron-up" "size-4 z-5" }}</span> Collapse comment{{ if ne $c 1 }}s{{ end }}
       </button>
     {{ end }}
