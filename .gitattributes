@@ -1,2 +1,3 @@
 api/tangled/** linguist-generated -diff
+api/tangled/*_ext.go -linguist-generated diff
 flake.lock -diff

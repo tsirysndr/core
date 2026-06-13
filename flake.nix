@@ -515,14 +515,21 @@
               rootDir=$(jj --ignore-working-copy root || git rev-parse --show-toplevel) || (echo "error: can't find repo root?"; exit 1)
               cd "$rootDir"
 
-              rm -f api/tangled/*
+              # *_ext.go are hand-written extensions; never remove or mutate them
+              find api/tangled -maxdepth 1 -type f -not -name '*_ext.go' -delete
               lexgen --build-file lexicon-build-config.json lexicons
-              sed -i.bak 's/\tutil/\/\/\tutil/' api/tangled/*
+
+              # disable type registration temporarily while running cborgen
+              find api/tangled -maxdepth 1 -name '*.go' -not -name '*_ext.go' -exec \
+                sed -i.bak 's/\tutil/\/\/\tutil/' {} +
               # lexgen generates incomplete Marshaler/Unmarshaler for union types
               find api/tangled/*.go -not -name "cbor_gen.go" -exec \
                 sed -i '/^func.*\(MarshalCBOR\|UnmarshalCBOR\)/,/^}/ s/^/\/\/ /' {} +
+              for f in api/tangled/*_ext.go; do [ -e "''$f" ] && mv "''$f" "''$f.bak"; done
               ${pkgs.gotools}/bin/goimports -w api/tangled/*
               CGO_ENABLED=0 go run ./cmd/cborgen/
+              for f in api/tangled/*_ext.go.bak; do [ -e "''$f" ] && mv "''$f" "''${f%.bak}"; done
+
               lexgen --build-file lexicon-build-config.json lexicons
               rm api/tangled/*.bak
             '';
