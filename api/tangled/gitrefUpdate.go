@@ -18,6 +18,8 @@ func init() {
 // RECORDTYPE: GitRefUpdate
 type GitRefUpdate struct {
 	LexiconTypeID string `json:"$type,const=sh.tangled.git.refUpdate" cborgen:"$type,const=sh.tangled.git.refUpdate"`
+	// changedFiles: files changed between commits
+	ChangedFiles []string `json:"changedFiles,omitempty" cborgen:"changedFiles,omitempty"`
 	// committerDid: did of the user that pushed this ref
 	CommitterDid string             `json:"committerDid" cborgen:"committerDid"`
 	Meta         *GitRefUpdate_Meta `json:"meta" cborgen:"meta"`
@@ -27,6 +29,8 @@ type GitRefUpdate struct {
 	OldSha string `json:"oldSha" cborgen:"oldSha"`
 	// ownerDid: did of the owner of the repo
 	OwnerDid *string `json:"ownerDid,omitempty" cborgen:"ownerDid,omitempty"`
+	// pushOptions: push options passed on git-push
+	PushOptions []string `json:"pushOptions,omitempty" cborgen:"pushOptions,omitempty"`
 	// ref: Ref being updated
 	Ref string `json:"ref" cborgen:"ref"`
 	// repo: DID of the repo itself

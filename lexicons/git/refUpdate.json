@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "record",
-      "description": "An update to a git repository, emitted by knots.",
+      "description": "An event record representing git-push operation to git repository, emitted by knots.",
       "key": "tid",
       "record": {
         "type": "object",
@@ -49,6 +49,26 @@
             "description": "new SHA of this ref",
             "minLength": 40,
             "maxLength": 40
+          },
+          "changedFiles": {
+            "type": "array",
+            "description": "files changed between commits",
+            "items": { "type": "string" }
+          },
+          "pushOptions": {
+            "type": "array",
+            "description": "push options passed on git-push",
+            "maxLength": 50,
+            "items": {
+              "type": "string",
+              "maxLength": 1024,
+              "knownValues": [
+                "ci-skip",
+                "ci-verbose",
+                "skip-ci",
+                "verbose-ci"
+              ]
+            }
           },
           "meta": {
             "type": "ref",

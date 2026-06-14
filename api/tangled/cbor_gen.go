@@ -1611,9 +1611,17 @@ func (t *GitRefUpdate) MarshalCBOR(w io.Writer) error {
 	}
 
 	cw := cbg.NewCborWriter(w)
-	fieldCount := 8
+	fieldCount := 10
+
+	if t.ChangedFiles == nil {
+		fieldCount--
+	}
 
 	if t.OwnerDid == nil {
+		fieldCount--
+	}
+
+	if t.PushOptions == nil {
 		fieldCount--
 	}
 
@@ -1780,6 +1788,78 @@ func (t *GitRefUpdate) MarshalCBOR(w io.Writer) error {
 		}
 	}
 
+	// t.PushOptions ([]string) (slice)
+	if t.PushOptions != nil {
+
+		if len("pushOptions") > 1000000 {
+			return xerrors.Errorf("Value in field \"pushOptions\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("pushOptions"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("pushOptions")); err != nil {
+			return err
+		}
+
+		if len(t.PushOptions) > 8192 {
+			return xerrors.Errorf("Slice value in field t.PushOptions was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajArray, uint64(len(t.PushOptions))); err != nil {
+			return err
+		}
+		for _, v := range t.PushOptions {
+			if len(v) > 1000000 {
+				return xerrors.Errorf("Value in field v was too long")
+			}
+
+			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(v))); err != nil {
+				return err
+			}
+			if _, err := cw.WriteString(string(v)); err != nil {
+				return err
+			}
+
+		}
+	}
+
+	// t.ChangedFiles ([]string) (slice)
+	if t.ChangedFiles != nil {
+
+		if len("changedFiles") > 1000000 {
+			return xerrors.Errorf("Value in field \"changedFiles\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("changedFiles"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("changedFiles")); err != nil {
+			return err
+		}
+
+		if len(t.ChangedFiles) > 8192 {
+			return xerrors.Errorf("Slice value in field t.ChangedFiles was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajArray, uint64(len(t.ChangedFiles))); err != nil {
+			return err
+		}
+		for _, v := range t.ChangedFiles {
+			if len(v) > 1000000 {
+				return xerrors.Errorf("Value in field v was too long")
+			}
+
+			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(v))); err != nil {
+				return err
+			}
+			if _, err := cw.WriteString(string(v)); err != nil {
+				return err
+			}
+
+		}
+	}
+
 	// t.CommitterDid (string) (string)
 	if len("committerDid") > 1000000 {
 		return xerrors.Errorf("Value in field \"committerDid\" was too long")
@@ -1940,6 +2020,86 @@ func (t *GitRefUpdate) UnmarshalCBOR(r io.Reader) (err error) {
 					}
 
 					t.OwnerDid = (*string)(&sval)
+				}
+			}
+			// t.PushOptions ([]string) (slice)
+		case "pushOptions":
+
+			maj, extra, err = cr.ReadHeader()
+			if err != nil {
+				return err
+			}
+
+			if extra > 8192 {
+				return fmt.Errorf("t.PushOptions: array too large (%d)", extra)
+			}
+
+			if maj != cbg.MajArray {
+				return fmt.Errorf("expected cbor array")
+			}
+
+			if extra > 0 {
+				t.PushOptions = make([]string, extra)
+			}
+
+			for i := 0; i < int(extra); i++ {
+				{
+					var maj byte
+					var extra uint64
+					var err error
+					_ = maj
+					_ = extra
+					_ = err
+
+					{
+						sval, err := cbg.ReadStringWithMax(cr, 1000000)
+						if err != nil {
+							return err
+						}
+
+						t.PushOptions[i] = string(sval)
+					}
+
+				}
+			}
+			// t.ChangedFiles ([]string) (slice)
+		case "changedFiles":
+
+			maj, extra, err = cr.ReadHeader()
+			if err != nil {
+				return err
+			}
+
+			if extra > 8192 {
+				return fmt.Errorf("t.ChangedFiles: array too large (%d)", extra)
+			}
+
+			if maj != cbg.MajArray {
+				return fmt.Errorf("expected cbor array")
+			}
+
+			if extra > 0 {
+				t.ChangedFiles = make([]string, extra)
+			}
+
+			for i := 0; i < int(extra); i++ {
+				{
+					var maj byte
+					var extra uint64
+					var err error
+					_ = maj
+					_ = extra
+					_ = err
+
+					{
+						sval, err := cbg.ReadStringWithMax(cr, 1000000)
+						if err != nil {
+							return err
+						}
+
+						t.ChangedFiles[i] = string(sval)
+					}
+
 				}
 			}
 			// t.CommitterDid (string) (string)
