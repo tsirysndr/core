@@ -10,76 +10,69 @@
   </header>
 
   <main class="col-span-full md:col-span-10 bg-white dark:bg-gray-800 drop-shadow-sm rounded p-6 md:px-10">
-    <div class="space-y-16">
+    <div class="space-y-12">
 
-      <!-- Introduction Section -->
+      <!-- introduction section -->
       <section>
         <p class="text-gray-500 dark:text-gray-300 mb-2">
         Tangled's logo and mascot is <strong>Dolly</strong>, the first ever <em>cloned</em> mammal. Please
         follow the below guidelines when using Dolly and the logotype.
         </p>
-        <p class="text-gray-500 dark:text-gray-300 mb-2">
-        All assets are served as SVGs, and can be downloaded by right-clicking and clicking "Save image as".
-        </p>
       </section>
 
-      <!-- Black Logotype Section -->
-      <section class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-        <div class="order-2 lg:order-1">
-          <div class="border border-gray-200 dark:border-gray-700 p-8 sm:p-16 bg-gray-50 dark:bg-gray-100 rounded">
-            <img src="https://assets.tangled.network/tangled_logotype_black_on_trans.svg"
-                 alt="Tangled logo - black version"
-                 class="w-full max-w-sm mx-auto" />
+      <!-- black logotype section -->
+      <section class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+        <div class="order-2">
+          <div id="asset-logotype-black" data-filename="tangled_logotype_black.svg" class="border border-gray-200 dark:border-gray-700 p-8 sm:p-16 bg-gray-50 dark:bg-gray-100 rounded">
+            {{ template "fragments/dolly/logotype" (dict "Classes" "w-full max-w-sm mx-auto" "FillColor" "black") }}
           </div>
         </div>
-        <div class="order-1 lg:order-2">
+        <div class="order-1">
           <h2 class="text-xl font-semibold dark:text-white mb-3">Black logotype</h2>
           <p class="text-gray-500 dark:text-gray-300 mb-4">For use on light-colored backgrounds.</p>
-          <p class="text-gray-700 dark:text-gray-300">
+          <p class="text-gray-700 dark:text-gray-300 mb-4">
           This is the preferred version of the logotype, featuring dark text and elements, ideal for light
           backgrounds and designs.
           </p>
+          <button type="button" data-download="#asset-logotype-black" class="btn flex items-center gap-2 w-fit">
+            {{ i "download" "w-4 h-4" }} Download SVG
+          </button>
         </div>
       </section>
 
-      <!-- White Logotype Section -->
-      <section class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-        <div class="order-2 lg:order-1">
-          <div class="bg-black p-8 sm:p-16 rounded">
-            <img src="https://assets.tangled.network/tangled_logotype_white_on_trans.svg"
-                 alt="Tangled logo - white version"
-                 class="w-full max-w-sm mx-auto" />
+      <!-- white logotype section -->
+      <section class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+        <div class="order-2">
+          <div id="asset-logotype-white" data-filename="tangled_logotype_white.svg" class="bg-black p-8 sm:p-16 rounded">
+            {{ template "fragments/dolly/logotype" (dict "Classes" "w-full max-w-sm mx-auto" "FillColor" "white") }}
           </div>
         </div>
-        <div class="order-1 lg:order-2">
+        <div class="order-1">
           <h2 class="text-xl font-semibold dark:text-white mb-3">White logotype</h2>
           <p class="text-gray-500 dark:text-gray-300 mb-4">For use on dark-colored backgrounds.</p>
-          <p class="text-gray-700 dark:text-gray-300">
+          <p class="text-gray-700 dark:text-gray-300 mb-4">
             This version features white text and elements, ideal for dark backgrounds
             and inverted designs.
           </p>
+          <button type="button" data-download="#asset-logotype-white" class="btn flex items-center gap-2 w-fit">
+            {{ i "download" "w-4 h-4" }} Download SVG
+          </button>
         </div>
       </section>
 
-      <!-- Mark Only Section -->
-      <section class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-        <div class="order-2 lg:order-1">
-          <div class="grid grid-cols-2 gap-2">
-            <!-- Black mark on light background -->
-            <div class="border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-100 p-8 sm:p-12 rounded">
-              <img src="https://assets.tangled.network/tangled_dolly_face_only_black_on_trans.svg"
-                   alt="Dolly face - black version"
-                   class="w-full max-w-16 mx-auto" />
+      <!-- mark only section -->
+      <section class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+        <div class="order-2 h-full">
+          <div class="grid grid-cols-2 gap-2 h-full">
+            <div id="asset-face-black" data-filename="tangled_dolly_face_black.svg" class="border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-100 p-8 sm:p-12 rounded flex items-center justify-center">
+              {{ template "fragments/dolly/logo" (dict "Classes" "w-full max-w-16 mx-auto" "FillColor" "black") }}
             </div>
-            <!-- White mark on dark background -->
-            <div class="bg-black p-8 sm:p-12 rounded">
-              <img src="https://assets.tangled.network/tangled_dolly_face_only_white_on_trans.svg"
-                   alt="Dolly face - white version"
-                   class="w-full max-w-16 mx-auto" />
+            <div id="asset-face-white" data-filename="tangled_dolly_face_white.svg" class="bg-black p-8 sm:p-12 rounded flex items-center justify-center">
+              {{ template "fragments/dolly/logo" (dict "Classes" "w-full max-w-16 mx-auto" "FillColor" "white") }}
             </div>
           </div>
         </div>
-        <div class="order-1 lg:order-2">
+        <div class="order-1">
           <h2 class="text-xl font-semibold dark:text-white mb-3">Mark only</h2>
           <p class="text-gray-500 dark:text-gray-300 mb-4">
             When a smaller 1:1 logo or icon is needed, Dolly's face may be used on its own.
@@ -88,40 +81,36 @@
             <strong class="font-semibold">Note</strong>: for situations where the background
             is unknown, use the black version for ideal contrast in most environments.
           </p>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" data-download="#asset-face-black" class="btn flex items-center gap-2 w-fit">
+              {{ i "download" "w-4 h-4" }} Black on white
+            </button>
+            <button type="button" data-download="#asset-face-white" class="btn flex items-center gap-2 w-fit">
+              {{ i "download" "w-4 h-4" }} White on black
+            </button>
+          </div>
         </div>
       </section>
 
-      <!-- Colored Backgrounds Section -->
-      <section class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-        <div class="order-2 lg:order-1">
+      <!-- colored backgrounds section -->
+      <section class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+        <div class="order-2">
           <div class="grid grid-cols-2 gap-2">
-            <!-- Pastel Green background -->
             <div class="bg-green-500 p-8 sm:p-12 rounded">
-              <img src="https://assets.tangled.network/tangled_dolly_face_only_white_on_trans.svg"
-                   alt="Tangled logo on pastel green background"
-                   class="w-full max-w-16 mx-auto" />
+              {{ template "fragments/dolly/logo" (dict "Classes" "w-full max-w-16 mx-auto" "FillColor" "white") }}
             </div>
-            <!-- Pastel Blue background -->
             <div class="bg-blue-500 p-8 sm:p-12 rounded">
-              <img src="https://assets.tangled.network/tangled_dolly_face_only_white_on_trans.svg"
-                   alt="Tangled logo on pastel blue background"
-                   class="w-full max-w-16 mx-auto" />
+              {{ template "fragments/dolly/logo" (dict "Classes" "w-full max-w-16 mx-auto" "FillColor" "white") }}
             </div>
-            <!-- Pastel Yellow background -->
             <div class="bg-yellow-500 p-8 sm:p-12 rounded">
-              <img src="https://assets.tangled.network/tangled_dolly_face_only_white_on_trans.svg"
-                   alt="Tangled logo on pastel yellow background"
-                   class="w-full max-w-16 mx-auto" />
+              {{ template "fragments/dolly/logo" (dict "Classes" "w-full max-w-16 mx-auto" "FillColor" "white") }}
             </div>
-            <!-- Pastel Red background -->
             <div class="bg-red-500 p-8 sm:p-12 rounded">
-              <img src="https://assets.tangled.network/tangled_dolly_face_only_white_on_trans.svg"
-                   alt="Tangled logo on pastel red background"
-                   class="w-full max-w-16 mx-auto" />
+              {{ template "fragments/dolly/logo" (dict "Classes" "w-full max-w-16 mx-auto" "FillColor" "white") }}
             </div>
           </div>
         </div>
-        <div class="order-1 lg:order-2">
+        <div class="order-1">
           <h2 class="text-xl font-semibold dark:text-white mb-3">Colored backgrounds</h2>
           <p class="text-gray-500 dark:text-gray-300 mb-4">
             White logo mark on colored backgrounds.
@@ -133,37 +122,25 @@
         </div>
       </section>
 
-      <!-- Black Logo on Pastel Backgrounds Section -->
-      <section class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-        <div class="order-2 lg:order-1">
+      <!-- black logo on pastel backgrounds section -->
+      <section class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+        <div class="order-2">
           <div class="grid grid-cols-2 gap-2">
-            <!-- Pastel Green background -->
             <div class="bg-green-200 p-8 sm:p-12 rounded">
-              <img src="https://assets.tangled.network/tangled_dolly_face_only_black_on_trans.svg"
-                   alt="Tangled logo on pastel green background"
-                   class="w-full max-w-16 mx-auto" />
+              {{ template "fragments/dolly/logo" (dict "Classes" "w-full max-w-16 mx-auto" "FillColor" "black") }}
             </div>
-            <!-- Pastel Blue background -->
             <div class="bg-blue-200 p-8 sm:p-12 rounded">
-              <img src="https://assets.tangled.network/tangled_dolly_face_only_black_on_trans.svg"
-                   alt="Tangled logo on pastel blue background"
-                   class="w-full max-w-16 mx-auto" />
+              {{ template "fragments/dolly/logo" (dict "Classes" "w-full max-w-16 mx-auto" "FillColor" "black") }}
             </div>
-            <!-- Pastel Yellow background -->
             <div class="bg-yellow-200 p-8 sm:p-12 rounded">
-              <img src="https://assets.tangled.network/tangled_dolly_face_only_black_on_trans.svg"
-                   alt="Tangled logo on pastel yellow background"
-                   class="w-full max-w-16 mx-auto" />
+              {{ template "fragments/dolly/logo" (dict "Classes" "w-full max-w-16 mx-auto" "FillColor" "black") }}
             </div>
-            <!-- Pastel Pink background -->
             <div class="bg-pink-200 p-8 sm:p-12 rounded">
-              <img src="https://assets.tangled.network/tangled_dolly_face_only_black_on_trans.svg"
-                   alt="Tangled logo on pastel pink background"
-                   class="w-full max-w-16 mx-auto" />
+              {{ template "fragments/dolly/logo" (dict "Classes" "w-full max-w-16 mx-auto" "FillColor" "black") }}
             </div>
           </div>
         </div>
-        <div class="order-1 lg:order-2">
+        <div class="order-1">
           <h2 class="text-xl font-semibold dark:text-white mb-3">Lighter backgrounds</h2>
           <p class="text-gray-500 dark:text-gray-300 mb-4">
             Dark logo mark on lighter, pastel backgrounds.
@@ -175,16 +152,14 @@
         </div>
       </section>
 
-      <!-- Recoloring Section -->
-      <section class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-        <div class="order-2 lg:order-1">
+      <!-- recoloring section -->
+      <section class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+        <div class="order-2">
           <div class="bg-yellow-100 border border-yellow-200 p-8 sm:p-16 rounded">
-            <img src="https://assets.tangled.network/tangled_logotype_black_on_trans.svg"
-                 alt="Recolored Tangled logotype in gray/sand color"
-                 class="w-full max-w-sm mx-auto opacity-60 sepia contrast-75 saturate-50" />
+            {{ template "fragments/dolly/logotype" (dict "Classes" "w-full max-w-sm mx-auto opacity-60 sepia contrast-75 saturate-50" "FillColor" "black") }}
           </div>
         </div>
-        <div class="order-1 lg:order-2">
+        <div class="order-1">
           <h2 class="text-xl font-semibold dark:text-white mb-3">Recoloring</h2>
           <p class="text-gray-500 dark:text-gray-300 mb-4">
             Custom coloring of the logotype is permitted.
@@ -201,4 +176,37 @@
     </div>
   </main>
 </div>
+
+<script>
+  (function () {
+    function downloadSvg(svg, filename) {
+      var clone = svg.cloneNode(true);
+      // strip tailwind utility classes — they're meaningless in a standalone file
+      clone.removeAttribute('class');
+      clone.querySelectorAll('[class]').forEach(function (el) { el.removeAttribute('class'); });
+      if (!clone.getAttribute('xmlns')) {
+        clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      }
+      var data = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+      var url = URL.createObjectURL(new Blob([data], { type: 'image/svg+xml' }));
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = filename || 'tangled.svg';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    document.querySelectorAll('[data-download]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var container = document.querySelector(btn.dataset.download);
+        if (!container) return;
+        var svg = container.querySelector('svg');
+        if (!svg) return;
+        downloadSvg(svg, container.dataset.filename);
+      });
+    });
+  })();
+</script>
 {{ end }}
