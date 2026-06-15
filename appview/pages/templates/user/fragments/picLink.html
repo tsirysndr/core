@@ -44,7 +44,6 @@
           popovertarget="vouch-modal-{{ normalizeForHtmlId $vr.SubjectDid.String }}"
           popovertargetaction="toggle"
           class="absolute -bottom-0.5 -right-0.5 w-1/2 h-1/2 cursor-pointer"
-          title="{{ template "user/fragments/vouchTooltip" $vr }}">
           {{ if $vr.IsDirectVouch }}
             {{ template "fragments/icons/shield-direct-vouch" "w-full h-full" }}
           {{ else if $vr.IsDirectDenounce }}
