@@ -343,7 +343,7 @@ func SkipVouchSuggestion(e Execer, did, subjectDid string) error {
 }
 
 // priority:
-//  1. collaborator invites sent
+//  1. collaborator invites sent - NOTE with knot-owned events not mentioning *who* is doing the adding of collab, we can't know who to suggest a vouch to.
 //  2. knot member invites sent
 //  3. PR authors on FOO's repositories
 //  4. issue authors on FOO's repositories

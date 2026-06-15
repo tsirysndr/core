@@ -16,6 +16,7 @@ import (
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
+	"tangled.org/core/appview/knotacl"
 	"tangled.org/core/appview/knotcompat"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/sites"
@@ -33,7 +34,16 @@ import (
 	"github.com/posthog/posthog-go"
 )
 
-func Knotstream(ctx context.Context, c *config.Config, d *db.DB, enforcer *rbac.Enforcer, posthog posthog.Client, notifier notify.Notifier, cfClient *cloudflare.Client) (*ec.Consumer, error) {
+type aclRoster interface {
+	AddKnotMember(host string, subject syntax.DID, cursor knotacl.Cursor) error
+	RemoveKnotMember(host string, subject syntax.DID, cursor knotacl.Cursor) error
+	AddCollaborator(repoDid, subject syntax.DID, cursor knotacl.Cursor) error
+	RemoveCollaborator(repoDid, subject syntax.DID, cursor knotacl.Cursor) error
+	InvalidateMembers(host string)
+	InvalidateCollaborators(host, repoDid string)
+}
+
+func Knotstream(ctx context.Context, c *config.Config, d *db.DB, acl *knotacl.Service, enforcer *rbac.Enforcer, posthog posthog.Client, notifier notify.Notifier, cfClient *cloudflare.Client) (*ec.Consumer, error) {
 	knots, err := db.GetRegistrations(d, orm.FilterIsNot("registered", "null"))
 	if err != nil {
 		return nil, err
@@ -47,7 +57,7 @@ func Knotstream(ctx context.Context, c *config.Config, d *db.DB, enforcer *rbac.
 	return bootstrapStream(
 		ctx, "knotstream", ec.KindKnot, hosts, c.Redis.Addr,
 		c.Knotstream, c.Core.Dev,
-		knotIngester(d, enforcer, posthog, notifier, c.Core.Dev, c, cfClient),
+		knotIngester(d, acl, enforcer, posthog, notifier, c.Core.Dev, c, cfClient),
 	), nil
 }
 
@@ -65,7 +75,7 @@ func resolveRepo(d *db.DB, repoDid *string, ownerDid, repoName string) (*models.
 	return &repos[0], nil
 }
 
-func knotIngester(d *db.DB, enforcer *rbac.Enforcer, posthog posthog.Client, notifier notify.Notifier, dev bool, c *config.Config, cfClient *cloudflare.Client) ec.ProcessFunc {
+func knotIngester(d *db.DB, acl aclRoster, enforcer *rbac.Enforcer, posthog posthog.Client, notifier notify.Notifier, dev bool, c *config.Config, cfClient *cloudflare.Client) ec.ProcessFunc {
 	return func(ctx context.Context, source ec.Source, msg eventstream.Event) error {
 		switch msg.Nsid {
 		case tangled.GitRefUpdateNSID:
@@ -74,10 +84,119 @@ func knotIngester(d *db.DB, enforcer *rbac.Enforcer, posthog posthog.Client, not
 			return ingestPipeline(d, source, msg)
 		case knotdb.RepoDIDAssignNSID:
 			return ingestDIDAssign(d, enforcer, source, msg, ctx)
+		case knotdb.KnotMemberUpdateNSID:
+			return ingestKnotMemberUpdate(acl, source, msg)
+		case knotdb.RepoCollaboratorUpdateNSID:
+			return ingestCollaboratorUpdate(ctx, d, acl, source, msg)
 		}
 
 		return nil
 	}
+}
+
+const (
+	aclIngestAttempts = 3
+	aclIngestBackoff  = 50 * time.Millisecond
+)
+
+func withAclRetry(attempts int, backoff time.Duration, op func() error) error {
+	if err := op(); err == nil || attempts <= 1 {
+		return err
+	}
+	time.Sleep(backoff)
+	return withAclRetry(attempts-1, backoff, op)
+}
+
+func ingestKnotMemberUpdate(acl aclRoster, source ec.Source, msg eventstream.Event) error {
+	var rec knotdb.KnotMemberUpdate
+	if err := json.Unmarshal(msg.EventJson, &rec); err != nil {
+		return fmt.Errorf("unmarshal memberUpdate: %w", err)
+	}
+
+	subject, err := syntax.ParseDID(rec.Subject)
+	if err != nil {
+		return fmt.Errorf("memberUpdate bad subject %q: %w", rec.Subject, err)
+	}
+
+	cursor := knotacl.Cursor(msg.Created)
+	switch rec.Op {
+	case knotdb.AclOpAdd:
+		err = withAclRetry(aclIngestAttempts, aclIngestBackoff, func() error {
+			return acl.AddKnotMember(source.Host, subject, cursor)
+		})
+	case knotdb.AclOpRemove:
+		err = withAclRetry(aclIngestAttempts, aclIngestBackoff, func() error {
+			return acl.RemoveKnotMember(source.Host, subject, cursor)
+		})
+	default:
+		return fmt.Errorf("memberUpdate unknown op %q", rec.Op)
+	}
+
+	if err != nil {
+		acl.InvalidateMembers(source.Host)
+	}
+	return err
+}
+
+func ingestCollaboratorUpdate(ctx context.Context, d *db.DB, acl aclRoster, source ec.Source, msg eventstream.Event) error {
+	var rec knotdb.RepoCollaboratorUpdate
+	if err := json.Unmarshal(msg.EventJson, &rec); err != nil {
+		return fmt.Errorf("unmarshal collaboratorUpdate: %w", err)
+	}
+
+	subject, err := syntax.ParseDID(rec.Subject)
+	if err != nil {
+		return fmt.Errorf("collaboratorUpdate bad subject %q: %w", rec.Subject, err)
+	}
+	repoDid, err := syntax.ParseDID(rec.Repo)
+	if err != nil {
+		return fmt.Errorf("collaboratorUpdate bad repo %q: %w", rec.Repo, err)
+	}
+
+	cursor := knotacl.Cursor(msg.Created)
+	switch rec.Op {
+	case knotdb.AclOpAdd:
+		err = withAclRetry(aclIngestAttempts, aclIngestBackoff, func() error {
+			owned, err := repoOwnedBySource(ctx, d, source, repoDid, subject)
+			if err != nil || !owned {
+				return err
+			}
+			return acl.AddCollaborator(repoDid, subject, cursor)
+		})
+	case knotdb.AclOpRemove:
+		err = withAclRetry(aclIngestAttempts, aclIngestBackoff, func() error {
+			owned, err := repoOwnedBySource(ctx, d, source, repoDid, subject)
+			if err != nil || !owned {
+				return err
+			}
+			return acl.RemoveCollaborator(repoDid, subject, cursor)
+		})
+	default:
+		return fmt.Errorf("collaboratorUpdate unknown op %q", rec.Op)
+	}
+
+	if err != nil {
+		acl.InvalidateCollaborators(source.Host, repoDid.String())
+	}
+	return err
+}
+
+func repoOwnedBySource(ctx context.Context, d *db.DB, source ec.Source, repoDid, subject syntax.DID) (bool, error) {
+	repo, err := db.GetRepoByDid(d, repoDid.String())
+	if errors.Is(err, sql.ErrNoRows) {
+		log.FromContext(ctx).Warn("collaboratorUpdate for unindexed repo, skipping until reconcile",
+			"repo_did", repoDid, "subject", subject)
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if repo.Knot != source.Host {
+		log.FromContext(ctx).Warn("collaboratorUpdate for a repo this knot does not host, dropping",
+			"repo_did", repoDid, "subject", subject, "claimed_by", source.Host, "owner", repo.Knot)
+		return false, nil
+	}
+	return true, nil
 }
 
 // TODO(boltless): remove this. knotmirror should do all sort of indexing

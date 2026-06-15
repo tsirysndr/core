@@ -215,7 +215,7 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 		}
 	}
 
-	knotstream, err := Knotstream(ctx, config, d, enforcer, posthog, notifier, cfClient)
+	knotstream, err := Knotstream(ctx, config, d, aclService, enforcer, posthog, notifier, cfClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start knotstream consumer: %w", err)
 	}
