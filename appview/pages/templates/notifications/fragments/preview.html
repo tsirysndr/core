@@ -23,7 +23,7 @@
       <button
         hx-post="/notifications/read-all"
         hx-swap="none"
-        hx-on::after-request="htmx.ajax('GET', '/notifications/preview?read=unread&category={{ $cat }}', {target:'#notif-popup', swap:'innerHTML'}); htmx.ajax('GET', '/notifications/count', {target:'#notification-count-desktop', swap:'innerHTML'})"
+        hx-on::after-request="htmx.ajax('GET', '/notifications/preview?read={{ $read }}&category={{ $cat }}', {target:'#notif-popup', swap:'innerHTML'}); htmx.ajax('GET', '/notifications/count', {target:'#notification-count-desktop', swap:'innerHTML'})"
         class="btn-flat text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center gap-2 text-sm"
         title="Mark all read">
         {{ i "check-check" "size-4" }} Mark all read

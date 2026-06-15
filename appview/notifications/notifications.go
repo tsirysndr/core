@@ -279,7 +279,7 @@ func (n *Notifications) markAllRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/notifications", http.StatusSeeOther)
+	w.WriteHeader(http.StatusOK)
 }
 
 func (n *Notifications) deleteNotification(w http.ResponseWriter, r *http.Request) {
