@@ -1,13 +1,22 @@
 {{ define "fragments/pagination" }}
-  {{/* Params: Page (pagination.Page), TotalCount (int), BasePath (string), QueryParams (url.Values) */}}
+  {{/* Params: Page (pagination.Page), BasePath (string), QueryParams (url.Values), TotalCount (int)|HasMore (bool) */}}
+  {{/* Cursor mode when HasMore is provided */}}
+
   {{ $page := .Page }}
   {{ $totalCount := .TotalCount }}
   {{ $basePath := .BasePath }}
   {{ $queryParams := safeUrl .QueryParams.Encode }}
+  {{ $cursor := mapContains . "HasMore" }}
 
   {{ $prev := $page.Previous.Offset }}
   {{ $next := $page.Next.Offset }}
-  {{ $lastPage := sub $totalCount (mod $totalCount $page.Limit) }}
+
+  {{ $hasNext := false }}
+  {{ if $cursor }}
+    {{ $hasNext = .HasMore }}
+  {{ else }}
+    {{ $hasNext = lt $next $totalCount }}
+  {{ end }}
 
   <div class="flex justify-center items-center mt-4 gap-5">
     <a
@@ -26,50 +35,54 @@
       Prev
     </a>
 
-    {{ if gt $page.Offset 0 }}
-      <a hx-boost="true" href="{{ $basePath }}?{{ $queryParams }}&offset=0&limit={{ $page.Limit }}">
-        1
-      </a>
-    {{ end }}
+    {{ if not $cursor }}
+      {{ $lastPage := sub $totalCount (mod $totalCount $page.Limit) }}
 
-    {{ if gt $prev $page.Limit }}
-      <span class="text-gray-400 dark:text-gray-500">—</span>
-    {{ end }}
+      {{ if gt $page.Offset 0 }}
+        <a hx-boost="true" href="{{ $basePath }}?{{ $queryParams }}&offset=0&limit={{ $page.Limit }}">
+          1
+        </a>
+      {{ end }}
 
-    {{ if gt $prev 0 }}
-      <a hx-boost="true" href="{{ $basePath }}?{{ $queryParams }}&offset={{ $prev }}&limit={{ $page.Limit }}">
-        {{ add (div $prev $page.Limit) 1 }}
-      </a>
-    {{ end }}
+      {{ if gt $prev $page.Limit }}
+        <span class="text-gray-400 dark:text-gray-500">—</span>
+      {{ end }}
 
-    <span class="px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm">
-      {{ add (div $page.Offset $page.Limit) 1 }}
-    </span>
+      {{ if gt $prev 0 }}
+        <a hx-boost="true" href="{{ $basePath }}?{{ $queryParams }}&offset={{ $prev }}&limit={{ $page.Limit }}">
+          {{ add (div $prev $page.Limit) 1 }}
+        </a>
+      {{ end }}
 
-    {{ if lt $next $lastPage }}
-      <a hx-boost="true" href="{{ $basePath }}?{{ $queryParams }}&offset={{ $next }}&limit={{ $page.Limit }}">
-        {{ add (div $next $page.Limit) 1 }}
-      </a>
-    {{ end }}
+      <span class="px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm">
+        {{ add (div $page.Offset $page.Limit) 1 }}
+      </span>
 
-    {{ if lt $next (sub $totalCount (mul 2 $page.Limit)) }}
-      <span class="text-gray-400 dark:text-gray-500">—</span>
-    {{ end }}
+      {{ if lt $next $lastPage }}
+        <a hx-boost="true" href="{{ $basePath }}?{{ $queryParams }}&offset={{ $next }}&limit={{ $page.Limit }}">
+          {{ add (div $next $page.Limit) 1 }}
+        </a>
+      {{ end }}
 
-    {{ if lt $page.Offset $lastPage }} 
-      <a hx-boost="true" href="{{ $basePath }}?{{ $queryParams }}&offset={{ $lastPage }}&limit={{ $page.Limit }}">
-        {{ add (div $lastPage $page.Limit) 1 }}
-      </a>
+      {{ if lt $next (sub $totalCount (mul 2 $page.Limit)) }}
+        <span class="text-gray-400 dark:text-gray-500">—</span>
+      {{ end }}
+
+      {{ if lt $page.Offset $lastPage }}
+        <a hx-boost="true" href="{{ $basePath }}?{{ $queryParams }}&offset={{ $lastPage }}&limit={{ $page.Limit }}">
+          {{ add (div $lastPage $page.Limit) 1 }}
+        </a>
+      {{ end }}
     {{ end }}
 
     <a
       class="
         flex items-center gap-1 no-underline hover:no-underline dark:text-white text-sm
-        {{ if lt $next $totalCount | not }}
+        {{ if not $hasNext }}
             cursor-not-allowed opacity-50
         {{ end }}
       "
-      {{ if lt $next $totalCount }}
+      {{ if $hasNext }}
         hx-boost="true"
         href="{{ $basePath }}?{{ $queryParams }}&offset={{ $next }}&limit={{ $page.Limit }}"
       {{ end }}

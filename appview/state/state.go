@@ -15,6 +15,7 @@ import (
 	"tangled.org/core/appview/bsky"
 	"tangled.org/core/appview/cache"
 	"tangled.org/core/appview/cloudflare"
+	"tangled.org/core/appview/codesearch"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/email"
@@ -76,6 +77,7 @@ type State struct {
 	logger           *slog.Logger
 	validator        *validator.Validator
 	cfClient         *cloudflare.Client
+	codesearch       *codesearch.CodeSearch
 }
 
 func Make(ctx context.Context, config *config.Config) (*State, error) {
@@ -250,6 +252,7 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 		logger:           logger,
 		validator:        validator,
 		cfClient:         cfClient,
+		codesearch:       &codesearch.CodeSearch{Host: config.CodeSearch.ZoektUrl},
 	}
 
 	// fetch initial bluesky posts if configured

@@ -1,7 +1,7 @@
-{{ define "title" }}Search &middot; Tangled{{ end }}
+{{ define "title" }}{{ if eq .FilterType "code" }}Code Search{{ else }}Search{{ end }} &middot; Tangled{{ end }}
 
 {{ define "content" }}
-  <h1 class="text-2xl font-bold mb-4 px-2">Search</h1>
+  <h1 class="text-2xl font-bold mb-4 px-2">{{ if eq .FilterType "code" }}Code Search{{ else }}Search{{ end }}</h1>
 
   <div class="grid grid-cols-1 md:grid-cols-4 gap-4 px-2">
     <div class="col-span-1 md:col-span-3 space-y-4">
@@ -17,48 +17,89 @@
 
 {{ define "searchBar" }}
   <form id="search-form" method="GET" class="flex items-center gap-2">
+    <input type="hidden" name="type" value="{{ .FilterType }}">
     <div class="flex relative w-full">
       <div class="flex-1 flex relative">
         <input
           id="search-q"
-          class="flex-1 py-1 pl-2 pr-10 mr-[-1px] rounded-r-none peer"
+          class='{{ if eq .FilterType "code" }}font-mono{{ end }} flex-1 py-1 pl-2 pr-10 mr-[-1px] rounded-r-none peer'
           type="text"
           name="q"
           value="{{ .FilterQuery }}"
-          placeholder="Search repositories..."
+          placeholder='{{ if eq .FilterType "code" }}Search code...{{ else }}Search repositories...{{ end }}'
         >
         <a
-          href="/search"
+          href="/search?type={{ .FilterType }}"
           class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 {{ if not .FilterQuery }}hidden{{ end }} peer-[:not(:placeholder-shown)]:block"
         >
-          {{ i "x" "w-4 h-4" }}
+          {{ i "x" "size-4" }}
         </a>
       </div>
       <button
         type="submit"
         class="p-2 text-gray-400 border rounded-r border-gray-300 dark:border-gray-600"
       >
-        {{ i "search" "w-4 h-4" }}
+        {{ i "search" "size-4" }}
       </button>
     </div>
-    <div class="md:hidden">
-      {{ template "sortOptionsList" . }}
-    </div>
+    <button
+      type="button"
+      popovertarget="search-filters-sheet"
+      popovertargetaction="toggle"
+      class="md:hidden btn flex items-center gap-2 shrink-0">
+      {{ i "list-filter" "size-4" }}
+      <span>Filters</span>
+    </button>
   </form>
 
-  <div class="md:hidden mt-3">
-    <div class="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
-      {{ template "languageFilters" . }}
+  <div
+    popover
+    id="search-filters-sheet"
+    class="md:hidden m-0 fixed inset-x-0 bottom-0 top-auto w-full max-w-none
+           rounded-t-xl rounded-b-none
+           bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700
+           dark:text-white backdrop:bg-gray-400/50 dark:backdrop:bg-gray-800/50
+           p-4 max-h-[80dvh] overflow-y-auto">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-base font-semibold">Filters</h2>
+      <button type="button" popovertarget="search-filters-sheet" popovertargetaction="hide"
+              class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+        {{ i "x" "size-5" }}
+      </button>
+    </div>
+    <div class="flex flex-col gap-6">
+      {{ template "searchTypeSwitcher" . }}
+      {{ if eq .FilterType "repo" }}
+      <div>
+        <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Sort by</h3>
+        {{ template "sortOptionsList" . }}
+      </div>
+      {{ end }}
+      <div>
+        <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Languages</h3>
+        {{ template "languageFilters" . }}
+      </div>
     </div>
   </div>
 {{ end }}
 
 {{ define "searchResults" }}
+  {{ if .ErrorMsg }}
+    <div class="flex items-center gap-2 my-2 bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 rounded px-3 py-2 text-red-600 dark:text-red-300 text-sm">
+      {{ i "circle-alert" "size-4" }}
+      <span>{{ .ErrorMsg }}</span>
+    </div>
+  {{ else if eq .FilterType "code" }}
+    {{ template "codeSearchResults" . }}
+  {{ else }}
+    {{ template "repoSearchResults" . }}
+  {{ end }}
+{{ end }}
+
+{{ define "repoSearchResults" }}
   <div id="repos" class="grid grid-cols-1 gap-4 mb-6">
     {{ range .Repos }}
-      <div class="border border-gray-200 dark:border-gray-700 rounded-sm">
-         {{ template "user/fragments/repoCard" (list $ . true) }}
-      </div>
+      {{ template "search/fragments/resultCard" . }}
     {{ else }}
         <div class="text-base text-gray-500 flex items-center justify-center italic p-12 border border-gray-200 dark:border-gray-700 rounded">
           <span>No repositories found.</span>
@@ -75,19 +116,48 @@
         "Page" .Page
         "TotalCount" .ResultCount
         "BasePath" "search"
-        "QueryParams" (queryParams "q" .FilterQuery "sort" .SortParam)
+        "QueryParams" (queryParams "q" .FilterQuery "sort" .SortParam "type" .FilterType)
+    ) }}
+  {{ end }}
+{{ end }}
+
+{{ define "codeSearchResults" }}
+  <div id="repos" class="grid grid-cols-1 gap-4 mb-6">
+    {{ range .Results }}
+      {{ template "search/fragments/resultCard" . }}
+    {{ else }}
+      <div class="text-base text-gray-500 flex items-center justify-center italic p-12 border border-gray-200 dark:border-gray-700 rounded">
+        <span>No results found.</span>
+      </div>
+    {{ end }}
+  </div>
+
+  <div class="md:hidden mb-4">
+    {{ template "searchStatistics" . }}
+  </div>
+
+  {{ if or (gt .Page.Offset 0) .HasMore }}
+    {{ template "fragments/pagination" (dict
+        "Page" .Page
+        "BasePath" "search"
+        "QueryParams" (queryParams "q" .FilterQuery "type" .FilterType)
+        "HasMore" .HasMore
     ) }}
   {{ end }}
 {{ end }}
 
 {{ define "searchOptionsPanel" }}
   <div class="flex flex-col gap-6 px-2 md:px-0">
+    {{ template "searchTypeSwitcher" . }}
+
+    {{ if eq .FilterType "repo" }}
     <div>
       <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
         Sort by
       </h3>
       {{ template "sortOptionsList" . }}
     </div>
+    {{ end }}
 
     <div>
       <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
@@ -100,60 +170,87 @@
   </div>
 {{ end }}
 
+{{ define "searchTypeSwitcher" }}
+  <div>
+    <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+      Filter by
+    </h3>
+    <div>
+      {{ $options := list
+        (dict "value" "repo" "name" "Repositories")
+        (dict "value" "code" "name" "Code")
+      }}
+      {{ range $options }}
+        <label class="flex items-center gap-2 text-sm cursor-pointer">
+          <input
+            type="radio"
+            value="{{ .value }}"
+            {{ if eq $.FilterType .value }}checked{{ end }}
+            onchange="window.location.href='/search?type={{ .value }}&q={{ $.FilterQuery }}'"
+          >
+          <span>{{ .name }}</span>
+        </label>
+      {{ end }}
+    </div>
+  </div>
+{{ end }}
+
 {{ define "sortOptionsList" }}
-  {{ $currentQuery := .FilterQuery }}
-  <select
-    name="sort"
-    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 dark:text-white text-sm"
-    onchange="window.location.href='/search?q={{ .FilterQuery }}&sort=' + this.value"
-    >
-    {{ $currentSort := .SortParam }}
-    {{ if eq $currentSort "" }}
-      {{ $currentSort = "relevance" }}
-    {{ end }}
+  {{ if eq .FilterType "repo" }}
+    <select
+      name="sort"
+      class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 dark:text-white text-sm"
+      onchange="window.location.href='/search?type=repo&q={{ .FilterQuery }}&sort=' + this.value"
+      >
+      {{ $currentSort := .SortParam }}
+      {{ if eq $currentSort "" }}
+        {{ $currentSort = "relevance" }}
+      {{ end }}
 
-    {{ $options := list
-      (dict "value" "relevance" "name" "Relevance")
-      (dict "value" "created-desc" "name" "Newest")
-      (dict "value" "created-asc" "name" "Oldest")
-      (dict "value" "stars-desc" "name" "Most Stars")
-      (dict "value" "stars-asc" "name" "Fewest Stars")
-      (dict "value" "issues-desc" "name" "Most Issues")
-      (dict "value" "issues-asc" "name" "Fewest Issues")
-      (dict "value" "pulls-desc" "name" "Most Pulls")
-      (dict "value" "pulls-asc" "name" "Fewest Pulls")
-    }}
+      {{ $options := list
+        (dict "value" "relevance" "name" "Relevance")
+        (dict "value" "created-desc" "name" "Newest")
+        (dict "value" "created-asc" "name" "Oldest")
+        (dict "value" "stars-desc" "name" "Most Stars")
+        (dict "value" "stars-asc" "name" "Fewest Stars")
+        (dict "value" "issues-desc" "name" "Most Issues")
+        (dict "value" "issues-asc" "name" "Fewest Issues")
+        (dict "value" "pulls-desc" "name" "Most Pulls")
+        (dict "value" "pulls-asc" "name" "Fewest Pulls")
+      }}
 
-    {{ range $options }}
-      <option value="{{ .value }}" {{ if eq $currentSort .value }}selected{{ end }}>
-        {{ .name }}
-      </option>
-    {{ end }}
-  </select>
+      {{ range $options }}
+        <option value="{{ .value }}" {{ if eq $currentSort .value }}selected{{ end }}>
+          {{ .name }}
+        </option>
+      {{ end }}
+    </select>
+  {{ end }}
 {{ end }}
 
 {{ define "languageFilters" }}
   {{ $commonLanguages := list "Go" "JavaScript" "TypeScript" "Python" "Rust" "OCaml" "Haskell" "C" "C++" "Ruby" "Swift" }}
 
-  <div class="flex gap-2 md:flex-wrap">
+  <div class="flex flex-wrap gap-2">
     {{ range $commonLanguages }}
       {{ $lang := . }}
-      {{ template "languageFilterChip" (dict "Language" $lang "CurrentQuery" $.FilterQuery) }}
+      {{ template "languageFilterChip" (dict "Language" $lang "CurrentQuery" $.FilterQuery "FilterType" $.FilterType) }}
     {{ end }}
   </div>
 
   <p class="hidden md:block text-gray-500 dark:text-gray-400 text-xs mt-3">
     Click a language to filter results. You can also filter by language by
     adding <code class="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded
-    text-xs">language:name</code> to the search bar.
+    text-xs">lang:name</code> to the search bar.
   </p>
 {{ end }}
 
 {{ define "languageFilterChip" }}
-  {{ $lang := .Language }}
+  {{ $lang         := .Language }}
   {{ $currentQuery := .CurrentQuery }}
-  {{ $langColor := langColor $lang }}
-  {{ $newQuery := queryParams "q" (printf "language:%s %s" $lang $currentQuery) }}
+  {{ $filterType   := .FilterType }}
+  {{ $langColor    := langColor $lang }}
+  {{ $newQuery     := queryParams "q" (printf "lang:%s %s" $lang $currentQuery) "type" $filterType }}
 
   <a
     href="/search?{{ safeUrl $newQuery.Encode }}"
@@ -166,11 +263,17 @@
 {{ end }}
 
 {{ define "searchStatistics" }}
-  {{ if gt .ResultCount 0 }}
-  <div class="text-xs text-gray-600 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 py-2">
-    Returned {{ .ResultCount }} of {{ .DocCount }} repos in {{ .TimeTaken }}
-  </div>
+  {{ if eq .FilterType "code" }}
+    {{ if gt .MatchCount 0 }}
+    <div class="text-xs text-gray-600 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 py-2">
+      Found {{ .MatchCount }} results in {{ .FileCount }} files in {{ .TimeTaken }}
+    </div>
+    {{ end }}
+  {{ else }}
+    {{ if gt .ResultCount 0 }}
+    <div class="text-xs text-gray-600 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 py-2">
+      Returned {{ .ResultCount }} of {{ .DocCount }} repos in {{ .TimeTaken }}
+    </div>
+    {{ end }}
   {{ end }}
 {{ end }}
-
-

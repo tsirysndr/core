@@ -338,6 +338,7 @@ services:
       TANGLED_JETSTREAM_ENDPOINT: wss://jetstream.tngl.boltless.dev/subscribe
       TANGLED_REDIS_ADDR: redis:6379
       TANGLED_KNOTMIRROR_URL: https://mirror.tngl.boltless.dev
+      TANGLED_CODESEARCH_ZOEKT_URL: https://zoekt.tngl.boltless.dev
     ports:
       - "3000:3000"
     volumes:

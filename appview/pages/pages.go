@@ -33,6 +33,7 @@ import (
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/sourcegraph/zoekt"
 )
 
 //go:embed templates/* static legal
@@ -1682,16 +1683,19 @@ func (p *Pages) SingleString(w io.Writer, params SingleStringParams) error {
 
 type SearchReposParams struct {
 	BaseParams
-	Repos       []models.Repo
+	FilterType  string // "repo" | "code"
+	Repos       []SearchResult
 	Page        pagination.Page
 	ResultCount int
 	FilterQuery string
 	SortParam   string
 	TimeTaken   time.Duration
 	DocCount    int64
+	ErrorMsg    string
 }
 
 func (p *Pages) SearchRepos(w io.Writer, params SearchReposParams) error {
+	params.FilterType = "repo"
 	return p.execute("search/search", w, params)
 }
 
@@ -1711,6 +1715,131 @@ func (p *Pages) SearchQuickMobile(w io.Writer, params SearchQuickParams) error {
 		return err
 	}
 	return tpl.ExecuteTemplate(w, "search/fragments/quickMobile", params)
+}
+
+type SearchResult struct {
+	RepoDID  syntax.DID
+	Repo     *models.Repo
+	FilePath string
+	Branches []string
+	Commit   string
+	Language string
+
+	File   *CodeSearchResult_File  // filename match
+	Chunks CodeSearchResult_Chunks // content matches
+}
+
+// CodeSearchResult_Chunk is a content match with its lines pre-rendered.
+type CodeSearchResult_Chunk struct {
+	Lines      []ChunkLine // precomputed from Content/ContentStartLine/Ranges
+	MatchCount int         // number of match ranges in this chunk
+}
+
+type CodeSearchResult_Chunks []CodeSearchResult_Chunk
+
+func (cs CodeSearchResult_Chunks) MatchCount() int {
+	count := 0
+	for _, c := range cs {
+		count += c.MatchCount
+	}
+	return count
+}
+
+type CodeSearchResult_File struct {
+	NameSpans []ChunkSpan // precomputed from FilePath/Ranges
+}
+
+type ChunkSpan struct {
+	Text  string
+	Match bool
+}
+
+type ChunkLine struct {
+	Num       int
+	Spans     []ChunkSpan
+	Highlight bool
+}
+
+// ChunkLines renders a chunk's Content into per-line ChunkLines, splitting each
+// line into matched/unmatched spans using ranges. startLine is the 1-based line
+// number of the first line.
+func ChunkLines(content string, startLine int, ranges []zoekt.Range) []ChunkLine {
+	if startLine < 1 {
+		startLine = 1
+	}
+	// trim a single trailing newline so we don't emit a spurious empty line
+	content = strings.TrimSuffix(content, "\n")
+	lines := strings.Split(content, "\n")
+	out := make([]ChunkLine, len(lines))
+	for i, text := range lines {
+		num := startLine + i
+		runes := []rune(text)
+
+		// collect matched rune intervals [c0,c1) for this line
+		var intervals [][2]int
+		for _, rg := range ranges {
+			if num < int(rg.Start.LineNumber) || num > int(rg.End.LineNumber) {
+				continue
+			}
+			c0, c1 := 0, len(runes)
+			if num == int(rg.Start.LineNumber) {
+				c0 = int(rg.Start.Column) - 1
+			}
+			if num == int(rg.End.LineNumber) {
+				c1 = int(rg.End.Column) - 1
+			}
+			c0 = max(0, min(c0, len(runes)))
+			c1 = max(0, min(c1, len(runes)))
+			if c0 < c1 {
+				intervals = append(intervals, [2]int{c0, c1})
+			}
+		}
+		intervals = mergeIntervals(intervals)
+
+		out[i] = ChunkLine{
+			Num:       num,
+			Spans:     spanRunes(runes, intervals),
+			Highlight: len(intervals) > 0,
+		}
+	}
+	return out
+}
+
+// FileNameSpans splits a filename into matched/unmatched spans using ranges.
+// Filename ranges live on line 1; columns are clamped to rune bounds.
+func FileNameSpans(name string, ranges []zoekt.Range) []ChunkSpan {
+	runes := []rune(name)
+	var intervals [][2]int
+	for _, rg := range ranges {
+		if rg.Start.LineNumber > 1 || rg.End.LineNumber < 1 {
+			continue
+		}
+		c0 := max(0, min(int(rg.Start.Column)-1, len(runes)))
+		c1 := max(0, min(int(rg.End.Column)-1, len(runes)))
+		if c0 < c1 {
+			intervals = append(intervals, [2]int{c0, c1})
+		}
+	}
+	return spanRunes(runes, mergeIntervals(intervals))
+}
+
+type CodeSearchParams struct {
+	BaseParams
+	FilterType  string // "code"
+	FilterQuery string
+	Results     []SearchResult
+	Page        pagination.Page
+	HasMore     bool
+	ErrorMsg    string
+
+	MatchCount int
+	FileCount  int
+	TimeTaken  time.Duration
+}
+
+func (p *Pages) CodeSearch(w io.Writer, params CodeSearchParams) error {
+	params.FilterType = "code"
+	return p.execute("search/search", w, params)
 }
 
 func (p *Pages) Home(w io.Writer, params TimelineParams) error {

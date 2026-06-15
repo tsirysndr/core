@@ -1,0 +1,24 @@
+{{ define "search/fragments/chunkBody" }}
+  {{ $owner    := .Owner }}
+  {{ $slug     := .Slug }}
+  {{ $commit   := .Commit }}
+  {{ $filePath := .FilePath }}
+  {{ $chunk    := .Chunk }}
+  <div class="overflow-x-auto font-mono text-sm">
+    {{ range $chunk.Lines }}
+      <div class="px-3 flex gap-3 w-max min-w-full{{ if .Highlight }} line-range-hl{{ end }}">
+        <a href="/{{ $owner }}/{{ $slug }}/blob/{{ $commit }}/{{ $filePath }}#L{{ .Num }}" class="block select-none text-right text-gray-300 dark:text-gray-600 hover:text-gray-500 hover:underline" style="min-width: 2.5rem">{{ .Num }}</a>
+        <div class="whitespace-pre text-gray-700 dark:text-gray-300">
+          {{- range .Spans -}}
+            {{- if .Match -}}
+              <span class="chunk-match-hl">{{ .Text }}</span>
+            {{- else -}}
+              {{ .Text }}
+            {{- end -}}
+          {{- end -}}
+          {{- if not .Spans }}&#8203;{{ end -}}
+        </div>
+      </div>
+    {{ end }}
+  </div>
+{{ end }}

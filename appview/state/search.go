@@ -17,22 +17,44 @@ import (
 )
 
 func (s *State) Search(w http.ResponseWriter, r *http.Request) {
+	switch r.URL.Query().Get("type") {
+	case "code":
+		s.handleCodeSearch(w, r)
+	case "repo":
+		s.handleRepoSearch(w, r)
+	default:
+		query := r.URL.Query()
+		query.Set("type", "repo")
+		http.Redirect(w, r, "/search?"+query.Encode(), http.StatusFound)
+	}
+}
+
+func (s *State) handleRepoSearch(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "Search")
-
-	params := r.URL.Query()
+	query := r.URL.Query()
 	page := pagination.FromContext(r.Context())
+	q := searchquery.Parse(query.Get("q"))
 
-	query := searchquery.Parse(params.Get("q"))
-
-	sortParam := params.Get("sort")
+	sortParam := query.Get("sort")
 	sortField, sortDesc := parseSortParam(sortParam)
 
+	var params pages.SearchReposParams
+	params.BaseParams = pages.BaseParamsFromContext(r.Context())
+	params.FilterQuery = q.String()
+	params.SortParam = sortParam
+	params.Page = page
+	defer func() {
+		if err := s.pages.SearchRepos(w, params); err != nil {
+			l.Error("failed to render page", "err", err)
+		}
+	}()
+
 	var language string
-	if lang := cmp.Or(query.Get("language"), query.Get("lang")); lang != nil {
+	if lang := cmp.Or(q.Get("language"), q.Get("lang")); lang != nil {
 		language = *lang
 	}
 
-	tf := searchquery.ExtractTextFilters(query)
+	tf := searchquery.ExtractTextFilters(q)
 
 	searchOpts := models.RepoSearchOptions{
 		Keywords:        tf.Keywords,
@@ -56,7 +78,7 @@ func (s *State) Search(w http.ResponseWriter, r *http.Request) {
 		res, err := s.indexer.Repos.Search(r.Context(), searchOpts)
 		if err != nil {
 			l.Error("failed to search repos", "err", err)
-			s.pages.Error500(w)
+			params.ErrorMsg = "Failed to perform search. Please try again later."
 			return
 		}
 
@@ -66,7 +88,7 @@ func (s *State) Search(w http.ResponseWriter, r *http.Request) {
 			repos, err = db.GetRepos(s.db, orm.FilterIn("id", res.Hits))
 			if err != nil {
 				l.Error("failed to get repos by IDs", "err", err)
-				s.pages.Error500(w)
+				params.ErrorMsg = "Failed to query repos. Please try again later."
 				return
 			}
 
@@ -94,7 +116,7 @@ func (s *State) Search(w http.ResponseWriter, r *http.Request) {
 		)
 		if err != nil {
 			l.Error("failed to get repos", "err", err)
-			s.pages.Error500(w)
+			params.ErrorMsg = "Failed to query repos. Please try again later."
 			return
 		}
 
@@ -103,7 +125,7 @@ func (s *State) Search(w http.ResponseWriter, r *http.Request) {
 		)
 		if err != nil {
 			l.Error("failed to count repos", "err", err)
-			s.pages.Error500(w)
+			params.ErrorMsg = "Failed to count repos. Please try again later."
 			return
 		}
 
@@ -117,11 +139,11 @@ func (s *State) Search(w http.ResponseWriter, r *http.Request) {
 		"resultCount", resultCount,
 		"docCount", docCount,
 		"time", searchDuration,
-		"filterQuery", query.String(),
+		"filterQuery", q.String(),
 		"sortParam", sortParam,
 	)
 
-	if !s.config.Core.Dev && query.String() != "" {
+	if !s.config.Core.Dev && q.String() != "" {
 		distinctId := s.oauth.GetDid(r)
 		if distinctId == "" {
 			distinctId = "anonymous"
@@ -131,7 +153,7 @@ func (s *State) Search(w http.ResponseWriter, r *http.Request) {
 				DistinctId: distinctId,
 				Event:      "search",
 				Properties: posthog.Properties{
-					"query":        query.String(),
+					"query":        q.String(),
 					"result_count": resultCount,
 					"method":       method,
 				},
@@ -141,19 +163,15 @@ func (s *State) Search(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 
-	err = s.pages.SearchRepos(w, pages.SearchReposParams{
-		BaseParams:  pages.BaseParamsFromContext(r.Context()),
-		Repos:       repos,
-		Page:        page,
-		FilterQuery: query.String(),
-		SortParam:   sortParam,
-		TimeTaken:   searchDuration,
-		ResultCount: resultCount,
-		DocCount:    docCount,
-	})
-	if err != nil {
-		l.Error("failed to render page", "err", err)
+	repoResults := make([]pages.SearchResult, len(repos))
+	for i := range repos {
+		repoResults[i] = pages.SearchResult{Repo: &repos[i]}
 	}
+
+	params.Repos = repoResults
+	params.TimeTaken = searchDuration
+	params.ResultCount = resultCount
+	params.DocCount = docCount
 }
 
 func (s *State) SearchQuick(w http.ResponseWriter, r *http.Request) {

@@ -554,6 +554,10 @@
     @apply !bg-yellow-200/30 dark:!bg-yellow-700/30;
 }
 
+.chunk-match-hl {
+    @apply rounded-sm !bg-yellow-300/70 dark:!bg-yellow-600/60;
+}
+
 :is(.line-quote-hl, .line-range-hl) > .min-w-\[3\.5rem\] {
     @apply !bg-yellow-200/30 dark:!bg-yellow-700/30;
 }

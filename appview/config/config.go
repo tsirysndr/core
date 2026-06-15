@@ -157,6 +157,10 @@ type OgreConfig struct {
 	Host string `env:"HOST, default=https://ogre.tangled.network"`
 }
 
+type CodeSearchConfig struct {
+	ZoektUrl string `env:"ZOEKT_URL"`
+}
+
 type SSHConfig struct {
 	Enabled     bool   `env:"ENABLED, default=false"`
 	ListenAddr  string `env:"LISTEN_ADDR, default=0.0.0.0:3333"`
@@ -198,6 +202,7 @@ type Config struct {
 	KnotMirror    KnotMirrorConfig `env:",prefix=TANGLED_KNOTMIRROR_"`
 	Ogre          OgreConfig       `env:",prefix=TANGLED_OGRE_"`
 	SSH           SSHConfig        `env:",prefix=TANGLED_SSH_"`
+	CodeSearch    CodeSearchConfig `env:",prefix=TANGLED_CODESEARCH_"`
 }
 
 func LoadConfig(ctx context.Context) (*Config, error) {
