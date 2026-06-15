@@ -8,6 +8,10 @@
   {{ end }}
   <div class="relative inline-block"
        {{ if $vr }}
+       hx-get="/profile/popover?did={{ $did }}"
+       hx-trigger="mouseenter once"
+       hx-target="find [data-profile-popover-content]"
+       hx-swap="innerHTML"
        onmouseenter="(function(el){
          clearTimeout(el._pht);
          el._pht = setTimeout(function(){
@@ -24,13 +28,7 @@
          p.classList.add('hidden');
        })(this)"
        {{ end }}>
-    <a href="/{{ $handle }}" title="{{ $handle }}"
-       {{ if $vr }}
-       hx-get="/profile/popover?did={{ $did }}"
-       hx-trigger="mouseenter once"
-       hx-target="next [data-profile-popover-content]"
-       hx-swap="innerHTML"
-       {{ end }}>
+    <a href="/{{ $handle }}" title="{{ $handle }}">
       <img
           src="{{ tinyAvatar $did }}"
           alt=""
@@ -43,7 +41,7 @@
           type="button"
           popovertarget="vouch-modal-{{ normalizeForHtmlId $vr.SubjectDid.String }}"
           popovertargetaction="toggle"
-          class="absolute -bottom-0.5 -right-0.5 w-1/2 h-1/2 cursor-pointer"
+          class="absolute -bottom-0.5 -right-0.5 w-1/2 h-1/2 cursor-pointer">
           {{ if $vr.IsDirectVouch }}
             {{ template "fragments/icons/shield-direct-vouch" "w-full h-full" }}
           {{ else if $vr.IsDirectDenounce }}
