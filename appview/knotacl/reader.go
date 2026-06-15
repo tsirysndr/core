@@ -65,7 +65,7 @@ func (r *legacyReader) isKnotMember(ctx context.Context, host, userDid string) b
 }
 
 type nativeReader struct {
-	client *cache
+	client *roster
 	execer db.Execer
 }
 

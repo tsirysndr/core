@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"golang.org/x/sync/errgroup"
 
 	"tangled.org/core/appview/db"
@@ -33,12 +34,12 @@ type Service struct {
 	nat *nativeReader
 }
 
-func NewService(enforcer *rbac.Enforcer, execer db.Execer, dev bool, logger *slog.Logger) *Service {
+func NewService(enforcer *rbac.Enforcer, store *db.DB, dev bool, logger *slog.Logger) *Service {
 	return &Service{
 		dev: dev,
 		log: logger,
 		leg: &legacyReader{enforcer: enforcer},
-		nat: &nativeReader{client: newCache(NewClient(dev, logger), cacheTTL, nil), execer: execer},
+		nat: &nativeReader{client: newRoster(store, NewClient(dev, logger), reconcileTTL, nil, logger), execer: store},
 	}
 }
 
@@ -87,6 +88,22 @@ func (s *Service) InvalidateMembers(host string) {
 
 func (s *Service) InvalidateCollaborators(host, repoDid string) {
 	s.nat.client.InvalidateCollaborators(host, repoDid)
+}
+
+func (s *Service) AddKnotMember(host string, subject syntax.DID, cursor Cursor) error {
+	return s.nat.client.AddKnotMember(host, subject, cursor)
+}
+
+func (s *Service) RemoveKnotMember(host string, subject syntax.DID, cursor Cursor) error {
+	return s.nat.client.RemoveKnotMember(host, subject, cursor)
+}
+
+func (s *Service) AddCollaborator(repoDid, subject syntax.DID, cursor Cursor) error {
+	return s.nat.client.AddCollaborator(repoDid, subject, cursor)
+}
+
+func (s *Service) RemoveCollaborator(repoDid, subject syntax.DID, cursor Cursor) error {
+	return s.nat.client.RemoveCollaborator(repoDid, subject, cursor)
 }
 
 func (s *Service) KnotsForUser(ctx context.Context, userDid string) []string {

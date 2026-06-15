@@ -105,6 +105,20 @@ func testRepo(host string) *models.Repo {
 	return &models.Repo{Did: testOwner, Knot: host, RepoDid: testRepoDid, Name: "anemone"}
 }
 
+func seedRepoRow(t *testing.T, d *db.DB, repo *models.Repo) {
+	t.Helper()
+	tx, err := d.Begin()
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	if err := db.AddRepo(tx, repo); err != nil {
+		t.Fatalf("AddRepo: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+}
+
 func seedRepoPolicies(t *testing.T, e *rbac.Enforcer, host string) {
 	t.Helper()
 	if err := e.AddRepo(testOwner, host, testRepoDid); err != nil {
@@ -141,7 +155,8 @@ func TestService_OldKnotUsesCasbinNoLiveQuery(t *testing.T) {
 func TestService_ParityOldVsNew(t *testing.T) {
 	ctx := context.Background()
 	oldSvc, _, oldHost := newServiceEnv(t, &fakeKnot{version: "v1.14.0"}, func(e *rbac.Enforcer, h string) { seedRepoPolicies(t, e, h) })
-	newSvc, _, newHost := newServiceEnv(t, &fakeKnot{version: "v1.15.0", capabilities: capsKnotACL, collaborators: []string{testCollab}}, nil)
+	newSvc, newDb, newHost := newServiceEnv(t, &fakeKnot{version: "v1.15.0", capabilities: capsKnotACL, collaborators: []string{testCollab}}, nil)
+	seedRepoRow(t, newDb, testRepo(newHost))
 
 	for _, did := range []string{testOwner, testCollab} {
 		oldRoles := sortedRoles(oldSvc.RolesInRepo(ctx, testRepo(oldHost), did).Roles)
@@ -167,7 +182,8 @@ func TestService_NewKnotOwnerFromRecord(t *testing.T) {
 
 func TestService_NewKnotCollaboratorFromList(t *testing.T) {
 	ctx := context.Background()
-	svc, _, host := newServiceEnv(t, &fakeKnot{version: "v1.15.0", capabilities: capsKnotACL, collaborators: []string{testCollab}}, nil)
+	svc, d, host := newServiceEnv(t, &fakeKnot{version: "v1.15.0", capabilities: capsKnotACL, collaborators: []string{testCollab}}, nil)
+	seedRepoRow(t, d, testRepo(host))
 
 	collab := svc.RolesInRepo(ctx, testRepo(host), testCollab)
 	if !collab.IsCollaborator() || !collab.IsPushAllowed() {
@@ -181,7 +197,8 @@ func TestService_NewKnotCollaboratorFromList(t *testing.T) {
 func TestService_MixedFleet(t *testing.T) {
 	ctx := context.Background()
 	oldSvc, _, oldHost := newServiceEnv(t, &fakeKnot{version: "v1.14.0"}, func(e *rbac.Enforcer, h string) { seedRepoPolicies(t, e, h) })
-	newSvc, _, newHost := newServiceEnv(t, &fakeKnot{version: "v1.15.0", capabilities: capsKnotACL, collaborators: []string{testCollab}}, nil)
+	newSvc, newDb, newHost := newServiceEnv(t, &fakeKnot{version: "v1.15.0", capabilities: capsKnotACL, collaborators: []string{testCollab}}, nil)
+	seedRepoRow(t, newDb, testRepo(newHost))
 
 	if !newSvc.RolesInRepo(ctx, testRepo(newHost), testCollab).IsCollaborator() {
 		t.Error("new-knot collaborator must resolve from the live query with an empty casbin")
@@ -307,7 +324,8 @@ func TestService_KnotMembersIncludesOwner(t *testing.T) {
 func TestService_CollaboratorsNewKnot(t *testing.T) {
 	ctx := context.Background()
 
-	svc, _, host := newServiceEnv(t, &fakeKnot{version: "v1.15.0", capabilities: capsKnotACL, collaborators: []string{testCollab}}, nil)
+	svc, d, host := newServiceEnv(t, &fakeKnot{version: "v1.15.0", capabilities: capsKnotACL, collaborators: []string{testCollab}}, nil)
+	seedRepoRow(t, d, testRepo(host))
 	collabs := svc.Collaborators(ctx, testRepo(host))
 	if len(collabs) != 2 {
 		t.Fatalf("Collaborators = %v, want owner + one collaborator", collabs)
@@ -319,7 +337,8 @@ func TestService_CollaboratorsNewKnot(t *testing.T) {
 		t.Errorf("second row = %v, want the collaborator", collabs[1])
 	}
 
-	dupSvc, _, dupHost := newServiceEnv(t, &fakeKnot{version: "v1.15.0", capabilities: capsKnotACL, collaborators: []string{testCollab, testOwner}}, nil)
+	dupSvc, dupDb, dupHost := newServiceEnv(t, &fakeKnot{version: "v1.15.0", capabilities: capsKnotACL, collaborators: []string{testCollab, testOwner}}, nil)
+	seedRepoRow(t, dupDb, testRepo(dupHost))
 	rows := dupSvc.Collaborators(ctx, testRepo(dupHost))
 	ownerRows := 0
 	for _, c := range rows {

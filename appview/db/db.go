@@ -2218,6 +2218,28 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "add-knotacl-sync-table", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			create table if not exists knotacl_sync (
+				scope_key text primary key,
+				synced_at text not null
+			);
+		`)
+		return err
+	})
+
+	orm.RunMigration(conn, logger, "add-knotacl-delta-cursor-table", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			create table if not exists knotacl_delta_cursor (
+				scope_key text not null,
+				subject text not null,
+				cursor integer not null,
+				primary key (scope_key, subject)
+			);
+		`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,
