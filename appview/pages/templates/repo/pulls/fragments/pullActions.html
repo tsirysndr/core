@@ -2,6 +2,7 @@
   {{ $lastIdx := sub (len .Pull.Submissions) 1 }}
   {{ $roundNumber := .RoundNumber }}
   {{ $stack := .Stack }}
+  {{ $loading := .Loading }}
 
   {{ $totalPulls := sub 0 1 }}
   {{ $below := sub 0 1 }}
@@ -22,16 +23,24 @@
   {{ $isLastRound := eq $roundNumber $lastIdx }}
   {{ $isSameRepoBranch := .Pull.IsBranchBased }}
   {{ $isUpToDate := .ResubmitCheck.No }}
-  <div id="actions-{{$roundNumber}}" hx-target="this" class="flex flex-wrap gap-2 relative p-2">
-    <button 
+  <div id="actions-{{$roundNumber}}" hx-target="this" class="{{ if .LoggedInUser }}flex flex-wrap gap-2 relative p-2{{ else }}hidden{{ end }}"
+    {{ if $loading }}
+      hx-get="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/round/{{ $roundNumber }}/actions"
+      hx-trigger="load"
+      hx-swap="outerHTML"
+    {{ end }}
+  >
+    {{ if .LoggedInUser }}
+    <button
       hx-get="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/round/{{ $roundNumber }}/comment"
       class="btn-flat p-2 flex items-center gap-2 no-underline hover:no-underline group">
         {{ i "message-square-plus" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
         {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
         Comment
     </button>
-    {{ if .BranchDeleteStatus }}
-      <button 
+    {{ end }}
+    {{ if and (not $loading) .BranchDeleteStatus }}
+      <button
         hx-delete="/{{ resolve .BranchDeleteStatus.Repo.Did }}/{{ .BranchDeleteStatus.Repo.Slug }}/branches"
         hx-vals='{"branch": "{{ .BranchDeleteStatus.Branch }}" }'
         hx-swap="none"
@@ -42,15 +51,19 @@
       </button>
     {{ end }}
     {{ if and $isPushAllowed $isOpen $isLastRound }}
-      <button 
+      <button
         hx-post="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/merge"
         hx-swap="none"
         hx-confirm="Are you sure you want to merge pull #{{ .Pull.PullId }} into the `{{ .Pull.TargetBranch }}` branch?"
         class="btn-flat p-2 flex items-center gap-2 group"
-        {{ if $isConflicted }}disabled{{ end }}
+        {{ if or $loading $isConflicted }}disabled{{ end }}
       >
-        {{ i "git-merge" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
-        {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+        {{ if $loading }}
+          {{ i "loader-circle" "w-4 h-4 animate-spin" }}
+        {{ else }}
+          {{ i "git-merge" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
+          {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+        {{ end }}
         Merge{{if $stackCount}} {{$stackCount}}{{end}}
       </button>
     {{ end }}
@@ -67,21 +80,28 @@
           hx-disabled-elt="#resubmitBtn"
           class="btn-flat p-2 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed group"
 
-          {{ if $isUpToDate }}
+          {{ if $loading }}
+          title="Checking for updates…"
+          disabled
+          {{ else if $isUpToDate }}
           title="Update this branch to resubmit this pull request"
           disabled
           {{ else }}
           title="Resubmit this pull request"
           {{ end }}
           >
-          {{ i "rotate-ccw" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
-          {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+          {{ if $loading }}
+            {{ i "loader-circle" "w-4 h-4 animate-spin" }}
+          {{ else }}
+            {{ i "rotate-ccw" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
+            {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+          {{ end }}
           Resubmit
       </button>
     {{ end }}
 
     {{ if and (or $isPullAuthor $isPushAllowed) $isOpen $isLastRound }}
-    <button 
+    <button
       hx-post="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/close"
       hx-swap="none"
       class="btn-flat p-2 flex items-center gap-2 group">
@@ -92,7 +112,7 @@
     {{ end }}
 
     {{ if and (or $isPullAuthor $isPushAllowed) $isClosed $isLastRound }}
-    <button 
+    <button
       hx-post="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/reopen"
       hx-swap="none"
       class="btn-flat p-2 flex items-center gap-2 group">
@@ -102,4 +122,65 @@
     </button>
     {{ end }}
   </div>
+
+  {{ if and (not $loading) $isLastRound }}
+    <div id="mergecheck-banner" hx-swap-oob="innerHTML">{{ template "mergeCheck" . }}</div>
+    <div id="resubmit-banner" hx-swap-oob="innerHTML">{{ template "resubmitStatus" . }}</div>
+  {{ end }}
+{{ end }}
+
+{{ define "mergeCheck" }}
+  {{ $isOpen := .Pull.State.IsOpen }}
+  {{ if and $isOpen .MergeCheck .MergeCheck.Error }}
+    <div class="flex items-center gap-2 text-red-600 dark:text-red-500">
+      {{ i "triangle-alert" "w-4 h-4" }}
+      <span class="font-medium">{{ .MergeCheck.Error }}</span>
+    </div>
+  {{ else if and $isOpen .MergeCheck .MergeCheck.IsConflicted }}
+    <details class="group/conflict">
+      <summary class="flex items-center justify-between cursor-pointer list-none">
+        <div class="flex items-center gap-2 text-red-600 dark:text-red-500">
+          {{ i "triangle-alert" "w-4 h-4" }}
+          <span class="font-medium">Merge conflicts detected</span>
+          <div class="text-sm text-gray-500 dark:text-gray-400">
+            <span class="group-open/conflict:hidden inline">Expand</span>
+            <span class="hidden group-open/conflict:inline">Collapse</span>
+          </div>
+        </div>
+      </summary>
+      {{ if gt (len .MergeCheck.Conflicts) 0 }}
+        <ul class="space-y-1 mt-2 overflow-x-auto">
+          {{ range .MergeCheck.Conflicts }}
+            {{ if .Filename }}
+              <li class="flex items-center whitespace-nowrap">
+                {{ i "file-warning" "inline-flex w-4 h-4 mr-1.5 text-red-600 dark:text-red-500 flex-shrink-0" }}
+                <span class="font-mono">{{ .Filename }}</span>
+              </li>
+            {{ else if .Reason }}
+            <li class="flex items-center whitespace-nowrap">
+              {{ i "file-warning" "w-4 h-4 mr-1.5 text-red-600 dark:text-red-500 " }}
+              <span>{{.Reason}}</span>
+            </li>
+            {{ end }}
+          {{ end }}
+        </ul>
+      {{ end }}
+    </details>
+  {{ else if and $isOpen .MergeCheck }}
+    <div class="flex items-center gap-2 text-green-600 dark:text-green-500">
+      {{ i "check" "w-4 h-4" }}
+      <span class="font-medium">No conflicts, ready to merge</span>
+    </div>
+  {{ end }}
+{{ end }}
+
+{{ define "resubmitStatus" }}
+  {{ if .ResubmitCheck.Yes }}
+  <div class="bg-amber-50 dark:bg-amber-900 border border-amber-500 rounded shadow-sm px-6 py-2 relative">
+    <div class="flex items-center gap-2 text-amber-500 dark:text-amber-300">
+      {{ i "triangle-alert" "w-4 h-4" }}
+      <span class="font-medium">This branch has been updated, consider resubmitting</span>
+    </div>
+  </div>
+  {{ end }}
 {{ end }}

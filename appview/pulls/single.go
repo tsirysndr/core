@@ -58,11 +58,16 @@ func (s *Pulls) PullActions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		mergeCheckResponse := s.mergeCheck(r, f, pull, stack)
+		// only the last round's buttons and banners use merge/resubmit checks
+		isLastRound := roundNumber == pull.LastRoundNumber()
 		branchDeleteStatus := s.branchDeleteStatus(r, f, pull)
+		mergeCheckResponse := types.MergeCheckResponse{}
 		resubmitResult := pages.Unknown
-		if user.Did == pull.OwnerDid {
-			resubmitResult = s.resubmitCheck(r, f, pull, stack)
+		if isLastRound {
+			mergeCheckResponse = s.mergeCheck(r, f, pull, stack)
+			if user != nil && user.Did == pull.OwnerDid {
+				resubmitResult = s.resubmitCheck(r, f, pull, stack)
+			}
 		}
 
 		s.pages.PullActionsFragment(w, pages.PullActionsParams{
@@ -144,13 +149,6 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 
 	// can be nil  if this pull is not stacked
 	stack, _ := r.Context().Value("stack").(models.Stack)
-
-	mergeCheckResponse := s.mergeCheck(r, f, pull, stack)
-	branchDeleteStatus := s.branchDeleteStatus(r, f, pull)
-	resubmitResult := pages.Unknown
-	if user != nil && user.Did == pull.OwnerDid {
-		resubmitResult = s.resubmitCheck(r, f, pull, stack)
-	}
 
 	m := make(map[string]models.Pipeline)
 
@@ -256,9 +254,9 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		Pull:               pull,
 		Stack:              stack,
 		Backlinks:          backlinks,
-		BranchDeleteStatus: branchDeleteStatus,
-		MergeCheck:         mergeCheckResponse,
-		ResubmitCheck:      resubmitResult,
+		BranchDeleteStatus: nil,
+		MergeCheck:         types.MergeCheckResponse{},
+		ResubmitCheck:      pages.Unknown,
 		Pipelines:          m,
 		Diff:               diff,
 		DiffOpts:           diffOpts,

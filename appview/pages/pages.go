@@ -1428,6 +1428,10 @@ type PullActionsParams struct {
 	ResubmitCheck      ResubmitResult
 	BranchDeleteStatus *models.BranchDeleteStatus
 	Stack              models.Stack
+
+	// renders buttons in a pre-check state and attaches the hx-trigger="load"
+	// that fetches the real, checked fragment
+	Loading bool
 }
 
 func (p *Pages) PullActionsFragment(w io.Writer, params PullActionsParams) error {

@@ -311,7 +311,14 @@
       {{ template "submissionCommits" $ }}
       {{ template "submissionPipeline" $ }}
       {{ if eq $lastIdx $round }}
-        {{ block "mergeCheck" $root }} {{ end }}
+        <div id="mergecheck-banner">
+          {{ if $root.Pull.State.IsOpen }}
+            <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+              {{ i "loader-circle" "w-4 h-4 animate-spin" }}
+              <span>Checking mergeability…</span>
+            </div>
+          {{ end }}
+        </div>
       {{ end }}
     </div>
   </div>
@@ -444,51 +451,6 @@
   {{ end }}
 {{ end }}
 
-{{ define "mergeCheck" }}
-  {{ $isOpen := .Pull.State.IsOpen }}
-  {{ if and $isOpen .MergeCheck .MergeCheck.Error }}
-    <div class="flex items-center gap-2 text-red-600 dark:text-red-500">
-      {{ i "triangle-alert" "w-4 h-4" }}
-      <span class="font-medium">{{ .MergeCheck.Error }}</span>
-    </div>
-  {{ else if and $isOpen .MergeCheck .MergeCheck.IsConflicted }}
-    <details class="group/conflict">
-      <summary class="flex items-center justify-between cursor-pointer list-none">
-        <div class="flex items-center gap-2 text-red-600 dark:text-red-500">
-          {{ i "triangle-alert" "w-4 h-4" }}
-          <span class="font-medium">Merge conflicts detected</span>
-          <div class="text-sm text-gray-500 dark:text-gray-400">
-            <span class="group-open/conflict:hidden inline">Expand</span>
-            <span class="hidden group-open/conflict:inline">Collapse</span>
-          </div>
-        </div>
-      </summary>
-      {{ if gt (len .MergeCheck.Conflicts) 0 }}
-        <ul class="space-y-1 mt-2 overflow-x-auto">
-          {{ range .MergeCheck.Conflicts }}
-            {{ if .Filename }}
-              <li class="flex items-center whitespace-nowrap">
-                {{ i "file-warning" "inline-flex w-4 h-4 mr-1.5 text-red-600 dark:text-red-500 flex-shrink-0" }}
-                <span class="font-mono">{{ .Filename }}</span>
-              </li>
-            {{ else if .Reason }}
-            <li class="flex items-center whitespace-nowrap">
-              {{ i "file-warning" "w-4 h-4 mr-1.5 text-red-600 dark:text-red-500 " }}
-              <span>{{.Reason}}</span>
-            </li>
-            {{ end }}
-          {{ end }}
-        </ul>
-      {{ end }}
-    </details>
-  {{ else if and $isOpen .MergeCheck }}
-    <div class="flex items-center gap-2 text-green-600 dark:text-green-500">
-      {{ i "check" "w-4 h-4" }}
-      <span class="font-medium">No conflicts, ready to merge</span>
-    </div>
-  {{ end }}
-{{ end }}
-
 {{ define "mergeStatus" }}
   {{ if .Pull.State.IsClosed }}
   <div class="bg-gray-50 dark:bg-gray-700 border border-black dark:border-gray-500 rounded shadow-sm px-6 py-2 relative">
@@ -511,17 +473,6 @@
     <div class="flex items-center gap-2 text-red-500 dark:text-red-300">
       {{ i "git-pull-request-closed" "w-4 h-4" }}
       <span class="font-medium">This pull has been deleted (possibly by jj abandon or jj squash)</span>
-    </div>
-  </div>
-  {{ end }}
-{{ end }}
-
-{{ define "resubmitStatus" }}
-  {{ if .ResubmitCheck.Yes }}
-  <div class="bg-amber-50 dark:bg-amber-900 border border-amber-500 rounded shadow-sm px-6 py-2 relative">
-    <div class="flex items-center gap-2 text-amber-500 dark:text-amber-300">
-      {{ i "triangle-alert" "w-4 h-4" }}
-      <span class="font-medium">This branch has been updated, consider resubmitting</span>
     </div>
   </div>
   {{ end }}
@@ -612,24 +563,25 @@
     <div class="relative -ml-10">
       {{ if eq $lastIdx $item.RoundNumber }}
         {{ block "mergeStatus" $root }} {{ end }}
-        {{ block "resubmitStatus" $root }} {{ end }}
+        <div id="resubmit-banner"></div>
       {{ end }}
     </div>
     <div hx-include="this" class="relative -ml-10 bg-gray-50 dark:bg-gray-900">
       {{ if $root.LoggedInUser }}
         <input name="subject-uri" type="hidden" value="{{ $root.Pull.AtUri }}">
         <input name="pull-round-idx" type="hidden" value="{{ $item.RoundNumber }}">
-        {{ template "repo/pulls/fragments/pullActions"
-          (dict
-            "LoggedInUser" $root.LoggedInUser
-            "Pull" $root.Pull
-            "RepoInfo" $root.RepoInfo
-            "RoundNumber" $item.RoundNumber
-            "MergeCheck" $root.MergeCheck
-            "ResubmitCheck" $root.ResubmitCheck
-            "BranchDeleteStatus" $root.BranchDeleteStatus
-            "Stack" $root.Stack) }}
       {{ end }}
+      {{ template "repo/pulls/fragments/pullActions"
+        (dict
+          "LoggedInUser" $root.LoggedInUser
+          "Pull" $root.Pull
+          "RepoInfo" $root.RepoInfo
+          "RoundNumber" $item.RoundNumber
+          "MergeCheck" $root.MergeCheck
+          "ResubmitCheck" $root.ResubmitCheck
+          "BranchDeleteStatus" $root.BranchDeleteStatus
+          "Stack" $root.Stack
+          "Loading" (eq $lastIdx $item.RoundNumber)) }}
     </div>
   </details>
 {{ end }}
