@@ -227,8 +227,20 @@ impl PageLimit {
 
 #[derive(Debug)]
 pub struct EdgePage {
-    pub items: Vec<AtUri<DefaultStr>>,
+    pub items: Vec<EdgeItem>,
     pub next: Option<PageToken>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EdgeItem {
+    pub uri: AtUri<DefaultStr>,
+    pub sort_micros: u64,
+}
+
+impl AsRef<str> for EdgeItem {
+    fn as_ref(&self) -> &str {
+        self.uri.as_ref()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -639,6 +651,23 @@ impl EdgeStore {
             .unwrap_or(0)
     }
 
+    pub fn sources_for(&self, key: &EdgeKey) -> Vec<AtUri<DefaultStr>> {
+        self.lookup_key(key)
+            .and_then(|id| {
+                self.forward.read_sync(&id, |_, sources| {
+                    sources
+                        .directed(PageCursor::Start, SortDir::Desc)
+                        .filter_map(|bucket| {
+                            let spur = bucket.source.to_spur()?;
+                            let stored = self.source_interner.try_resolve(&spur)?;
+                            AtUri::new_owned(self.decode_source(stored)?).ok()
+                        })
+                        .collect::<Vec<_>>()
+                })
+            })
+            .unwrap_or_default()
+    }
+
     pub fn list(
         &self,
         key: &EdgeKey,
@@ -659,7 +688,11 @@ impl EdgeStore {
                         .filter_map(|&key| {
                             let spur = key.source.to_spur()?;
                             let stored = self.source_interner.try_resolve(&spur)?;
-                            AtUri::new_owned(self.decode_source(stored)?).ok()
+                            let uri = AtUri::new_owned(self.decode_source(stored)?).ok()?;
+                            Some(EdgeItem {
+                                uri,
+                                sort_micros: key.micros.0,
+                            })
                         })
                         .collect();
                     let next = has_more
@@ -732,7 +765,10 @@ impl EdgeStore {
                         .matched
                         .into_iter()
                         .take(visible_len)
-                        .map(|(_, uri)| uri)
+                        .map(|(key, uri)| EdgeItem {
+                            uri,
+                            sort_micros: key.micros.0,
+                        })
                         .collect();
                     EdgePage { items, next }
                 })

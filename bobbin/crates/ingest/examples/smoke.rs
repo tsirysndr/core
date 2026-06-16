@@ -46,6 +46,8 @@ async fn main() {
         disconnects: None,
         warming_shadow: None,
         warming_buffer: None,
+        knot_registry: None,
+        knot_gate: None,
     };
     let task = tokio::spawn(async move {
         let _ = run(cfg, runtime).await;

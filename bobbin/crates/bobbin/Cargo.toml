@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 bobbin-edge-index = { workspace = true }
 bobbin-ingest = { workspace = true }
+bobbin-knot-ingest = { workspace = true }
 bobbin-knot-proxy = { workspace = true }
 bobbin-record-lru = { workspace = true }
 bobbin-runtime = { workspace = true }

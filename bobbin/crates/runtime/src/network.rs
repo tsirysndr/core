@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -137,6 +138,8 @@ pub trait WsTransport: Send + Sync + 'static {
     fn connect(&self, url: Url) -> WsConnectFuture;
 }
 
+pub type AddrGuard = Arc<dyn Fn(&[SocketAddr]) -> Result<(), NetworkError> + Send + Sync>;
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct TungsteniteWs;
 
@@ -151,6 +154,52 @@ impl WsTransport for TungsteniteWs {
         Box::pin(async move {
             let url_str = url.as_str().to_owned();
             let (ws, _resp) = tokio_tungstenite::connect_async(&url_str)
+                .await
+                .map_err(|e| NetworkError::Connect(e.to_string()))?;
+            let (sink_inner, stream_inner) = futures::StreamExt::split(ws);
+            let sink: Box<dyn WsSink> = Box::new(TungsteniteSink { inner: sink_inner });
+            let stream: Box<dyn WsStream> = Box::new(TungsteniteStream {
+                inner: stream_inner,
+            });
+            Ok(WsConn { sink, stream })
+        })
+    }
+}
+
+pub struct GuardedWs {
+    guard: AddrGuard,
+}
+
+impl GuardedWs {
+    pub fn shared(guard: AddrGuard) -> Arc<dyn WsTransport> {
+        Arc::new(Self { guard })
+    }
+}
+
+impl WsTransport for GuardedWs {
+    fn connect(&self, url: Url) -> WsConnectFuture {
+        let guard = self.guard.clone();
+        Box::pin(async move {
+            let host = url
+                .host_str()
+                .ok_or_else(|| NetworkError::Connect("ws url missing host".to_owned()))?
+                .to_owned();
+            let port = url
+                .port_or_known_default()
+                .ok_or_else(|| NetworkError::Connect("ws url missing port".to_owned()))?;
+            let addrs: Vec<SocketAddr> = tokio::net::lookup_host((host.as_str(), port))
+                .await
+                .map_err(|e| NetworkError::Connect(e.to_string()))?
+                .collect();
+            guard(&addrs)?;
+            let addr = addrs
+                .into_iter()
+                .next()
+                .ok_or_else(|| NetworkError::Connect(format!("no addresses for {host}")))?;
+            let tcp = tokio::net::TcpStream::connect(addr)
+                .await
+                .map_err(|e| NetworkError::Connect(e.to_string()))?;
+            let (ws, _resp) = tokio_tungstenite::client_async_tls(url.as_str(), tcp)
                 .await
                 .map_err(|e| NetworkError::Connect(e.to_string()))?;
             let (sink_inner, stream_inner) = futures::StreamExt::split(ws);

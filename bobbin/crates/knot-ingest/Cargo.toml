@@ -1,40 +1,30 @@
 [package]
-name = "bobbin-ingest"
+name = "bobbin-knot-ingest"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-bobbin-types = { workspace = true }
 bobbin-edge-index = { workspace = true }
-bobbin-knot-ingest = { workspace = true }
-bobbin-record-lru = { workspace = true }
-bobbin-resolver = { workspace = true }
+bobbin-knot-proxy = { workspace = true }
 bobbin-runtime = { workspace = true }
-bobbin-slingshot-client = { workspace = true }
+bobbin-types = { workspace = true }
 jacquard-common = { workspace = true }
 
 bytes = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }
-scc = { workspace = true }
+http = { workspace = true }
+reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-tracing-subscriber = { workspace = true }
-tokio-util = { workspace = true }
-tokio = { workspace = true, features = ["test-util"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 wiremock = { workspace = true }
-criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
-
-[[bench]]
-name = "json_decode"
-harness = false

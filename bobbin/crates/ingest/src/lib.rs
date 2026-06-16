@@ -7,6 +7,7 @@ use bobbin_edge_index::{
     ApplyOutcome, Coverage, CoverageWatch, EdgeStore, HydrantCursor, IssueStateKind,
     PromotionSignal, PullStatusKind, StateIndex, apply_record_state,
 };
+use bobbin_knot_ingest::{CapabilityGate, KnotRegistry};
 use bobbin_record_lru::RecordStore;
 use bobbin_resolver::{NormalizeRepoRefs, decode_canon_or_upgrade_bytes, synthesize_created_at};
 use bobbin_runtime::{
@@ -15,6 +16,7 @@ use bobbin_runtime::{
 };
 use bobbin_types::edges::{Edge, ExtractError, Record};
 use bobbin_types::ids::{RepoIdent, SubjectRef};
+use bobbin_types::knot_acl::KnotHostKey;
 use bobbin_types::record::RecordBody;
 use bobbin_types::search::{SearchSink, SearchableRecord};
 use bytes::Bytes;
@@ -215,6 +217,8 @@ pub struct IngestRuntime<S: SearchSink + 'static> {
     pub disconnects: Option<Arc<DisconnectSink>>,
     pub warming_shadow: Option<Arc<WarmingShadowBuffer>>,
     pub warming_buffer: Option<Arc<WarmingBuffer>>,
+    pub knot_registry: Option<Arc<KnotRegistry>>,
+    pub knot_gate: Option<Arc<CapabilityGate>>,
 }
 
 impl<S: SearchSink + 'static> Clone for IngestRuntime<S> {
@@ -234,6 +238,8 @@ impl<S: SearchSink + 'static> Clone for IngestRuntime<S> {
             disconnects: self.disconnects.clone(),
             warming_shadow: self.warming_shadow.clone(),
             warming_buffer: self.warming_buffer.clone(),
+            knot_registry: self.knot_registry.clone(),
+            knot_gate: self.knot_gate.clone(),
         }
     }
 }
@@ -250,6 +256,8 @@ impl<S: SearchSink + 'static> IngestRuntime<S> {
             search: &self.search,
             shadow: self.warming_shadow.as_deref(),
             buffer: self.warming_buffer.as_deref(),
+            knot_registry: self.knot_registry.as_deref(),
+            knot_gate: self.knot_gate.as_deref(),
         }
     }
 }
@@ -264,6 +272,8 @@ struct PipelineCtx<'a, S: SearchSink + 'static> {
     search: &'a S,
     shadow: Option<&'a WarmingShadowBuffer>,
     buffer: Option<&'a WarmingBuffer>,
+    knot_registry: Option<&'a KnotRegistry>,
+    knot_gate: Option<&'a CapabilityGate>,
 }
 
 pub async fn run<S: SearchSink + 'static>(
@@ -1062,6 +1072,28 @@ async fn prepare_record<S: SearchSink + 'static>(
                         finalize_drained(ctx, drained).await;
                     }
                 }
+                if let Some(registry) = ctx.knot_registry {
+                    let host = KnotHostKey::new(repo.knot.as_ref());
+                    match repo.repo_did.clone() {
+                        Some(repo_did) => registry.observe_repo(&host, repo_did),
+                        None => registry.observe_host(&host),
+                    }
+                }
+            }
+            match acl_disposition(&parsed, ctx.knot_gate, ctx.knot_registry) {
+                AclDisposition::NativeSkip => {
+                    if let Some(registry) = ctx.knot_registry {
+                        registry.forget_legacy_member(&source);
+                    }
+                    return PendingOp::Delete { source, nsid };
+                }
+                AclDisposition::LegacyMember { host } => {
+                    if let Some(registry) = ctx.knot_registry {
+                        registry.observe_host(&host);
+                        registry.note_legacy_member(source.clone(), &host);
+                    }
+                }
+                AclDisposition::Other => {}
             }
             let edges = match parsed.extract_edges(&source) {
                 Ok(es) => es,
@@ -1085,12 +1117,54 @@ async fn prepare_record<S: SearchSink + 'static>(
             if nsid.as_ref() == "sh.tangled.repo" {
                 ctx.resolver.forget(&record.did, &record.rkey).await;
             }
+            if nsid.as_ref() == "sh.tangled.knot.member"
+                && let Some(registry) = ctx.knot_registry
+            {
+                registry.forget_legacy_member(&source);
+            }
             PendingOp::Delete { source, nsid }
         }
         RecordAction::Other => {
             debug!(collection = %nsid, "ignoring unknown record action");
             PendingOp::Noop
         }
+    }
+}
+
+enum AclDisposition {
+    Other,
+    NativeSkip,
+    LegacyMember { host: KnotHostKey },
+}
+
+fn acl_disposition(
+    parsed: &Record,
+    gate: Option<&CapabilityGate>,
+    registry: Option<&KnotRegistry>,
+) -> AclDisposition {
+    let Some(gate) = gate else {
+        return AclDisposition::Other;
+    };
+    match parsed {
+        Record::KnotMember(member) => {
+            let host = KnotHostKey::new(member.domain.as_ref());
+            if gate.is_native(&host) {
+                AclDisposition::NativeSkip
+            } else {
+                AclDisposition::LegacyMember { host }
+            }
+        }
+        Record::Collaborator(collaborator) => {
+            let native = registry
+                .and_then(|registry| registry.host_of_repo(&collaborator.repo))
+                .is_some_and(|host| gate.is_native(&host));
+            if native {
+                AclDisposition::NativeSkip
+            } else {
+                AclDisposition::Other
+            }
+        }
+        _ => AclDisposition::Other,
     }
 }
 
@@ -1375,6 +1449,8 @@ async fn handle_frame<S: SearchSink + 'static>(
         search,
         shadow: None,
         buffer: None,
+        knot_registry: None,
+        knot_gate: None,
     };
     let pending = prepare_frame(frame, &ctx, now).await;
     let pending = resolve_pending(pending, &ctx).await;
@@ -1614,6 +1690,95 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn native_knot_member_skipped_legacy_indexed() {
+        use bobbin_knot_ingest::{CapabilityGate, KnotClient, KnotRegistry};
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/xrpc/sh.tangled.knot.version"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "version": "1.1.0",
+                "capabilities": ["knot-acl"]
+            })))
+            .mount(&server)
+            .await;
+        let url = url::Url::parse(&server.uri()).unwrap();
+        let native_host = format!("{}:{}", url.host_str().unwrap(), url.port().unwrap());
+
+        let gate = CapabilityGate::new(
+            KnotClient::with_default_http(true).unwrap(),
+            Arc::new(SystemClock::new()),
+            true,
+            true,
+        );
+        assert!(gate.has_knot_acl(&KnotHostKey::new(&native_host)).await);
+
+        let registry = KnotRegistry::new();
+        let (store, issue_states, pull_statuses, cov, resolver) = fresh();
+        let ctx = PipelineCtx {
+            resolver: &resolver,
+            store: &store,
+            issue_states: &issue_states,
+            pull_statuses: &pull_statuses,
+            coverage: &cov,
+            records: &NoopRecordStore,
+            search: &NoopSearchSink,
+            shadow: None,
+            buffer: None,
+            knot_registry: Some(&registry),
+            knot_gate: Some(&gate),
+        };
+
+        let member_frame = |id: u64, rkey: &str, domain: &str| {
+            parse_frame(json!({
+                "id": id,
+                "type": "record",
+                "record": {
+                    "live": false,
+                    "did": "did:plc:akshay",
+                    "rev": fresh_tid().as_str(),
+                    "collection": "sh.tangled.knot.member",
+                    "rkey": rkey,
+                    "action": "create",
+                    "record": {
+                        "$type": "sh.tangled.knot.member",
+                        "subject": "did:plc:boltless",
+                        "domain": domain,
+                        "createdAt": "2026-06-01T00:00:00Z"
+                    }
+                }
+            }))
+        };
+
+        let native =
+            prepare_frame(member_frame(1, "aaaaaaaaaaaaz", &native_host), &ctx, now()).await;
+        assert!(
+            matches!(native.op, PendingOp::Delete { .. }),
+            "member record for a native knot must be dropped"
+        );
+
+        let legacy =
+            prepare_frame(member_frame(2, "bbbbbbbbbbbbz", "legacy.knot"), &ctx, now()).await;
+        assert!(
+            matches!(legacy.op, PendingOp::Upsert { .. }),
+            "member record for a legacy knot must be ingested"
+        );
+        assert!(
+            registry.hosts().contains(&KnotHostKey::new("legacy.knot")),
+            "a member record seeds host discovery even before any repo is seen"
+        );
+        assert_eq!(
+            registry
+                .drain_legacy_members(&KnotHostKey::new("legacy.knot"))
+                .len(),
+            1,
+            "legacy member edge is indexed for later purge once the knot upgrades"
+        );
+    }
+
+    #[tokio::test]
     async fn create_then_delete_round_trips_a_star() {
         let (store, issue_states, pull_statuses, cov, resolver) = fresh();
         let create: HydrantFrame = parse_frame(json!({
@@ -1752,6 +1917,8 @@ mod tests {
             search: &search,
             shadow: None,
             buffer: None,
+            knot_registry: None,
+            knot_gate: None,
         };
         let mk = |live: bool| -> HydrantFrame {
             parse_frame(json!({
@@ -2418,6 +2585,8 @@ mod tests {
             disconnects: None,
             warming_shadow: None,
             warming_buffer: None,
+            knot_registry: None,
+            knot_gate: None,
         }
     }
 
@@ -3046,6 +3215,8 @@ mod tests {
             disconnects: None,
             warming_shadow: None,
             warming_buffer: None,
+            knot_registry: None,
+            knot_gate: None,
         };
 
         let parallelism = 4usize;

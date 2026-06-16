@@ -19,6 +19,7 @@ pub use _lex::*;
 
 pub mod edges;
 pub mod ids;
+pub mod knot_acl;
 pub mod legacy;
 pub mod record;
 pub mod search;

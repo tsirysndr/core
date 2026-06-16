@@ -34,6 +34,7 @@ bobbin-resolver = { path = "bobbin/crates/resolver" }
 bobbin-slingshot-client = { path = "bobbin/crates/slingshot-client" }
 bobbin-record-lru = { path = "bobbin/crates/record-lru" }
 bobbin-knot-proxy = { path = "bobbin/crates/knot-proxy" }
+bobbin-knot-ingest = { path = "bobbin/crates/knot-ingest" }
 bobbin-runtime = { path = "bobbin/crates/runtime" }
 bobbin-search = { path = "bobbin/crates/search" }
 bobbin-sim = { path = "bobbin/crates/bobbin-sim" }

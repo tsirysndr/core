@@ -23,8 +23,8 @@ use axum::{
     routing::get,
 };
 use bobbin_edge_index::{
-    Coverage, CoverageWatch, CursorParseError, EdgePage, EdgeStore, IssueStateKind, PageCursor,
-    PageLimit, PageToken, PullStatusKind, SortDir, StateIndex, StateKind,
+    Coverage, CoverageWatch, CursorParseError, EdgeItem, EdgePage, EdgeStore, IssueStateKind,
+    PageCursor, PageLimit, PageToken, PullStatusKind, SortDir, StateIndex, StateKind,
 };
 use bobbin_knot_proxy::{KnotHost, KnotProxy, KnotProxyError, ProxyResponse, RepoSlug};
 use bobbin_record_lru::RecordStore;
@@ -34,6 +34,7 @@ use bobbin_search::{
 };
 use bobbin_slingshot_client::{SlingshotClient, SlingshotError};
 use bobbin_types::ids::{EdgeKey, SubjectRef, nsid_static};
+use bobbin_types::knot_acl::{KnotOwnedSource, decode_knot_owned_source, knot_did_host};
 use bobbin_types::record::RecordBody;
 use bobbin_types::search::SearchableRecord;
 use bobbin_types::sh_tangled::actor::profile::{Profile, ProfileGetRecordOutput, ProfileRecord};
@@ -1434,10 +1435,14 @@ async fn hydrate_record_view<V>(
     state: &AppState,
     nsid: &Nsid<DefaultStr>,
     uri: AtUri<DefaultStr>,
+    sort_micros: u64,
 ) -> Result<Option<RecordView<V>>, XrpcError>
 where
     V: serde::de::DeserializeOwned + NormalizeRepoRefs,
 {
+    if let Some(source) = decode_knot_owned_source(&uri) {
+        return synthesize_knot_owned_view::<V>(state, uri, source, sort_micros).await;
+    }
     let body = resolve_for_view(state, nsid, uri).await?;
     let value: V = deserialize_or_upgrade::<V>(state, nsid, &body.value).await?;
     let Some(value) = value.normalize(&state.resolver).await else {
@@ -1448,6 +1453,53 @@ where
         cid: Some(body.cid.clone()),
         value,
     }))
+}
+
+async fn synthesize_knot_owned_view<V>(
+    state: &AppState,
+    uri: AtUri<DefaultStr>,
+    source: KnotOwnedSource,
+    sort_micros: u64,
+) -> Result<Option<RecordView<V>>, XrpcError>
+where
+    V: serde::de::DeserializeOwned + NormalizeRepoRefs,
+{
+    let Some(body) = synth_knot_owned_value(source, sort_micros) else {
+        return Ok(None);
+    };
+    let Ok(value) = serde_json::from_value::<V>(body) else {
+        return Ok(None);
+    };
+    let Some(value) = value.normalize(&state.resolver).await else {
+        return Ok(None);
+    };
+    Ok(Some(RecordView {
+        uri,
+        cid: None,
+        value,
+    }))
+}
+
+fn synth_knot_owned_value(source: KnotOwnedSource, sort_micros: u64) -> Option<serde_json::Value> {
+    let created_at = micros_to_rfc3339(sort_micros)?;
+    match source {
+        KnotOwnedSource::Member { knot, subject } => Some(serde_json::json!({
+            "domain": knot_did_host(&knot)?,
+            "subject": subject.as_ref(),
+            "createdAt": created_at,
+        })),
+        KnotOwnedSource::Collaborator { repo, subject } => Some(serde_json::json!({
+            "repo": repo.as_ref(),
+            "subject": subject.as_ref(),
+            "createdAt": created_at,
+        })),
+    }
+}
+
+fn micros_to_rfc3339(micros: u64) -> Option<String> {
+    let micros = i64::try_from(micros).ok()?;
+    chrono::DateTime::from_timestamp_micros(micros)
+        .map(|dt| dt.to_rfc3339_opts(chrono::SecondsFormat::Micros, true))
 }
 
 #[derive(Clone, Copy)]
@@ -1533,18 +1585,19 @@ where
 fn hydrate_record_stream<V>(
     state: &AppState,
     nsid: Nsid<DefaultStr>,
-    uris: Vec<AtUri<DefaultStr>>,
+    items: Vec<EdgeItem>,
     provenance: HitProvenance,
 ) -> impl Stream<Item = Result<RecordView<V>, XrpcError>> + Send + 'static
 where
     V: serde::de::DeserializeOwned + Serialize + NormalizeRepoRefs + Send + 'static,
 {
     let owned = state.clone();
-    hydrate_stream(uris, move |uri| {
+    hydrate_stream(items, move |item| {
         let owned = owned.clone();
         let nsid = nsid.clone();
         async move {
-            let result = hydrate_record_view::<V>(&owned, &nsid, uri.clone()).await;
+            let EdgeItem { uri, sort_micros } = item;
+            let result = hydrate_record_view::<V>(&owned, &nsid, uri.clone(), sort_micros).await;
             if matches!(provenance, HitProvenance::Indexed)
                 && let Err(err) = &result
                 && is_index_evictable(err)
@@ -1673,7 +1726,14 @@ where
         )));
     }
     let permit = state.heavy_permit()?;
-    let views = hydrate_record_stream::<V>(state, nsid, parsed, HitProvenance::ClientSupplied);
+    let items = parsed
+        .into_iter()
+        .map(|uri| EdgeItem {
+            uri,
+            sort_micros: 0,
+        })
+        .collect();
+    let views = hydrate_record_stream::<V>(state, nsid, items, HitProvenance::ClientSupplied);
     Ok(json_stream::<RecordView<V>, _>(
         "items",
         views,

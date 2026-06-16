@@ -14,7 +14,7 @@ pub use mem_network::{
     MemWsResponder, MemWsServerFuture, MemWsTransport,
 };
 pub use network::{
-    BodyStream, HttpRequest, HttpResponseFuture, HttpResponseHead, HttpResult, HttpTransport,
-    NetworkError, ReqwestHttp, TungsteniteWs, WsConn, WsConnectFuture, WsMessage, WsMessageFuture,
-    WsSendFuture, WsSink, WsStream, WsTransport,
+    AddrGuard, BodyStream, GuardedWs, HttpRequest, HttpResponseFuture, HttpResponseHead,
+    HttpResult, HttpTransport, NetworkError, ReqwestHttp, TungsteniteWs, WsConn, WsConnectFuture,
+    WsMessage, WsMessageFuture, WsSendFuture, WsSink, WsStream, WsTransport,
 };

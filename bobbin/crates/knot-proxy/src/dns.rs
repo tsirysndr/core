@@ -7,12 +7,12 @@ use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 
 use crate::host::{PrivateHostReason, classify_ip};
 
-pub(crate) struct PrivateAddressFilter {
+pub struct PrivateAddressFilter {
     allow_private: bool,
 }
 
 impl PrivateAddressFilter {
-    pub(crate) fn new(allow_private: bool) -> Self {
+    pub fn new(allow_private: bool) -> Self {
         Self { allow_private }
     }
 }

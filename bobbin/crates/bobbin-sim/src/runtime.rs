@@ -122,6 +122,8 @@ impl Sim {
             disconnects: Some(disconnects.clone()),
             warming_shadow: Some(warming_shadow.clone()),
             warming_buffer: warming_buffer_enabled.then(|| warming_buffer.clone()),
+            knot_registry: None,
+            knot_gate: None,
         };
         let ingest_config = IngestConfig {
             hydrant_base,

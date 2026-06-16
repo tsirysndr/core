@@ -10,9 +10,13 @@ use bobbin_edge_index::{CoverageWatch, EdgeStore, HydrantCursor, StateIndex};
 use bobbin_ingest::{
     IngestConfig, IngestRuntime, RepoIdResolver, WarmingBuffer, run as run_ingest,
 };
-use bobbin_knot_proxy::{KnotHttpConfig, KnotProxy, KnotProxyConfig};
+use bobbin_knot_ingest::{CapabilityGate, KnotClient, KnotRegistry, Orchestrator};
+use bobbin_knot_proxy::{KnotHttpConfig, KnotProxy, KnotProxyConfig, classify_ip};
 use bobbin_record_lru::{CacheCapacity, LruRecordStore, RecordStore};
-use bobbin_runtime::{Clock, MemoryBudget, OsEntropy, RuntimeHasher, SystemClock, TungsteniteWs};
+use bobbin_runtime::{
+    Clock, GuardedWs, MemoryBudget, NetworkError, OsEntropy, RuntimeHasher, SystemClock,
+    TungsteniteWs, WsTransport,
+};
 use bobbin_search::{SearchIndex, SearchReader};
 use bobbin_slingshot_client::SlingshotClient;
 use bobbin_xrpc::{
@@ -186,6 +190,7 @@ async fn run(cfg: BobbinConfig) -> anyhow::Result<()> {
     let pull_statuses = Arc::new(StateIndex::new(hasher.clone()));
     let coverage = Arc::new(CoverageWatch::new());
     let warming_buffer = Arc::new(WarmingBuffer::new(hasher.clone()));
+    let knot_registry = Arc::new(KnotRegistry::new());
     let knots = Arc::new(KnotProxy::new(
         KnotProxyConfig {
             allow_private_hosts: cfg.knot.allow_private,
@@ -215,6 +220,29 @@ async fn run(cfg: BobbinConfig) -> anyhow::Result<()> {
     };
     let cancel = CancellationToken::new();
     let ingest_coverage = coverage.clone();
+
+    let knot_acl_dev = !cfg.knot.require_https;
+    let knot_allow_private = cfg.knot.allow_private;
+    let knot_client = KnotClient::with_default_http(knot_allow_private)?;
+    let knot_gate = Arc::new(CapabilityGate::new(
+        knot_client.clone(),
+        clock.clone(),
+        knot_acl_dev,
+        knot_allow_private,
+    ));
+    let knot_ws: Arc<dyn WsTransport> = if knot_allow_private {
+        ws.clone()
+    } else {
+        GuardedWs::shared(Arc::new(|addrs: &[SocketAddr]| {
+            match addrs.iter().find_map(|sa| classify_ip(&sa.ip())) {
+                Some(reason) => Err(NetworkError::Connect(format!(
+                    "knot eventstream resolves to {reason} address space"
+                ))),
+                None => Ok(()),
+            }
+        }))
+    };
+
     let ingest_runtime = IngestRuntime {
         store: edges.clone(),
         issue_states: issue_states.clone(),
@@ -225,13 +253,28 @@ async fn run(cfg: BobbinConfig) -> anyhow::Result<()> {
         resolver: resolver.clone(),
         clock: clock.clone(),
         entropy,
-        ws,
+        ws: ws.clone(),
         cancel: cancel.clone(),
         disconnects: None,
         warming_shadow: None,
         warming_buffer: Some(warming_buffer),
+        knot_registry: Some(knot_registry.clone()),
+        knot_gate: Some(knot_gate.clone()),
     };
     let mut ingest_handle = tokio::spawn(run_ingest(ingest_cfg, ingest_runtime));
+
+    let knot_orchestrator = Orchestrator {
+        client: Arc::new(knot_client),
+        gate: knot_gate,
+        registry: knot_registry,
+        store: edges.clone(),
+        ws: knot_ws,
+        clock: clock.clone(),
+        dev: knot_acl_dev,
+        allow_private: knot_allow_private,
+        cancel: cancel.clone(),
+    };
+    let _knot_acl_handle = tokio::spawn(knot_orchestrator.run());
 
     let _adaptive_watcher = budget.zip(limiter.as_ref()).map(|(b, l)| {
         mem::spawn_adaptive_watcher(

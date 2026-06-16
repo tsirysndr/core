@@ -22,7 +22,8 @@ mod dns;
 mod host;
 
 pub use breaker::{Breaker, BreakerPermit, CircuitOpen, FailureThreshold, ThresholdError};
-pub use host::{KnotHost, KnotHostError, PrivateHostReason, RepoSlug, RepoSlugError};
+pub use dns::PrivateAddressFilter;
+pub use host::{KnotHost, KnotHostError, PrivateHostReason, RepoSlug, RepoSlugError, classify_ip};
 
 const USER_AGENT: &str = concat!("bobbin/", env!("CARGO_PKG_VERSION"));
 const HTTPS_SCHEME: &str = "https";
