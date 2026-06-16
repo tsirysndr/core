@@ -136,50 +136,6 @@ func (p *Pages) EmbedFS() fs.FS {
 	return p.embedFS
 }
 
-// ParseWith parses the base layout together with all appview fragments and
-// an additional template from extraFS identified by extraPath (relative to
-// extraFS root). The returned template is ready to ExecuteTemplate with
-// "layouts/base" -- primarily for use with the blog.
-func (p *Pages) ParseWith(extraFS fs.FS, extraPath string) (*template.Template, error) {
-	fragmentPaths, err := p.fragmentPaths()
-	if err != nil {
-		return nil, err
-	}
-
-	funcs := p.funcMap()
-	tpl, err := template.New("layouts/base").
-		Funcs(funcs).
-		ParseFS(p.embedFS, append(fragmentPaths, p.nameToPath("layouts/base"))...)
-	if err != nil {
-		return nil, err
-	}
-
-	err = fs.WalkDir(extraFS, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".html") {
-			return nil
-		}
-		if path != extraPath && !strings.Contains(path, "fragments/") {
-			return nil
-		}
-		data, err := fs.ReadFile(extraFS, path)
-		if err != nil {
-			return err
-		}
-		if _, err = tpl.New(path).Parse(string(data)); err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return tpl, nil
-}
-
 func (p *Pages) fragmentPaths() ([]string, error) {
 	var fragmentPaths []string
 	err := fs.WalkDir(p.embedFS, "templates", func(path string, d fs.DirEntry, err error) error {

@@ -1,0 +1,77 @@
+{{ define "layouts/blogbase" }}
+    <!doctype html>
+    <html lang="en" class="dark:bg-gray-900">
+        <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+            <meta name="description" content="The next-generation social coding platform."/>
+
+            <!-- Open Graph defaults -->
+            <meta property="og:site_name" content="Tangled" />
+            <meta property="og:type" content="website" />
+            <meta property="og:locale" content="en_US" />
+
+            <!-- Keywords -->
+            <meta name="keywords" content="git, code collaboration, AT Protocol, open source, version control, social coding, code hosting" />
+
+            <!-- Author and copyright -->
+            <meta name="author" content="Tangled" />
+            <meta name="robots" content="index, follow" />
+
+            <link rel="icon" href="/static/logos/dolly.ico" sizes="48x48"/>
+            <link rel="icon" href="/static/logos/dolly.svg" sizes="any" type="image/svg+xml"/>
+            <link rel="apple-touch-icon" href="/static/logos/dolly.png"/>
+
+            <!-- preconnect to image cdn -->
+            <link rel="preconnect" href="https://avatar.tangled.sh" />
+            <link rel="preconnect" href="https://camo.tangled.sh" />
+
+            <!-- preload main font -->
+            <link rel="preload" href="/static/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin />
+
+            <link rel="stylesheet" href="/static/tw.css?{{ cssContentHash }}" type="text/css" />
+
+            <script>
+              document.addEventListener('DOMContentLoaded', () => {
+                const nodes = document.querySelectorAll('pre.mermaid');
+                if (!nodes.length) return;
+                const script = document.createElement('script');
+                script.src = '/static/mermaid.min.js';
+                script.onload = async () => {
+                  mermaid.initialize({
+                    startOnLoad: true,
+                    theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default',
+                  });
+                  await mermaid.run({ nodes });
+                };
+                document.head.appendChild(script);
+              });
+            </script>
+            <title>{{ block "title" . }}{{ end }}</title>
+            {{ block "extrameta" . }}{{ end }}
+        </head>
+        <body class="min-h-screen flex flex-col gap-4 bg-slate-100 dark:bg-gray-900 dark:text-white transition-colors duration-200 {{ block "bodyClasses" . }} {{ end }}">
+          {{ block "topbarLayout" . }}{{ end }}
+
+          {{ block "mainLayout" . }}
+            <div class="flex-grow">
+              <div class="max-w-screen-lg mx-auto flex flex-col gap-4">
+                {{ block "contentLayout" . }}
+                <main>
+                  {{ block "content" . }}{{ end }}
+                </main>
+                {{ end }}
+
+                {{ block "contentAfterLayout" . }}
+                <main>
+                  {{ block "contentAfter" . }}{{ end }}
+                </main>
+                {{ end }}
+              </div>
+            </div>
+          {{ end }}
+
+          {{ block "footerLayout" . }}{{ end }}
+        </body>
+    </html>
+{{ end }}

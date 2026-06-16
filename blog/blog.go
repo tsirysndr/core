@@ -148,9 +148,53 @@ func AtomFeed(posts []Post, baseURL string) (string, error) {
 	return feed.ToAtom()
 }
 
+// parseLayout builds a template set from the appview's fragments together with
+// the blog's own layouts, fragments, and the given page template (relative to
+// templatesDir). The result is ready to ExecuteTemplate with "layouts/blogbase".
+func parseLayout(p *pages.Pages, templatesDir, page string) (*template.Template, error) {
+	fragmentPaths, err := p.FragmentPaths()
+	if err != nil {
+		return nil, err
+	}
+
+	tpl, err := template.New("layouts/blogbase").
+		Funcs(p.FuncMap()).
+		ParseFS(p.EmbedFS(), fragmentPaths...)
+	if err != nil {
+		return nil, err
+	}
+
+	extraFS := os.DirFS(templatesDir)
+	err = fs.WalkDir(extraFS, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".html") {
+			return nil
+		}
+		// only the requested page, plus shared layouts and fragments
+		if path != page && !strings.Contains(path, "fragments/") && !strings.Contains(path, "layouts/") {
+			return nil
+		}
+		data, err := fs.ReadFile(extraFS, path)
+		if err != nil {
+			return err
+		}
+		if _, err = tpl.New(path).Parse(string(data)); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return tpl, nil
+}
+
 // RenderIndex renders the blog index page to w.
 func RenderIndex(p *pages.Pages, templatesDir string, posts []Post, w io.Writer) error {
-	tpl, err := p.ParseWith(os.DirFS(templatesDir), "index.html")
+	tpl, err := parseLayout(p, templatesDir, "index.html")
 	if err != nil {
 		return err
 	}
@@ -163,14 +207,14 @@ func RenderIndex(p *pages.Pages, templatesDir string, posts []Post, w io.Writer)
 			}
 		}
 	}
-	return tpl.ExecuteTemplate(w, "layouts/base", indexParams{Posts: posts, Featured: featured})
+	return tpl.ExecuteTemplate(w, "layouts/blogbase", indexParams{Posts: posts, Featured: featured})
 }
 
 // RenderPost renders a single blog post page to w.
 func RenderPost(p *pages.Pages, templatesDir string, post Post, w io.Writer) error {
-	tpl, err := p.ParseWith(os.DirFS(templatesDir), "post.html")
+	tpl, err := parseLayout(p, templatesDir, "post.html")
 	if err != nil {
 		return err
 	}
-	return tpl.ExecuteTemplate(w, "layouts/base", postParams{Post: post})
+	return tpl.ExecuteTemplate(w, "layouts/blogbase", postParams{Post: post})
 }
