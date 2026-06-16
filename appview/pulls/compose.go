@@ -289,12 +289,14 @@ func (s *Pulls) composeParams(r *http.Request, repo *models.Repo) (pages.RepoNew
 
 	title := r.FormValue("title")
 	body := r.FormValue("body")
+	titleDirty := r.FormValue("titleDirty") == "1"
+	bodyDirty := r.FormValue("bodyDirty") == "1"
 	if comparison != nil && len(comparison.FormatPatch) > 0 {
 		first := comparison.FormatPatch[0]
-		if title == "" && first.PatchHeader != nil {
+		if !titleDirty && first.PatchHeader != nil {
 			title = first.Title
 		}
-		if body == "" && first.PatchHeader != nil {
+		if !bodyDirty && first.PatchHeader != nil {
 			body = first.Body
 		}
 	}
@@ -319,6 +321,8 @@ func (s *Pulls) composeParams(r *http.Request, repo *models.Repo) (pages.RepoNew
 		Patch:            patch,
 		Title:            title,
 		Body:             body,
+		TitleDirty:       titleDirty,
+		BodyDirty:        bodyDirty,
 		IsStacked:        isStacked,
 		Comparison:       comparison,
 		Diff:             diff,

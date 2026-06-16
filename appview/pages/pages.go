@@ -1312,6 +1312,8 @@ type RepoNewPullParams struct {
 	Patch            string
 	Title            string
 	Body             string
+	TitleDirty       bool
+	BodyDirty        bool
 	IsStacked        bool
 	Comparison       *types.RepoFormatPatchResponse
 	Diff             *types.NiceDiff

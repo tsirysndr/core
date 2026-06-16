@@ -63,6 +63,11 @@
                         {{ template "repo/pulls/fragments/pullStepDetails" . }}
                     </div>
                 </section>
+            {{ else }}
+                <input type="hidden" name="title" value="{{ .Title }}" />
+                <input type="hidden" name="body" value="{{ .Body }}" />
+                <input type="hidden" name="titleDirty" value="{{ if .TitleDirty }}1{{ end }}" />
+                <input type="hidden" name="bodyDirty" value="{{ if .BodyDirty }}1{{ end }}" />
             {{ end }}
         </form>
 

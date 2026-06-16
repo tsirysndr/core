@@ -23,6 +23,8 @@
 {{ define "pullStepDetailsSingle" }}
     {{ $root := .Root }}
     {{ $previewUrl := .PreviewUrl }}
+    <input type="hidden" name="titleDirty" id="titleDirty" value="{{ if $root.TitleDirty }}1{{ end }}" />
+    <input type="hidden" name="bodyDirty" id="bodyDirty" value="{{ if $root.BodyDirty }}1{{ end }}" />
     <div class="flex flex-col gap-1">
         <label for="title" class="text-xs tracking-wide text-gray-800 dark:text-gray-200">Title</label>
         <input
@@ -30,6 +32,7 @@
             name="title"
             id="title"
             value="{{ $root.Title }}"
+            oninput="document.getElementById('titleDirty').value='1'"
             class="w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
             placeholder="One-line summary of your change."
         />
@@ -42,6 +45,7 @@
         "Rows" 6
         "Placeholder" "Describe your change. Markdown is supported."
         "PreviewUrl" $previewUrl
+        "DirtyFlag" "bodyDirty"
     ) }}
 {{ end }}
 
@@ -52,6 +56,7 @@
     {{ $rows := .Rows }}
     {{ $placeholder := .Placeholder }}
     {{ $previewUrl := .PreviewUrl }}
+    {{ $dirtyFlag := .DirtyFlag }}
     <div class="flex flex-col gap-2" data-md-editor="{{ $id }}">
         <div class="btn-group self-start text-gray-600 dark:text-gray-300">
             <button type="button" data-md-mode="write"
@@ -79,6 +84,7 @@
                 rows="{{ $rows }}"
                 class="w-full resize-y dark:bg-gray-800 dark:text-white dark:border-gray-700"
                 placeholder="{{ $placeholder }}"
+                {{ if $dirtyFlag }}oninput="document.getElementById('{{ $dirtyFlag }}').value='1'"{{ end }}
             >{{ $value }}</textarea>
         </div>
         <div data-md-panel="preview" class="hidden">
