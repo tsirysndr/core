@@ -173,8 +173,12 @@ func (g *GitRepo) applyPatch(patchData, patchFile string, opts MergeOptions) err
 		{"-C", g.path, "config", "advice.mergeConflict", "false"},
 		{"-C", g.path, "config", "advice.amWorkDir", "false"},
 	} {
+		var cfgStderr bytes.Buffer
 		cfgCmd, _ := wrapCmd(exec.Command("git", cfgArgs...))
-		cfgCmd.Run() //nolint:errcheck // best-effort config
+		cfgCmd.Stderr = &cfgStderr
+		if err := cfgCmd.Run(); err != nil {
+			log.Printf("git config %v failed (non-fatal): err=%v stderr=%q", cfgArgs, err, cfgStderr.String())
+		}
 	}
 
 	// if patch is a format-patch, apply using 'git am'
@@ -227,6 +231,7 @@ func (g *GitRepo) applyPatch(patchData, patchFile string, opts MergeOptions) err
 
 	if err := cmd.Run(); err != nil {
 		conflicts := parseGitApplyErrors(stderr.String())
+		log.Printf("git commit failed: err=%v stderr=%q", err, stderr.String())
 		return &ErrMerge{
 			Message:     "patch cannot be applied cleanly",
 			Conflicts:   conflicts,
@@ -293,6 +298,7 @@ func (g *GitRepo) applySingleMailbox(singlePatch types.FormatPatch) (plumbing.Ha
 
 	if err := cmd.Run(); err != nil {
 		conflicts := parseGitApplyErrors(stderr.String())
+		log.Printf("git am failed: err=%v stderr=%q", err, stderr.String())
 		return plumbing.ZeroHash, &ErrMerge{
 			Message:     "patch cannot be applied cleanly",
 			Conflicts:   conflicts,
