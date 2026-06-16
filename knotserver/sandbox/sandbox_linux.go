@@ -80,6 +80,54 @@ func (l *LandlockBackend) WrapMulti(paths []string, cmd *exec.Cmd) (*exec.Cmd, e
 
 func (l *LandlockBackend) Name() string { return "landlock" }
 
+// RuleSpec describes the paths a sandbox should grant access to, grouped by
+// access tier. It is the input to the Landlock ruleset construction and is
+// exposed so the path-derivation logic can be tested independently of any
+// actual kernel-level enforcement.
+type RuleSpec struct {
+	// SystemRO is the set of system directories granted read+execute.
+	SystemRO []string
+	// GitConfigRO is the global git config file, granted read-only access
+	// at file granularity. Empty when $HOME is not set.
+	GitConfigRO string
+	// DevRW is the set of device-file directories granted read/write +
+	// ioctl access (needed so /dev/null works under Landlock V5+).
+	DevRW []string
+	// TmpRW is the set of directories granted read/write for temporary
+	// patch and object files.
+	TmpRW []string
+	// RepoRW is the set of repository directories granted read/write
+	// access including the REFER right (for cross-directory rename in
+	// receive-pack's quarantine migration).
+	RepoRW []string
+}
+
+// BuildRuleSpec derives the set of paths the sandbox should grant to each
+// access tier given the repository paths the subprocess operates on.
+func BuildRuleSpec(repoPaths []string) RuleSpec {
+	return buildRuleSpec(repoPaths, os.Getenv("HOME"))
+}
+
+// buildRuleSpec is the testable variant of BuildRuleSpec that takes $HOME
+// explicitly instead of reading it from the environment.
+func buildRuleSpec(repoPaths []string, home string) RuleSpec {
+	var gitConfig string
+	if home != "" {
+		// the only thing the sandboxed git subprocess needs from $HOME is the
+		// global config file. granting just that one file (not the whole
+		// .config tree) keeps everything else under $HOME outside the ruleset.
+		gitConfig = filepath.Join(home, ".config", "git", "config")
+	}
+
+	return RuleSpec{
+		SystemRO:    []string{"/usr", "/bin", "/lib", "/lib64", "/nix", "/etc"},
+		GitConfigRO: gitConfig,
+		DevRW:       []string{"/dev"},
+		TmpRW:       []string{"/tmp"},
+		RepoRW:      append([]string(nil), repoPaths...),
+	}
+}
+
 // ApplyLandlock applies a Landlock ruleset to the current process then
 // exec's into gitArgs. Called from the hidden "sandbox-exec" subcommand.
 func ApplyLandlock(repoPaths []string, gitArgs []string) error {
@@ -87,37 +135,19 @@ func ApplyLandlock(repoPaths []string, gitArgs []string) error {
 		return fmt.Errorf("sandbox-exec: no command specified")
 	}
 
-	// collect unique parent directories so git can read global config
-	// under $HOME/.config/git/config. repo contents stay DAC-locked
-	// (0700) so other repos can't actually be read.
-	parents := map[string]struct{}{}
-	for _, p := range repoPaths {
-		parents[filepath.Dir(p)] = struct{}{}
-	}
-	parentSlice := make([]string, 0, len(parents))
-	for p := range parents {
-		parentSlice = append(parentSlice, p)
-	}
+	spec := BuildRuleSpec(repoPaths)
 
-	// each repo gets full read/write plus REFER (needed for git's quarantine
-	// rename in receive-pack, which moves objects across directories).
-	repoRules := make([]landlock.Rule, len(repoPaths))
-	for i, p := range repoPaths {
-		repoRules[i] = landlock.RWDirs(p).WithRefer()
+	rules := []landlock.Rule{
+		landlock.RODirs(spec.SystemRO...).IgnoreIfMissing(),
+		landlock.RWFiles(spec.DevRW...).WithIoctlDev().IgnoreIfMissing(),
+		landlock.RWDirs(spec.TmpRW...).IgnoreIfMissing(),
 	}
-
-	rules := append([]landlock.Rule{
-		// system dirs: read + execute only, no writes
-		landlock.RODirs("/usr", "/bin", "/lib", "/lib64", "/nix", "/etc").IgnoreIfMissing(),
-		// /dev/null and friends: read/write files + ioctl (V5+ restricts ioctl
-		// on device files; WithIoctlDev keeps /dev/null fully accessible)
-		landlock.RWFiles("/dev").WithIoctlDev().IgnoreIfMissing(),
-		// parent dirs: read + execute so git can traverse to the repo and read
-		// global git config; 0700 DAC permissions prevent cross-repo reads
-		landlock.RODirs(parentSlice...).IgnoreIfMissing(),
-		// /tmp: read/write for temporary patch and object files
-		landlock.RWDirs("/tmp").IgnoreIfMissing(),
-	}, repoRules...)
+	if spec.GitConfigRO != "" {
+		rules = append(rules, landlock.ROFiles(spec.GitConfigRO).IgnoreIfMissing())
+	}
+	for _, p := range spec.RepoRW {
+		rules = append(rules, landlock.RWDirs(p).WithRefer())
+	}
 
 	// V8.BestEffort enforces the strongest ruleset the running kernel supports,
 	// up to V8. RestrictPaths also sets PR_SET_NO_NEW_PRIVS automatically.

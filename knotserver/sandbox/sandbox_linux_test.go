@@ -4,10 +4,81 @@ package sandbox
 
 import (
 	"os/exec"
+	"reflect"
 	"strings"
 	"syscall"
 	"testing"
 )
+
+func TestBuildRuleSpec_SingleRepo(t *testing.T) {
+	spec := buildRuleSpec([]string{"/home/git/did:plc:abc"}, "/home/git")
+
+	if got, want := spec.GitConfigRO, "/home/git/.config/git/config"; got != want {
+		t.Errorf("GitConfigRO = %q, want %q", got, want)
+	}
+	if got, want := spec.RepoRW, []string{"/home/git/did:plc:abc"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("RepoRW = %q, want %q", got, want)
+	}
+	if got, want := spec.SystemRO, []string{"/usr", "/bin", "/lib", "/lib64", "/nix", "/etc"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("SystemRO = %q, want %q", got, want)
+	}
+	if got, want := spec.TmpRW, []string{"/tmp"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("TmpRW = %q, want %q", got, want)
+	}
+	if got, want := spec.DevRW, []string{"/dev"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("DevRW = %q, want %q", got, want)
+	}
+}
+
+func TestBuildRuleSpec_GitConfigFollowsHome(t *testing.T) {
+	// the granted git config path must follow $HOME, not the repo path. this
+	// is what makes the merge case work: tmpDir is under /tmp, but the
+	// subprocess still resolves the global config from $HOME/.config/git/config.
+	spec := buildRuleSpec([]string{"/tmp/git-clone-XYZ"}, "/home/git")
+
+	if got, want := spec.GitConfigRO, "/home/git/.config/git/config"; got != want {
+		t.Errorf("GitConfigRO = %q, want %q", got, want)
+	}
+}
+
+func TestBuildRuleSpec_NoHome(t *testing.T) {
+	// empty $HOME should not produce a bogus "/.config/git/config" entry.
+	spec := buildRuleSpec([]string{"/home/git/did:plc:abc"}, "")
+
+	if spec.GitConfigRO != "" {
+		t.Errorf("GitConfigRO = %q, want empty", spec.GitConfigRO)
+	}
+}
+
+func TestBuildRuleSpec_NeverGrantsScanPath(t *testing.T) {
+	// the scan path (the repo's parent) must NEVER appear in any RW or RO
+	// list. granting it would expose other repos and the knot DB via
+	// Landlock RO + DAC group bits. this is the key invariant the rule
+	// tightening was meant to enforce.
+	spec := buildRuleSpec([]string{"/home/git/did:plc:abc"}, "/home/git")
+
+	parent := "/home/git"
+	for _, group := range [][]string{spec.SystemRO, spec.DevRW, spec.TmpRW, spec.RepoRW} {
+		for _, p := range group {
+			if p == parent {
+				t.Errorf("scan path %q must not appear in the ruleset; found in %q", parent, group)
+			}
+		}
+	}
+	if spec.GitConfigRO == parent {
+		t.Errorf("scan path %q must not be granted as GitConfigRO", parent)
+	}
+}
+
+func TestBuildRuleSpec_EmptyInput(t *testing.T) {
+	spec := buildRuleSpec(nil, "")
+	if spec.GitConfigRO != "" {
+		t.Errorf("GitConfigRO should be empty for nil input and no $HOME, got %q", spec.GitConfigRO)
+	}
+	if len(spec.RepoRW) != 0 {
+		t.Errorf("RepoRW should be empty for nil input, got %q", spec.RepoRW)
+	}
+}
 
 func TestLandlockBackend_Name(t *testing.T) {
 	if (&LandlockBackend{}).Name() != "landlock" {
