@@ -21,6 +21,8 @@ type GitTempGetEntry_Output struct {
 	// name: The file name
 	Name string `json:"name" cborgen:"name"`
 	Oid  string `json:"oid" cborgen:"oid"`
+	// size: Blob size
+	Size int64 `json:"size" cborgen:"size"`
 	// submodule: Submodule information if path is a submodule
 	Submodule *GitTempDefs_Submodule `json:"submodule,omitempty" cborgen:"submodule,omitempty"`
 }

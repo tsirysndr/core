@@ -29,7 +29,7 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["name", "mode", "oid"],
+          "required": ["name", "mode", "oid", "size"],
           "properties": {
             "name": {
               "type": "string",
@@ -41,6 +41,10 @@
             },
             "oid": {
               "type": "string"
+            },
+            "size": {
+              "type": "integer",
+              "description": "Blob size"
             },
             "lastCommit": {
               "type": "ref",

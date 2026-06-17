@@ -16,8 +16,9 @@ const (
 
 // KnotVersion_Output is the output of a sh.tangled.knot.version call.
 type KnotVersion_Output struct {
-	Version      string   `json:"version" cborgen:"version"`
+	// capabilities: Protocol capability tokens this knot implements, such as knot-acl. Knots that omit this field are treated as legacy.
 	Capabilities []string `json:"capabilities,omitempty" cborgen:"capabilities,omitempty"`
+	Version      string   `json:"version" cborgen:"version"`
 }
 
 // KnotVersion calls the XRPC method "sh.tangled.knot.version".
