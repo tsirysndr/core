@@ -143,6 +143,11 @@ func (rp *Repo) Blob(w http.ResponseWriter, r *http.Request) {
 			}, nil
 		}
 
+		// skip large blobs
+		if blobResp.ContentLength > maxBlobSize || blobResp.ContentLength < 0 {
+			l.Error("large blob:", "ContentLength", blobResp.ContentLength, "maxBlobSize", maxBlobSize)
+		}
+
 		content, err := io.ReadAll(io.LimitReader(blobResp.Body, maxBlobSize+1))
 		if err != nil {
 			return models.BlobView{}, err
