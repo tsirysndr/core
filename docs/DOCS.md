@@ -1620,6 +1620,25 @@ This document is laid out in reverse-chronological order.
 Newer migration guides are listed first, and older guides
 are further down the page.
 
+## Upgrading to v1.15.0-alpha
+
+With v1.15.0-alpha, a knot itself owns its members and
+per-repo collaborators directly. Previously this data was sourced from
+PDS records (`sh.tangled.knot.member` and `sh.tangled.repo.collaborator`)
+that the appview and the knot both read off the firehose.
+The knot is now the source of truth and serves them over XRPC instead:
+
+- `sh.tangled.knot.addMember`, `sh.tangled.knot.removeMember`, `sh.tangled.knot.listMembers`
+- `sh.tangled.repo.addCollaborator`, `sh.tangled.repo.removeCollaborator`, `sh.tangled.repo.listCollaborators`
+
+Until your knot is upgraded, the appview keeps reading its
+members and collaborators from the old firehose-sourced records.
+Upgrade to move your knot onto knot-owned access control.
+
+- Upgrade to the latest tag (v1.15.0 or above)
+- Head to the [knot dashboard](https://tangled.org/settings/knots) and
+  hit the "retry" button to verify your knot
+
 ## Upgrading to v1.14.0-alpha
 
 Starting with v1.14.0-alpha, the fully knot uses the repoDID as its

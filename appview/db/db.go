@@ -2240,6 +2240,13 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "migrate-knots-to-knot-owned-acl", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			update registrations set needs_upgrade = 1;
+		`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,
