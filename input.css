@@ -1621,3 +1621,26 @@ actor-typeahead::part(menu) {
         } /* white */
     }
 }
+
+.focus-pill {
+    --r: 10px;
+
+    &::before,
+    &::after {
+        @apply bg-indigo-600 absolute bottom-0;
+        content: "";
+        width: var(--r);
+        height: var(--r);
+        -webkit-mask: radial-gradient(var(--r) at var(--r) 0, #0000 98%, #000);
+        mask: radial-gradient(var(--r) at var(--r) 0, #0000 98%, #000);
+    }
+    
+    &::before {
+        left: calc(-1 * var(--r));
+        @apply -scale-x-100;
+    }
+    
+    &::after {
+        right: calc(-1 * var(--r));
+    }
+}

@@ -1,9 +1,11 @@
 {{ define "focus/pill" }}
     {{ if .Focusing }}
     {{ $offFocus := and .FocusLink .CurrentPath (not (hasPrefix .CurrentPath .FocusLink)) }}
-    <div id="focus-pill" class="fixed bottom-0 left-1/2 -translate-x-1/2 z-50 select-none">
+    <div id="focus-border" class="ring-inset ring-4 ring-indigo-600 rounded-2xl fixed inset w-screen h-screen z-50 pointer-events-none
+      before:ring-inset before:ring-4 before:ring-indigo-600 before:fixed before:inset before:w-screen before:h-screen before:z-50 before:pointer-events-none"></div>
+    <div id="focus-pill" class="focus-pill fixed bottom-1 left-1/2 -translate-x-1/2 z-50 select-none">
       {{ if $offFocus }}<a href="{{ .FocusLink }}" class="absolute inset-0 z-0 no-underline" aria-label="Return to focus"></a>{{ end }}
-      <div class="relative flex items-center gap-12 bg-indigo-600 text-sm text-white rounded-t-lg px-4 py-2 shadow-lg">
+      <div class="relative flex items-center gap-12 bg-indigo-600 text-sm text-white rounded-t-lg px-4 py-2">
 
       <form method="POST" action="/focus/end" class="relative z-10 inline m-0">
         <button type="submit" class="flex items-center gap-1 text-white hover:text-indigo-200 bg-transparent border-0 p-0 cursor-pointer text-sm">
@@ -13,8 +15,8 @@
 
       {{ $remaining := sub .FocusCount 1 }}
       {{ if $offFocus }}
-        <span class="flex items-center gap-2 whitespace-nowrap animate-pulse">
-          {{ i "route-off" "size-4" }}
+        <span class="flex items-center gap-2 whitespace-nowrap">
+          {{ i "route-off" "size-4 animate-pulse" }}
           Off track
           {{ if gt $remaining 0 }}
             <span class="opacity-75">{{ $remaining }} remaining</span>
