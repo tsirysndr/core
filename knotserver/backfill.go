@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
@@ -86,39 +87,41 @@ func BackfillCollaborators(
 		return nil
 	}
 
-	repoDids, err := d.ListRepoDids()
+	byRepo, err := e.GetCollaboratorsByRepo(rbac.ThisServer)
 	if err != nil {
-		return fmt.Errorf("list repos: %w", err)
+		return fmt.Errorf("list collaborators: %w", err)
 	}
 
 	var rows []db.Collaborator
-	for _, repoDid := range repoDids {
+	var skipped int
+	for _, repoDid := range slices.Sorted(maps.Keys(byRepo)) {
+		candidates := byRepo[repoDid]
+
 		ownerDid, _, err := d.GetRepoKeyOwner(repoDid)
 		if err != nil {
-			l.Warn("skipping repo during collaborator backfill", "repoDid", repoDid, "err", err)
+			l.Warn("skipping collaborators for unresolvable repo", "repoDid", repoDid, "collaborators", len(candidates), "err", err)
+			skipped += len(candidates)
 			continue
 		}
 
 		repo, err := syntax.ParseDID(repoDid)
 		if err != nil {
-			l.Warn("skipping repo with invalid DID", "repoDid", repoDid, "err", err)
+			l.Warn("skipping collaborators for repo with invalid DID", "repoDid", repoDid, "collaborators", len(candidates), "err", err)
+			skipped += len(candidates)
 			continue
 		}
 		owner, err := syntax.ParseDID(ownerDid)
 		if err != nil {
-			l.Warn("skipping repo with invalid owner DID", "repoDid", repoDid, "owner", ownerDid, "err", err)
+			l.Warn("skipping collaborators for repo with invalid owner DID", "repoDid", repoDid, "owner", ownerDid, "collaborators", len(candidates), "err", err)
+			skipped += len(candidates)
 			continue
 		}
 
-		collaborators, err := e.GetUserByRoleInRepo("repo:collaborator", rbac.ThisServer, repoDid)
-		if err != nil {
-			return fmt.Errorf("list collaborators for %s: %w", repoDid, err)
-		}
-
-		for _, candidate := range collaborators {
+		for _, candidate := range candidates {
 			subject, err := syntax.ParseDID(candidate)
 			if err != nil {
 				l.Warn("skipping collaborator with invalid DID", "repoDid", repoDid, "candidate", candidate, "err", err)
+				skipped++
 				continue
 			}
 			rows = append(rows, db.Collaborator{
@@ -133,6 +136,6 @@ func BackfillCollaborators(
 		return fmt.Errorf("apply backfill: %w", err)
 	}
 
-	l.Info("backfilled collaborators from casbin", "count", len(rows), "repos", len(repoDids), "marked", markApplied)
+	l.Info("backfilled collaborators from casbin", "count", len(rows), "repos", len(byRepo), "skipped", skipped, "marked", markApplied)
 	return nil
 }

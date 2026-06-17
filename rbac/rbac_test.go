@@ -151,17 +151,19 @@ func TestCollaboratorPermissions(t *testing.T) {
 	assert.ElementsMatch(t, []string{}, perms)
 }
 
-func TestGetByRole(t *testing.T) {
+func TestGetCollaboratorsByRepo(t *testing.T) {
 	e := setup(t)
 
 	knot := "example.com"
 	repo := "did:plc:foo/my-repo"
+	otherRepo := "did:plc:foo/other-repo"
 	owner := "did:plc:foo"
 	collaborator1 := "did:plc:bar"
 	collaborator2 := "did:plc:baz"
 
 	_ = e.AddKnot(knot)
 	_ = e.AddRepo(owner, knot, repo)
+	_ = e.AddRepo(owner, knot, otherRepo)
 
 	err := e.AddCollaborator(collaborator1, knot, repo)
 	assert.NoError(t, err)
@@ -169,13 +171,14 @@ func TestGetByRole(t *testing.T) {
 	err = e.AddCollaborator(collaborator2, knot, repo)
 	assert.NoError(t, err)
 
-	collaborators, err := e.GetUserByRoleInRepo("repo:collaborator", knot, repo)
+	byRepo, err := e.GetCollaboratorsByRepo(knot)
 	assert.NoError(t, err)
 	assert.ElementsMatch(t, []string{
 		"did:plc:bar", // collaborator1
 		"did:plc:baz", // collaborator2
-	}, collaborators)
-	assert.NotContains(t, collaborators, owner, "owner does not hold repo:collaborator and must not be listed")
+	}, byRepo[repo])
+	assert.NotContains(t, byRepo[repo], owner, "owner does not hold repo:collaborator and must not be listed")
+	assert.Empty(t, byRepo[otherRepo], "a repo without collaborators must not appear")
 }
 
 func TestGetPermissionsInRepo(t *testing.T) {

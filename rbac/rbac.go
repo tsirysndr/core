@@ -263,29 +263,27 @@ func (e *Enforcer) GetSpindleUsersByRole(role, domain string) ([]string, error) 
 	return e.GetUserByRole(role, intoSpindle(domain))
 }
 
-func (e *Enforcer) GetUserByRoleInRepo(role, domain, repo string) ([]string, error) {
-	policies, err := e.E.GetImplicitUsersForResourceByDomain(repo, domain)
+func (e *Enforcer) GetCollaboratorsByRepo(domain string) (map[string][]string, error) {
+	policies, err := e.E.GetFilteredNamedPolicy("p", 3, "repo:collaborator")
 	if err != nil {
 		return nil, err
 	}
 
-	var users []string
+	byRepo := make(map[string][]string)
 	for _, p := range policies {
-		user := p[0]
-		if !strings.HasPrefix(user, "did:") {
+		subject, dom, repo := p[0], p[1], p[2]
+		if dom != domain || !strings.HasPrefix(subject, "did:") {
 			continue
 		}
-		ok, err := e.E.Enforce(user, domain, repo, role)
-		if err != nil {
-			return nil, err
-		}
-		if ok {
-			users = append(users, user)
-		}
+		byRepo[repo] = append(byRepo[repo], subject)
 	}
 
-	slices.Sort(users)
-	return slices.Compact(users), nil
+	for repo, users := range byRepo {
+		slices.Sort(users)
+		byRepo[repo] = slices.Compact(users)
+	}
+
+	return byRepo, nil
 }
 
 func (e *Enforcer) IsKnotOwner(user, domain string) (bool, error) {
