@@ -109,6 +109,44 @@ loop:
 	return entries, nil
 }
 
+func CatFileBatchCheck(ctx context.Context, repoPath string) (io.WriteCloser, *bufio.Reader, func()) {
+	batchStdinReader, batchStdinWriter := io.Pipe()
+	batchStdoutReader, batchStdoutWriter := nio.Pipe(buffer.New(32 * 1024))
+	ctx, ctxCancel := context.WithCancel(ctx)
+	closed := make(chan struct{})
+	cancel := func() {
+		ctxCancel()
+		_ = batchStdinWriter.Close()
+		_ = batchStdoutReader.Close()
+		<-closed
+	}
+
+	// Ensure cancel is called as soon as the provided context is cancelled
+	go func() {
+		<-ctx.Done()
+		cancel()
+	}()
+
+	go func() {
+		stderr := &strings.Builder{}
+		cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "cat-file", "--batch-check")
+		cmd.Stdin = batchStdinReader
+		cmd.Stdout = batchStdoutWriter
+		cmd.Stderr = stderr
+		if err := cmd.Run(); err != nil {
+			_ = batchStdinReader.CloseWithError(fmt.Errorf("%w\n%s", err, stderr.String()))
+			_ = batchStdoutWriter.CloseWithError(fmt.Errorf("%w\n%s", err, stderr.String()))
+		} else {
+			_ = batchStdoutWriter.Close()
+			_ = batchStdinReader.Close()
+		}
+		close(closed)
+	}()
+
+	batchReader := bufio.NewReaderSize(batchStdoutReader, 32*1024)
+	return batchStdinWriter, batchReader, cancel
+}
+
 func CatFileBatch(ctx context.Context, repoPath string) (io.WriteCloser, *bufio.Reader, func()) {
 	batchStdinReader, batchStdinWriter := io.Pipe()
 	batchStdoutReader, batchStdoutWriter := nio.Pipe(buffer.New(32 * 1024))

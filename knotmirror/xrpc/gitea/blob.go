@@ -12,6 +12,16 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 )
 
+func GetBlobSize(ctx context.Context, repoPath string, hash plumbing.Hash) (int64, error) {
+	wr, rd, cancel := CatFileBatchCheck(ctx, repoPath)
+	defer cancel()
+	if _, err := wr.Write([]byte(hash.String() + "\n")); err != nil {
+		return 0, err
+	}
+	_, _, size, err := ReadBatchLine(rd)
+	return size, err
+}
+
 // ReadBlob returns blob size and [io.ReadCloser] of that blob.
 func ReadBlob(ctx context.Context, repoPath string, hash plumbing.Hash) (int64, io.ReadCloser, error) {
 	wr, rd, cancel := CatFileBatch(ctx, repoPath)
