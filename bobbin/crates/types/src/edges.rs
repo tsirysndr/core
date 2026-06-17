@@ -305,10 +305,15 @@ fn append_mirror_edges(primary: Vec<Edge>, source: &AtUri<DefaultStr>) -> Vec<Ed
         return primary;
     };
     let author_subject = SubjectRef::Did(author);
+    let already: std::collections::HashSet<&str> =
+        primary.iter().map(|e| e.kind.as_ref()).collect();
     let mirrors: Vec<Edge> = primary
         .iter()
         .filter_map(|edge| {
             let mirror_nsid = mirror_kind_for(edge.kind.as_ref())?;
+            if already.contains(mirror_nsid) {
+                return None;
+            }
             (edge.subject != author_subject).then(|| Edge {
                 kind: nsid_static(mirror_nsid),
                 subject: author_subject.clone(),
@@ -318,6 +323,21 @@ fn append_mirror_edges(primary: Vec<Edge>, source: &AtUri<DefaultStr>) -> Vec<Ed
         })
         .collect();
     primary.into_iter().chain(mirrors).collect()
+}
+
+pub(crate) fn subject_keyed_mirror(primary: Edge, mirror_subject: SubjectRef) -> Vec<Edge> {
+    match mirror_kind_for(primary.kind.as_ref()) {
+        Some(mirror_nsid) => {
+            let mirror = Edge {
+                kind: nsid_static(mirror_nsid),
+                subject: mirror_subject,
+                source: primary.source.clone(),
+                sort_micros: primary.sort_micros,
+            };
+            vec![primary, mirror]
+        }
+        None => vec![primary],
+    }
 }
 
 fn star_edges(
@@ -414,10 +434,15 @@ fn collaborator_edges(
     source: &AtUri<DefaultStr>,
     record: &Collaborator<DefaultStr>,
 ) -> Result<Vec<Edge>, ExtractError> {
-    Ok(one_edge(
-        "sh.tangled.repo.collaborator",
-        SubjectRef::Did(record.repo.clone()),
-        source,
+    let primary = Edge {
+        kind: nsid_static("sh.tangled.repo.collaborator"),
+        subject: SubjectRef::Did(record.repo.clone()),
+        source: source.clone(),
+        sort_micros: 0,
+    };
+    Ok(subject_keyed_mirror(
+        primary,
+        SubjectRef::Did(record.subject.clone()),
     ))
 }
 
@@ -798,7 +823,7 @@ mod tests {
     }
 
     #[test]
-    fn collaborator_keys_on_repo_did() {
+    fn collaborator_edges_index_repo_and_collaborator() {
         let edges = extract(
             "sh.tangled.repo.collaborator",
             "at://did:plc:nel/sh.tangled.repo.collaborator/abcabcabcabcz",
@@ -809,9 +834,34 @@ mod tests {
                 "createdAt": "2026-05-01T00:00:00Z"
             }),
         );
-        assert_eq!(edges.len(), 1);
+        assert_eq!(edges.len(), 2);
         assert_eq!(edges[0].kind, nsid("sh.tangled.repo.collaborator"));
         assert_eq!(edges[0].subject, did_subj("did:plc:abalone"));
+        assert_eq!(edges[1].kind, nsid("sh.tangled.repo.collaborator.by"));
+        assert_eq!(edges[1].subject, did_subj("did:plc:lyna"));
+    }
+
+    #[test]
+    fn collaborator_by_keys_on_collaborator_not_author() {
+        let parsed = Record::from_json_value(
+            &nsid("sh.tangled.repo.collaborator"),
+            json!({
+                "$type": "sh.tangled.repo.collaborator",
+                "repo": "did:plc:abalone",
+                "subject": "did:plc:lyna",
+                "createdAt": "2026-05-01T00:00:00Z"
+            }),
+        )
+        .expect("parse");
+        let edges = parsed
+            .extract_edges(&at("at://did:plc:nel/sh.tangled.repo.collaborator/abcabcabcabcz"))
+            .expect("extract");
+        assert_eq!(edges.len(), 2);
+        let mirror = edges
+            .iter()
+            .find(|e| e.kind == nsid("sh.tangled.repo.collaborator.by"))
+            .expect("collaborator.by mirror present");
+        assert_eq!(mirror.subject, did_subj("did:plc:lyna"));
     }
 
     #[test]

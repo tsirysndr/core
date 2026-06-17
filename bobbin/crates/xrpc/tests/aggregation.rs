@@ -2106,6 +2106,38 @@ async fn knot_owned_member_is_synthesized_without_slingshot() {
 }
 
 #[tokio::test]
+async fn knot_owned_member_lists_by_knot_did() {
+    let harness = Harness::new().await;
+    let knot = bobbin_types::knot_acl::host_to_knot_did("kt.oyster.cafe").unwrap();
+    let subject = did("did:plc:boltless");
+    let created = chrono::DateTime::parse_from_rfc3339("2026-06-01T00:00:00Z").unwrap();
+    let micros = created.timestamp_micros() as u64;
+    let (source, edges) = bobbin_types::knot_acl::member_upsert(&knot, &subject, micros).unwrap();
+    harness.edges.upsert_source(&source, edges);
+    harness.promote_ready(1, 1);
+
+    let (status, body) = json_response(
+        router(harness.state.clone())
+            .oneshot(list_request(
+                "sh.tangled.knot.listMembersBy",
+                knot.as_ref(),
+                &[],
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let items = body["items"].as_array().expect("items array");
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["uri"], json!(source.as_ref()));
+    assert!(items[0]["cid"].is_null());
+    assert_eq!(items[0]["value"]["domain"], json!("kt.oyster.cafe"));
+    assert_eq!(items[0]["value"]["subject"], json!("did:plc:boltless"));
+}
+
+#[tokio::test]
 async fn knot_owned_collaborator_is_synthesized_without_slingshot() {
     let harness = Harness::new().await;
     let repo = did("did:plc:scallop");
@@ -2122,6 +2154,39 @@ async fn knot_owned_collaborator_is_synthesized_without_slingshot() {
             .oneshot(list_request(
                 "sh.tangled.repo.listCollaborators",
                 repo.as_ref(),
+                &[],
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let items = body["items"].as_array().expect("items array");
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["uri"], json!(source.as_ref()));
+    assert!(items[0]["cid"].is_null());
+    assert_eq!(items[0]["value"]["repo"], json!("did:plc:scallop"));
+    assert_eq!(items[0]["value"]["subject"], json!("did:plc:olaren"));
+}
+
+#[tokio::test]
+async fn knot_owned_collaborator_lists_by_subject_did() {
+    let harness = Harness::new().await;
+    let repo = did("did:plc:scallop");
+    let subject = did("did:plc:olaren");
+    let created = chrono::DateTime::parse_from_rfc3339("2026-06-03T12:00:00Z").unwrap();
+    let micros = created.timestamp_micros() as u64;
+    let (source, edges) =
+        bobbin_types::knot_acl::collaborator_upsert(&repo, &subject, micros).unwrap();
+    harness.edges.upsert_source(&source, edges);
+    harness.promote_ready(1, 1);
+
+    let (status, body) = json_response(
+        router(harness.state.clone())
+            .oneshot(list_request(
+                "sh.tangled.repo.listCollaboratorsBy",
+                subject.as_ref(),
                 &[],
             ))
             .await

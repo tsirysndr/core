@@ -303,6 +303,7 @@ dependencies = [
  "axum",
  "bobbin-edge-index",
  "bobbin-ingest",
+ "bobbin-knot-ingest",
  "bobbin-knot-proxy",
  "bobbin-record-lru",
  "bobbin-runtime",
@@ -345,6 +346,7 @@ name = "bobbin-ingest"
 version = "0.0.1"
 dependencies = [
  "bobbin-edge-index",
+ "bobbin-knot-ingest",
  "bobbin-record-lru",
  "bobbin-resolver",
  "bobbin-runtime",
@@ -364,6 +366,30 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "url",
+ "wiremock",
+]
+
+[[package]]
+name = "bobbin-knot-ingest"
+version = "0.0.1"
+dependencies = [
+ "bobbin-edge-index",
+ "bobbin-knot-proxy",
+ "bobbin-runtime",
+ "bobbin-types",
+ "bytes",
+ "chrono",
+ "futures",
+ "http",
+ "jacquard-common",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
  "url",
  "wiremock",
 ]

@@ -103,7 +103,10 @@ pub fn member_upsert(
         source: source.clone(),
         sort_micros: created_micros,
     };
-    Some((source, vec![edge]))
+    Some((
+        source,
+        crate::edges::subject_keyed_mirror(edge, SubjectRef::Did(knot.clone())),
+    ))
 }
 
 pub fn collaborator_upsert(
@@ -118,7 +121,10 @@ pub fn collaborator_upsert(
         source: source.clone(),
         sort_micros: created_micros,
     };
-    Some((source, vec![edge]))
+    Some((
+        source,
+        crate::edges::subject_keyed_mirror(edge, SubjectRef::Did(subject.clone())),
+    ))
 }
 
 pub fn decode_knot_owned_source(source: &AtUri<DefaultStr>) -> Option<KnotOwnedSource> {
@@ -252,17 +258,25 @@ mod tests {
     }
 
     #[test]
-    fn member_upsert_builds_decodable_primary_edge() {
+    fn member_upsert_builds_primary_and_knot_mirror_edges() {
         let knot = host_to_knot_did("oyster.cafe").unwrap();
         let subject = did("did:plc:nel");
         let (source, edges) =
             member_upsert(&knot, &subject, 1_700_000_000_000_000).expect("build member upsert");
-        assert_eq!(edges.len(), 1);
-        let edge = &edges[0];
-        assert_eq!(edge.kind.as_ref(), "sh.tangled.knot.member");
-        assert_eq!(edge.subject, SubjectRef::Did(subject.clone()));
-        assert_eq!(edge.source, source);
-        assert_eq!(edge.sort_micros, 1_700_000_000_000_000);
+        assert_eq!(edges.len(), 2);
+
+        let primary = &edges[0];
+        assert_eq!(primary.kind.as_ref(), "sh.tangled.knot.member");
+        assert_eq!(primary.subject, SubjectRef::Did(subject.clone()));
+        assert_eq!(primary.source, source);
+        assert_eq!(primary.sort_micros, 1_700_000_000_000_000);
+
+        let mirror = &edges[1];
+        assert_eq!(mirror.kind.as_ref(), "sh.tangled.knot.member.by");
+        assert_eq!(mirror.subject, SubjectRef::Did(knot.clone()));
+        assert_eq!(mirror.source, source);
+        assert_eq!(mirror.sort_micros, 1_700_000_000_000_000);
+
         assert_eq!(
             decode_knot_owned_source(&source),
             Some(KnotOwnedSource::Member { knot, subject })
@@ -270,17 +284,25 @@ mod tests {
     }
 
     #[test]
-    fn collaborator_upsert_keys_on_repo_did() {
+    fn collaborator_upsert_builds_primary_and_subject_mirror_edges() {
         let repo = did("did:plc:scallop");
         let subject = did("did:plc:olaren");
         let (source, edges) =
             collaborator_upsert(&repo, &subject, 42).expect("build collaborator upsert");
-        assert_eq!(edges.len(), 1);
-        let edge = &edges[0];
-        assert_eq!(edge.kind.as_ref(), "sh.tangled.repo.collaborator");
-        assert_eq!(edge.subject, SubjectRef::Did(repo.clone()));
-        assert_eq!(edge.source, source);
-        assert_eq!(edge.sort_micros, 42);
+        assert_eq!(edges.len(), 2);
+
+        let primary = &edges[0];
+        assert_eq!(primary.kind.as_ref(), "sh.tangled.repo.collaborator");
+        assert_eq!(primary.subject, SubjectRef::Did(repo.clone()));
+        assert_eq!(primary.source, source);
+        assert_eq!(primary.sort_micros, 42);
+
+        let mirror = &edges[1];
+        assert_eq!(mirror.kind.as_ref(), "sh.tangled.repo.collaborator.by");
+        assert_eq!(mirror.subject, SubjectRef::Did(subject.clone()));
+        assert_eq!(mirror.source, source);
+        assert_eq!(mirror.sort_micros, 42);
+
         assert_eq!(
             decode_knot_owned_source(&source),
             Some(KnotOwnedSource::Collaborator { repo, subject })
