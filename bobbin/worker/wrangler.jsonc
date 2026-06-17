@@ -1,0 +1,42 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bobbin",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-03-07",
+  "observability": {
+    "enabled": true,
+  },
+  "containers": [
+    {
+      "class_name": "BobbinContainer",
+      "image": "../containerfiles/bobbin.Containerfile",
+      "image_build_context": "../../",
+      "instance_type": "standard-2",
+      "max_instances": 1,
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "BOBBIN",
+        "class_name": "BobbinContainer",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["BobbinContainer"],
+    },
+  ],
+  "custom_domains": [
+    {
+      "pattern": "api.tangled.org",
+    },
+  ],
+  "vars": {
+    "BOBBIN_HYDRANT_URL": "https://hyd.bob.oyster.cafe",
+    "BOBBIN_SLINGSHOT_URL": "https://slng.bob.oyster.cafe",
+    "BOBBIN_LOG": "info",
+  },
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@tangled/bobbin-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "^0.3.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260317.1",
+    "@types/node": "^25.5.0",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.75.0"
+  }
+}
