@@ -270,6 +270,18 @@ func (s *State) StandardRouter(mw *middleware.Middleware) http.Handler {
 		r.Post("/punchcard", s.UpdateProfilePunchcardSetting)
 	})
 
+	r.With(middleware.AuthMiddleware(s.oauth)).Route("/welcome", func(r chi.Router) {
+		r.Get("/", s.OnboardingResume)
+		r.Get("/profile", s.OnboardingProfile)
+		r.Post("/profile", s.OnboardingSaveProfile)
+		r.Get("/keys", s.OnboardingKeys)
+		r.Get("/social", s.OnboardingSocial)
+		r.Get("/repo", s.OnboardingRepo)
+		r.Post("/next", s.OnboardingNext)
+		r.Post("/skip", s.OnboardingSkip)
+		r.Post("/complete", s.OnboardingComplete)
+	})
+
 	r.Mount("/settings", s.SettingsRouter())
 	r.Mount("/strings", s.StringsRouter(mw))
 
