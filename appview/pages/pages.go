@@ -434,6 +434,7 @@ type BlogPost struct {
 
 type TimelineParams struct {
 	BaseParams
+	Onboarding       models.OnboardingProgress
 	Timeline         []models.TimelineGroup
 	Repos            []models.Repo
 	GfiLabel         *models.LabelDefinition

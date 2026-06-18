@@ -105,6 +105,14 @@ func (t *Timeline) Timeline(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var onboarding *models.Onboarding
+	if user != nil {
+		onboarding, err = db.GetOnboarding(t.db, user.Did)
+		if err != nil {
+			t.logger.Error("failed to get onboarding status", "err", err)
+		}
+	}
+
 	var canFocus bool
 	if user != nil {
 		focusCount, _ := db.CountFocusNotifs(t.db, user.Did)
@@ -113,6 +121,7 @@ func (t *Timeline) Timeline(w http.ResponseWriter, r *http.Request) {
 
 	err = t.pages.Timeline(w, pages.TimelineParams{
 		BaseParams:       pages.BaseParamsFromContext(r.Context()),
+		Onboarding:       onboarding.Progress(),
 		Timeline:         timeline,
 		Repos:            repos,
 		GfiLabel:         gfiLabel,

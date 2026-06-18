@@ -268,7 +268,7 @@ func (s *Settings) profileSettings(w http.ResponseWriter, r *http.Request) {
 	// TODO: bring the user state from DB instead of PDS request
 	isDeactivated := s.isAccountDeactivated(r.Context(), syntax.DID(user.Did))
 
-	s.Pages.UserProfileSettings(w, pages.UserProfileSettingsParams{
+	err = s.Pages.UserProfileSettings(w, pages.UserProfileSettingsParams{
 		BaseParams:          pages.BaseParamsFromContext(r.Context()),
 		PunchcardPreference: punchcardPreferences,
 		IsTnglSh:            isTnglSh,

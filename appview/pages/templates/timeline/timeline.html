@@ -17,6 +17,9 @@
 <div id="timeline-grid" class="flex flex-col w-full max-w-[1920px] mx-auto md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)] md:items-start">
 
     <div class="hidden md:flex md:flex-col md:gap-4 md:pt-4 md:px-4 md:sticky md:top-0 md:h-screen md:overflow-y-auto md:pb-4 md:w-full md:max-w-[400px]">
+        {{ if .Onboarding.Active }}
+            {{ template "timeline/fragments/welcome" . }}
+        {{ end }}
         {{ template "timeline/fragments/notifications" . }}
         {{ template "timeline/fragments/recents" . }}
     </div>

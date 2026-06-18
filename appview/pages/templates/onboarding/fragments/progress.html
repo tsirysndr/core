@@ -1,0 +1,8 @@
+{{ define "onboarding/progressBar" }}
+  <div class="flex items-center gap-2">
+    <span class="text-xs tabular-nums text-gray-500 dark:text-gray-400 shrink-0">{{ .Step }}/{{ .Total }}</span>
+    <div class="h-1 flex-1 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+      <div class="h-full rounded-full bg-indigo-500" style="width: {{ .Percent }}%"></div>
+    </div>
+  </div>
+{{ end }}
