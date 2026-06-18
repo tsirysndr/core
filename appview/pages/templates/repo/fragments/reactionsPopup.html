@@ -16,17 +16,19 @@
     id="reactions-popover-{{ $id }}"
     popover
     style="position-anchor: --reactions-anchor-{{ $id }};"
-    class="[&:popover-open]:grid grid-cols-4 [position-area:bottom_center] justify-self-center w-max inset-auto mt-1 rounded bg-white dark:bg-gray-800 dark:text-white border border-gray-200 dark:border-gray-700 shadow-lg"
+    class="[position-area:bottom_center] justify-self-center w-max h-fit inset-auto mt-1 rounded bg-white dark:bg-gray-800 dark:text-white border border-gray-200 dark:border-gray-700 shadow-lg"
   >
-    {{ range $kind := const.OrderedReactionKinds }}
-    <button
-      type="button"
-      popovertarget="reactions-popover-{{ $id }}"
-      popovertargetaction="hide"
-      class="reactBtn-{{ $.CommentRkey }}-{{ $kind }} btn-flat px-3 text-base hover:bg-gray-100 dark:hover:bg-gray-700"
-    >
-      {{ $kind }}
-    </button>
-    {{ end }}
+    <div class="grid grid-cols-4">
+      {{ range $kind := const.OrderedReactionKinds }}
+      <button
+        type="button"
+        popovertarget="reactions-popover-{{ $id }}"
+        popovertargetaction="hide"
+        class="reactBtn-{{ $.CommentRkey }}-{{ $kind }} btn-flat px-3 text-base hover:bg-gray-100 dark:hover:bg-gray-700"
+      >
+        {{ $kind }}
+      </button>
+      {{ end }}
+    </div>
   </div>
 {{ end }}
