@@ -57,6 +57,33 @@ func DeleteFollowByRkey(e Execer, userDid, rkey string) error {
 	return err
 }
 
+// GetMostFollowed returns the DIDs with the most followers, most-followed first.
+func GetMostFollowed(e Execer, limit int) ([]string, error) {
+	query := `
+		select subject_did, count(*) as followers
+		from follows
+		group by subject_did
+		order by followers desc
+		limit ?`
+
+	rows, err := e.Query(query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var dids []string
+	for rows.Next() {
+		var did string
+		var followers int64
+		if err := rows.Scan(&did, &followers); err != nil {
+			return nil, err
+		}
+		dids = append(dids, did)
+	}
+	return dids, rows.Err()
+}
+
 func GetFollowerFollowingCount(e Execer, did string) (models.FollowStats, error) {
 	var followers, following int64
 	err := e.QueryRow(
