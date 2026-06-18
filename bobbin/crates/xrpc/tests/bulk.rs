@@ -127,6 +127,18 @@ fn enc(s: &str) -> String {
 fn bulk_request(endpoint: &str, key: &str, values: &[&str]) -> Request<Body> {
     let qs = values
         .iter()
+        .map(|v| format!("{key}={v}"))
+        .collect::<Vec<_>>()
+        .join("&");
+    Request::builder()
+        .uri(format!("/xrpc/{endpoint}?{qs}"))
+        .body(Body::empty())
+        .unwrap()
+}
+
+fn bulk_request_escaped(endpoint: &str, key: &str, values: &[&str]) -> Request<Body> {
+    let qs = values
+        .iter()
         .map(|v| format!("{key}={}", enc(v)))
         .collect::<Vec<_>>()
         .join("&");
@@ -258,6 +270,31 @@ async fn get_profiles_returns_all_resolved_profiles() {
     assert_eq!(status, StatusCode::OK);
     let items = body["items"].as_array().unwrap();
     assert_eq!(items.len(), 2);
+}
+
+#[tokio::test]
+async fn get_profiles_accepts_percent_escaped_at_uris() {
+    let h = Harness::new().await;
+    h.mount(
+        &did("did:plc:nel"),
+        &nsid("sh.tangled.actor.profile"),
+        &rkey("self"),
+        profile_body(&handle("witchcraft.systems")),
+    )
+    .await;
+    let app = router(h.state.clone());
+    let (status, body) = json_response(
+        app.oneshot(bulk_request_escaped(
+            "sh.tangled.actor.getProfiles",
+            "actors",
+            &["at://did:plc:nel/sh.tangled.actor.profile/self"],
+        ))
+        .await
+        .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["items"].as_array().unwrap().len(), 1);
 }
 
 #[tokio::test]

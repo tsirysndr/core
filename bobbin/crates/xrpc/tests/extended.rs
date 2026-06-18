@@ -133,6 +133,24 @@ impl Harness {
 }
 
 fn list_request(endpoint: &str, subject: &str, extras: &[(&str, &str)]) -> Request<Body> {
+    let mut qs = format!("subject={subject}");
+    extras.iter().for_each(|(k, v)| {
+        qs.push('&');
+        qs.push_str(k);
+        qs.push('=');
+        qs.push_str(&encode(v));
+    });
+    Request::builder()
+        .uri(format!("/xrpc/{endpoint}?{qs}"))
+        .body(Body::empty())
+        .unwrap()
+}
+
+fn list_request_escaped_subject(
+    endpoint: &str,
+    subject: &str,
+    extras: &[(&str, &str)],
+) -> Request<Body> {
     let mut qs = format!("subject={}", encode(subject));
     extras.iter().for_each(|(k, v)| {
         qs.push('&');
@@ -383,6 +401,49 @@ async fn list_label_ops_accepts_issue_subject() {
     assert_eq!(items.len(), 1);
     assert_eq!(items[0]["value"]["subject"], json!(issue_uri.as_ref()));
     assert_eq!(items[0]["value"]["add"][0]["key"], json!(def_uri.as_ref()));
+}
+
+#[tokio::test]
+async fn list_ops_accepts_percent_escaped_subject() {
+    let h = Harness::new().await;
+    let issue_uri = at("at://did:plc:clam/sh.tangled.repo.issue/i1");
+    let author = did("did:plc:nel");
+    let rk = rkey("op1");
+    let def_uri = at("at://did:plc:clam/sh.tangled.label.definition/bug");
+    h.add_edge(
+        &nsid("sh.tangled.label.op"),
+        &issue_uri,
+        &at(&format!(
+            "at://{}/sh.tangled.label.op/{}",
+            author.as_ref(),
+            rk.as_ref()
+        )),
+    );
+    h.mount(
+        &author,
+        &nsid("sh.tangled.label.op"),
+        &rk,
+        label_op_body(&issue_uri, &def_uri, "true"),
+    )
+    .await;
+
+    let app = router(h.state.clone());
+    let (status, body) = json_response(
+        app.oneshot(list_request_escaped_subject(
+            "sh.tangled.label.listOps",
+            issue_uri.as_ref(),
+            &[],
+        ))
+        .await
+        .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "escaped subject must still be accepted"
+    );
+    assert_eq!(body["items"].as_array().unwrap().len(), 1);
 }
 
 #[tokio::test]

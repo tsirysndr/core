@@ -84,6 +84,13 @@ async fn mount_record(
 }
 
 fn xrpc_request(endpoint: &str, param: &str, value: &str) -> Request<Body> {
+    Request::builder()
+        .uri(format!("/xrpc/{endpoint}?{param}={value}"))
+        .body(Body::empty())
+        .unwrap()
+}
+
+fn xrpc_request_escaped(endpoint: &str, param: &str, value: &str) -> Request<Body> {
     let encoded: String = byte_serialize(value.as_bytes()).collect();
     Request::builder()
         .uri(format!("/xrpc/{endpoint}?{param}={encoded}"))
@@ -212,6 +219,59 @@ async fn cold_start_serves_all_four_point_lookups() {
             }
         })
         .await;
+}
+
+#[tokio::test]
+async fn percent_escaped_at_uri_resolves_identically_to_raw() {
+    let server = MockServer::start().await;
+    let clam = did("did:plc:clam");
+    mount_record(
+        &server,
+        &clam,
+        &nsid("sh.tangled.actor.profile"),
+        &rkey("self"),
+        json!({
+            "$type": "sh.tangled.actor.profile",
+            "bluesky": false,
+            "description": "clam shell"
+        }),
+    )
+    .await;
+
+    let state = fresh_app(&Url::parse(&server.uri()).unwrap()).await;
+    let app = router(state);
+
+    let at_uri = format!("at://{}/sh.tangled.actor.profile/self", clam.as_ref());
+
+    let (raw_status, raw_body) = json_response(
+        app.clone()
+            .oneshot(xrpc_request(
+                "sh.tangled.actor.getProfile",
+                "actor",
+                &at_uri,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let (escaped_status, escaped_body) = json_response(
+        app.oneshot(xrpc_request_escaped(
+            "sh.tangled.actor.getProfile",
+            "actor",
+            &at_uri,
+        ))
+        .await
+        .unwrap(),
+    )
+    .await;
+
+    assert_eq!(raw_status, StatusCode::OK, "raw at-uri status");
+    assert_eq!(escaped_status, StatusCode::OK, "escaped at-uri status");
+    assert_eq!(
+        raw_body, escaped_body,
+        "raw and escaped must resolve identically"
+    );
+    assert_eq!(escaped_body["uri"], at_uri);
 }
 
 #[tokio::test]

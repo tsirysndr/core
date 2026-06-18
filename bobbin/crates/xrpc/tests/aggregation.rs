@@ -155,7 +155,7 @@ impl Harness {
 }
 
 fn list_request(endpoint: &str, subject: &str, extras: &[(&str, &str)]) -> Request<Body> {
-    let mut qs = format!("subject={}", encode(subject));
+    let mut qs = format!("subject={subject}");
     extras.iter().for_each(|(k, v)| {
         qs.push('&');
         qs.push_str(k);
