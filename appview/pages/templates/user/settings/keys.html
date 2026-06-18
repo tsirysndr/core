@@ -29,13 +29,9 @@
       {{ template "addKeyButton" . }}
     </div>
   </div>
-  <div class="flex flex-col rounded border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700 w-full">
+  <div id="keys-list" class="flex flex-col rounded border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700 w-full [&:not(:has(*))]:hidden">
     {{ range .PubKeys }}
-      {{ template "user/settings/fragments/keyListing" (list $ .) }}
-    {{ else }}
-      <div class="flex items-center justify-center p-2 text-gray-500">
-        No keys added yet
-      </div>
+      {{ template "user/settings/fragments/keyListing" . }}
     {{ end }}
   </div>
 {{ end }}
@@ -60,7 +56,9 @@
 <form
   hx-put="/settings/keys"
   hx-indicator="#spinner"
-  hx-swap="none"
+  hx-target="#keys-list"
+  hx-swap="beforeend"
+  hx-on:keyadded="this.reset(); this.closest('[popover]').hidePopover()"
   class="flex flex-col gap-2"
 >
   <label for="key-name" class="text-lg font-medium p-0">

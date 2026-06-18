@@ -275,6 +275,9 @@ func (s *Settings) profileSettings(w http.ResponseWriter, r *http.Request) {
 		IsDeactivated:       isDeactivated,
 		HandleOpen:          r.URL.Query().Get("handle") == "1",
 	})
+	if err != nil {
+		s.Logger.Error("failed to render settings page", "err", err)
+	}
 }
 
 func (s *Settings) notificationsSettings(w http.ResponseWriter, r *http.Request) {
@@ -680,7 +683,13 @@ func (s *Settings) keys(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		s.Pages.HxLocation(w, "/settings/keys")
+		// return just the new key row so the client appends it in place. the
+		// keyadded trigger lets the form reset/close only on success (errors go
+		// through Notice, which also returns 200).
+		w.Header().Set("HX-Trigger", "keyadded")
+		if err := s.Pages.KeyFragment(w, pubKey); err != nil {
+			s.Logger.Error("failed to render key fragment", "err", err)
+		}
 		return
 
 	case http.MethodDelete:
@@ -728,7 +737,8 @@ func (s *Settings) keys(w http.ResponseWriter, r *http.Request) {
 		}
 		s.Logger.Info("deleted key successfully", "name", name)
 
-		s.Pages.HxLocation(w, "/settings/keys")
+		w.Header().Set("HX-Trigger", "keydeleted")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 }

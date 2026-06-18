@@ -30,7 +30,7 @@
 {{ end }}
 
 {{ define "content" }}
-  {{ if not .Card.HasProfile }}
+  {{ if not .Card.IsTangledUser }}
   <section class="bg-white dark:bg-gray-800 px-2 py-6 md:p-6 rounded w-full dark:text-white shadow-sm">
     <div class="flex items-center gap-6 p-4">
       <img class="w-28 h-28 shrink-0 object-cover rounded-full" src="{{ profileAvatarUrl .Card.Profile "" }}" />
