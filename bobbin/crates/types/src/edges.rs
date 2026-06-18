@@ -854,7 +854,9 @@ mod tests {
         )
         .expect("parse");
         let edges = parsed
-            .extract_edges(&at("at://did:plc:nel/sh.tangled.repo.collaborator/abcabcabcabcz"))
+            .extract_edges(&at(
+                "at://did:plc:nel/sh.tangled.repo.collaborator/abcabcabcabcz",
+            ))
             .expect("extract");
         assert_eq!(edges.len(), 2);
         let mirror = edges
