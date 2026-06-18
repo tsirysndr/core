@@ -1,0 +1,58 @@
+{{ define "mainLayout" }}
+  <div class="w-full min-h-screen flex items-start justify-center bg-white dark:bg-transparent px-4 pt-16 pb-8">
+    <main class="max-w-3xl w-full">
+      <h1 class="flex place-content-center mb-4">
+        {{ template "fragments/logotype" (dict "Classes" "w-40 h-20") }}
+      </h1>
+
+      <div class="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 shadow-sm dark:text-white overflow-hidden">
+        <div class="px-6 py-5 border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
+          {{ template "onboarding/fragments/steps" . }}
+        </div>
+        <div class="p-6">
+          {{ block "content" . }}{{ end }}
+        </div>
+      </div>
+
+      {{ if lt .Step 3 }}
+      <form hx-post="/welcome/skip" hx-swap="none" class="flex justify-center mt-4">
+        <button type="submit" class="btn-flat flex items-center gap-2">
+          {{ i "x" "size-4" }}
+          Skip onboarding
+        </button>
+      </form>
+      {{ end }}
+    </main>
+  </div>
+{{ end }}
+
+{{ define "topbarLayout" }}
+  <div class="hidden"></div>
+{{ end }}
+
+{{ define "footerLayout" }}
+  <div class="hidden"></div>
+{{ end }}
+
+{{ define "onboarding/fragments/steps" }}
+  {{ $step := .Step }}
+  <ol class="flex items-center w-full gap-3 text-sm">
+    {{ range $i, $label := list "Set up your profile" "Follow & star" "Add SSH keys" "Finish" }}
+      {{ if gt $i 0 }}
+        <li aria-hidden="true" class="h-px flex-1 min-w-4 bg-gray-200 dark:bg-gray-700"></li>
+      {{ end }}
+      <li class="flex items-center gap-2 flex-shrink-0">
+        {{ if lt $i $step }}
+          <span class="flex items-center justify-center size-7 rounded-full bg-gray-200 dark:bg-gray-700 text-black dark:text-white">{{ i "check" "size-4" }}</span>
+          <span class="hidden sm:inline text-gray-500 dark:text-gray-400">{{ $label }}</span>
+        {{ else if eq $i $step }}
+          <span class="flex items-center justify-center size-7 rounded-full bg-indigo-600 dark:bg-indigo-500 text-white dark:text-white font-medium">{{ add $i 1 }}</span>
+          <span class="hidden sm:inline font-medium text-black dark:text-white">{{ $label }}</span>
+        {{ else }}
+          <span class="flex items-center justify-center size-7 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500">{{ add $i 1 }}</span>
+          <span class="hidden sm:inline text-gray-400 dark:text-gray-500">{{ $label }}</span>
+        {{ end }}
+      </li>
+    {{ end }}
+  </ol>
+{{ end }}

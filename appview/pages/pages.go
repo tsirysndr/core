@@ -236,6 +236,15 @@ func (p *Pages) parseLoginBase(top string) (*template.Template, error) {
 	return p.parse(stack...)
 }
 
+func (p *Pages) parseOnboardingBase(top string) (*template.Template, error) {
+	stack := []string{
+		"layouts/base",
+		"layouts/onboardingbase",
+		top,
+	}
+	return p.parse(stack...)
+}
+
 func (p *Pages) executePlain(name string, w io.Writer, params any) error {
 	tpl, err := p.parse(name)
 	if err != nil {
