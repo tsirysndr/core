@@ -1725,6 +1725,242 @@ latest revision, and change your config block like so:
  };
 ```
 
+# Bobbin
+
+Bobbin is an API appview for Tangled records. It serves XRPC
+endpoints for `sh.tangled.*`, with it you can get repos,
+issues, pulls, comments, follows, stars, labels, pipelines,
+and profiles. It is read-only, there is no auth, since that
+should all be handled direct-to-PDS and knot respectively.
+
+**Bobbin has no permanent storage**.
+
+It is only a glorified edge index, in the graph theory
+sense. Additionally it has a record cache, re-filled on
+demand. All other data that Bobbin serves comes live from
+PDSes & knots.
+
+## What Bobbin needs
+
+The way that Bobbin is able to pull off being
+so stateless is by moving state upstream.
+Primarily it depends on an instance of
+[Hydrant](https://tangled.org/did:plc:6v3ul2ptnqctyxwkz5ti4amn)
+, which is the service that gives an event stream
+for Bobbin to quickly backfill from on every restart.
+Backfilling ought to take less than a couple of minutes
+maximum. If the upstream instance of Hydrant fails
+while Bobbin is live, its list/count endpoints stop
+advancing and report a stale cursor. Single-lookups
+will continue working, due to the second dependency:
+[Slingshot](https://tangled.org/did:plc:c7mc2fn47ihdihul4vjwsuy3/tree/main/slingshot).
+Slingshot fetches individual records & resolves identities.
+If the upstream instance of Slingshot fails, single-lookups
+will fail with a `502` error. There are some aggregation
+endpoints that use Slingshot for hydrating, which will also
+fail.
+
+A soft dependency that ought to exist for Bobbin to operate
+correctly is simply the plethora of knots that are out
+there, that Bobbin talks to directly for git data and, for
+knots at v1.15+, members & collaborators.
+
+## Building Bobbin
+
+Bobbin is under [Tangled's core monorepo, under bobbin/](https://tangled.org/did:plc:j5hmlfdrwkvtxm7cjmu7j2is/tree/master/bobbin).
+Here's an easy local debug-build:
+
+```sh
+cargo build -p bobbin
+```
+
+Bobbin loves being in a container. When using
+`bobbin/containerfiles/bobbin.Containerfile`, it runs `cargo
+build --release --bin bobbin --package bobbin` within a
+little Debian runtime, exposing port 8090.
+
+## Configuration
+
+The best way to configure Bobbin is via a toml config file.
+There's an `example.toml` in [Bobbin's subdir](https://tangled.org/did:plc:j5hmlfdrwkvtxm7cjmu7j2is/blob/master/bobbin/example.toml).
+Every value is overridable by a `BOBBIN_*` env var.
+The load order is env, then `--config <path>`, then
+`/etc/bobbin/config.toml`, then built-in defaults.
+
+Load and check a config without starting the server:
+
+```sh
+bobbin --config config.toml validate
+```
+
+Minimal config is the two upstream URLs. The hydrant URL
+takes `ws://` or `wss://`. An `http://` or `https://`
+URL is rewritten to the matching websocket scheme at
+connection-time.
+
+```toml
+[server]
+binds = ["127.0.0.1:8090"]
+
+# Loopback-only & can leave empty to disable debug introspection.
+debug_bind = "127.0.0.1:8091"
+
+[hydrant]
+url = "https://hydrant.example.com"
+
+[slingshot]
+url = "https://slingshot.example.com"
+```
+
+> 🦪 Lewis
+>
+> At time of writing, we (Tangled) don't host public
+> instances of Hydrant or Slingshot. You will have to
+> find public instances or spin these up yourself! :P
+
+Take a gander in the project's example.toml for an
+exhaustive list of things to configure.
+
+You will discover fun things such as a configurable adaptive
+loop that watches the cgroup memory limit & throttles heavy
+requests under pressure. It only works if it detects a
+cgroup limit is present. The config for that is in the
+`[backpressure]` block of the config template.
+
+## Running Bobbin
+
+Start the server using a config toml:
+
+```bash
+bobbin --config config.toml
+```
+Bobbin wakes up in a cold sweat and immediately gets to
+work:
+1. It binds its listeners, connects to the Hydrant stream
+  in the background.
+2. It serves requests from the first
+  moment it's alive, even before the Hydrant stream connects
+  or finishes catching up. Having a cold Hydrant itself
+  costs only latency and approximate counts.
+
+## The API
+
+**Single lookups** take a record's AT-URI.
+
+- `getRepo` takes the repo URI:
+
+```sh
+curl "$BOBBIN/xrpc/sh.tangled.repo.getRepo?repo=at://did:plc:boltless/sh.tangled.repo/squid"
+```
+```json
+{
+  "uri": "at://did:plc:boltless/sh.tangled.repo/squid",
+  "cid": "bafyrei...",
+  "value": { "$type": "sh.tangled.repo", "knot": "knot1.tangled.sh", "description": "...", "createdAt": "..." }
+}
+```
+
+- `getProfile` takes the full profile record URI, so a bare
+  handle or DID will not resolve:
+
+```sh
+curl "$BOBBIN/xrpc/sh.tangled.actor.getProfile?actor=at://did:plc:boltless/sh.tangled.actor.profile/self"
+```
+
+- If Slingshot cannot serve the record, the response is `502`:
+
+```json
+{ "error": "UpstreamFailed", "message": "upstream unavailable: ..." }
+```
+
+**Aggregation** endpoints come in `list*` and `count*` pairs,
+each with a `*By` sibling, and require a `subject` query param.
+
+- `listRepos` and `countRepos` key on the owner DID:
+
+```sh
+curl "$BOBBIN/xrpc/sh.tangled.repo.countRepos?subject=did:plc:boltless"
+```
+```json
+{ "count": 7, "distinctAuthors": 1 }
+```
+
+```sh
+curl "$BOBBIN/xrpc/sh.tangled.repo.listRepos?subject=did:plc:boltless&limit=3"
+```
+```json
+{ "items": [ { "uri": "at://did:plc:boltless/sh.tangled.repo/squid", "cid": "bafyrei...", "value": { } } ], "cursor": null }
+```
+
+- Bobbin validates the subject per collection. Here a repo URI
+  is passed where a bare DID is required, so the call returns a
+  `400`:
+
+```sh
+curl "$BOBBIN/xrpc/sh.tangled.graph.listFollows?subject=at://did:plc:boltless/sh.tangled.repo/squid"
+```
+```json
+{ "error": "InvalidRequest", "message": "invalid request: subject must be a bare did, got at-uri with collection sh.tangled.repo" }
+```
+
+**Search** is a single endpoint over an in-mem full-text
+index:
+
+```sh
+curl "$BOBBIN/xrpc/sh.tangled.search.query?q=tangled&limit=2"
+```
+```json
+{ "hits": [ { "uri": "at://...", "cid": "...", "nsid": "sh.tangled.repo", "score": 27.1, "value": { } } ], "cursor": null }
+```
+
+**Git data** such as blob, tree, diff, log, and archive proxies
+straight to the repo's knot, streamed back without caching.
+
+## Coverage and warm-up
+
+- While the edge index is catching up from Hydrant,
+  the aggregation count is a lower bound & may still climb.
+- One endpoint reports how far along the backfill it is:
+
+```sh
+curl "$BOBBIN/xrpc/sh.tangled.bobbin.getCoverage"
+```
+
+While warming up:
+
+```json
+{ "ready": false, "eventsProcessed": 45588, "lastCursor": 51658 }
+```
+
+Once caught up, Bobbin flips to ready:
+
+```json
+{ "ready": true, "eventsProcessed": 106085, "lastCursor": 116527 }
+```
+
+If starting up Hydrant for the first time, Hydrant itself
+will take a decent while (a couple of hours) to backfill
+from PDSes. Hydrant stores its backfill on disk. Bobbin
+restart reaches `ready` in minutes by replaying event from
+an already-populated Hydrant. If your Hydrant is new, expect
+Bobbin to backfill in that same couple of hours that Hydrant
+takes.
+
+## Loose ends and not-gonna-impl
+
+- **No coverage signal for per-knot rosters yet.**
+  Coverage tracks the hydrant stream only. A v1.15 knot
+  that is unreachable serves a stale or empty member set
+  with nothing to flag it.
+- **Knot eventstream fan-out isn't pooled.**
+  Bobbin opens one websocket per v1.15
+  knot on top of the hydrant subscription. A network with
+  thousands of knots wants pooling or a shared subscription.
+- **No sequential issue or PR numbers.** bobbin returns rkeys,
+  not `#42` style ids like the web appview. A client
+  deriving a display number does it from creation order. But
+  why bother? rkeys are the IDs.
+
 # Hacking on Tangled
 
 We highly recommend [installing
