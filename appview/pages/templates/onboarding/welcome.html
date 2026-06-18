@@ -1,0 +1,13 @@
+{{ define "title" }}Welcome &middot; Tangled{{ end }}
+
+{{ define "content" }}
+  {{ if eq .Step 0 }}
+    {{ template "onboarding/profile" . }}
+  {{ else if eq .Step 1 }}
+    {{ template "onboarding/social" . }}
+  {{ else if eq .Step 2 }}
+    {{ template "onboarding/keys" . }}
+  {{ else }}
+    {{ template "onboarding/finish" . }}
+  {{ end }}
+{{ end }}

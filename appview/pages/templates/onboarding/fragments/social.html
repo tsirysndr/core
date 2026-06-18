@@ -1,0 +1,51 @@
+{{ define "onboarding/social" }}
+  <h1 class="text-2xl font-semibold dark:text-white">Discover</h1>
+  <p class="text-base text-gray-500 dark:text-gray-400 mt-1 mb-4">Find users to follow and repositories to star.</p>
+
+  {{ if .People }}
+    <div class="grid grid-cols-1 gap-3 mb-4">
+      {{ range .People }}
+        <div class="border border-gray-200 dark:border-gray-700 rounded-sm overflow-hidden">
+          {{ template "user/fragments/followCard"
+            (dict
+                "LoggedInUser" $.LoggedInUser
+                "UserDid" .UserDid
+                "Profile" .Profile
+                "FollowStatus" .FollowStatus
+                "FollowersCount" .FollowersCount
+                "FollowingCount" .FollowingCount) }}
+        </div>
+      {{ end }}
+    </div>
+  {{ end }}
+
+  {{ if .TrendingRepos }}
+    <div class="grid grid-cols-1 gap-3">
+      {{ range .TrendingRepos }}
+        <div class="border border-gray-200 dark:border-gray-700 rounded-sm overflow-hidden">
+          {{ template "user/fragments/repoCard"
+            (list $ . true true
+              (dict
+                "SubjectAt" .RepoAt
+                "IsStarred" (index $.StarStatuses .RepoDid)
+                "StarCount" .RepoStats.StarCount
+                "RepoName" .Slug)) }}
+        </div>
+      {{ end }}
+    </div>
+  {{ end }}
+
+  {{ if not (or .People .TrendingRepos) }}
+    <p class="text-sm text-gray-500 dark:text-gray-400 my-4">Nothing to suggest right now — you can explore once you're set up.</p>
+  {{ end }}
+
+  <div class="flex items-center justify-between mt-6">
+    {{ template "onboarding/back" "/welcome/profile" }}
+    <form hx-post="/welcome/next" hx-swap="none">
+      <input type="hidden" name="step" value="2">
+      <button type="submit" class="btn-create-flat w-fit flex items-center gap-2 text-sm">
+        Next {{ i "arrow-right" "size-4" }}
+      </button>
+    </form>
+  </div>
+{{ end }}

@@ -1,6 +1,6 @@
 {{ define "user/fragments/editBio" }}
   <form
-    hx-post="/profile/bio"
+    hx-post="{{ if .Action }}{{ .Action }}{{ else }}/profile/bio{{ end }}"
     class="flex flex-col gap-4 my-2 max-w-full"
     hx-disabled-elt="#save-btn,#cancel-btn"
     hx-swap="none"

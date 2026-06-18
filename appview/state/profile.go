@@ -3,6 +3,7 @@ package state
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -804,18 +805,30 @@ func (s *State) createRepoItem(ctx context.Context, repo models.RepoEvent, autho
 
 func (s *State) UpdateProfileBio(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "UpdateProfileBio")
-	user := s.oauth.GetMultiAccountUser(r)
 
-	err := r.ParseForm()
-	if err != nil {
+	if err := r.ParseForm(); err != nil {
 		l.Error("invalid profile update form", "err", err)
 		s.pages.Notice(w, "update-profile", "Invalid form.")
 		return
 	}
 
+	profile, err := s.bioFormToProfile(r)
+	if err != nil {
+		s.pages.Notice(w, "update-profile", err.Error())
+		return
+	}
+
+	s.updateProfile(profile, w, r)
+}
+
+// bioFormToProfile builds a validated Profile from an form, callers must have
+// called r.ParseForm.
+func (s *State) bioFormToProfile(r *http.Request) (*models.Profile, error) {
+	user := s.oauth.GetMultiAccountUser(r)
+
 	profile, err := db.GetProfile(s.db, user.Did)
 	if err != nil {
-		l.Error("getting profile data", "did", user.Did, "err", err)
+		s.logger.Error("getting profile data", "did", user.Did, "err", err)
 	}
 	if profile == nil {
 		profile = &models.Profile{Did: user.Did}
@@ -829,14 +842,12 @@ func (s *State) UpdateProfileBio(w http.ResponseWriter, r *http.Request) {
 	if rawPreferredHandle != "" {
 		h, err := syntax.ParseHandle(rawPreferredHandle)
 		if err != nil {
-			s.pages.Notice(w, "update-profile", "Invalid handle format.")
-			return
+			return nil, errors.New("Invalid handle format.")
 		}
 
 		ident, err := s.idResolver.ResolveIdent(r.Context(), user.Did)
 		if err != nil || !slices.Contains(ident.AlsoKnownAs, "at://"+rawPreferredHandle) {
-			s.pages.Notice(w, "update-profile", "Handle not found in your DID document.")
-			return
+			return nil, errors.New("Handle not found in your DID document.")
 		}
 		profile.PreferredHandle = h
 	} else {
@@ -845,25 +856,20 @@ func (s *State) UpdateProfileBio(w http.ResponseWriter, r *http.Request) {
 
 	var links [5]string
 	for i := range 5 {
-		iLink := r.FormValue(fmt.Sprintf("link%d", i))
-		links[i] = iLink
+		links[i] = r.FormValue(fmt.Sprintf("link%d", i))
 	}
 	profile.Links = links
 
 	// Parse stats (exactly 2)
-	stat0 := r.FormValue("stat0")
-	stat1 := r.FormValue("stat1")
-
-	profile.Stats[0].Kind = models.ParseVanityStatKind(stat0)
-	profile.Stats[1].Kind = models.ParseVanityStatKind(stat1)
+	profile.Stats[0].Kind = models.ParseVanityStatKind(r.FormValue("stat0"))
+	profile.Stats[1].Kind = models.ParseVanityStatKind(r.FormValue("stat1"))
 
 	if err := db.ValidateProfile(s.db, profile); err != nil {
-		l.Error("invalid profile", "err", err)
-		s.pages.Notice(w, "update-profile", err.Error())
-		return
+		s.logger.Error("invalid profile", "err", err)
+		return nil, err
 	}
 
-	s.updateProfile(profile, w, r)
+	return profile, nil
 }
 
 func (s *State) UpdateProfilePins(w http.ResponseWriter, r *http.Request) {
@@ -904,14 +910,27 @@ func (s *State) UpdateProfilePins(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *State) updateProfile(profile *models.Profile, w http.ResponseWriter, r *http.Request) {
-	l := s.logger.With("handler", "updateProfile")
 	user := s.oauth.GetMultiAccountUser(r)
+
+	if err := s.writeProfile(r, profile); err != nil {
+		s.logger.With("handler", "updateProfile").Error("failed to write profile", "err", err)
+		s.pages.Notice(w, "update-profile", "Failed to update profile, try again later.")
+		return
+	}
+
+	s.pages.HxRedirect(w, "/"+user.Did)
+}
+
+// writeProfile persists a profile to the PDS and local DB and updates caches.
+// It is shared by the profile settings handler and the onboarding flow; the
+// response (notice/redirect) is left to the caller.
+func (s *State) writeProfile(r *http.Request, profile *models.Profile) error {
+	user := s.oauth.GetMultiAccountUser(r)
+	l := s.logger.With("handler", "writeProfile")
 
 	client, err := s.oauth.AuthorizedClient(r)
 	if err != nil {
-		l.Error("failed to get authorized client", "err", err)
-		s.pages.Notice(w, "update-profile", "Failed to update profile, try again later.")
-		return
+		return fmt.Errorf("failed to get authorized client: %w", err)
 	}
 
 	var pinnedRepoStrings []string
@@ -955,9 +974,7 @@ func (s *State) updateProfile(profile *models.Profile, w http.ResponseWriter, r 
 		SwapRecord: cid,
 	})
 	if err != nil {
-		l.Error("failed to update profile on PDS", "err", err)
-		s.pages.Notice(w, "update-profile", "Failed to update PDS, try again later.")
-		return
+		return fmt.Errorf("failed to update profile on PDS: %w", err)
 	}
 
 	if err := db.UpsertProfile(s.db, profile); err != nil {
@@ -977,13 +994,13 @@ func (s *State) updateProfile(profile *models.Profile, w http.ResponseWriter, r 
 			pipe.Del(ctx, didKey)
 		}
 		if _, execErr := pipe.Exec(ctx); execErr != nil {
-			l.Warn("failed to update preferred handle cache", "err", execErr)
+			s.logger.Warn("failed to update preferred handle cache", "err", execErr)
 		}
 	}
 
 	s.notifier.UpdateProfile(r.Context(), profile)
 
-	s.pages.HxRedirect(w, "/"+user.Did)
+	return nil
 }
 
 func (s *State) ProfilePopover(w http.ResponseWriter, r *http.Request) {
@@ -1153,25 +1170,29 @@ func (s *State) UploadProfileAvatar(w http.ResponseWriter, r *http.Request) {
 
 	l.Info("uploaded avatar blob", "cid", uploadBlobResp.Blob.Ref.String())
 
-	// get current profile record from PDS to get its CID for swap
+	// get current profile record from PDS to get its CID for swap. A new user
+	// (e.g. mid-onboarding) may not have a profile record yet; treat any error
+	// as "no existing record" and create a fresh one with no swap.
 	getRecordResp, err := comatproto.RepoGetRecord(r.Context(), client, "", tangled.ActorProfileNSID, user.Did, "self")
-	if err != nil {
-		l.Error("failed to get current profile record", "err", err)
-		s.pages.Notice(w, "avatar-error", "Failed to get current profile from your PDS")
-		return
-	}
 
 	var profileRecord *tangled.ActorProfile
-	if getRecordResp.Value != nil {
+	var swapCid *string
+	switch {
+	case err != nil:
+		l.Warn("no existing profile record, creating new record", "err", err)
+		profileRecord = &tangled.ActorProfile{}
+	case getRecordResp.Value != nil:
 		if val, ok := getRecordResp.Value.Val.(*tangled.ActorProfile); ok {
 			profileRecord = val
 		} else {
 			l.Warn("profile record type assertion failed, creating new record")
 			profileRecord = &tangled.ActorProfile{}
 		}
-	} else {
+		swapCid = getRecordResp.Cid
+	default:
 		l.Warn("no existing profile record, creating new record")
 		profileRecord = &tangled.ActorProfile{}
+		swapCid = getRecordResp.Cid
 	}
 
 	profileRecord.Avatar = uploadBlobResp.Blob
@@ -1181,7 +1202,7 @@ func (s *State) UploadProfileAvatar(w http.ResponseWriter, r *http.Request) {
 		Repo:       user.Did,
 		Rkey:       "self",
 		Record:     &lexutil.LexiconTypeDecoder{Val: profileRecord},
-		SwapRecord: getRecordResp.Cid,
+		SwapRecord: swapCid,
 	})
 
 	if err != nil {
@@ -1205,6 +1226,13 @@ func (s *State) UploadProfileAvatar(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		l.Error("failed to update profile in DB", "err", err)
 		s.pages.HxRefresh(w)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// inline uploads (e.g. the onboarding step) manage their own preview
+	// client-side; skip the full reload so unsaved form fields aren't cleared.
+	if r.FormValue("inline") == "true" {
 		w.WriteHeader(http.StatusOK)
 		return
 	}

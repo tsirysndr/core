@@ -1,0 +1,39 @@
+{{ define "onboarding/keys" }}
+  <h1 class="text-2xl font-semibold dark:text-white">Add an SSH key</h1>
+  <p class="text-base text-gray-500 dark:text-gray-400 mt-1">Add a public SSH key to push to your repositories over SSH.</p>
+
+  <div id="keys-list" class="flex flex-col rounded border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700 my-4 [&:not(:has(*))]:hidden">
+    {{ range .PubKeys }}
+      {{ template "user/settings/fragments/keyListing" . }}
+    {{ end }}
+  </div>
+
+  <form hx-put="/settings/keys" hx-target="#keys-list" hx-swap="beforeend" hx-on:keyadded="this.reset()" class="flex flex-col gap-4 my-4 group" hx-disabled-elt="#add-key-btn">
+    <div class="flex flex-col gap-1">
+      <label for="name" class="font-medium">Key name</label>
+      <input type="text" name="name" placeholder="my-laptop" required>
+    </div>
+    <div class="flex flex-col gap-1">
+      <label for="key" class="font-medium">Public key</label>
+      <textarea name="key" rows="3" required placeholder="ssh-ed25519 AAAA..." class="font-mono text-sm"></textarea>
+    </div>
+    <button id="add-key-btn" type="submit" class="ml-auto btn-flat flex w-fit items-center gap-2 text-sm">
+      {{ i "plus" "size-4 inline group-[.htmx-request]:hidden" }}
+      {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
+      Add key
+    </button>
+    <p id="settings-keys" class="error"></p>
+  </form>
+
+  <p id="settings-keys-delete-error" class="error"></p>
+
+  <div class="flex items-center justify-between mt-6">
+    {{ template "onboarding/back" "/welcome/social" }}
+    <form hx-post="/welcome/next" hx-swap="none">
+      <input type="hidden" name="step" value="3">
+      <button type="submit" class="btn-create-flat w-fit flex items-center gap-2 text-sm">
+        Next {{ i "arrow-right" "size-4" }}
+      </button>
+    </form>
+  </div>
+{{ end }}

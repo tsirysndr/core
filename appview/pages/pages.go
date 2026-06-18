@@ -271,6 +271,15 @@ func (p *Pages) executeLogin(name string, w io.Writer, params any) error {
 	return err
 }
 
+func (p *Pages) executeOnboarding(name string, w io.Writer, params any) error {
+	tpl, err := p.parseOnboardingBase(name)
+	if err != nil {
+		return err
+	}
+
+	return tpl.ExecuteTemplate(w, "layouts/base", params)
+}
+
 func (p *Pages) execute(name string, w io.Writer, params any) error {
 	tpl, err := p.parseBase(name)
 	if err != nil {
@@ -705,6 +714,7 @@ func (p *Pages) ForkRepo(w io.Writer, params ForkRepoParams) error {
 type ProfileCard struct {
 	UserDid           string
 	HasProfile        bool
+	IsTangledUser     bool
 	FollowStatus      models.FollowStatus
 	VouchRelationship *models.VouchRelationship
 	Punchcard         *models.Punchcard
@@ -873,6 +883,9 @@ type EditBioParams struct {
 	BaseParams
 	Profile     *models.Profile
 	AlsoKnownAs []string
+	// Action optionally overrides the form's hx-post target. Defaults to
+	// /profile/bio when empty. Used by the onboarding flow to save + advance.
+	Action string
 }
 
 func (p *Pages) EditBioFragment(w io.Writer, params EditBioParams) error {
@@ -905,6 +918,29 @@ type StarBtnFragmentParams struct {
 func (p *Pages) StarBtnFragment(w io.Writer, params StarBtnFragmentParams) error {
 	params.HxSwapOob = true
 	return p.executePlain("fragments/starBtn", w, params)
+}
+
+type OnboardingParams struct {
+	BaseParams
+	Step int
+
+	EditBio EditBioParams
+
+	PubKeys []models.PublicKey
+
+	People        []FollowCard
+	TrendingRepos []models.Repo
+	StarStatuses  map[string]bool
+}
+
+// KeyFragment renders a single SSH key row (used to append a newly added key
+// to the list without a full reload).
+func (p *Pages) KeyFragment(w io.Writer, key models.PublicKey) error {
+	return p.executePlain("user/settings/fragments/keyListing", w, key)
+}
+
+func (p *Pages) Onboarding(w io.Writer, params OnboardingParams) error {
+	return p.executeOnboarding("onboarding/welcome", w, params)
 }
 
 type RepoIndexParams struct {

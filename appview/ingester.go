@@ -613,7 +613,7 @@ func (i *Ingester) ingestProfile(ctx context.Context, e *jmodels.Event, l *slog.
 
 		err = db.ValidateProfile(i.Db, &profile)
 		if err != nil {
-			return fmt.Errorf("invalid profile record")
+			return fmt.Errorf("invalid profile record: %w", err)
 		}
 
 		err = db.UpsertProfile(i.Db, &profile)

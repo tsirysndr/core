@@ -704,20 +704,20 @@ func (s *Settings) keys(w http.ResponseWriter, r *http.Request) {
 		if rkey == "" {
 			if err := db.DeletePublicKeyLegacy(s.Db, did, name); err != nil {
 				s.Logger.Error("failed to remove public key", "err", err)
-				s.Pages.Notice(w, "settings-keys", "Failed to remove public key.")
+				s.Pages.Notice(w, "settings-keys-delete-error", "Failed to remove public key.")
 				return
 			}
 		} else {
 			if err := db.DeletePublicKeyByRkey(s.Db, did, rkey); err != nil {
 				s.Logger.Error("failed to remove public key", "err", err)
-				s.Pages.Notice(w, "settings-keys", "Failed to remove public key.")
+				s.Pages.Notice(w, "settings-keys-delete-error", "Failed to remove public key.")
 				return
 			}
 
 			client, err := s.OAuth.AuthorizedClient(r)
 			if err != nil {
 				s.Logger.Error("failed to authorize client", "err", err)
-				s.Pages.Notice(w, "settings-keys", "Failed to authorize client.")
+				s.Pages.Notice(w, "settings-keys-delete-error", "Failed to authorize client.")
 				return
 			}
 
@@ -731,7 +731,7 @@ func (s *Settings) keys(w http.ResponseWriter, r *http.Request) {
 			// invalid record
 			if err != nil {
 				s.Logger.Error("failed to delete record", "err", err)
-				s.Pages.Notice(w, "settings-keys", "Failed to remove key.")
+				s.Pages.Notice(w, "settings-keys-delete-error", "Failed to remove key.")
 				return
 			}
 		}

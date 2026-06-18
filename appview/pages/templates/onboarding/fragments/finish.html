@@ -1,0 +1,79 @@
+{{ define "onboarding/finish" }}
+  <h1 class="text-2xl font-semibold dark:text-white">You're all set!</h1>
+  <p class="text-base text-gray-500 dark:text-gray-400 mt-1">Here are a few things to explore next:</p>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6">
+    <div class="sm:col-span-2 flex flex-col gap-2 border border-gray-200 dark:border-gray-700 rounded p-4">
+      <div class="flex items-center gap-2">
+        {{ i "book-marked" "size-4" }}
+        <h3 class=" dark:text-white">Create a repository</h3>
+      </div>
+      <p class="text-sm text-gray-500 dark:text-gray-400 flex-1">Kick things off by creating your first repository.</p>
+      <a href="/repo/new" class="ml-auto text-sm w-fit flex items-center gap-1 dark:text-white hover:underline">
+        Create {{ i "arrow-right" "size-4" }}
+      </a>
+    </div>
+
+    <div class="sm:row-span-2 flex flex-col gap-2 border border-gray-200 dark:border-gray-700 rounded p-4">
+      <div class="flex items-center gap-2">
+        {{ i "git-pull-request" "size-4" }}
+        <h3 class=" dark:text-white">Contribute to the Tangled project</h3>
+      </div>
+      <p class="text-sm text-gray-500 dark:text-gray-400 flex-1">
+        Tangled is fully open-source: Open a feature request, or submit a bug-fix!
+        <br>
+        <br>
+        All contributions are welcome.
+      </p>
+      <a href="/core" class="ml-auto text-sm w-fit flex items-center gap-1 dark:text-white hover:underline">
+        Contribute {{ i "arrow-right" "size-4" }}
+      </a>
+    </div>
+
+    <div class="flex flex-col gap-2 border border-gray-200 dark:border-gray-700 rounded p-4">
+      <div class="flex items-center gap-2">
+        {{ i "server" "size-4" }}
+        <h3 class=" dark:text-white">Host your own knot</h3>
+      </div>
+      <p class="text-sm text-gray-500 dark:text-gray-400 flex-1">Host repositories on your own infrastructure with knots.</p>
+      <a href="https://docs.tangled.org/knot-self-hosting-guide.html" target="_blank" rel="noopener noreferrer" class="ml-auto text-sm w-fit flex items-center gap-1 dark:text-white hover:underline">
+        Read the docs {{ i "arrow-right" "size-4" }}
+      </a>
+    </div>
+
+    <div class="flex flex-col gap-2 border border-gray-200 dark:border-gray-700 rounded p-4">
+      <div class="flex items-center gap-2">
+        {{ i "layers-2" "size-4" }}
+        <h3 class=" dark:text-white">Host your own spindle</h3>
+      </div>
+      <p class="text-sm text-gray-500 dark:text-gray-400 flex-1">Run CI jobs on your own infrastructure using spindles.</p>
+      <a href="https://docs.tangled.org/spindles.html#self-hosting-guide" target="_blank" rel="noopener noreferrer" class="ml-auto text-sm w-fit flex items-center gap-1 dark:text-white hover:underline">
+        Read the docs {{ i "arrow-right" "size-4" }}
+      </a>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+    <a href="https://bsky.app/profile/tangled.org" target="_blank" rel="noopener noreferrer" class="flex flex-col gap-1 border border-gray-200 dark:border-gray-700 rounded p-4 no-underline hover:no-underline hover:bg-gray-50 dark:hover:bg-gray-800">
+      <div class="flex items-center gap-2">{{ i "bluesky" "size-4" }}<span class=" dark:text-white">Bluesky</span></div>
+      <p class="text-sm text-gray-500 dark:text-gray-400">Follow us @tangled.org on Bluesky for updates.</p>
+    </a>
+    <a href="https://chat.tangled.org" target="_blank" rel="noopener noreferrer" class="flex flex-col gap-1 border border-gray-200 dark:border-gray-700 rounded p-4 no-underline hover:no-underline hover:bg-gray-50 dark:hover:bg-gray-800">
+      <div class="flex items-center gap-2">{{ i "message-circle" "size-4" }}<span class=" dark:text-white">Discord</span></div>
+      <p class="text-sm text-gray-500 dark:text-gray-400">Join the community on Discord.</p>
+    </a>
+    <a href="https://x.com/tangled_org" target="_blank" rel="noopener noreferrer" class="flex flex-col gap-1 border border-gray-200 dark:border-gray-700 rounded p-4 no-underline hover:no-underline hover:bg-gray-50 dark:hover:bg-gray-800">
+      <div class="flex items-center gap-2">{{ i "twitter" "size-4" }}<span class=" dark:text-white">X (Twitter)</span></div>
+      <p class="text-sm text-gray-500 dark:text-gray-400">Follow us @tangled_org on X for updates.</p>
+    </a>
+  </div>
+
+  <div class="flex items-center justify-between mt-6">
+    {{ template "onboarding/back" "/welcome/keys" }}
+    <form hx-post="/welcome/complete" hx-swap="none">
+      <button type="submit" class="btn-create-flat w-fit flex items-center gap-2 text-sm">
+        {{ i "check" "size-4" }} Finish
+      </button>
+    </form>
+  </div>
+{{ end }}
