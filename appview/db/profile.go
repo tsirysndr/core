@@ -398,6 +398,50 @@ func GetDidByPreferredHandle(e Execer, handle syntax.Handle) (syntax.DID, error)
 	return syntax.DID(did), nil
 }
 
+// whether a DID has authored any Tangled record, counts some common records towards this
+func IsTangledUser(e Execer, did string) (bool, error) {
+	profile, err := GetProfile(e, did)
+	if err != nil {
+		return false, err
+	}
+	if profile != nil {
+		return true, nil
+	}
+
+	keys, err := GetPublicKeysForDid(e, did)
+	if err != nil {
+		return false, err
+	}
+	if len(keys) > 0 {
+		return true, nil
+	}
+
+	counts := []func() (int64, error){
+		func() (int64, error) { return CountRepos(e, orm.FilterEq("did", did)) },
+		func() (int64, error) { return CountStrings(e, orm.FilterEq("did", did)) },
+		func() (int64, error) { return CountStars(e, orm.FilterEq("did", did)) },
+	}
+	for _, count := range counts {
+		n, err := count()
+		if err != nil {
+			return false, err
+		}
+		if n > 0 {
+			return true, nil
+		}
+	}
+
+	stats, err := GetFollowerFollowingCount(e, did)
+	if err != nil {
+		return false, err
+	}
+	if stats.Following > 0 {
+		return true, nil
+	}
+
+	return false, nil
+}
+
 func GetProfile(e Execer, did string) (*models.Profile, error) {
 	var profile models.Profile
 	var pronouns sql.Null[string]

@@ -15,7 +15,6 @@ import (
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/auth/oauth"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	lexutil "github.com/bluesky-social/indigo/lex/util"
 	xrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-chi/chi/v5"
 	"github.com/posthog/posthog-go"
@@ -95,9 +94,29 @@ func (o *OAuth) callback(w http.ResponseWriter, r *http.Request) {
 
 	o.Logger.Debug("session saved successfully")
 
+	did := sessData.AccountDID.String()
+
+	// default to true, so users don't have to onboard again
+	isTangledUser, err := db.IsTangledUser(o.Db, did)
+	if err != nil {
+		isTangledUser = true
+	}
+
+	isNewUser := !isTangledUser
+	if isNewUser {
+		if ob, _ := db.GetOnboarding(o.Db, did); ob == nil {
+			if err := db.UpsertOnboarding(o.Db, &models.Onboarding{
+				Did:    did,
+				Step:   models.OnboardingStepProfile,
+				Status: models.OnboardingInProgress,
+			}); err != nil {
+				o.Logger.Error("failed to seed onboarding record", "did", did, "err", err)
+			}
+		}
+	}
+
 	go o.addToDefaultKnot(sessData.AccountDID)
 	go o.addToDefaultSpindle(sessData.AccountDID.String())
-	go o.ensureTangledProfile(sessData)
 	go o.autoClaimTnglShDomain(sessData.AccountDID.String())
 
 	if !o.Config.Core.Dev {
@@ -116,6 +135,8 @@ func (o *OAuth) callback(w http.ResponseWriter, r *http.Request) {
 
 	if o.isAccountDeactivated(sessData) {
 		redirectURL = "/settings/profile"
+	} else if isNewUser {
+		redirectURL = "/welcome"
 	}
 
 	http.Redirect(w, r, redirectURL, http.StatusFound)
@@ -302,47 +323,6 @@ func (o *OAuth) addMemberViaKnotAdmin(ctx context.Context, knotHost string, subj
 	}
 
 	return nil
-}
-
-func (o *OAuth) ensureTangledProfile(sessData *oauth.ClientSessionData) {
-	ctx := context.Background()
-	did := sessData.AccountDID.String()
-	l := o.Logger.With("did", did)
-
-	profile, _ := db.GetProfile(o.Db, did)
-	if profile != nil {
-		l.Debug("profile already exists in DB")
-		return
-	}
-
-	l.Debug("creating empty Tangled profile")
-
-	sess, err := o.resumeSession(ctx, sessData.AccountDID, sessData.SessionID)
-	if err != nil {
-		l.Error("failed to resume session for profile creation", "err", err)
-		return
-	}
-	client := sess.APIClient()
-
-	_, err = comatproto.RepoPutRecord(ctx, client, &comatproto.RepoPutRecord_Input{
-		Collection: tangled.ActorProfileNSID,
-		Repo:       did,
-		Rkey:       "self",
-		Record:     &lexutil.LexiconTypeDecoder{Val: &tangled.ActorProfile{}},
-	})
-
-	if err != nil {
-		l.Error("failed to create empty profile on PDS", "err", err)
-		return
-	}
-
-	emptyProfile := &models.Profile{Did: did}
-	if err := db.UpsertProfile(o.Db, emptyProfile); err != nil {
-		l.Error("failed to create empty profile in DB", "err", err)
-		return
-	}
-
-	l.Debug("successfully created empty Tangled profile on PDS and DB")
 }
 
 // create a AppPasswordSession using apppasswords

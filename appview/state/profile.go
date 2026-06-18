@@ -90,6 +90,11 @@ func (s *State) profile(r *http.Request) (*pages.ProfileCard, error) {
 		profile = &models.Profile{Did: did}
 	}
 
+	isTangledUser, err := db.IsTangledUser(s.db, did)
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine tangled user status: %w", err)
+	}
+
 	repoCount, err := db.CountRepos(s.db, orm.FilterEq("did", did))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repo count: %w", err)
@@ -141,6 +146,7 @@ func (s *State) profile(r *http.Request) (*pages.ProfileCard, error) {
 	return &pages.ProfileCard{
 		UserDid:           did,
 		HasProfile:        hasProfile,
+		IsTangledUser:     isTangledUser,
 		Profile:           profile,
 		FollowStatus:      followStatus,
 		VouchRelationship: vouchRelationship,
