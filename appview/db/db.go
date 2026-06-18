@@ -692,6 +692,14 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			check (did <> subject_did)
 		);
 
+		create table if not exists onboarding (
+			did     text primary key,
+			step    integer not null default 0,
+			status  text not null default 'in_progress'
+					check (status in ('in_progress','completed','skipped')),
+			created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+			updated text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+		);
 
 		create table if not exists migrations (
 			id integer primary key autoincrement,
