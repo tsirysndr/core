@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -231,7 +232,8 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 		return err
 	}
 	state.ReadCache = readCache
-	uploadCache, err := StartUploadCacheProxy(ctx, cid, e.cfg.NixCache.UploadURL, upstreams, l)
+	stagingDir := filepath.Join(workDir, "upload-cache")
+	uploadCache, err := StartUploadCacheProxy(ctx, cid, e.cfg.NixCache.UploadURL, upstreams, stagingDir, l)
 	if err != nil {
 		return err
 	}
@@ -451,9 +453,7 @@ func (e *Engine) activateConfig(ctx context.Context, wid models.WorkflowId, stat
 		return nil
 	}
 
-	drainCtx, cancel := context.WithTimeout(ctx, cacheDrainTimeout)
-	defer cancel()
-	if _, err := state.Agent.Drain(drainCtx); err != nil {
+	if err := e.drainNixCache(ctx, state); err != nil {
 		return fmt.Errorf("drain config cache uploads before metadata commit: %w", err)
 	}
 	if err := state.NixOSToplevelCache.Commit(configKey, result.Toplevel); err != nil {

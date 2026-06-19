@@ -188,7 +188,10 @@ more useful than "guest agent connection lost: EOF".
 Teardown is same whether the workflow succeeded, failed or timed out: drain the
 guest's pending Nix cache uploads, ask the agent to power off and wait for QEMU
 to exit (falling back to QMP `system_powerdown` and finally a kill if it
-doesn't), then close the proxies and remove the work directory.
+doesn't), then close the proxies and remove the work directory. For non-HTTP
+upload targets the host-side import already happened synchronously when the
+guest committed each narinfo, so there is no second host-side cache drain step
+at teardown.
 
 ### Nix cache
 
@@ -204,5 +207,29 @@ with a 404 only winning if every upstream returns 404.
 The upload proxy goes the other way: paths built inside the guest are pushed to
 spindle's configured upload cache (if any) so the next workflow that needs them
 doesn't rebuild. Paths already present on any configured read cache are skipped.
-The agent queues built paths and they're uploaded eagerly as they appear; any
-still in flight at teardown block the drain step until they finish.
+
+For `http://` and `https://` upload targets the proxy just reverse-proxies the
+guest's binary-cache upload traffic to the configured remote cache, while still
+answering narinfo existence checks across the upload target plus the read
+caches.
+
+For `ssh://`, `ssh-ng://`, `daemon`, and `local` targets spindle implements the
+small HTTP binary-cache upload surface itself. It stages uploaded `nar/` objects
+and narinfos under the workflow workdir, validates the narinfo, then treats the
+narinfo upload as the commit point: once `<hash>.narinfo` is written spindle
+runs:
+
+```bash
+nix copy \
+  --from file://<staging-dir> \
+  --to <target-store> \
+  --no-check-sigs \
+  --substitute-on-destination \
+  <store-path>
+```
+
+That copy is synchronous. If it fails, spindle removes the staged narinfo again
+so future `GET`/`HEAD <hash>.narinfo` requests do not falsely dedupe a path that
+never made it to the destination store. The guest still only ever sees the same
+HTTP binary-cache upload protocol over vsock; it never gets direct access to
+SSH credentials or the destination store itself.

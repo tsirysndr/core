@@ -15,6 +15,7 @@ strip_ansi() {
 declare -a TEST_NAMES=()
 declare -a TEST_STATUSES=()
 declare -a TEST_TIMES=()
+SKIP_TEST_RC=200
 
 get_time_ms() {
     local t="${EPOCHREALTIME:-}"
@@ -46,6 +47,7 @@ print_summary() {
     log "test summary"
     echo "========================================="
     local passed_count=0
+    local skipped_count=0
     local failed_count=0
     local total_time=0
     for i in "${!TEST_NAMES[@]}"; do
@@ -59,6 +61,9 @@ print_summary() {
         if [ "$status" = "Failed" ]; then
             status_color="\033[0;31m"
             failed_count=$((failed_count + 1))
+        elif [ "$status" = "Skipped" ]; then
+            status_color="\033[0;33m"
+            skipped_count=$((skipped_count + 1))
         else
             passed_count=$((passed_count + 1))
         fi
@@ -70,9 +75,19 @@ print_summary() {
     local total_tests="${#TEST_NAMES[@]}"
     local total_time_str
     total_time_str=$(format_duration "$total_time")
-    printf "  total: %d tests, %d passed, %d failed\n" "$total_tests" "$passed_count" "$failed_count"
+    printf "  total: %d tests, %d passed, %d skipped, %d failed\n" "$total_tests" "$passed_count" "$skipped_count" "$failed_count"
     printf "  total execution time: %s\n" "$total_time_str"
     echo "========================================="
+}
+
+skip_test() {
+    echo "skipped: $*"
+    return "$SKIP_TEST_RC"
+}
+
+host_is_nixos() {
+    [ -e /etc/NIXOS ] && return 0
+    [ -r /etc/os-release ] && grep -q '^ID=nixos$' /etc/os-release
 }
 
 JOBS="${JOBS:-4}"
@@ -124,6 +139,11 @@ rm -rf /tmp/test-spindle-microvm-logs
 
 log "setup local cache & temp environment"
 TEMP_DIR=$(mktemp -d -t test-spindle-microvm-XXXXXX)
+
+if [ ! -e /dev/vsock ]; then
+    echo "error: /dev/vsock is missing; run sudo modprobe vhost_vsock" >&2
+    exit 1
+fi
 
 log "build spindle & microvm image tarball"
 nix develop --command go build -o spindle/spindle-microvm-run ./cmd/spindle-microvm-run
@@ -201,6 +221,7 @@ run_vm() {
     local name=""
     local timeout="60s"
     local upload=0
+    local upload_url=""
     local activate=""
     local no_cache=0
     local db=""
@@ -223,6 +244,11 @@ run_vm() {
             --upload)
                 upload=1
                 shift
+                ;;
+            --upload-url)
+                upload=1
+                upload_url="$2"
+                shift 2
                 ;;
             --activate)
                 activate="$2"
@@ -266,8 +292,11 @@ run_vm() {
     fi
 
     if [ "$upload" -eq 1 ]; then
+        if [ -z "$upload_url" ]; then
+            upload_url="$CACHE_UPLOAD_URL?secret-key=$CACHE_SECRET_KEY_PATH"
+        fi
         args+=(
-            --cache-upload-url "$CACHE_UPLOAD_URL?secret-key=$CACHE_SECRET_KEY_PATH"
+            --cache-upload-url "$upload_url"
         )
     fi
 
@@ -305,8 +334,15 @@ run_test_job() {
     log "[$name] start (vsock port $port)"
 
     local status="Passed"
-    if ! "$func" > "$logfile" 2>&1; then
-        status="Failed"
+    if "$func" > "$logfile" 2>&1; then
+        status="Passed"
+    else
+        local rc=$?
+        if [ "$rc" -eq "$SKIP_TEST_RC" ]; then
+            status="Skipped"
+        else
+            status="Failed"
+        fi
     fi
 
     local duration_ms=$(($(get_time_ms) - start))
@@ -316,6 +352,9 @@ run_test_job() {
     duration_str=$(format_duration "$duration_ms")
     if [ "$status" = "Failed" ]; then
         printf "\n\033[0;31m>>> [%s] FAILED (%s)\033[0m\n" "$name" "$duration_str"
+        strip_ansi "$logfile" || true
+    elif [ "$status" = "Skipped" ]; then
+        printf "\n\033[0;33m>>> [%s] skipped (%s)\033[0m\n" "$name" "$duration_str"
         strip_ansi "$logfile" || true
     else
         printf "\n\033[0;32m>>> [%s] passed (%s)\033[0m\n" "$name" "$duration_str"
@@ -435,6 +474,42 @@ test_build_upload() {
         return 1
     fi
     echo "success: store path uploaded to cache"
+}
+
+test_ssh_store_upload() {
+    if ! host_is_nixos; then
+        skip_test "ssh store upload smoke only runs on nixos hosts"
+    fi
+
+    run_ssh_store_upload_case() {
+        local target="$1"
+        local label="$2"
+        local name="uploaded-test-file-${label}"
+        local content="hello from vm upload via ${label}"
+        local out
+        out=$(run_vm --name "$label" --timeout "180s" --upload-url "$target" -- /run/current-system/sw/bin/bash -l -c "nix-build -E 'with import <nixpkgs> {}; writeText \"$name\" \"$content\"' --no-out-link") || return 1
+
+        local built_path
+        built_path=$(echo "$out" | strip_ansi | grep -v '\.drv' | grep -o "/nix/store/[a-z0-9]*-${name}" | head -n 1 || true)
+        if [ -z "$built_path" ]; then
+            echo "error: could not find built store path in vm output for $label" >&2
+            echo "$out" | strip_ansi >&2
+            return 1
+        fi
+        if [ ! -e "$built_path" ]; then
+            echo "error: uploaded path missing from host store for $label: $built_path" >&2
+            return 1
+        fi
+        if [ "$(cat "$built_path")" != "$content" ]; then
+            echo "error: uploaded path content mismatch for $label" >&2
+            echo "path=$built_path" >&2
+            return 1
+        fi
+        echo "success: store path uploaded to $target via spindle"
+    }
+
+    run_ssh_store_upload_case "ssh-ng://localhost" "ssh-ng-upload"
+    run_ssh_store_upload_case "ssh://localhost" "ssh-upload"
 }
 
 test_networking() {
@@ -831,6 +906,7 @@ TESTS=(
     test_alpine_nix
     test_realize
     test_build_upload
+    test_ssh_store_upload
     test_networking
     test_substitution_and_no_upload
     test_activation_services

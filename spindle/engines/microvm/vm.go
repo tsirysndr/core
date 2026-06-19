@@ -182,15 +182,17 @@ func (e *Engine) cleanupState(ctx context.Context, wid models.WorkflowId, state 
 }
 
 func (e *Engine) drainNixCache(ctx context.Context, state *workflowState) error {
-	if state.Agent == nil || e.cfg.NixCache.UploadURL == "" {
+	if e.cfg.NixCache.UploadURL == "" {
 		return nil
 	}
 
 	drainCtx, cancel := context.WithTimeout(ctx, cacheDrainTimeout)
 	defer cancel()
 
-	if _, err := state.Agent.Drain(drainCtx); err != nil {
-		return fmt.Errorf("drain nix cache: %w", err)
+	if state.Agent != nil {
+		if _, err := state.Agent.Drain(drainCtx); err != nil {
+			return fmt.Errorf("drain guest nix cache uploads: %w", err)
+		}
 	}
 	return nil
 }

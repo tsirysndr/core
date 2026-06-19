@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"strings"
 	"time"
@@ -16,14 +14,20 @@ import (
 	"github.com/mdlayher/vsock"
 )
 
+type UploadCacheBackend interface {
+	http.Handler
+	Close() error
+}
+
 type UploadCacheProxy struct {
 	port uint32
 
-	ln     *vsock.Listener
-	server *http.Server
+	ln      *vsock.Listener
+	server  *http.Server
+	backend UploadCacheBackend
 }
 
-func StartUploadCacheProxy(ctx context.Context, cid uint32, uploadURL string, readUpstreams []CacheUpstream, logger *slog.Logger) (*UploadCacheProxy, error) {
+func StartUploadCacheProxy(ctx context.Context, cid uint32, uploadURL string, readUpstreams []CacheUpstream, stagingDir string, logger *slog.Logger) (*UploadCacheProxy, error) {
 	if strings.TrimSpace(uploadURL) == "" {
 		return nil, nil
 	}
@@ -33,15 +37,9 @@ func StartUploadCacheProxy(ctx context.Context, cid uint32, uploadURL string, re
 	}
 	logger = logger.With("where", "upload_cache_proxy", "cid", cid, "uploadURL", uploadURL)
 
-	target, err := url.Parse(uploadURL)
+	backend, err := newUploadCacheBackend(uploadURL, readUpstreams, stagingDir, logger)
 	if err != nil {
-		return nil, fmt.Errorf("parse upload URL %q: %w", uploadURL, err)
-	}
-	if target.Scheme != "http" && target.Scheme != "https" {
-		return nil, fmt.Errorf("upload URL %q uses unsupported scheme %q (must be http or https)", uploadURL, target.Scheme)
-	}
-	if target.Host == "" {
-		return nil, fmt.Errorf("upload URL %q is missing host", uploadURL)
+		return nil, err
 	}
 
 	ln, port, err := listenRandomVsockUploadPort(ctx)
@@ -50,11 +48,12 @@ func StartUploadCacheProxy(ctx context.Context, cid uint32, uploadURL string, re
 	}
 
 	proxy := &UploadCacheProxy{
-		port: port,
-		ln:   ln,
+		port:    port,
+		ln:      ln,
+		backend: backend,
 	}
 	proxy.server = &http.Server{
-		Handler:           uploadProxyHandler(target, readUpstreams, logger),
+		Handler:           backend,
 		Protocols:         cacheProxyProtocols(),
 		ReadHeaderTimeout: 30 * time.Second,
 	}
@@ -72,6 +71,39 @@ func StartUploadCacheProxy(ctx context.Context, cid uint32, uploadURL string, re
 
 	logger.Info("started upload cache proxy", "port", port, "target", uploadURL, "readUpstreams", len(readUpstreams))
 	return proxy, nil
+}
+
+func newUploadCacheBackend(uploadURL string, readUpstreams []CacheUpstream, stagingDir string, logger *slog.Logger) (UploadCacheBackend, error) {
+	if strings.TrimSpace(uploadURL) == "" {
+		return nil, nil
+	}
+
+	target, err := url.Parse(uploadURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse upload URL %q: %w", uploadURL, err)
+	}
+
+	switch target.Scheme {
+	case "http", "https":
+		if target.Host == "" {
+			return nil, fmt.Errorf("upload URL %q is missing host", uploadURL)
+		}
+		return newHTTPUploadProxyBackend(target, readUpstreams, logger), nil
+
+	case "ssh", "ssh-ng":
+		return newNixStoreUploadBackend(target.String(), stagingDir, readUpstreams, logger, nil)
+
+	case "":
+		switch uploadURL {
+		case "daemon", "local":
+			return newNixStoreUploadBackend(uploadURL, stagingDir, readUpstreams, logger, nil)
+		default:
+			return nil, fmt.Errorf("unsupported upload URL %q", uploadURL)
+		}
+
+	default:
+		return nil, fmt.Errorf("upload URL %q uses unsupported scheme %q", uploadURL, target.Scheme)
+	}
 }
 
 func (p *UploadCacheProxy) Port() uint32 {
@@ -97,76 +129,10 @@ func (p *UploadCacheProxy) Close() error {
 		closeErr = errors.Join(closeErr, p.ln.Close())
 		p.ln = nil
 	}
+	if p.backend != nil {
+		closeErr = errors.Join(closeErr, p.backend.Close())
+	}
 	return closeErr
-}
-
-func uploadProxyHandler(target *url.URL, readUpstreams []CacheUpstream, logger *slog.Logger) http.Handler {
-	rp := httputil.NewSingleHostReverseProxy(target)
-	rp.ErrorLog = slog.NewLogLogger(logger.Handler(), slog.LevelError)
-
-	origDirector := rp.Director
-	rp.Director = func(req *http.Request) {
-		origDirector(req)
-		// ensure host matches target
-		req.Host = target.Host
-		// the transport doesn't turn URL userinfo into basic auth, only
-		// http.Client does, so do it ourselves
-		if user := target.User; user != nil {
-			password, _ := user.Password()
-			req.SetBasicAuth(user.Username(), password)
-		}
-	}
-
-	// before uploading, nix copy asks the destination whether it already has each
-	// path by GET/HEAD-ing <hash>.narinfo and skips the ones it does. we answer
-	// that check across the upload target *and* the read caches: if any of them
-	// already serves the path there is no point uploading it (the guest would
-	// just substitute it from there anyway).
-	narinfoUpstreams := append([]CacheUpstream{{url: target}}, readUpstreams...)
-	exists := &parallelRacingTransport{
-		upstreams:         narinfoUpstreams,
-		underlying:        proxyTransport,
-		guardedUnderlying: guardedProxyTransport,
-		logger:            logger,
-	}
-
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if isNarinfoExistenceCheck(r) {
-			serveNarinfoExistence(w, r, exists, logger)
-			return
-		}
-		rp.ServeHTTP(w, r)
-	})
-}
-
-func isNarinfoExistenceCheck(r *http.Request) bool {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		return false
-	}
-	return strings.HasSuffix(r.URL.Path, ".narinfo")
-}
-
-func serveNarinfoExistence(w http.ResponseWriter, r *http.Request, exists http.RoundTripper, logger *slog.Logger) {
-	probe := r.Clone(r.Context())
-	probe.RequestURI = ""
-
-	resp, err := exists.RoundTrip(probe)
-	if err != nil {
-		logger.Warn("upload proxy narinfo check failed, treating as not present", "path", r.URL.Path, "error", err)
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-	defer resp.Body.Close()
-
-	for key, values := range resp.Header {
-		for _, value := range values {
-			w.Header().Add(key, value)
-		}
-	}
-	w.WriteHeader(resp.StatusCode)
-	if _, err := io.Copy(w, resp.Body); err != nil && !errors.Is(err, context.Canceled) {
-		logger.Warn("upload proxy narinfo copy failed", "path", r.URL.Path, "error", err)
-	}
 }
 
 func listenRandomVsockUploadPort(ctx context.Context) (*vsock.Listener, uint32, error) {

@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/mdlayher/vsock"
@@ -74,9 +75,10 @@ func SpindleMicroVMRunCommand() *cli.Command {
 				Usage: "timeout for the guest command",
 			},
 			&cli.DurationFlag{
-				Name:  "cache-drain-timeout",
-				Value: 5 * time.Minute,
-				Usage: "how long to wait for queued cache uploads after the guest command exits",
+				Name:    "cache-upload-wait-timeout",
+				Aliases: []string{"cache-drain-timeout"},
+				Value:   5 * time.Minute,
+				Usage:   "how long to wait for guest cache uploads to finish after the command exits",
 			},
 			&cli.DurationFlag{
 				Name:  "shutdown-timeout",
@@ -177,6 +179,9 @@ func runMicroVMRunDev(ctx context.Context, cmd *cli.Command) error {
 	}
 	jobID := "spindle-microvm-run"
 	execID := "dev-1"
+	var pendingConfigKey string
+	var pendingConfigToplevel string
+	var configCacheDB *db.DB
 
 	fmt.Fprintf(os.Stderr, "listening for agent on %s\n", ln.Addr())
 	conn, err := acceptExpectedVsockConn(ln, vm.CID(), logger)
@@ -203,7 +208,7 @@ func runMicroVMRunDev(ctx context.Context, cmd *cli.Command) error {
 	var uploadCache *microvm.UploadCacheProxy
 	if cmd.String("cache-upload-url") != "" {
 		var err error
-		uploadCache, err = microvm.StartUploadCacheProxy(ctx, vm.CID(), cmd.String("cache-upload-url"), upstreams, logger)
+		uploadCache, err = microvm.StartUploadCacheProxy(ctx, vm.CID(), cmd.String("cache-upload-url"), upstreams, filepath.Join(vm.WorkDir(), "upload-cache"), logger)
 		if err != nil {
 			return fmt.Errorf("start upload cache proxy: %w", err)
 		}
@@ -243,22 +248,21 @@ func runMicroVMRunDev(ctx context.Context, cmd *cli.Command) error {
 			return fmt.Errorf("calculate base config hash: %w", err)
 		}
 
-		var d *db.DB
 		var configKey string
 		var cachedToplevel string
 		if cmd.String("db") != "" {
-			d, err = db.Make(ctx, cmd.String("db"))
+			configCacheDB, err = db.Make(ctx, cmd.String("db"))
 			if err != nil {
 				return fmt.Errorf("failed to open database: %w", err)
 			}
-			defer d.Close()
+			defer configCacheDB.Close()
 
 			configKey, err = microvm.BuildConfigKey(imageSpec, cmd.String("activate-config"))
 			if err != nil {
 				return fmt.Errorf("calculate config key: %w", err)
 			}
 
-			record, err := d.GetNixOSToplevelCacheRecord(configKey)
+			record, err := configCacheDB.GetNixOSToplevelCacheRecord(configKey)
 			if err != nil {
 				if !errors.Is(err, sql.ErrNoRows) {
 					return fmt.Errorf("lookup config cache: %w", err)
@@ -280,10 +284,12 @@ func runMicroVMRunDev(ctx context.Context, cmd *cli.Command) error {
 		}
 		fmt.Fprintf(os.Stderr, "activated config toplevel: %s\n", result.Toplevel)
 
-		if d != nil && cachedToplevel == "" && result.Toplevel != "" && configKey != "" {
-			err = d.SaveNixOSToplevelCacheRecord(configKey, result.Toplevel)
-			if err != nil {
-				return fmt.Errorf("save config cache: %w", err)
+		if configCacheDB != nil && cachedToplevel == "" && result.Toplevel != "" && configKey != "" {
+			if uploadCache == nil {
+				fmt.Fprintln(os.Stderr, "skipping config cache metadata commit: no cache upload url configured")
+			} else {
+				pendingConfigKey = configKey
+				pendingConfigToplevel = result.Toplevel
 			}
 		}
 	}
@@ -302,17 +308,22 @@ func runMicroVMRunDev(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	if uploadCache != nil {
-		drainCtx := ctx
-		if cmd.Duration("cache-drain-timeout") > 0 {
+		uploadWaitCtx := ctx
+		if cmd.Duration("cache-upload-wait-timeout") > 0 {
 			var cancel context.CancelFunc
-			drainCtx, cancel = context.WithTimeout(ctx, cmd.Duration("cache-drain-timeout"))
+			uploadWaitCtx, cancel = context.WithTimeout(ctx, cmd.Duration("cache-upload-wait-timeout"))
 			defer cancel()
 		}
-		uploaded, err := session.Drain(drainCtx)
+		uploaded, err := session.Drain(uploadWaitCtx)
 		if err != nil {
 			return err
 		}
 		fmt.Printf("cache uploaded: %d\n", uploaded)
+		if configCacheDB != nil && pendingConfigKey != "" && pendingConfigToplevel != "" {
+			if err := configCacheDB.SaveNixOSToplevelCacheRecord(pendingConfigKey, pendingConfigToplevel); err != nil {
+				return fmt.Errorf("save config cache: %w", err)
+			}
+		}
 	}
 
 	// mirror the engine shutdown order: ask the agent to power off first,
