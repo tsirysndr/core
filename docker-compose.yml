@@ -151,6 +151,10 @@ services:
       SPINDLE_MICROVM_PIPELINES_OVERLAY_DIR: /var/lib/spindle/overlays
       SPINDLE_MICROVM_PIPELINES_AGENT_PORT: "11240"
       SPINDLE_S3_LOG_BUCKET: ""
+      SPINDLE_MICROVM_PIPELINES_ENABLE_CGROUPS: "false"
+    # these two are required for cgroups, uncomment if testing
+    # privileged: true
+    # cgroup: host
     devices:
       - /dev/vsock:/dev/vsock
       - /dev/kvm:/dev/kvm

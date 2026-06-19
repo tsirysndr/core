@@ -2,7 +2,9 @@ package microvm
 
 import (
 	"context"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -53,6 +55,8 @@ type QEMUVMHandle struct {
 	QMPPath       string
 	serialLogPath string
 	workDir       string
+
+	qmpSocketPath string
 
 	cmd         *exec.Cmd
 	done        chan struct{}
@@ -106,6 +110,17 @@ func (qemuRunner) Start(ctx context.Context, cfg VMConfig, volumePaths map[strin
 		Cgroup:      cfg.Cgroup,
 		Dev:         cfg.Dev,
 	}, logger)
+}
+
+// we hash the workDir to get a deterministic qmpSock path
+// since they are AF_UNIX sockets, they are bound by a 108 char long path limit...
+func qmpSocketPath(workDir string) string {
+	base := filepath.Dir(workDir)
+	if workDir == "" {
+		base = os.TempDir()
+	}
+	sum := sha256.Sum256([]byte(workDir))
+	return filepath.Join(base, hex.EncodeToString(sum[:8])+".qmp.sock")
 }
 
 func StartQEMU(ctx context.Context, cfg QEMUConfig, logger *slog.Logger) (VMHandle, error) {
@@ -163,7 +178,8 @@ func StartQEMU(ctx context.Context, cfg QEMUConfig, logger *slog.Logger) (VMHand
 
 	qmpPath := cfg.QMPPath
 	if qmpPath == "" {
-		qmpPath = filepath.Join(workDir, "qmp.sock")
+		qmpPath = qmpSocketPath(workDir)
+		handle.qmpSocketPath = qmpPath
 	}
 	handle.QMPPath = qmpPath
 
@@ -334,6 +350,12 @@ func (h *QEMUVMHandle) Close() error {
 	if h.cgroup != nil {
 		closeErr = errors.Join(closeErr, h.cgroup.Close())
 		h.cgroup = nil
+	}
+	if h.qmpSocketPath != "" {
+		if err := os.Remove(h.qmpSocketPath); err != nil && !os.IsNotExist(err) {
+			closeErr = errors.Join(closeErr, err)
+		}
+		h.qmpSocketPath = ""
 	}
 	return closeErr
 }
