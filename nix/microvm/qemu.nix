@@ -7,7 +7,7 @@
 
     vcpu = 2;
     # don't set to 2048, https://github.com/microvm-nix/microvm.nix/issues/171
-    mem = 2049;
+    mem = 4096;
 
     interfaces = [
       {

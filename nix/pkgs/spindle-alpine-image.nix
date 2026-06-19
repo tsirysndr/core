@@ -117,7 +117,7 @@
         console = "hvc0";
         extraArgs = [];
       };
-      memoryMiB = 2048;
+      memoryMiB = 4096;
       storeDisk = "store-disk";
       storeDiskType = "squashfs";
       vcpus = 2;
