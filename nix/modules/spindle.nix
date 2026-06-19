@@ -306,6 +306,7 @@ in
         pkgs.slirp4netns
         pkgs.iproute2
         pkgs.util-linux
+        config.nix.package
       ];
     in
       mkIf cfg.enable {
