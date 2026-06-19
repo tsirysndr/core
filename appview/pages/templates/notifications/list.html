@@ -14,7 +14,9 @@
   <div class="flex md:px-0 px-4 pb-4 items-center justify-between gap-4">
     <div class="flex items-center gap-2">
       {{ template "fragments/tabSelector" (dict "Name" "read" "Values" $readVals "Active" .ReadFilter) }}
-      {{ template "focus/fragments/beginButton" . }}
+      <div class="hidden sm:block">
+        {{ template "focus/fragments/beginButton" . }}
+      </div>
       <button
         hx-post="/notifications/read-all"
         hx-swap="none"
