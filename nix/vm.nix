@@ -164,15 +164,12 @@ in
 
           pipelines = {
             logBucket = envVarOr "SPINDLE_S3_LOG_BUCKET" "";
-            microvm = {
-              enableKVM = nestedVirt;
+            microvm.enableKVM = nestedVirt;
+            nixCache = {
+              readUrls = ["http://127.0.0.1:8501"];
+              trustedPublicKeys = ["cache.local:F7YqpMzuBdILYd/v+wMZN2YKxCzliXQyFmeezOxw7rU="];
+              uploadUrl = "http://127.0.0.1:8501/upload";
             };
-          };
-
-          cache = {
-            readUrls = ["http://127.0.0.1:8501"];
-            trustedPublicKeys = ["cache.local:F7YqpMzuBdILYd/v+wMZN2YKxCzliXQyFmeezOxw7rU="];
-            uploadUrl = "http://127.0.0.1:8501/upload";
           };
         };
         services.ncps = {

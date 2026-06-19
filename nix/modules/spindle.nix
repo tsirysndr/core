@@ -258,28 +258,28 @@ in
               };
             };
           };
-        };
 
-        cache = {
-          readUrls = mkOption {
-            type = types.listOf types.str;
-            default = [];
-            example = ["http://ncps.internal:8501"];
-            description = "Nix binary cache URLs the Spindle guest should read from.";
-          };
+          nixCache = {
+            readUrls = mkOption {
+              type = types.listOf types.str;
+              default = [];
+              example = ["http://ncps.internal:8501" "ssh-ng://user@my-awesome-cache"];
+              description = "Nix binary cache URLs the Spindle guest should read from.";
+            };
 
-          trustedPublicKeys = mkOption {
-            type = types.listOf types.str;
-            default = [];
-            example = ["ncps.internal-1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="];
-            description = "Public keys trusted for the configured Nix binary caches.";
-          };
+            trustedPublicKeys = mkOption {
+              type = types.listOf types.str;
+              default = [];
+              example = ["internal-1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="];
+              description = "Public keys trusted for the configured Nix binary caches.";
+            };
 
-          uploadUrl = mkOption {
-            type = types.str;
-            default = "";
-            example = "http://ncps.internal:8501/upload";
-            description = "Optional cache upload URL used by live cache import paths.";
+            uploadUrl = mkOption {
+              type = types.str;
+              default = "";
+              example = "local";
+              description = "Optional cache upload URL used by live cache import paths.";
+            };
           };
         };
 
@@ -376,9 +376,9 @@ in
               "SPINDLE_MICROVM_PIPELINES_CGROUP_PIDS_MAX=${toString cfg.pipelines.microvm.cgroup.pidsMax}"
               "SPINDLE_MICROVM_PIPELINES_CGROUP_SWAP_MAX_MIB=${toString cfg.pipelines.microvm.cgroup.swapMaxMiB}"
               "SPINDLE_MICROVM_PIPELINES_CGROUP_SUPERVISOR_MEMORY_MIN_MIB=${toString cfg.pipelines.microvm.cgroup.supervisorMinMiB}"
-              "SPINDLE_NIX_CACHE_READ_URLS=${concatStringsSep "," cfg.cache.readUrls}"
-              "SPINDLE_NIX_CACHE_TRUSTED_PUBLIC_KEYS=${concatStringsSep "," cfg.cache.trustedPublicKeys}"
-              "SPINDLE_NIX_CACHE_UPLOAD_URL=${cfg.cache.uploadUrl}"
+              "SPINDLE_NIX_CACHE_READ_URLS=${concatStringsSep "," cfg.pipelines.nixCache.readUrls}"
+              "SPINDLE_NIX_CACHE_TRUSTED_PUBLIC_KEYS=${concatStringsSep "," cfg.pipelines.nixCache.trustedPublicKeys}"
+              "SPINDLE_NIX_CACHE_UPLOAD_URL=${cfg.pipelines.nixCache.uploadUrl}"
               "SPINDLE_S3_LOG_BUCKET=${cfg.pipelines.logBucket}"
             ];
             ExecStart = "${cfg.package}/bin/spindle";
