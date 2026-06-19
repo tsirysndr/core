@@ -10,6 +10,9 @@ import (
 	"tangled.org/core/spindle/models"
 )
 
+// memory buffer for qemu process / slirp4netns itself
+const runnerBufferMiB = 96
+
 type Resources struct {
 	MemoryMiB int64
 	VCPUs     int64
@@ -84,7 +87,7 @@ func resourcesForImage(spec ImageSpec) Resources {
 		diskMiB += volume.SizeMiB
 	}
 	return Resources{
-		MemoryMiB: int64(spec.MemoryMiB),
+		MemoryMiB: int64(spec.MemoryMiB) + runnerBufferMiB,
 		VCPUs:     int64(spec.VCPUs),
 		DiskMiB:   diskMiB,
 	}
