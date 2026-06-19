@@ -239,18 +239,30 @@ func selfCgroupV2Path() (string, error) {
 }
 
 func moveParentProcesses(parent *cgroup2.Manager, supervisorMemoryMinMiB int64, logger *slog.Logger) error {
-	supervisor, err := parent.NewChild(supervisorCgroupName, supervisorResources(supervisorMemoryMinMiB))
-	if err != nil {
-		return fmt.Errorf("create supervisor cgroup: %w", err)
-	}
-
 	procs, err := parent.Procs(false)
 	if err != nil {
 		return fmt.Errorf("list parent cgroup processes: %w", err)
 	}
+
+	// first create with empty resources
+	supervisor, err := parent.NewChild(supervisorCgroupName, &cgroup2.Resources{})
+	if err != nil {
+		return fmt.Errorf("create supervisor cgroup: %w", err)
+	}
+
+	// move procs
 	for _, pid := range procs {
 		if err := supervisor.AddProc(pid); err != nil {
 			return fmt.Errorf("move pid %d to supervisor cgroup: %w", pid, err)
+		}
+	}
+
+	// now apply resources. we can't do this while parent has procs still
+	if res := supervisorResources(supervisorMemoryMinMiB); res != nil {
+		// we use a "new" parent here, this is so we enable subtree_control.
+		// .Update() does not work here...
+		if _, err = parent.NewChild(supervisorCgroupName, res); err != nil {
+			return fmt.Errorf("apply supervisor cgroup resources: %w", err)
 		}
 	}
 
