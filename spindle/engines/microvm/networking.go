@@ -122,21 +122,7 @@ func (n *slirpNamespace) Start(ctx context.Context, logFile *os.File, logger *sl
 		return nil, nil, fmt.Errorf("slirp4netns command not found in PATH: %w", err)
 	}
 
-	args := []string{
-		"--configure",
-		"--mtu=" + netnsMTU,
-	}
-	if !n.dev {
-		args = append(args, "--disable-host-loopback")
-	}
-	args = append(args,
-		"--enable-sandbox",
-		"--enable-seccomp",
-		"--exit-fd=3",
-		"--cidr="+outerSlirpCIDR,
-		pid,
-		netnsTapName,
-	)
+	args := slirpArgs(n.dev, pid)
 
 	cmd := exec.CommandContext(ctx, slirpPath, args...)
 	cmd.ExtraFiles = []*os.File{exitR}
@@ -149,4 +135,23 @@ func (n *slirpNamespace) Start(ctx context.Context, logFile *os.File, logger *sl
 
 	ok = true
 	return cmd, exitW, nil
+}
+
+func slirpArgs(dev bool, pid string) []string {
+	args := []string{
+		"--configure",
+		"--mtu=" + netnsMTU,
+	}
+	if !dev {
+		args = append(args, "--disable-host-loopback")
+	}
+	args = append(args,
+		"--disable-dns",
+		"--enable-seccomp",
+		"--exit-fd=3",
+		"--cidr="+outerSlirpCIDR,
+		pid,
+		netnsTapName,
+	)
+	return args
 }
