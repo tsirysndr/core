@@ -2,7 +2,8 @@ when:
   - event: ["push", "pull_request"]
     branch: master
 
-engine: nixery
+engine: microvm
+image: alpine
 
 steps:
   - name: "Check formatting"

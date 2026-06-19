@@ -1,14 +1,15 @@
-engine: nixery
 when:
   - event: push
     branch: master
 
+engine: microvm
+image: nixos
+
 dependencies:
-  nixpkgs:
-    - go
-    - gcc
-    - nodejs
-    - tailwindcss
+  - go
+  - gcc
+  - nodejs
+  - tailwindcss
 
 steps:
   - name: patch static dir
