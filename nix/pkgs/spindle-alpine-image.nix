@@ -136,7 +136,7 @@
           imageType = "raw";
           mountPoint = "/workspace";
           readOnly = false;
-          sizeMiB = 1024 * 10;
+          sizeMiB = 1024 * 16; # 16 GB
         }
       ];
     }

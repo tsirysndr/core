@@ -267,7 +267,7 @@ in {
     {
       image = "persist.img";
       mountPoint = "/persist";
-      size = 1024 * 16;
+      size = 1024 * 24; # 24 GB
       fsType = "ext4";
     }
   ];
