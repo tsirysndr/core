@@ -107,6 +107,22 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			updated_at text not null
 		);
 
+		create table if not exists pipelines (
+			id        text primary key,
+			repo_did  text not null,
+			commit_id text not null
+		);
+
+		create table if not exists workflows (
+			id          integer primary key autoincrement,
+			pipeline_id text    not null,
+			name        text    not null,
+			status      text    not null default 'pending',
+
+			unique(pipeline_id, id),
+			foreign key (pipeline_id) references pipelines(id) on delete cascade
+		);
+
 		create table if not exists migrations (
 			id integer primary key autoincrement,
 			name text unique
