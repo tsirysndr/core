@@ -278,10 +278,7 @@ func (b *NixStoreUploadBackend) putNarinfo(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if _, err := writeFileAtomic(dst, ".tmp-narinfo", func(f *os.File) (int64, error) {
-		n, err := f.Write(body)
-		return int64(n), err
-	}); err != nil {
+	if _, err := writeNarinfoFile(dst, body); err != nil {
 		b.logger.Warn("stage narinfo upload failed", "path", relPath, "error", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -346,9 +343,108 @@ func (b *NixStoreUploadBackend) stagingObjectPath(relPath string) (string, error
 	return filepath.Join(b.stagingDir, local), nil
 }
 
+// makes the full reference graph of rootStorePath resolvable in the staging
+// cache. `nix copy` computes the closure from the --from store, so every
+// referenced narinfo must be present there or the walk fails with "path ... is
+// not valid". newly-built deps are already staged by the guest, but deps that
+// live only in a read cache were skipped during upload, so we backfill their
+// narinfos here. only the narinfos (the reference graph) are needed: the
+// destination supplies the NAR data via --substitute-on-destination.
+func (b *NixStoreUploadBackend) ensureClosureStaged(ctx context.Context, rootStorePath string) error {
+	visited := map[string]bool{}
+	queue := []string{rootStorePath}
+	for len(queue) > 0 {
+		storePath := queue[0]
+		queue = queue[1:]
+		if visited[storePath] {
+			continue
+		}
+		visited[storePath] = true
+
+		info, err := b.resolveStagedNarinfo(ctx, storePath)
+		if err != nil {
+			// the root must resolve (the guest just staged it); a dep we can't
+			// find anywhere is left for `nix copy` to surface with its own error.
+			if storePath == rootStorePath {
+				return fmt.Errorf("resolve narinfo for %s: %w", storePath, err)
+			}
+			b.logger.Warn("closure dep narinfo unresolved; leaving to nix copy", "storePath", storePath, "error", err)
+			continue
+		}
+
+		for _, ref := range info.References {
+			refPath := storePrefix + ref
+			if refPath == storePath {
+				continue // self-reference
+			}
+			if !visited[refPath] {
+				queue = append(queue, refPath)
+			}
+		}
+	}
+	return nil
+}
+
+// returns parsed narinfo for store path, backfilling from readUpstreams if not found
+func (b *NixStoreUploadBackend) resolveStagedNarinfo(ctx context.Context, storePath string) (*narinfo, error) {
+	hash, _, err := parseStorePath(storePath)
+	if err != nil {
+		return nil, err
+	}
+	localPath := filepath.Join(b.stagingDir, hash+".narinfo")
+	info, err := readNarinfoFile(localPath)
+	if err == nil {
+		return info, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+
+	// dep missing from staging because it was skipped during upload
+	// (lives on a read cache) so we backfill it from readUpstreams.
+	body, err := b.fetchUpstreamNarinfo(ctx, hash)
+	if err != nil {
+		return nil, err
+	}
+	written, err := writeNarinfoFile(localPath, body)
+	if err != nil {
+		return nil, err
+	}
+	b.logger.Debug("backfilled narinfo", "hash", hash, "bytes", written)
+
+	return parseNarinfo(bytes.NewReader(body))
+}
+
+// fetches narinfo from readUpstreams
+func (b *NixStoreUploadBackend) fetchUpstreamNarinfo(ctx context.Context, hash string) ([]byte, error) {
+	if len(b.readUpstreams) == 0 {
+		return nil, os.ErrNotExist
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://upstream/"+hash+".narinfo", nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := newNarinfoExistenceTransport(b.readUpstreams, b.logger).RoundTrip(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, os.ErrNotExist
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("upstream narinfo %s: status %d", hash, resp.StatusCode)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, maxNarinfoSize+1))
+}
+
 // todo(dawn): ideally we don't use `nix copy` here but instead have our own
 // `nix copy` impl so we don't need nix on host. but that's a far stretch goal :p
 func (b *NixStoreUploadBackend) importStorePath(ctx context.Context, storePath string) error {
+	if err := b.ensureClosureStaged(ctx, storePath); err != nil {
+		return fmt.Errorf("stage closure for %s: %w", storePath, err)
+	}
+
 	fromURL := url.URL{Scheme: "file", Path: b.stagingDir}
 	args := []string{
 		"copy",
@@ -375,6 +471,13 @@ func readNarinfoFile(path string) (*narinfo, error) {
 	}
 	defer f.Close()
 	return parseNarinfo(f)
+}
+
+func writeNarinfoFile(path string, body []byte) (int64, error) {
+	return writeFileAtomic(path, ".tmp-narinfo", func(f *os.File) (int64, error) {
+		n, err := f.Write(body)
+		return int64(n), err
+	})
 }
 
 func writeFileAtomic(dst, tempPrefix string, write func(*os.File) (int64, error)) (written int64, err error) {

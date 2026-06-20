@@ -171,7 +171,10 @@ func (e *Engine) cleanupState(ctx context.Context, wid models.WorkflowId, state 
 	ctx = context.WithoutCancel(ctx)
 
 	var err error
-	err = errors.Join(err, e.drainNixCache(ctx, state))
+	// todo(dawn): expose this error to the user as a warning
+	if drainErr := e.drainNixCache(ctx, state); drainErr != nil {
+		e.l.Warn("cache drain failed during cleanup; continuing", "workflow", wid, "error", drainErr)
+	}
 	err = errors.Join(err, e.shutdownVM(ctx, wid, state))
 	err = errors.Join(err, closeIO(&state.Agent))
 	err = errors.Join(err, closeIO(&state.ReadCache))

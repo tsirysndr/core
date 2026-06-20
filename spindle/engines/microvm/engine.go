@@ -454,7 +454,11 @@ func (e *Engine) activateConfig(ctx context.Context, wid models.WorkflowId, stat
 	}
 
 	if err := e.drainNixCache(ctx, state); err != nil {
-		return fmt.Errorf("drain config cache uploads before metadata commit: %w", err)
+		// a partial upload would leave the cache unable to realize this toplevel,
+		// so skip the metadata commit rather than poison it with an un-realizable
+		// key. the config still activated fine, so don't fail the workflow.
+		e.l.Warn("cache drain failed; skipping config cache metadata commit", "workflow", wid, "configKey", configKey, "toplevel", result.Toplevel, "error", err)
+		return nil
 	}
 	if err := state.NixOSToplevelCache.Commit(configKey, result.Toplevel); err != nil {
 		return err

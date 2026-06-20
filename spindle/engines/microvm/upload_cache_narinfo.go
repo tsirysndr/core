@@ -15,6 +15,8 @@ type narinfo struct {
 	URL       string
 	NarHash   string
 	NarSize   int64
+	// paths this path depends on
+	References []string
 }
 
 const (
@@ -62,6 +64,8 @@ func parseNarinfo(r io.Reader) (*narinfo, error) {
 				return nil, fmt.Errorf("invalid NarSize %q: %w", value, err)
 			}
 			info.NarSize = n
+		case "References":
+			info.References = strings.Fields(value)
 		}
 	}
 	if err := scanner.Err(); err != nil {

@@ -223,6 +223,62 @@ func TestNixStoreBackendImportsNarinfoImmediately(t *testing.T) {
 	}
 }
 
+func TestNixStoreBackendBackfillsClosureDepNarinfo(t *testing.T) {
+	const depHash = "abcdfghijklmnpqrsvwxyz0123456789"
+	depNarinfo := "StorePath: /nix/store/" + depHash + "-dep\nURL: nar/dep.nar.zst\nNarHash: sha256:dep\nNarSize: 1\n"
+
+	var depRequests int
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/"+depHash+".narinfo" {
+			depRequests++
+			_, _ = io.WriteString(w, depNarinfo)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer upstream.Close()
+
+	upURL, err := url.Parse(upstream.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	runner := &fakeRunner{}
+	staging := t.TempDir()
+	b, err := newNixStoreUploadBackend("ssh-ng://cache-host", staging, []CacheUpstream{{url: upURL}}, slog.Default(), runner)
+	if err != nil {
+		t.Fatalf("newNixStoreUploadBackend: %v", err)
+	}
+
+	mustUploadNar(t, b, "foo.nar.zst", "nar-body")
+
+	// the top path references the dep, which is absent from staging.
+	narinfo := "StorePath: " + testStorePath + "\nURL: nar/foo.nar.zst\nNarHash: sha256:abc\nNarSize: 123\nReferences: " + depHash + "-dep\n"
+	rec := httptest.NewRecorder()
+	b.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/"+testStoreHash+".narinfo", strings.NewReader(narinfo)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PUT narinfo status: got %d, want 200; body=%q", rec.Code, rec.Body.String())
+	}
+
+	// the dep narinfo must have been fetched from the upstream and staged...
+	if depRequests == 0 {
+		t.Fatalf("expected the dep narinfo to be fetched from the upstream")
+	}
+	staged, err := os.ReadFile(filepath.Join(staging, depHash+".narinfo"))
+	if err != nil {
+		t.Fatalf("dep narinfo not backfilled into staging: %v", err)
+	}
+	if string(staged) != depNarinfo {
+		t.Fatalf("backfilled dep narinfo contents: got %q, want %q", string(staged), depNarinfo)
+	}
+
+	// ...and the import still copies just the requested top path.
+	calls := runner.Calls()
+	if len(calls) != 1 || calls[0][len(calls[0])-1] != testStorePath {
+		t.Fatalf("expected a single nix copy for %s, got %v", testStorePath, calls)
+	}
+}
+
 func TestNixStoreBackendRemovesNarinfoOnImportFailure(t *testing.T) {
 	runner := &fakeRunner{nextErr: errors.New("nix copy failed")}
 	b, staging := newTestNixStoreBackend(t, "ssh://cache-host", runner)
