@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/jetstream"
@@ -217,7 +218,7 @@ func (h *Knot) configureOwner(ctx context.Context) error {
 		return fmt.Errorf("failed to add owner to RBAC: %w", err)
 	}
 
-	err = keys.FetchAndStore(ctx, h.resolver.Directory(), h.db, cfgOwner)
+	err = keys.FetchAndStore(ctx, h.resolver.Directory(), h.db, syntax.DID(cfgOwner))
 	if err != nil {
 		h.l.Error("fetching and adding owners public keys", "error", err, "did", cfgOwner)
 	}

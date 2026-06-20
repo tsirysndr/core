@@ -31,7 +31,7 @@ func (x *Xrpc) ListKeys(w http.ResponseWriter, r *http.Request) {
 	publicKeys := make([]*tangled.KnotListKeys_PublicKey, 0, len(keys))
 	for _, key := range keys {
 		publicKeys = append(publicKeys, &tangled.KnotListKeys_PublicKey{
-			Did:       key.Did,
+			Did:       key.Did.String(),
 			Key:       key.Key,
 			CreatedAt: key.CreatedAt,
 		})

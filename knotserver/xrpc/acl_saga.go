@@ -188,7 +188,7 @@ func (h *Xrpc) fetchKeysAsync(ctx context.Context, l *slog.Logger, subject synta
 	kctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), keyFetchTimeout)
 	go func() {
 		defer cancel()
-		if err := keys.FetchAndStore(kctx, h.Resolver.Directory(), h.Db, subject.String()); err != nil {
+		if err := keys.FetchAndStore(kctx, h.Resolver.Directory(), h.Db, subject); err != nil {
 			l.Warn("failed to fetch subject public keys, continuing", "subject", subject, "error", err)
 		}
 	}()

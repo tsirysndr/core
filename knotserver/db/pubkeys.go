@@ -1,48 +1,104 @@
 package db
 
 import (
+	"database/sql"
+	"log/slog"
 	"strconv"
 	"time"
 
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/api/tangled"
 )
 
 type PublicKey struct {
-	Did string
+	Did  syntax.DID
+	Rkey syntax.RecordKey
 	tangled.PublicKey
 }
 
-func (d *DB) AddPublicKeyFromRecord(did string, recordIface map[string]interface{}) error {
-	record := make(map[string]string)
-	for k, v := range recordIface {
-		if str, ok := v.(string); ok {
-			record[k] = str
+func (d *DB) UpsertPublicKey(pk PublicKey) error {
+	tx, err := d.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if pk.Rkey != "" {
+		if _, err := tx.Exec(`delete from public_keys where did = ? and rkey = ?`, pk.Did, pk.Rkey); err != nil {
+			return err
 		}
 	}
 
-	pk := PublicKey{
-		Did: did,
+	if err := insertPublicKey(tx, d.logger, pk); err != nil {
+		return err
 	}
-	pk.Key = record["key"]
-	pk.CreatedAt = record["createdAt"]
 
-	return d.AddPublicKey(pk)
+	return tx.Commit()
 }
 
-func (d *DB) AddPublicKey(pk PublicKey) error {
+func insertPublicKey(tx *sql.Tx, logger *slog.Logger, pk PublicKey) error {
+	if pk.Key == "" {
+		logger.Warn("skipping public key with empty key value", "did", pk.Did, "rkey", pk.Rkey)
+		return nil
+	}
+
 	if pk.CreatedAt == "" {
 		pk.CreatedAt = time.Now().Format(time.RFC3339)
 	}
 
-	query := `insert or ignore into public_keys (did, key, created) values (?, ?, ?)`
-	_, err := d.db.Exec(query, pk.Did, pk.Key, pk.CreatedAt)
+	res, err := tx.Exec(
+		`insert or ignore into public_keys (did, key, rkey, created) values (?, ?, ?, ?)`,
+		pk.Did, pk.Key, pk.Rkey, pk.CreatedAt,
+	)
+	if err != nil {
+		return err
+	}
+
+	if rows, err := res.RowsAffected(); err == nil && rows == 0 {
+		logger.Warn("public key not stored, already registered to another did", "did", pk.Did, "rkey", pk.Rkey)
+	}
+
+	return nil
+}
+
+func (d *DB) DeletePublicKeyByRkey(did syntax.DID, rkey syntax.RecordKey) error {
+	if rkey == "" {
+		return nil
+	}
+
+	query := `delete from public_keys where did = ? and rkey = ?`
+	_, err := d.db.Exec(query, did, rkey)
 	return err
 }
 
-func (d *DB) RemovePublicKey(did string) error {
-	query := `delete from public_keys where did = ?`
-	_, err := d.db.Exec(query, did)
-	return err
+func (d *DB) ReplacePublicKeys(did syntax.DID, keys []PublicKey) error {
+	tx, err := d.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`delete from public_keys where did = ?`, did); err != nil {
+		return err
+	}
+
+	if err := insertPublicKeys(tx, d.logger, keys); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func insertPublicKeys(tx *sql.Tx, logger *slog.Logger, keys []PublicKey) error {
+	if len(keys) == 0 {
+		return nil
+	}
+
+	if err := insertPublicKey(tx, logger, keys[0]); err != nil {
+		return err
+	}
+
+	return insertPublicKeys(tx, logger, keys[1:])
 }
 
 func (pk *PublicKey) JSON() map[string]any {
@@ -65,30 +121,6 @@ func (d *DB) GetAllPublicKeys() ([]PublicKey, error) {
 	for rows.Next() {
 		var publicKey PublicKey
 		if err := rows.Scan(&publicKey.Key, &publicKey.Did, &publicKey.CreatedAt); err != nil {
-			return nil, err
-		}
-		keys = append(keys, publicKey)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return keys, nil
-}
-
-func (d *DB) GetPublicKeys(did string) ([]PublicKey, error) {
-	var keys []PublicKey
-
-	rows, err := d.db.Query(`select did, key, created from public_keys where did = ?`, did)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var publicKey PublicKey
-		if err := rows.Scan(&publicKey.Did, &publicKey.Key, &publicKey.CreatedAt); err != nil {
 			return nil, err
 		}
 		keys = append(keys, publicKey)

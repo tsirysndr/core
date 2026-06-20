@@ -306,6 +306,27 @@ func Setup(ctx context.Context, dbPath string) (*DB, error) {
 		return nil, err
 	}
 
+	if err := orm.RunMigration(conn, logger, "add-rkey-to-public-keys", func(tx *sql.Tx) error {
+		_, mErr := tx.ExecContext(ctx, `ALTER TABLE public_keys ADD COLUMN rkey TEXT`)
+		return mErr
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := orm.RunMigration(conn, logger, "enforce-global-key-uniqueness", func(tx *sql.Tx) error {
+		res, mErr := tx.ExecContext(ctx, `delete from public_keys where id not in (select min(id) from public_keys group by key)`)
+		if mErr != nil {
+			return mErr
+		}
+		if n, rErr := res.RowsAffected(); rErr == nil && n > 0 {
+			logger.Warn("dropped duplicate public keys to enforce global key uniqueness", "deleted", n)
+		}
+		_, mErr = tx.ExecContext(ctx, `create unique index if not exists idx_public_keys_key on public_keys(key)`)
+		return mErr
+	}); err != nil {
+		return nil, err
+	}
+
 	return &DB{
 		db:     db,
 		logger: logger,

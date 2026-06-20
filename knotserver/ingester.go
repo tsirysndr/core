@@ -26,24 +26,33 @@ import (
 )
 
 func (h *Knot) processPublicKey(ctx context.Context, event *jmodels.Event) error {
-	l := log.FromContext(ctx)
-	raw := json.RawMessage(event.Commit.Record)
-	did := event.Did
+	l := log.FromContext(ctx).With("handler", "processPublicKey", "did", event.Did, "rkey", event.Commit.RKey)
+	did := syntax.DID(event.Did)
+	rkey := syntax.RecordKey(event.Commit.RKey)
 
-	var record tangled.PublicKey
-	if err := json.Unmarshal(raw, &record); err != nil {
-		return fmt.Errorf("failed to unmarshal record: %w", err)
+	switch event.Commit.Operation {
+	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
+		var record tangled.PublicKey
+		if err := json.Unmarshal(json.RawMessage(event.Commit.Record), &record); err != nil {
+			return fmt.Errorf("failed to unmarshal record: %w", err)
+		}
+
+		pk := db.PublicKey{
+			Did:       did,
+			Rkey:      rkey,
+			PublicKey: record,
+		}
+		if err := h.db.UpsertPublicKey(pk); err != nil {
+			return fmt.Errorf("failed to upsert public key: %w", err)
+		}
+		l.Info("upserted public key from firehose")
+	case jmodels.CommitOperationDelete:
+		if err := h.db.DeletePublicKeyByRkey(did, rkey); err != nil {
+			return fmt.Errorf("failed to delete public key: %w", err)
+		}
+		l.Info("deleted public key from firehose")
 	}
 
-	pk := db.PublicKey{
-		Did:       did,
-		PublicKey: record,
-	}
-	if err := h.db.AddPublicKey(pk); err != nil {
-		l.Error("failed to add public key", "error", err)
-		return fmt.Errorf("failed to add public key: %w", err)
-	}
-	l.Info("added public key from firehose", "did", did)
 	return nil
 }
 
