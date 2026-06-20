@@ -48,6 +48,7 @@ func (x *Xrpc) Router() http.Handler {
 
 	// service query endpoints (no auth required)
 	r.Get("/"+tangled.OwnerNSID, x.Owner)
+	r.Get("/"+tangled.CiPipelineSubscribeLogsNSID, x.HandleCiPipelineSubscribeLogs)
 
 	return r
 }
@@ -59,4 +60,13 @@ func writeError(w http.ResponseWriter, e xrpcerr.XrpcError, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(e)
+}
+
+func writeJson(w http.ResponseWriter, status int, response any) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		return err
+	}
+	return nil
 }

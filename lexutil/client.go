@@ -44,7 +44,9 @@ type processFn func(ctx context.Context, cr *cbg.CborReader) error
 func (c *Client) LexDo(ctx context.Context, method string, inputEncoding string, endpoint string, params map[string]any, bodyData any, out any) error {
 	switch method {
 	case Subscription:
-		if process, ok := out.(processFn); ok {
+		if process, ok := out.(func(context.Context, *cbg.CborReader) error); ok {
+			return c.LexSubscribe(ctx, endpoint, params, process)
+		} else if process, ok := out.(processFn); ok {
 			return c.LexSubscribe(ctx, endpoint, params, process)
 		} else if redialer, ok := out.(Redialer); ok {
 			return c.LexSubscribeWithRedialer(ctx, endpoint, params, redialer)

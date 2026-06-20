@@ -374,6 +374,7 @@
             pkgs.iproute2
           ];
         shellHook = ''
+          export CC=${pkgs.stdenv.cc}/bin/cc
           mkdir -p appview/pages/static
           # temporary self-heal for workspaces that copied static assets as read-only
           [ -d appview/pages/static/icons ] && [ ! -w appview/pages/static/icons ] && chmod -R u+rwX appview/pages/static
