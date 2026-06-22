@@ -220,6 +220,9 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 		if setupDone {
 			return
 		}
+		if detail := vmCrashLog(state.VM); detail != "" {
+			l.Error("microVM setup failed", "detail", detail)
+		}
 		if err := e.cleanupState(context.Background(), wid, state); err != nil {
 			l.Error("failed to cleanup failed setup", "error", err)
 		}
@@ -385,10 +388,10 @@ func (e *Engine) classifyStepError(ctx context.Context, wid models.WorkflowId, s
 		}
 		if detail := vmCrashLog(state.VM); detail != "" {
 			fmt.Fprintf(stderr, "%s:\n%s\n", reason, detail)
-			l.Debug(reason, "oom", oom, "detail", detail)
+			l.Error(reason, "oom", oom, "detail", detail)
 		} else {
 			fmt.Fprintln(stderr, reason)
-			l.Debug(reason, "oom", oom)
+			l.Error(reason, "oom", oom)
 		}
 		return errors.New(reason + "; see workflow logs for serial output")
 	}
@@ -403,9 +406,9 @@ func (e *Engine) classifyStepError(ctx context.Context, wid models.WorkflowId, s
 	// will be more helpful.
 	if detail := vmCrashLog(state.VM); detail != "" {
 		fmt.Fprintf(stderr, "step failed (%v):\n%s\n", err, detail)
-		l.Debug("step failed", "error", err, "detail", detail)
+		l.Error("step failed", "error", err, "detail", detail)
 	} else {
-		l.Debug("step failed", "error", err)
+		l.Error("step failed", "error", err)
 	}
 	return err
 }
