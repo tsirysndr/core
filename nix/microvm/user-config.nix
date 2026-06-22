@@ -95,6 +95,14 @@
     if builtins.isBool v && hasEnableOption opt
     then {enable = v;}
     else resolveValue opt v;
+
+  # dependencies go into a devshell so we can make use of stdenv setup hooks
+  # (e.g. for pkg-config and such)
+  dependencies = userConfig.dependencies or [];
+  spindleDevShell = pkgs.mkShellNoCC {
+    name = "spindle-deps";
+    packages = map resolvePackage dependencies;
+  };
 in {
   nix.registry = builtins.mapAttrs (name: _:
     lib.mkForce {
@@ -104,7 +112,12 @@ in {
       };
     })
   registry;
-  environment.systemPackages = map resolvePackage (userConfig.dependencies or []);
+  # put the devshell into the resulting image env.
+  # we do this instead of using a `.nix` file because it lets us skip eval time.
+  environment.etc = lib.mkIf (dependencies != []) {
+    "spindle/devshell.drv".source = spindleDevShell.drvPath;
+    "spindle/devshell-inputs".source = spindleDevShell.inputDerivation;
+  };
   services = builtins.mapAttrs (normalize (options.services or {})) (userConfig.services or {});
   virtualisation = builtins.mapAttrs (normalize (options.virtualisation or {})) (userConfig.virtualisation or {});
 }

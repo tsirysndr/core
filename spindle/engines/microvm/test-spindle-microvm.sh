@@ -12,6 +12,27 @@ strip_ansi() {
     sed -E "s/${esc}\[[0-9;]*[a-zA-Z]//g; s/${esc}\([a-zA-Z]//g" "$@"
 }
 
+# check_needles OUT NEEDLES...
+check_needles() {
+    local out="$1"
+    shift
+    local clean
+    clean=$(echo "$out" | strip_ansi)
+
+    local needle missing=0
+    for needle in "$@"; do
+        if ! echo "$clean" | grep -qE "$needle"; then
+            echo "error: output missing '$needle'" >&2
+            missing=1
+        fi
+    done
+
+    if [ "$missing" -ne 0 ]; then
+        echo "$clean" >&2
+        return 1
+    fi
+}
+
 declare -a TEST_NAMES=()
 declare -a TEST_STATUSES=()
 declare -a TEST_TIMES=()
@@ -446,11 +467,7 @@ esac
 /run/current-system/sw/bin/nix-store --realise "$store_path" >/dev/null
 ' bash "$test_store_path") || return 1
 
-    if ! echo "$out" | strip_ansi | grep -q -E "^http_version=2(\\.0)?$"; then
-        echo "error: cache proxy did not report HTTP/2" >&2
-        echo "$out" | strip_ansi >&2
-        return 1
-    fi
+    check_needles "$out" "^http_version=2(\\.0)?$" || return 1
     echo "success: store path realized from cache and cache proxy accepted cleartext HTTP/2"
 }
 
@@ -536,20 +553,8 @@ test_substitution_and_no_upload() {
     local out
     out=$(run_vm --name "nixpkgs-hello" --timeout "180s" --upload -- /run/current-system/sw/bin/nix-store --realise "$hello_path") || return 1
 
-    # Check that it was substituted from our proxy
-    if ! echo "$out" | strip_ansi | grep -q -E "copying path.*hello"; then
-        echo "error: hello package was not substituted (or output mismatch)" >&2
-        echo "$out" | strip_ansi >&2
-        return 1
-    fi
-
-    # Check that nothing was uploaded to the cache
-    if ! echo "$out" | strip_ansi | grep -q "cache uploaded: 0"; then
-        echo "error: hello package substitution triggered cache upload" >&2
-        echo "$out" | strip_ansi >&2
-        return 1
-    fi
-
+    # substituted from our proxy, and nothing uploaded back to the cache.
+    check_needles "$out" "copying path.*hello" "cache uploaded: 0" || return 1
     echo "success: hello package substituted from upstream cache and was not uploaded"
 }
 
@@ -570,45 +575,56 @@ test_activation_services() {
     }'
     local out
     out=$(run_vm --name "activation-services" --timeout "300s" --activate "$config" -- /run/current-system/sw/bin/systemctl is-active sshd) || return 1
-    if ! echo "$out" | strip_ansi | grep -q "^active$"; then
-        echo "error: sshd not active after activation" >&2
-        echo "$out" | strip_ansi >&2
-        return 1
-    fi
+    check_needles "$out" "^active$" || return 1
     echo "success: openssh service active after activation"
 }
 
 test_activation_dependencies() {
-    # cowsay as a bare dependency (resolved via the pinned nixpkgs registry);
-    # hello via the github flakeref and (separately) the my-nixpkgs alias.
+    # pkg-config + openssl as bare dependencies (resolved via the pinned nixpkgs
+    # registry); their job is to prove the activation devshell exports build env
+    # vars like PKG_CONFIG_PATH, not just PATH. hello comes in via the github
+    # flakeref and (separately) the my-nixpkgs alias.
     local config='{
         '"$ACTIVATION_REGISTRY"',
         "dependencies": [
-            "cowsay",
+            "pkg-config",
+            "openssl",
             "github:nixos/nixpkgs#hello",
             "my-nixpkgs#hello"
         ]
     }'
+    # dependencies live in the activation devshell now, not systemPackages, so a
+    # step picks them up by sourcing the materialised env (this is what the
+    # engine's RunStep does automatically; the CLI runner does not, so we do it
+    # here).
     local out
     out=$(run_vm --name "activation-dependencies" --timeout "600s" --activate "$config" -- /run/current-system/sw/bin/bash -l -c '
+env_file=/run/spindle/devshell-env.sh
+[ -f "$env_file" ] && echo "env_file=present" || echo "env_file=missing"
+
+# mirror RunStep
+. "$env_file"
+export PATH="$PATH:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin"
+
 set -euo pipefail
-cowsay "registry pin ok" >/dev/null && echo "cowsay=ran"
+# bare deps: pkg-config must be on PATH, and it must locate openssl through the
+# devshell-provided PKG_CONFIG_PATH (openssls headers live in a separate `dev`
+# output, so this also proves that output got realised into the devshell).
+echo "pkgconfig=$(pkg-config --version)"
+pkg-config --exists openssl && echo "openssl_found=yes"
+echo "openssl_version=$(pkg-config --modversion openssl)"
+inc=$(pkg-config --variable=includedir openssl)
+echo "includedir=$inc"
+[ -f "$inc/openssl/ssl.h" ] && echo "dev_headers=found"
+
+# flakeref + aliased deps
 echo "hello=$(hello)"
 ') || return 1
 
-    local clean
-    clean=$(echo "$out" | strip_ansi)
-    if ! echo "$clean" | grep -qF "cowsay=ran"; then
-        echo "error: bare dependency 'cowsay' (resolved via the pinned nixpkgs registry) did not run" >&2
-        echo "$clean" >&2
-        return 1
-    fi
-    if ! echo "$clean" | grep -qF "hello=Hello, world!"; then
-        echo "error: hello dependency (github flakeref + my-nixpkgs alias) did not run" >&2
-        echo "$clean" >&2
-        return 1
-    fi
-    echo "success: bare, flakeref, and aliased dependencies all resolved and ran"
+    check_needles "$out" \
+        "env_file=present" "pkgconfig=[0-9]" "openssl_found=yes" \
+        "openssl_version=[0-9]" "dev_headers=found" "hello=Hello, world!" || return 1
+    echo "success: bare (pkg-config + openssl, dev headers found via PKG_CONFIG_PATH), flakeref, and aliased deps all resolved"
 }
 
 test_activation_registry_pin() {
@@ -629,14 +645,9 @@ echo "lib_version=$(nix eval --raw nixpkgs#lib.version)"
 echo "nix_path=$(nix eval --raw --impure --expr "toString <nixpkgs>")"
 ') || return 1
 
-    local clean
+    check_needles "$out" "lib_version=[0-9]" || return 1
+    local clean guest_nixpath
     clean=$(echo "$out" | strip_ansi)
-    if ! echo "$clean" | grep -qE "lib_version=[0-9]"; then
-        echo "error: guest could not resolve nixpkgs#lib.version from the user registry (locked-ref failure?)" >&2
-        echo "$clean" >&2
-        return 1
-    fi
-    local guest_nixpath
     guest_nixpath=$(echo "$clean" | sed -n 's/^nix_path=//p' | head -n1)
     if [ -z "$guest_nixpath" ] || [ "$guest_nixpath" = "$base_nixpkgs" ]; then
         echo "error: guest <nixpkgs> nixPath did not resolve to the registry override (got '$guest_nixpath', base '$base_nixpkgs')" >&2
@@ -664,11 +675,7 @@ nix-store --realise "$store_path" >/dev/null
 echo "substituted=$(cat "$store_path")"
 ' bash "$test_store_path") || return 1
 
-    if ! echo "$out" | strip_ansi | grep -qF "substituted=hello from the workflow cache"; then
-        echo "error: unique path was not substituted from the configured cache" >&2
-        echo "$out" | strip_ansi >&2
-        return 1
-    fi
+    check_needles "$out" "substituted=hello from the workflow cache" || return 1
     echo "success: unique path substituted from the workflow cache through the read proxy"
 }
 
@@ -693,25 +700,9 @@ docker run --rm alpine cat /etc/alpine-release | sed "s/^/alpine_release=/"
 docker run --rm alpine echo container-ran-ok
 ') || return 1
 
-    local clean
-    clean=$(echo "$out" | strip_ansi)
-    if ! echo "$clean" | grep -q "^docker_unit=active$"; then
-        echo "error: docker service not active after activation" >&2
-        echo "$clean" >&2
-        return 1
-    fi
-    if ! echo "$clean" | grep -qE "storage_driver=overlay(2|fs)"; then
-        echo "error: docker is not using an overlay storage driver (overlay.ko missing?)" >&2
-        return 1
-    fi
-    if ! echo "$clean" | grep -qE "alpine_release=[0-9]+\."; then
-        echo "error: failed to pull and read the alpine image" >&2
-        return 1
-    fi
-    if ! echo "$clean" | grep -q "container-ran-ok"; then
-        echo "error: command did not run inside the alpine container" >&2
-        return 1
-    fi
+    check_needles "$out" \
+        "^docker_unit=active$" "storage_driver=overlay(2|fs)" \
+        "alpine_release=[0-9]+\." "container-ran-ok" || return 1
     echo "success: docker service active, pulled and ran an alpine container on the overlay storage driver"
 }
 
@@ -730,28 +721,13 @@ test_activation_cached_realize() {
     # the db. nothing cached yet, so this builds from scratch.
     local out
     out=$(run_vm --name "activation-cached-first" --timeout "600s" --activate "$config" --db "$db_path" --upload -- /run/current-system/sw/bin/systemctl is-active sshd) || return 1
-    if ! echo "$out" | strip_ansi | grep -q "^active$"; then
-        echo "error: sshd not active after first activation" >&2
-        echo "$out" | strip_ansi >&2
-        return 1
-    fi
+    check_needles "$out" "^active$" || return 1
 
     # second run: same config + db, no upload. must realize the recorded toplevel
     # from the cache instead of rebuilding, and the cached system must come up.
     out=$(run_vm --name "activation-cached-second" --timeout "300s" --activate "$config" --db "$db_path" -- /run/current-system/sw/bin/systemctl is-active sshd) || return 1
 
-    local clean
-    clean=$(echo "$out" | strip_ansi)
-    if ! echo "$clean" | grep -q "realizing cached NixOS config"; then
-        echo "error: second run did not realize cached configuration" >&2
-        echo "$clean" >&2
-        return 1
-    fi
-    if ! echo "$clean" | grep -q "^active$"; then
-        echo "error: sshd not active after cached config activation" >&2
-        echo "$clean" >&2
-        return 1
-    fi
+    check_needles "$out" "realizing cached NixOS config" "^active$" || return 1
     echo "success: second run realized the cached NixOS config from the cache and sshd came up"
 }
 
@@ -779,13 +755,9 @@ nix-store --realise "$hello_path" >/dev/null
 echo "ran=$("$hello_path/bin/hello")"
 ' sh "$hello_path") || return 1
 
-    echo "$out" | strip_ansi >&2
-    for needle in "release=" "user=spindle-workflow" "git version" "bash=" "workspace writable" "git over https ok" "apk ok" "ran=Hello, world!"; do
-        if ! echo "$out" | strip_ansi | grep -q "$needle"; then
-            echo "error: alpine guest output missing $needle" >&2
-            return 1
-        fi
-    done
+    check_needles "$out" \
+        "release=" "user=spindle-workflow" "git version" "bash=" \
+        "workspace writable" "git over https ok" "apk ok" "ran=Hello, world!" || return 1
     echo "success: alpine guest booted, ran as workflow user, wrote workspace, cloned + installed over the network, and substituted+ran a package from cache.nixos.org over HTTPS"
 }
 
@@ -863,27 +835,12 @@ old_path=$(nix-build /workspace/old.nix --no-out-link)
 echo "old_path=$old_path"
 ' sh "$test_store_path") || return 1
 
-    echo "$out" | strip_ansi >&2
-    local clean
+    check_needles "$out" \
+        "daemon=ok" "substituted=hello from cache to alpine" "path_info=ok" \
+        "requisites=[1-9][0-9]*" "new_content=via-nix-build-with-dep" || return 1
+
+    local clean new_path old_path
     clean=$(echo "$out" | strip_ansi)
-
-    local needle
-    for needle in "daemon=ok" "substituted=hello from cache to alpine" "path_info=ok"; do
-        if ! echo "$clean" | grep -q "$needle"; then
-            echo "error: alpine nix output missing '$needle'" >&2
-            return 1
-        fi
-    done
-    if ! echo "$clean" | grep -qE "requisites=[1-9][0-9]*"; then
-        echo "error: store db query returned no requisites for the substituted path" >&2
-        return 1
-    fi
-    if ! echo "$clean" | grep -q "new_content=via-nix-build-with-dep"; then
-        echo "error: 'nix build' (new CLI) did not realise its substituted dependency and build" >&2
-        return 1
-    fi
-
-    local new_path old_path
     new_path=$(echo "$clean" | grep -o 'new_path=/nix/store/[a-z0-9]*-alpine-nix-build-new' | cut -d= -f2)
     old_path=$(echo "$clean" | grep -o 'old_path=/nix/store/[a-z0-9]*-alpine-nix-build-old' | cut -d= -f2)
     if [ -z "$new_path" ] || [ -z "$old_path" ]; then

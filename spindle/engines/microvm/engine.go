@@ -29,6 +29,8 @@ import (
 
 const (
 	guestWorkDir          = "/workspace/repo"
+	guestBasePATH         = "/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+	guestDevShellEnvPath  = "/run/spindle/devshell-env.sh"
 	activationStepAction  = "activate-config"
 	agentAcceptTimeout    = 2 * time.Minute
 	agentHandshakeTimeout = 30 * time.Second
@@ -91,7 +93,7 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB) (*Engine, error) {
 		cfg:          cfg,
 		db:           d,
 		agent:        agent,
-		scheduler:    engine.NewResourceScheduler[Resources](budget, max, agingThreshold),
+		scheduler:    engine.NewResourceScheduler(budget, max, agingThreshold),
 		cgroupParent: cgroupParent,
 		cleanup:      make(map[string][]cleanupFunc),
 	}, nil
@@ -301,6 +303,14 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 	return nil
 }
 
+func applyDepsSource(command string) string {
+	return fmt.Sprintf(
+		// check if it exists because not all images have this
+		`if [ -f %s ]; then . %s; export PATH="$PATH:%s"; fi; %s`,
+		guestDevShellEnvPath, guestDevShellEnvPath, guestBasePATH, command,
+	)
+}
+
 func (e *Engine) RunStep(ctx context.Context, wid models.WorkflowId, w *models.Workflow, idx int, secrets []secrets.UnlockedSecret, wfLogger models.WorkflowLogger) error {
 	state, ok := w.Data.(*workflowState)
 	if !ok || state == nil || state.Agent == nil {
@@ -320,7 +330,7 @@ func (e *Engine) RunStep(ctx context.Context, wid models.WorkflowId, w *models.W
 	env := []string{
 		"HOME=/workspace",
 		"LOGNAME=" + guestWorkflowUser,
-		"PATH=/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+		"PATH=" + guestBasePATH,
 		"USER=" + guestWorkflowUser,
 	}
 	for k, v := range w.Environment {
@@ -339,7 +349,7 @@ func (e *Engine) RunStep(ctx context.Context, wid models.WorkflowId, w *models.W
 	exitCode, err := state.Agent.Exec(execCtx, AgentExec{
 		ID: fmt.Sprintf("%s-%d", wid.String(), idx),
 		ExecStart: &agentv1.ExecStart{
-			Argv: []string{state.ImageSpec.Shell, "-lc", step.Command()},
+			Argv: []string{state.ImageSpec.Shell, "-lc", applyDepsSource(step.Command())},
 			Env:  env,
 			Cwd:  guestWorkDir,
 			User: guestWorkflowUser,

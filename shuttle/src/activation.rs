@@ -9,6 +9,8 @@ use tokio::sync::mpsc::Sender;
 use tracing::info;
 
 const USER_CONFIG_DIR: &str = "/run/spindle/user-config";
+const DEVSHELL_ENV_PATH: &str = "/run/spindle/devshell-env.sh";
+const DEVSHELL_DRV: &str = "/etc/spindle/devshell.drv";
 
 pub async fn run(id: String, req: v1::ActivateConfig, out: Sender<Message>) {
     let config_key = req.config_key.clone();
@@ -45,6 +47,7 @@ async fn activate(req: &v1::ActivateConfig) -> Result<PathBuf> {
     }
 
     switch_to_configuration(&toplevel, timeout).await?;
+    write_devshell_env(timeout).await?;
     info!(
         config_key = %req.config_key,
         base_config_hash = %req.base_config_hash,
@@ -52,6 +55,46 @@ async fn activate(req: &v1::ActivateConfig) -> Result<PathBuf> {
         "activated NixOS config"
     );
     Ok(toplevel)
+}
+
+async fn write_devshell_env(timeout: Duration) -> Result<()> {
+    let drv = match fs::canonicalize(DEVSHELL_DRV) {
+        Ok(p) => p,
+        Err(_) => {
+            let _ = fs::remove_file(DEVSHELL_ENV_PATH);
+            return Ok(());
+        }
+    };
+
+    info!(
+        ?drv,
+        "running nix print-dev-env for dependencies devshell..."
+    );
+    let output = run_capture(
+        Spec::new(nix_executable())
+            .args([
+                "print-dev-env".into(),
+                "--show-trace".into(),
+                drv.into_os_string(),
+            ])
+            .cwd(SPINDLE_RUN_DIR)
+            .timeout(timeout),
+    )
+    .await?;
+
+    if !output.success() {
+        anyhow::bail!(
+            "nix print-dev-env failed: exit={} error={:?} output={}",
+            output.exit.exit_code,
+            output.exit.error,
+            output.combined_lossy(),
+        );
+    }
+
+    fs::write(DEVSHELL_ENV_PATH, &output.stdout)
+        .with_context(|| format!("write {DEVSHELL_ENV_PATH}"))?;
+    info!(path = %DEVSHELL_ENV_PATH, "wrote devshell env");
+    Ok(())
 }
 
 async fn build_toplevel(req: &v1::ActivateConfig, timeout: Duration) -> Result<PathBuf> {
