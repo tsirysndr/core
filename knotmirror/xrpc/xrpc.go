@@ -58,6 +58,7 @@ func (x *Xrpc) Router() http.Handler {
 
 	r.Group(func(r chi.Router) {
 		r.Use(x.inflight.middleware)
+		r.Use(x.forwardSuspended)
 
 		r.Get("/"+tangled.GitTempGetArchiveNSID, x.GetArchive)
 		r.Get("/"+tangled.GitTempGetBlobNSID, x.GetBlob)

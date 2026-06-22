@@ -56,6 +56,13 @@ func (s RepoState) IsResyncing() bool {
 	return s == RepoStateResyncing
 }
 
+type ObjectFormat string
+
+const (
+	ObjectFormatSHA1   ObjectFormat = "sha1"
+	ObjectFormatSHA256 ObjectFormat = "sha256"
+)
+
 type HostCursor struct {
 	Hostname string
 	LastSeq  int64

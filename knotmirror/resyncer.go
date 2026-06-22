@@ -1,10 +1,12 @@
 package knotmirror
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/rand"
 	"net/http"
@@ -229,7 +231,8 @@ func (r *Resyncer) doResync(ctx context.Context, repoDid syntax.DID) (bool, erro
 	// HACK: check knot reachability with short timeout before running actual fetch.
 	// This is crucial as git-cli doesn't support http connection timeout.
 	// `http.lowSpeedTime` is only applied _after_ the connection.
-	if err := r.checkKnotReachability(ctx, repo); err != nil {
+	format, err := r.checkKnot(ctx, repo)
+	if err != nil {
 		if isRateLimitError(err) {
 			r.knotBackoffMu.Lock()
 			r.knotBackoff[repo.KnotDomain] = time.Now().Add(10 * time.Second)
@@ -238,6 +241,10 @@ func (r *Resyncer) doResync(ctx context.Context, repoDid syntax.DID) (bool, erro
 		}
 		// TODO: suspend repo on 404. KnotStream updates will change the repo state back online
 		return false, fmt.Errorf("knot unreachable: %w", err)
+	}
+
+	if format == models.ObjectFormatSHA256 {
+		return r.suspendUnsupported(ctx, repo)
 	}
 
 	timeout := r.repoFetchTimeout
@@ -282,11 +289,10 @@ func isRateLimitError(err error) bool {
 	return false
 }
 
-// checkKnotReachability checks if Knot is reachable and is valid git remote server
-func (r *Resyncer) checkKnotReachability(ctx context.Context, repo *models.Repo) error {
+func (r *Resyncer) checkKnot(ctx context.Context, repo *models.Repo) (models.ObjectFormat, error) {
 	repoUrl, err := makeRepoRemoteUrl(repo.KnotDomain, repo.RepoIdentifier(), r.cfg.KnotUseSSL)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	repoUrl += "/info/refs?service=git-upload-pack"
@@ -295,7 +301,7 @@ func (r *Resyncer) checkKnotReachability(ctx context.Context, repo *models.Repo)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", repoUrl, nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 	req.Header.Set("User-Agent", "git/2.x")
 	req.Header.Set("Accept", "*/*")
@@ -304,23 +310,48 @@ func (r *Resyncer) checkKnotReachability(ctx context.Context, repo *models.Repo)
 	if err != nil {
 		var uerr *url.Error
 		if errors.As(err, &uerr) {
-			return fmt.Errorf("request failed: %w", uerr.Unwrap())
+			return "", fmt.Errorf("request failed: %w", uerr.Unwrap())
 		}
-		return fmt.Errorf("request failed: %w", err)
+		return "", fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return &knotStatusError{resp.StatusCode}
+		return "", &knotStatusError{resp.StatusCode}
 	}
 
 	// check if target is git server
 	ct := resp.Header.Get("Content-Type")
 	if !strings.Contains(ct, "application/x-git-upload-pack-advertisement") {
-		return fmt.Errorf("unexpected content-type: %s", ct)
+		return "", fmt.Errorf("unexpected content-type: %s", ct)
 	}
 
-	return nil
+	advertisement, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		return "", fmt.Errorf("reading upload-pack advertisement: %w", err)
+	}
+	if bytes.Contains(advertisement, []byte("object-format=sha256")) {
+		return models.ObjectFormatSHA256, nil
+	}
+
+	return models.ObjectFormatSHA1, nil
+}
+
+func (r *Resyncer) suspendUnsupported(ctx context.Context, repo *models.Repo) (bool, error) {
+	if err := r.gitm.Delete(repo); err != nil {
+		r.logger.Warn("failed to remove local clone of suspended repo", "did", repo.RepoDid, "err", err)
+	}
+
+	repo.State = models.RepoStateSuspended
+	repo.ErrorMsg = "unsupported sha256 object format"
+	repo.RetryCount = 0
+	repo.RetryAfter = 0
+	if err := db.UpsertRepo(ctx, r.db, repo); err != nil {
+		return false, fmt.Errorf("suspending sha256 repo: %w", err)
+	}
+
+	r.logger.Info("suspended sha256 repo, reads forwarded to knot", "did", repo.RepoDid, "knot", repo.KnotDomain)
+	return true, nil
 }
 
 func (r *Resyncer) handleResyncFailure(ctx context.Context, repoDid syntax.DID, err error) error {

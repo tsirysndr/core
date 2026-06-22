@@ -1,6 +1,7 @@
 package xrpc
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -8,10 +9,13 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 
+	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
+	"github.com/go-git/go-git/v5/plumbing/filemode"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/knotmirror/db"
 	"tangled.org/core/knotmirror/models"
@@ -26,6 +30,7 @@ var mirrorToKnotNSID = map[string]string{
 	tangled.GitTempGetTagNSID:        tangled.RepoTagNSID,
 	tangled.GitTempGetArchiveNSID:    tangled.RepoArchiveNSID,
 	tangled.GitTempListLanguagesNSID: tangled.RepoLanguagesNSID,
+	tangled.GitTempGetBlobNSID:       tangled.RepoBlobNSID,
 }
 
 var hopByHopHeaders = map[string]bool{
@@ -181,4 +186,124 @@ func (x *Xrpc) proxyToKnot(w http.ResponseWriter, r *http.Request, repoDid synta
 
 	x.logger.Info("proxy: served from knot", "repo", repoDid, "knot", knot.baseURL, "status", resp.StatusCode)
 	return true
+}
+
+func (x *Xrpc) forwardSuspended(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		repoDid, err := syntax.ParseDID(r.URL.Query().Get("repo"))
+		if err != nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		repo, err := db.GetRepoByRepoDid(r.Context(), x.db, repoDid)
+		if err != nil || repo == nil || repo.State != models.RepoStateSuspended {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		nsid := strings.TrimPrefix(r.URL.Path, "/xrpc/")
+		switch nsid {
+		case tangled.GitTempGetEntryNSID:
+			x.serveSuspendedEntry(w, r, repoDid)
+		case tangled.GitTempGetBlobNSID:
+			q := r.URL.Query()
+			q.Set("raw", "true")
+			r.URL.RawQuery = q.Encode()
+			x.forwardOrFail(w, r, repoDid)
+		default:
+			if _, ok := mirrorToKnotNSID[nsid]; !ok {
+				next.ServeHTTP(w, r)
+				return
+			}
+			x.forwardOrFail(w, r, repoDid)
+		}
+	})
+}
+
+func (x *Xrpc) forwardOrFail(w http.ResponseWriter, r *http.Request, repoDid syntax.DID) {
+	if x.proxyToKnot(w, r, repoDid) {
+		return
+	}
+	writeJson(w, http.StatusBadGateway, atclient.ErrorBody{Name: "BadGateway", Message: "failed to reach knot for suspended repo"})
+}
+
+func (x *Xrpc) serveSuspendedEntry(w http.ResponseWriter, r *http.Request, repoDid syntax.DID) {
+	ref := cmp.Or(r.URL.Query().Get("ref"), "HEAD")
+	filePath := r.URL.Query().Get("path")
+	if filePath == "" {
+		writeJson(w, http.StatusBadRequest, atclient.ErrorBody{Name: "BadRequest", Message: "missing path parameter"})
+		return
+	}
+
+	knot, err := x.resolveKnot(r.Context(), repoDid)
+	if err != nil {
+		x.logger.Warn("suspended entry: failed to resolve knot", "repo", repoDid, "err", err)
+		writeJson(w, http.StatusBadGateway, atclient.ErrorBody{Name: "BadGateway", Message: "failed to resolve knot for suspended repo"})
+		return
+	}
+
+	client := &indigoxrpc.Client{Host: knot.baseURL, Client: x.httpClient}
+	out, err := tangled.RepoBlob(r.Context(), client, filePath, false, ref, knot.repoIdentifier)
+	if err != nil {
+		x.logger.Warn("suspended entry: knot repo.blob failed", "repo", repoDid, "err", err)
+		writeJson(w, http.StatusBadGateway, atclient.ErrorBody{Name: "BadGateway", Message: "failed to read entry from knot"})
+		return
+	}
+
+	mode := filemode.Regular
+	if out.Submodule != nil {
+		mode = filemode.Submodule
+	}
+
+	writeJson(w, http.StatusOK, tangled.GitTempGetEntry_Output{
+		Name:       path.Base(filePath),
+		Mode:       mode.String(),
+		Size:       derefInt64(out.Size),
+		LastCommit: suspendedLastCommit(out.LastCommit),
+		Submodule:  suspendedSubmodule(out.Submodule),
+	})
+}
+
+func suspendedLastCommit(c *tangled.RepoBlob_LastCommit) *tangled.GitTempDefs_Commit {
+	if c == nil || c.Author == nil {
+		return nil
+	}
+	sig := suspendedSignature(c.Author)
+	hash := c.Hash
+	return &tangled.GitTempDefs_Commit{
+		Author:    sig,
+		Committer: sig,
+		Hash:      &hash,
+		Message:   c.Message,
+	}
+}
+
+func suspendedSignature(s *tangled.RepoBlob_Signature) *tangled.GitTempDefs_Signature {
+	if s == nil {
+		return nil
+	}
+	return &tangled.GitTempDefs_Signature{
+		Name:  s.Name,
+		Email: s.Email,
+		When:  s.When,
+	}
+}
+
+func suspendedSubmodule(s *tangled.RepoBlob_Submodule) *tangled.GitTempDefs_Submodule {
+	if s == nil {
+		return nil
+	}
+	return &tangled.GitTempDefs_Submodule{
+		Name:   s.Name,
+		Url:    s.Url,
+		Branch: s.Branch,
+	}
+}
+
+func derefInt64(v *int64) int64 {
+	if v == nil {
+		return 0
+	}
+	return *v
 }
