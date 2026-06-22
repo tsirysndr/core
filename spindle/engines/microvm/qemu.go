@@ -253,16 +253,15 @@ func StartQEMU(ctx context.Context, cfg QEMUConfig, logger *slog.Logger) (VMHand
 	if qmpTimeout == 0 {
 		qmpTimeout = defaultQMPTimeout
 	}
-	if err := handle.waitForQMP(ctx, qmpTimeout); err != nil {
+	qmpCtx, cancelQMP := context.WithTimeout(ctx, qmpTimeout)
+	defer cancelQMP()
+	if err := handle.waitForQMP(qmpCtx, qmpTimeout); err != nil {
 		return nil, err
 	}
 
-	status, err := handle.QMPQueryStatus()
+	status, err := handle.waitForQMPRunning(qmpCtx, qmpTimeout)
 	if err != nil {
 		return nil, err
-	}
-	if status != "running" {
-		return nil, fmt.Errorf("qemu guest not running (status: %s)", status)
 	}
 	logger.Info("qemu microvm running", "cid", cid, "status", status)
 
@@ -381,14 +380,59 @@ func (h *QEMUVMHandle) QMPQueryStatus() (string, error) {
 	}
 
 	var resp struct {
-		Return struct {
+		Return *struct {
 			Status string `json:"status"`
 		} `json:"return"`
 	}
 	if err := json.Unmarshal(raw, &resp); err != nil {
-		return "", fmt.Errorf("qmp query-status parse: %w", err)
+		return "", fmt.Errorf("qmp query-status parse %q: %w", raw, err)
+	}
+	if resp.Return == nil {
+		return "", fmt.Errorf("qmp query-status missing return: %s", raw)
+	}
+	if resp.Return.Status == "" {
+		return "", fmt.Errorf("qmp query-status missing return.status: %s", raw)
 	}
 	return resp.Return.Status, nil
+}
+
+func (h *QEMUVMHandle) waitForQMPRunning(ctx context.Context, timeout time.Duration) (string, error) {
+	statusCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+
+	var lastStatus string
+	var lastErr error
+
+	for {
+		status, err := h.QMPQueryStatus()
+		if err != nil {
+			lastErr = err
+		} else {
+			lastErr = nil
+			lastStatus = status
+
+			switch status {
+			case "running":
+				return status, nil
+			case "shutdown", "internal-error", "io-error", "guest-panicked":
+				return "", fmt.Errorf("qemu guest entered unhealthy state before running (status: %s)", status)
+			}
+		}
+
+		select {
+		case <-statusCtx.Done():
+			if lastErr != nil {
+				return "", fmt.Errorf("qemu guest did not reach running state (last status: %s): %w", lastStatus, errors.Join(statusCtx.Err(), lastErr))
+			}
+			return "", fmt.Errorf("qemu guest did not reach running state (last status: %s): %w", lastStatus, statusCtx.Err())
+		case <-h.done:
+			return "", fmt.Errorf("qemu exited before reaching running state: %w", h.Wait())
+		case <-ticker.C:
+		}
+	}
 }
 
 func (h *QEMUVMHandle) QMPSystemPowerdown() error {
