@@ -235,7 +235,25 @@ in {
   ];
 
   # add any common packages / services here
-  environment.systemPackages = [pkgs.gitMinimal];
+  environment.systemPackages = with pkgs; [
+    gitMinimal
+    curlMinimal
+    wget
+    coreutils-full
+    file
+    findutils
+    gnused
+    jq
+    yq
+    xxd
+    gnutar
+    zip
+    unzip
+    gz-utils
+    bzip2
+    lz4
+    p7zip
+  ];
   # disable default nixos packages ([perl rsync strace])
   environment.defaultPackages = [];
   # this removed nixos-rebuild-ng and nixos-generate-config, which lets us

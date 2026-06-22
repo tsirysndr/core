@@ -15,9 +15,11 @@
 }: let
   nix = pkgsStatic.nixStatic;
   bash = pkgsStatic.bashNonInteractive;
+  curl = pkgsStatic.curlMinimal;
+  jq = pkgsStatic.jq;
   git =
     (pkgsStatic.gitMinimal.override {
-      curl = pkgsStatic.curlMinimal;
+      inherit curl;
       pythonSupport = false;
       withManual = false;
       nlsSupport = false;
@@ -26,7 +28,9 @@
       doInstallCheck = false;
       configureFlags = (old.configureFlags or []) ++ ["ac_cv_lib_curl_curl_global_init=yes"];
     });
-  guestTools = [nix bash git];
+  # we don't include gnused, xxd etc. here because busybox has them
+  # we want to keep the image this image small!
+  guestTools = [nix bash git curl jq];
 
   # run by busybox at sysinit
   setupScript = writeText "spindle-setup" ''
