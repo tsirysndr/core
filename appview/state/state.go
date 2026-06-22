@@ -418,6 +418,7 @@ func (s *State) NewsletterDismiss(w http.ResponseWriter, r *http.Request) {
 func (s *State) Keys(w http.ResponseWriter, r *http.Request) {
 	user := chi.URLParam(r, "user")
 	user = strings.TrimPrefix(user, "@")
+	user = strings.TrimSuffix(user, ".keys")
 
 	if user == "" {
 		w.WriteHeader(http.StatusBadRequest)

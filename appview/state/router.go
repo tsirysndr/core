@@ -60,6 +60,7 @@ func (s *State) Router() http.Handler {
 
 	userRouter := s.UserRouter(&middleware)
 	standardRouter := s.StandardRouter(&middleware)
+	keysRouter := s.KeysRouter(&middleware)
 
 	router.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
 		pat := chi.URLParam(r, "*")
@@ -87,6 +88,11 @@ func (s *State) Router() http.Handler {
 					s.logger.Error("db error looking up repo DID", "repoDid", firstPart, "err", err)
 					http.Error(w, "internal server error", http.StatusInternalServerError)
 				}
+				return
+			}
+
+			if strings.HasSuffix(firstPart, ".keys") {
+				keysRouter.ServeHTTP(w, r)
 				return
 			}
 
@@ -124,6 +130,17 @@ func (s *State) Router() http.Handler {
 	})
 
 	return router
+}
+
+func (s *State) KeysRouter(mw *middleware.Middleware) http.Handler {
+	r := chi.NewRouter()
+	r.Use(mw.InjectBaseParams)
+
+	r.With(mw.ResolveIdent()).Route("/{user}", func(r chi.Router) {
+		r.Get("/", s.Keys)
+	})
+
+	return r
 }
 
 func (s *State) UserRouter(mw *middleware.Middleware) http.Handler {
@@ -256,7 +273,6 @@ func (s *State) StandardRouter(mw *middleware.Middleware) http.Handler {
 	r.Mount("/signup", s.SignupRouter())
 	r.Mount("/", s.oauth.Router())
 
-	r.Get("/keys/{user}", s.Keys)
 	r.Get("/terms", s.TermsOfService)
 	r.Get("/privacy", s.PrivacyPolicy)
 	r.Get("/brand", s.Brand)

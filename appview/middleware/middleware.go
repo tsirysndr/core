@@ -222,6 +222,7 @@ func (mw Middleware) ResolveIdent() middlewareFunc {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			origSeg := chi.URLParam(req, "user")
 			didOrHandle := strings.TrimPrefix(origSeg, "@")
+			didOrHandle = strings.TrimSuffix(didOrHandle, ".keys")
 
 			if slices.Contains(excluded, didOrHandle) {
 				next.ServeHTTP(w, req)
