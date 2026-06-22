@@ -292,44 +292,47 @@
           });
     in {
       default = staticShell {
-        nativeBuildInputs = [
-          pkgs.go
-          pkgs.air
-          pkgs.gopls
-          pkgs.httpie
-          pkgs.litecli
-          pkgs.websocat
-          pkgs.tailwindcss
-          pkgs.nixos-shell
-          pkgs.redis
-          pkgs.worker-build
-          pkgs.cargo-generate
-          pkgs.qemu
-          pkgs.cdrkit
-          pkgs.parted
-          pkgs.buf
-          pkgs.protobuf
-          pkgs.protoc-gen-prost
-          pkgs.protoc-gen-prost-crate
-          pkgs.protoc-gen-prost-serde
-          pkgs.protoc-gen-go
-          (fenix.packages.${system}.combine [
-            fenix.packages.${system}.stable.cargo
-            fenix.packages.${system}.stable.rustc
-            fenix.packages.${system}.stable.rust-src
-            fenix.packages.${system}.stable.clippy
-            fenix.packages.${system}.stable.rustfmt
-            fenix.packages.${system}.targets.wasm32-unknown-unknown.stable.rust-std
-          ])
-          pkgs.coreutils # for those of us who are on systems that use busybox (alpine)
-          packages'.lexgen
-          packages'.treefmt-wrapper
-          packages'.tap
-          pkgs.e2fsprogs
-          pkgs.slirp4netns
-          pkgs.iproute2
-          pkgs.util-linux
-        ];
+        nativeBuildInputs =
+          [
+            pkgs.go
+            pkgs.air
+            pkgs.gopls
+            pkgs.httpie
+            pkgs.litecli
+            pkgs.websocat
+            pkgs.tailwindcss
+            pkgs.nixos-shell
+            pkgs.redis
+            pkgs.worker-build
+            pkgs.cargo-generate
+            pkgs.qemu
+            pkgs.cdrkit
+            pkgs.buf
+            pkgs.protobuf
+            pkgs.protoc-gen-prost
+            pkgs.protoc-gen-prost-crate
+            pkgs.protoc-gen-prost-serde
+            pkgs.protoc-gen-go
+            (fenix.packages.${system}.combine [
+              fenix.packages.${system}.stable.cargo
+              fenix.packages.${system}.stable.rustc
+              fenix.packages.${system}.stable.rust-src
+              fenix.packages.${system}.stable.clippy
+              fenix.packages.${system}.stable.rustfmt
+              fenix.packages.${system}.targets.wasm32-unknown-unknown.stable.rust-std
+            ])
+            pkgs.coreutils # for those of us who are on systems that use busybox (alpine)
+            packages'.lexgen
+            packages'.treefmt-wrapper
+            packages'.tap
+            pkgs.e2fsprogs
+            pkgs.util-linux
+          ]
+          ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
+            pkgs.parted
+            pkgs.slirp4netns
+            pkgs.iproute2
+          ];
         shellHook = ''
           mkdir -p appview/pages/static
           # temporary self-heal for workspaces that copied static assets as read-only
