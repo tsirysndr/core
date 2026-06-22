@@ -178,7 +178,8 @@
       "required": [
         "skip",
         "depth",
-        "submodules"
+        "submodules",
+        "tags"
       ],
       "properties": {
         "skip": {
@@ -188,6 +189,9 @@
           "type": "integer"
         },
         "submodules": {
+          "type": "boolean"
+        },
+        "tags": {
           "type": "boolean"
         }
       }

@@ -5074,7 +5074,7 @@ func (t *Pipeline_CloneOpts) MarshalCBOR(w io.Writer) error {
 
 	cw := cbg.NewCborWriter(w)
 
-	if _, err := cw.Write([]byte{163}); err != nil {
+	if _, err := cw.Write([]byte{164}); err != nil {
 		return err
 	}
 
@@ -5091,6 +5091,22 @@ func (t *Pipeline_CloneOpts) MarshalCBOR(w io.Writer) error {
 	}
 
 	if err := cbg.WriteBool(w, t.Skip); err != nil {
+		return err
+	}
+
+	// t.Tags (bool) (bool)
+	if len("tags") > 1000000 {
+		return xerrors.Errorf("Value in field \"tags\" was too long")
+	}
+
+	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("tags"))); err != nil {
+		return err
+	}
+	if _, err := cw.WriteString(string("tags")); err != nil {
+		return err
+	}
+
+	if err := cbg.WriteBool(w, t.Tags); err != nil {
 		return err
 	}
 
@@ -5190,6 +5206,24 @@ func (t *Pipeline_CloneOpts) UnmarshalCBOR(r io.Reader) (err error) {
 				t.Skip = false
 			case 21:
 				t.Skip = true
+			default:
+				return fmt.Errorf("booleans are either major type 7, value 20 or 21 (got %d)", extra)
+			}
+			// t.Tags (bool) (bool)
+		case "tags":
+
+			maj, extra, err = cr.ReadHeader()
+			if err != nil {
+				return err
+			}
+			if maj != cbg.MajOther {
+				return fmt.Errorf("booleans must be major type 7")
+			}
+			switch extra {
+			case 20:
+				t.Tags = false
+			case 21:
+				t.Tags = true
 			default:
 				return fmt.Errorf("booleans are either major type 7, value 20 or 21 (got %d)", extra)
 			}

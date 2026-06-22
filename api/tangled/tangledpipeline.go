@@ -27,6 +27,7 @@ type Pipeline_CloneOpts struct {
 	Depth      int64 `json:"depth" cborgen:"depth"`
 	Skip       bool  `json:"skip" cborgen:"skip"`
 	Submodules bool  `json:"submodules" cborgen:"submodules"`
+	Tags       bool  `json:"tags" cborgen:"tags"`
 }
 
 // Pipeline_ManualTriggerData is a "manualTriggerData" in the sh.tangled.pipeline schema.

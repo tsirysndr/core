@@ -151,19 +151,24 @@ func (compiler *Compiler) compileWorkflow(w Workflow) *tangled.Pipeline_Workflow
 }
 
 func (compiler *Compiler) analyzeCloneOptions(w Workflow) {
-	if w.CloneOpts.Skip && w.CloneOpts.IncludeSubmodules {
-		compiler.Diagnostics.AddWarning(
-			w.Name,
-			InvalidConfiguration,
-			"cannot apply `clone.skip` and `clone.submodules`",
-		)
+	if !w.CloneOpts.Skip {
+		return
 	}
 
-	if w.CloneOpts.Skip && w.CloneOpts.Depth > 0 {
+	warn := func(key string) {
 		compiler.Diagnostics.AddWarning(
 			w.Name,
 			InvalidConfiguration,
-			"cannot apply `clone.skip` and `clone.depth`",
+			fmt.Sprintf("cannot apply `clone.skip` and `clone.%s`", key),
 		)
+	}
+	if w.CloneOpts.Tags != nil {
+		warn("tags")
+	}
+	if w.CloneOpts.IncludeSubmodules != nil {
+		warn("submodules")
+	}
+	if w.CloneOpts.Depth > 0 {
+		warn("depth")
 	}
 }

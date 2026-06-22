@@ -40,9 +40,10 @@ type (
 	}
 
 	CloneOpts struct {
-		Skip              bool `yaml:"skip"`
-		Depth             int  `yaml:"depth"`
-		IncludeSubmodules bool `yaml:"submodules"`
+		Skip              bool  `yaml:"skip"`
+		Depth             int   `yaml:"depth"`
+		IncludeSubmodules *bool `yaml:"submodules"`
+		Tags              *bool `yaml:"tags"`
 	}
 
 	StringList []string
@@ -237,6 +238,7 @@ func (c CloneOpts) AsRecord() tangled.Pipeline_CloneOpts {
 	return tangled.Pipeline_CloneOpts{
 		Depth:      int64(c.Depth),
 		Skip:       c.Skip,
-		Submodules: c.IncludeSubmodules,
+		Submodules: c.IncludeSubmodules == nil || *c.IncludeSubmodules,
+		Tags:       c.Tags == nil || *c.Tags,
 	}
 }

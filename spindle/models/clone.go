@@ -140,6 +140,11 @@ func buildFetchArgs(clone tangled.Pipeline_CloneOpts, sha string) []string {
 		args = append(args, "--recurse-submodules=yes")
 	}
 
+	// Add tags if requested
+	if clone.Tags {
+		args = append(args, "--tags")
+	}
+
 	// Add remote and SHA
 	args = append(args, "origin")
 	if sha != "" {
