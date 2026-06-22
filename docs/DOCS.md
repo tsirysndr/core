@@ -1118,10 +1118,15 @@ is omitted, the spindle's configured default image is used.
 #### Dependencies
 
 On the microVM engine, `dependencies` is a flat list of
-packages that get added to the guest's `PATH` (via
-`environment.systemPackages`). This field only applies to
-**NixOS images**, for other images you can use the package
-manager included in a step.
+packages that are made available to every step. This field
+only applies to **NixOS images**; for other images you can
+use the package manager included in a step.
+
+The guest builds a [`nix develop`](https://nix.dev/manual/nix/2.18/command-ref/new-cli/nix3-develop)-style
+devshell from your dependencies and uses it for each step,
+so you can, for example, add `pkg-config` and `openssl` and
+have the `openssl-sys` crate while compiling a Rust project
+just work.
 
 A bare name like `go` is looked up in nixpkgs. You can also
 point at any flake with the `flakeref#attr` syntax, so
@@ -1185,6 +1190,222 @@ services:
 
 virtualisation:
   docker: true
+```
+
+#### Recipes
+
+##### Lint, test and build a Node project
+
+```yaml
+when:
+  - event: ["push", "pull_request"]
+    branch: ["main"]
+
+engine: microvm
+image: nixos
+
+dependencies:
+  - pnpm
+
+steps:
+  - name: "Install dependencies"
+    command: pnpm install --frozen-lockfile
+  - name: "Lint and test"
+    command: |
+      pnpm run lint
+      pnpm test
+  - name: "Build"
+    command: pnpm run build
+```
+
+##### Build a Rust project that links OpenSSL
+
+```yaml
+when:
+  - event: ["push", "pull_request"]
+    branch: ["main"]
+
+engine: microvm
+image: nixos
+
+dependencies:
+  - gcc
+  - cargo
+  - rustc
+  - clippy
+  - rustfmt
+  - pkg-config # exports PKG_CONFIG_PATH for the libraries below
+  - openssl # the C library + headers openssl-sys links against
+
+steps:
+  - name: "Check formatting"
+    command: cargo fmt --check
+  - name: "Clippy"
+    command: cargo clippy --all-targets -- -D warnings
+  - name: "Test"
+    command: cargo test --all
+  - name: "Release build"
+    command: cargo build --release
+```
+
+##### Run migrations and integration tests against PostgreSQL
+
+```yaml
+when:
+  - event: ["push", "pull_request"]
+    branch: ["main"]
+
+engine: microvm
+image: nixos
+
+environment:
+  DATABASE_URL: "postgresql:///spindle-workflow?host=/run/postgresql"
+
+dependencies:
+  - gcc
+  - cargo
+  - rustc
+  - pkg-config
+  - openssl
+  - sqlx-cli
+
+services:
+  postgresql:
+    enable: true
+    # has to be same name as the user for peer auth to work automatically
+    ensureDatabases: ["spindle-workflow"]
+    ensureUsers:
+      - name: spindle-workflow
+        ensureDBOwnership: true
+
+steps:
+  - name: "Run migrations"
+    command: sqlx migrate run
+  - name: "Integration tests"
+    command: cargo test --all
+```
+
+##### Build and push a Docker image on tag
+
+```yaml
+when:
+  - event: ["push"]
+    tag: ["v*"]
+
+engine: microvm
+image: nixos
+
+virtualisation:
+  docker: true
+
+steps:
+  - name: "Build and push to ghcr.io"
+    command: |
+      set -euo pipefail
+
+      echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+      image="ghcr.io/$REGISTRY_USER/myapp:$TANGLED_REF_NAME"
+
+      docker build -t "$image" -t "ghcr.io/$REGISTRY_USER/myapp:latest" .
+      docker push "$image"
+      docker push "ghcr.io/$REGISTRY_USER/myapp:latest"
+```
+
+##### Deploy to Cloudflare Workers on tag
+
+```yaml
+# .tangled/workflows/deploy.yml
+when:
+  - event: ["push"]
+    tag: ["v*"]
+
+engine: microvm
+image: nixos
+
+dependencies:
+  - pnpm
+
+steps:
+  - name: "Install dependencies"
+    command: pnpm install --frozen-lockfile
+  - name: "Deploy worker"
+    # `wrangler` picks up `CLOUDFLARE_API_TOKEN` from the env.
+    # set it under **Settings → Secrets**.
+    command: pnpm exec wrangler deploy
+```
+
+##### Publish a release artifact
+
+```yaml
+when:
+  - event: ["push"]
+    tag: ["v*"] # trigger on versions
+
+engine: microvm
+image: nixos
+
+dependencies:
+  - go
+
+steps:
+  - name: "Build release binary"
+    command: |
+      mkdir -p dist
+      CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dist/myapp ./cmd/myapp
+
+  - name: "Publish artifact record"
+    command: |
+      set -euo pipefail
+      # change this if you're not on `tngl.sh`
+      PDS="https://tngl.sh"
+      # also update this to your handle or did
+      ATP_IDENTIFIER="user.tngl.sh"
+      ARTIFACT_PATH="dist/myapp"
+      ARTIFACT_NAME="myapp"
+
+      # set `ATP_APP_PASSWORD` under **Settings → Secrets**
+      session=$(curl -fsS -X POST "$PDS/xrpc/com.atproto.server.createSession" \
+        -H "Content-Type: application/json" \
+        -d "{\"identifier\":\"$ATP_IDENTIFIER\",\"password\":\"$ATP_APP_PASSWORD\"}")
+      jwt=$(echo "$session" | jq -r .accessJwt)
+      did=$(echo "$session" | jq -r .did)
+
+      # upload the binary as a blob
+      blob=$(curl -fsS -X POST "$PDS/xrpc/com.atproto.repo.uploadBlob" \
+        -H "Authorization: Bearer $jwt" \
+        -H "Content-Type: application/octet-stream" \
+        --data-binary @"$ARTIFACT_PATH")
+
+      # note that this requires an annotated tag (`git tag -a v1.0.0 -m ...`)
+      tag_hash=$(git rev-parse "$TANGLED_REF_NAME^{tag}")
+      tag_bytes=$(printf '%s' "$tag_hash" | xxd -r -p | base64 | tr -d '=')
+
+      # the sh.tangled.repo.artifact record for your artifact
+      record=$(jq -n \
+        --arg did "$did" \
+        --arg tag "$tag_bytes" \
+        --arg name "$ARTIFACT_NAME" \
+        --arg repo "$TANGLED_REPO_URL" \
+        --arg created "$(date -Iseconds)" \
+        --argjson blob "$(echo "$blob" | jq .blob)" '{
+          repo: $did,
+          collection: "sh.tangled.repo.artifact",
+          validate: false,
+          record: {
+            "$type": "sh.tangled.repo.artifact",
+            tag: {"$bytes": $tag},
+            name: $name,
+            repo: $repo,
+            artifact: $blob,
+            createdAt: $created
+          }
+        }')
+
+      # create the record on the PDS
+      curl -fsS -X POST "$PDS/xrpc/com.atproto.repo.createRecord" \
+        -H "Authorization: Bearer $jwt" \
+        -H "Content-Type: application/json" \
+        -d "$record"
 ```
 
 ## Self-hosting guide
