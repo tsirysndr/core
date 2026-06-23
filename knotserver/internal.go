@@ -501,7 +501,7 @@ func (h *InternalHandle) emitPullRequestLink(
 		user = userIdent.Handle.String()
 	}
 
-	pullURL, err := h.createPullURL(h.c.AppViewEndpoint, remote, user, ownerDid, repoName, pushedBranch, defaultBranch)
+	pullURL, err := h.createPullURL(h.c.AppViewEndpoint, remote, user, repoDid, repoName, pushedBranch, defaultBranch)
 	if err != nil {
 		return err
 	}
@@ -514,9 +514,9 @@ func (h *InternalHandle) emitPullRequestLink(
 	return nil
 }
 
-func (h *InternalHandle) createPullURL(appviewURL, remote, user, ownerDID, repoName, pushedBranch, defaultBranch string) (string, error) {
+func (h *InternalHandle) createPullURL(appviewURL, remote, user, repoDid, repoName, pushedBranch, defaultBranch string) (string, error) {
 	if remote != "" {
-		return h.createForkPullURL(appviewURL, remote, ownerDID, repoName, pushedBranch, defaultBranch)
+		return h.createForkPullURL(appviewURL, remote, repoDid, pushedBranch, defaultBranch)
 	}
 
 	query := url.Values{}
@@ -533,10 +533,10 @@ func (h *InternalHandle) createPullURL(appviewURL, remote, user, ownerDID, repoN
 	return pullURL, nil
 }
 
-func (h *InternalHandle) createForkPullURL(appviewURL, remote, ownerDID, repoName, pushedBranch, defaultBranch string) (string, error) {
+func (h *InternalHandle) createForkPullURL(appviewURL, remote, repoDid, pushedBranch, defaultBranch string) (string, error) {
 	query := url.Values{}
 
-	query.Set("fork", fmt.Sprintf("%s/%s", ownerDID, repoName))
+	query.Set("fork", repoDid)
 	query.Set("source", "fork")
 	query.Set("sourceBranch", pushedBranch)
 	query.Set("targetBranch", defaultBranch)
