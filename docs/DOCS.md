@@ -1218,6 +1218,23 @@ steps:
     command: pnpm run build
 ```
 
+##### Check formatting
+
+```yaml
+when:
+  - event: ["push", "pull_request"]
+    branch: ["main"]
+
+engine: microvm
+image: alpine # slimmer image for checking the formatting
+
+steps:
+  - name: "Install go"
+    command: apk add go
+  - name: "Check formatting"
+    command: test -z $(gofmt -l .)
+```
+
 ##### Build a Rust project that links OpenSSL
 
 ```yaml
