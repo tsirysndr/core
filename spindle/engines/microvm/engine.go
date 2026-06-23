@@ -452,7 +452,7 @@ func (e *Engine) activateConfig(ctx context.Context, wid models.WorkflowId, stat
 		BaseConfigHash: baseHash,
 		UserConfig:     string(userConfigJSON),
 		Toplevel:       cachedToplevel,
-	})
+	}, out)
 	if err != nil {
 		return err
 	}

@@ -278,7 +278,7 @@ func runMicroVMRunDev(ctx context.Context, cmd *cli.Command) error {
 			BaseConfigHash: baseHash,
 			UserConfig:     cmd.String("activate-config"),
 			Toplevel:       cachedToplevel,
-		})
+		}, os.Stderr)
 		if err != nil {
 			return fmt.Errorf("activate config: %w", err)
 		}

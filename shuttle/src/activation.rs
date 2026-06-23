@@ -1,4 +1,4 @@
-use crate::command::{self, Spec, run_capture};
+use crate::command::{CaptureOutput, OutKind, Spec, run_capture, spawn_streaming};
 use crate::nix_config::{SPINDLE_RUN_DIR, nix_executable};
 use crate::protocol::{self, Message, v1};
 use anyhow::{Context, Result};
@@ -14,7 +14,7 @@ const DEVSHELL_DRV: &str = "/etc/spindle/devshell.drv";
 
 pub async fn run(id: String, req: v1::ActivateConfig, out: Sender<Message>) {
     let config_key = req.config_key.clone();
-    let result = activate(&req).await;
+    let result = activate(&id, &req, &out).await;
     let msg = Message {
         id,
         activate_config_result: Some(v1::ActivateConfigResult {
@@ -29,7 +29,7 @@ pub async fn run(id: String, req: v1::ActivateConfig, out: Sender<Message>) {
     let _ = out.send(msg).await;
 }
 
-async fn activate(req: &v1::ActivateConfig) -> Result<PathBuf> {
+async fn activate(id: &str, req: &v1::ActivateConfig, out: &Sender<Message>) -> Result<PathBuf> {
     let need_build = req.toplevel.is_empty();
     let timeout = (req.timeout_seconds > 0)
         .then(|| Duration::from_secs(u64::from(req.timeout_seconds)))
@@ -37,9 +37,9 @@ async fn activate(req: &v1::ActivateConfig) -> Result<PathBuf> {
         .unwrap_or(Duration::from_secs(2 * 60));
 
     let toplevel = if need_build {
-        build_toplevel(req, timeout).await?
+        build_toplevel(id, req, timeout, out).await?
     } else {
-        realise_toplevel(&req.toplevel, timeout).await?
+        realise_toplevel(id, &req.toplevel, timeout, out).await?
     };
 
     if !toplevel.starts_with("/nix/store/") {
@@ -97,7 +97,12 @@ async fn write_devshell_env(timeout: Duration) -> Result<()> {
     Ok(())
 }
 
-async fn build_toplevel(req: &v1::ActivateConfig, timeout: Duration) -> Result<PathBuf> {
+async fn build_toplevel(
+    id: &str,
+    req: &v1::ActivateConfig,
+    timeout: Duration,
+    out: &Sender<Message>,
+) -> Result<PathBuf> {
     let user_config = (req.user_config.is_empty())
         .then_some("{}")
         .unwrap_or_else(|| &req.user_config);
@@ -106,7 +111,7 @@ async fn build_toplevel(req: &v1::ActivateConfig, timeout: Duration) -> Result<P
     write_user_config(user_config).context("write user config")?;
 
     info!("running nix build command for user config toplevel...");
-    let output = run_capture(
+    let output = run_streaming_stderr(
         Spec::new(nix_executable())
             .args([
                 "build",
@@ -118,6 +123,8 @@ async fn build_toplevel(req: &v1::ActivateConfig, timeout: Duration) -> Result<P
             ])
             .cwd(SPINDLE_RUN_DIR)
             .timeout(timeout),
+        id,
+        out,
     )
     .await?;
 
@@ -151,14 +158,21 @@ fn write_user_config(user_config: &str) -> Result<()> {
     Ok(())
 }
 
-async fn realise_toplevel(toplevel: &str, timeout: Duration) -> Result<PathBuf> {
+async fn realise_toplevel(
+    id: &str,
+    toplevel: &str,
+    timeout: Duration,
+    out: &Sender<Message>,
+) -> Result<PathBuf> {
     if !toplevel.starts_with("/nix/store/") {
         anyhow::bail!("cached config toplevel {toplevel:?} is not a nix store path");
     }
-    let output = command::run_capture(
+    let output = run_streaming_stderr(
         Spec::new(nix_executable())
             .args(["build", "--no-link", "--show-trace", toplevel])
             .timeout(timeout),
+        id,
+        out,
     )
     .await?;
     if !output.success() {
@@ -171,6 +185,44 @@ async fn realise_toplevel(toplevel: &str, timeout: Duration) -> Result<PathBuf> 
     }
 
     Ok(PathBuf::from(toplevel))
+}
+
+// streams stderr but captures stdout
+async fn run_streaming_stderr(
+    spec: Spec,
+    id: &str,
+    out: &Sender<Message>,
+) -> Result<CaptureOutput> {
+    let running = spawn_streaming(spec)?;
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let (mut events, exit_task) = running.into_parts();
+
+    while let Some(event) = events.recv().await {
+        match event.kind {
+            OutKind::Stdout => stdout.extend_from_slice(&event.data),
+            OutKind::Stderr => {
+                stderr.extend_from_slice(&event.data);
+                let data = String::from_utf8_lossy(&event.data).into_owned();
+                let _ = out
+                    .send(Message {
+                        id: id.to_owned(),
+                        exec_stderr: Some(v1::ExecStderr { data }),
+                        ..Default::default()
+                    })
+                    .await;
+            }
+        }
+    }
+
+    let exit = exit_task
+        .await
+        .unwrap_or_else(|error| Err(anyhow::anyhow!("command supervisor failed: {error}")))?;
+    Ok(CaptureOutput {
+        exit,
+        stdout,
+        stderr,
+    })
 }
 
 async fn switch_to_configuration(toplevel: &Path, timeout: Duration) -> Result<()> {

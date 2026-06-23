@@ -197,7 +197,7 @@ func (s *AgentSession) Exec(ctx context.Context, exec AgentExec) (int, error) {
 	}
 }
 
-func (s *AgentSession) ActivateConfig(ctx context.Context, id string, req *agentv1.ActivateConfig) (*agentv1.ActivateConfigResult, error) {
+func (s *AgentSession) ActivateConfig(ctx context.Context, id string, req *agentv1.ActivateConfig, out io.Writer) (*agentv1.ActivateConfigResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -225,6 +225,14 @@ func (s *AgentSession) ActivateConfig(ctx context.Context, id string, req *agent
 
 		if p := msg.BuiltPaths; p != nil {
 			// s.l.Debug("guest built paths", "reason", p.Reason, "count", len(p.Paths))
+		} else if p := msg.ExecStderr; p != nil {
+			if out != nil {
+				_, _ = io.WriteString(out, p.Data)
+			}
+		} else if p := msg.ExecStdout; p != nil {
+			if out != nil {
+				_, _ = io.WriteString(out, p.Data)
+			}
 		} else if p := msg.ActivateConfigResult; p != nil {
 			if p.Error != "" {
 				return nil, fmt.Errorf("activate config failed: %s", p.Error)
