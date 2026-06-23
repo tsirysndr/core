@@ -19,8 +19,8 @@ import (
 
 const (
 	didBoltless = "did:plc:boltless"
-	keyAlpha    = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAlphaAlphaAlphaAlphaAlphaAlphaAlphaAlpha01"
-	keyBravo    = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIABravoBravoBravoBravoBravoBravoBravoBravo02"
+	keyAlpha    = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICrWubjgc3IM/zqjpWQJSig6l6iFyaDx7HWTiWlasjcM"
+	keyBravo    = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMax5MnG4RGoxp0TlaEj8mcFhZZp13cdIIvO8s4a6KZ2"
 )
 
 func TestFetchAndStore_EmptyResponseDoesNotWipe(t *testing.T) {

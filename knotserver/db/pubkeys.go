@@ -4,9 +4,11 @@ import (
 	"database/sql"
 	"log/slog"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	"golang.org/x/crypto/ssh"
 	"tangled.org/core/api/tangled"
 )
 
@@ -41,6 +43,13 @@ func insertPublicKey(tx *sql.Tx, logger *slog.Logger, pk PublicKey) error {
 		logger.Warn("skipping public key with empty key value", "did", pk.Did, "rkey", pk.Rkey)
 		return nil
 	}
+
+	canonical, ok := normalizePublicKey(pk.Key)
+	if !ok {
+		logger.Warn("skipping malformed public key", "did", pk.Did, "rkey", pk.Rkey)
+		return nil
+	}
+	pk.Key = canonical
 
 	if pk.CreatedAt == "" {
 		pk.CreatedAt = time.Now().Format(time.RFC3339)
@@ -107,6 +116,38 @@ func (pk *PublicKey) JSON() map[string]any {
 		"key":       pk.Key,
 		"createdAt": pk.CreatedAt,
 	}
+}
+
+func normalizePublicKey(key string) (string, bool) {
+	parsed, comment, _, _, err := ssh.ParseAuthorizedKey([]byte(key))
+	if err != nil {
+		return "", false
+	}
+
+	canonical := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(parsed)))
+	if comment != "" {
+		canonical += " " + comment
+	}
+
+	return canonical, true
+}
+
+func (d *DB) DidForPublicKey(offered ssh.PublicKey) (syntax.DID, bool, error) {
+	prefix := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(offered)))
+
+	var did syntax.DID
+	err := d.db.QueryRow(
+		`select did from public_keys where key = ? or key like ? limit 1`,
+		prefix, prefix+" %",
+	).Scan(&did)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+
+	return did, true, nil
 }
 
 func (d *DB) GetAllPublicKeys() ([]PublicKey, error) {

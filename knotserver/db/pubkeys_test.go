@@ -10,9 +10,9 @@ import (
 const (
 	didBoltless = "did:plc:boltless"
 	didAkshay   = "did:plc:akshay"
-	keyShared   = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAISharedSharedSharedSharedSharedSharedShar01"
-	keyRotated  = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIRotatedRotatedRotatedRotatedRotatedRot02"
-	keyOther    = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOtherOtherOtherOtherOtherOtherOtherOth03"
+	keyShared   = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIwwmlNQEh5NdGL4ERWj3uXWXylXsB8fPnO5frkl2sps"
+	keyRotated  = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAj/UuveywM4LZdjbcsH5LVmXhu8VX5jdUR6UdEQFGBo"
+	keyOther    = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBqWLXSkuE6AUkAwXThOsudIGqMV/u4ZnE8yTd6DSpoR"
 )
 
 func TestUpsertPublicKey_GlobalUniqueness(t *testing.T) {

@@ -86,6 +86,7 @@ func (x *Xrpc) Router() http.Handler {
 	r.Get("/"+tangled.RepoArchiveNSID, x.RepoArchive)
 	r.Get("/"+tangled.RepoLanguagesNSID, x.RepoLanguages)
 	r.Get("/"+tangled.RepoListCollaboratorsNSID, x.ListCollaborators)
+	r.Get("/"+tangled.RepoCheckPushAllowedNSID, x.CheckPushAllowed)
 
 	// knot query endpoints (no auth required)
 	r.Get("/"+tangled.KnotListKeysNSID, x.ListKeys)

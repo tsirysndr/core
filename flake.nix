@@ -600,11 +600,15 @@
         program =
           (pkgs.writeShellApplication {
             name = "lexgen";
+            runtimeInputs = [pkgs.stdenv.cc];
             text = ''
               if ! command -v lexgen > /dev/null; then
                 echo "error: must be executed from devshell"
                 exit 1
               fi
+
+              # pin CC to a glibc gcc so a stray musl cc cant mess up CGO
+              export CC=${pkgs.stdenv.cc}/bin/cc
 
               rootDir=$(jj --ignore-working-copy root || git rev-parse --show-toplevel) || (echo "error: can't find repo root?"; exit 1)
               cd "$rootDir"
@@ -621,7 +625,7 @@
                 sed -i '/^func.*\(MarshalCBOR\|UnmarshalCBOR\)/,/^}/ s/^/\/\/ /' {} +
               for f in api/tangled/*_ext.go; do [ -e "''$f" ] && mv "''$f" "''$f.bak"; done
               ${pkgs.gotools}/bin/goimports -w api/tangled/*
-              CGO_ENABLED=0 go run ./cmd/cborgen/
+              CGO_ENABLED=1 go run ./cmd/cborgen/
               for f in api/tangled/*_ext.go.bak; do [ -e "''$f" ] && mv "''$f" "''${f%.bak}"; done
 
               lexgen --build-file lexicon-build-config.json lexicons
