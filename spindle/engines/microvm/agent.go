@@ -252,6 +252,19 @@ func (s *AgentSession) ActivateConfig(ctx context.Context, id string, req *agent
 	}
 }
 
+func (s *AgentSession) OpenDebugShell(req *agentv1.OpenDebugShell) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.enc.Encode(&agentproto.Message{
+		Id:             "debug-shell",
+		OpenDebugShell: req,
+	}); err != nil {
+		return fmt.Errorf("send open_debug_shell: %w", err)
+	}
+	return nil
+}
+
 func (s *AgentSession) Poweroff(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -199,6 +199,7 @@ in {
     group = "spindle-workflow";
     home = "/workspace";
     createHome = false;
+    shell = pkgs.bashInteractive;
   };
   users.users.spindle-workflow.extraGroups = lib.mkIf config.virtualisation.docker.enable [
     "docker"

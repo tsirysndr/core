@@ -182,12 +182,12 @@ services:
       SPINDLE_MICROVM_PIPELINES_OVERLAY_DIR: /var/lib/spindle/overlays
       SPINDLE_MICROVM_PIPELINES_AGENT_PORT: "11240"
       SPINDLE_MICROVM_PIPELINES_ENABLE_CGROUPS: "false"
-      # route guest nix substitution + uploads through the local ncps cache.
-      # ncps re-signs on serve with cache.local's key, so the guest trusts the
-      # matching public key below (no signing happens in spindle itself).
       SPINDLE_NIX_CACHE_READ_URLS: http://ncps:8501
       SPINDLE_NIX_CACHE_TRUSTED_PUBLIC_KEYS: cache.local:F7YqpMzuBdILYd/v+wMZN2YKxCzliXQyFmeezOxw7rU=
       SPINDLE_NIX_CACHE_UPLOAD_URL: http://ncps:8501/upload
+      SPINDLE_MICROVM_PIPELINES_DEBUG_SSH_ENABLED: true
+      SPINDLE_MICROVM_PIPELINES_DEBUG_SSH_LISTEN_ADDR: 0.0.0.0:2223
+      SPINDLE_MICROVM_PIPELINES_DEBUG_SSH_GRACE_PERIOD: 10m
     # these two are required for cgroups, uncomment if testing
     # privileged: true
     # cgroup: host
@@ -202,6 +202,8 @@ services:
     security_opt:
       - label=disable
       - seccomp=unconfined
+    ports:
+      - "2223:2223"
     volumes:
       - spindle-data:/var/lib/spindle
       - spindle-logs:/var/log/spindle

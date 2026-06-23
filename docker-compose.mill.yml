@@ -31,6 +31,12 @@ x-mill-executor: &mill-executor
     SPINDLE_NIX_CACHE_READ_URLS: http://ncps:8501
     SPINDLE_NIX_CACHE_TRUSTED_PUBLIC_KEYS: cache.local:F7YqpMzuBdILYd/v+wMZN2YKxCzliXQyFmeezOxw7rU=
     SPINDLE_NIX_CACHE_UPLOAD_URL: http://ncps:8501/upload
+    SPINDLE_MICROVM_PIPELINES_DEBUG_SSH_ENABLED: "true"
+    SPINDLE_MICROVM_PIPELINES_DEBUG_SSH_LISTEN_ADDR: 0.0.0.0:2223
+    SPINDLE_MICROVM_PIPELINES_DEBUG_SSH_HOST: 127.0.0.1
+    SPINDLE_MICROVM_PIPELINES_DEBUG_SSH_JUMP_HOST: chernobog
+    SPINDLE_MICROVM_PIPELINES_DEBUG_SSH_GRACE_PERIOD: 10m
+    SPINDLE_MICROVM_PIPELINES_DEBUG_SSH_HOST_KEY_PATH: /var/lib/spindle/debug_ssh_host_key
     # dials the mill container directly using ws
     SPINDLE_MILL_URL: ws://spindle:6555/mill
   devices:
@@ -113,6 +119,9 @@ services:
       SPINDLE_MILL_LABELS: linux,fast
       SPINDLE_MILL_TOKEN_FILE: /shared/executor-a.mill-token
       SPINDLE_MICROVM_PIPELINES_AGENT_PORT: "11241"
+      SPINDLE_MICROVM_PIPELINES_DEBUG_SSH_LISTEN_ADDR: 0.0.0.0:2224
+    ports:
+      - "127.0.0.1:2224:2224"
     volumes:
       - spindle-executor-a-data:/var/lib/spindle
       - spindle-artifacts:/var/lib/spindle/artifacts
@@ -128,6 +137,9 @@ services:
       SPINDLE_MILL_LABELS: linux,slow
       SPINDLE_MILL_TOKEN_FILE: /shared/executor-b.mill-token
       SPINDLE_MICROVM_PIPELINES_AGENT_PORT: "11242"
+      SPINDLE_MICROVM_PIPELINES_DEBUG_SSH_LISTEN_ADDR: 0.0.0.0:2225
+    ports:
+      - "127.0.0.1:2225:2225"
     volumes:
       - spindle-executor-b-data:/var/lib/spindle
       - spindle-artifacts:/var/lib/spindle/artifacts
@@ -143,6 +155,9 @@ services:
       SPINDLE_MILL_LABELS: linux,gpu
       SPINDLE_MILL_TOKEN_FILE: /shared/executor-c.mill-token
       SPINDLE_MICROVM_PIPELINES_AGENT_PORT: "11243"
+      SPINDLE_MICROVM_PIPELINES_DEBUG_SSH_LISTEN_ADDR: 0.0.0.0:2226
+    ports:
+      - "127.0.0.1:2226:2226"
     volumes:
       - spindle-executor-c-data:/var/lib/spindle
       - spindle-artifacts:/var/lib/spindle/artifacts

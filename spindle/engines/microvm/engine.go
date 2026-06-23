@@ -58,6 +58,9 @@ type Engine struct {
 
 	cleanupMu sync.Mutex
 	cleanup   map[string][]cleanupFunc
+
+	debugMu sync.Mutex
+	debug   map[string]debugTarget
 }
 
 type Step struct {
@@ -88,7 +91,7 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB) (*Engine, error) {
 		}
 	}
 
-	return &Engine{
+	e := &Engine{
 		l:            l,
 		cfg:          cfg,
 		db:           d,
@@ -97,7 +100,14 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB) (*Engine, error) {
 		budget:       budget,
 		maxWorkflow:  max,
 		cleanup:      make(map[string][]cleanupFunc),
-	}, nil
+		debug:        make(map[string]debugTarget),
+	}
+
+	if cfg.MicroVMPipelines.DebugSSH.Enabled && cfg.MicroVMPipelines.DebugSSH.ListenAddr != "" {
+		go e.serveDebugSSH(ctx)
+	}
+
+	return e, nil
 }
 
 func (e *Engine) ensureAgentHub() (*agentHub, error) {
@@ -313,6 +323,7 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 		return err
 	}
 	state.VM = vm
+	state.StartedAt = time.Now()
 
 	category = "Failed to connect to agent"
 
@@ -337,6 +348,7 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 		return err
 	}
 	state.Agent = agentSession
+	state.CID = cid
 	wf.Data = state
 
 	e.registerCleanup(wid, func(ctx context.Context) error {
@@ -411,6 +423,18 @@ func (e *Engine) RunStep(ctx context.Context, wid models.WorkflowId, w *models.W
 
 	if exitCode != 0 {
 		e.l.Debug("step exited non-zero", "workflow", wid, "step", step.Name(), "exitCode", exitCode)
+		if e.cfg.MicroVMPipelines.DebugSSH.Enabled {
+			e.registerDebugTarget(wid, debugTarget{
+				cid:        state.CID,
+				agent:      state.Agent,
+				knot:       w.Environment["TANGLED_REPO_KNOT"],
+				repoDid:    w.Environment["TANGLED_REPO_REPO_DID"],
+				maxAliveAt: state.StartedAt.Add(e.WorkflowTimeout()),
+				connected:  make(chan struct{}),
+				released:   make(chan struct{}),
+			})
+			e.writeDebugHint(wid, len(w.Steps), wfLogger)
+		}
 		return fmt.Errorf("User step error: exited with code %d", exitCode)
 	}
 	return nil
@@ -572,6 +596,8 @@ func (e *Engine) anyCacheHasPath(ctx context.Context, state *workflowState, stor
 }
 
 func (e *Engine) DestroyWorkflow(ctx context.Context, wid models.WorkflowId) error {
+	e.maybeRetainForDebug(ctx, wid)
+
 	fns := e.drainCleanups(wid)
 
 	var cleanupErr error

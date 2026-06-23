@@ -780,6 +780,172 @@ func (x *PoweroffResult) GetError() string {
 	return ""
 }
 
+type OpenDebugShell struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	VsockPort     uint32                 `protobuf:"varint,1,opt,name=vsock_port,json=vsockPort,proto3" json:"vsock_port,omitempty"`
+	Term          string                 `protobuf:"bytes,2,opt,name=term,proto3" json:"term,omitempty"`
+	Rows          uint32                 `protobuf:"varint,3,opt,name=rows,proto3" json:"rows,omitempty"`
+	Cols          uint32                 `protobuf:"varint,4,opt,name=cols,proto3" json:"cols,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenDebugShell) Reset() {
+	*x = OpenDebugShell{}
+	mi := &file_spindle_agent_v1_agent_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenDebugShell) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenDebugShell) ProtoMessage() {}
+
+func (x *OpenDebugShell) ProtoReflect() protoreflect.Message {
+	mi := &file_spindle_agent_v1_agent_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenDebugShell.ProtoReflect.Descriptor instead.
+func (*OpenDebugShell) Descriptor() ([]byte, []int) {
+	return file_spindle_agent_v1_agent_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *OpenDebugShell) GetVsockPort() uint32 {
+	if x != nil {
+		return x.VsockPort
+	}
+	return 0
+}
+
+func (x *OpenDebugShell) GetTerm() string {
+	if x != nil {
+		return x.Term
+	}
+	return ""
+}
+
+func (x *OpenDebugShell) GetRows() uint32 {
+	if x != nil {
+		return x.Rows
+	}
+	return 0
+}
+
+func (x *OpenDebugShell) GetCols() uint32 {
+	if x != nil {
+		return x.Cols
+	}
+	return 0
+}
+
+// changes meaning based on who sends this:
+// guest->host is shell output, host->guest is keyboard input
+type PtyData struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PtyData) Reset() {
+	*x = PtyData{}
+	mi := &file_spindle_agent_v1_agent_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PtyData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PtyData) ProtoMessage() {}
+
+func (x *PtyData) ProtoReflect() protoreflect.Message {
+	mi := &file_spindle_agent_v1_agent_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PtyData.ProtoReflect.Descriptor instead.
+func (*PtyData) Descriptor() ([]byte, []int) {
+	return file_spindle_agent_v1_agent_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *PtyData) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+type PtyResize struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Rows          uint32                 `protobuf:"varint,1,opt,name=rows,proto3" json:"rows,omitempty"`
+	Cols          uint32                 `protobuf:"varint,2,opt,name=cols,proto3" json:"cols,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PtyResize) Reset() {
+	*x = PtyResize{}
+	mi := &file_spindle_agent_v1_agent_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PtyResize) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PtyResize) ProtoMessage() {}
+
+func (x *PtyResize) ProtoReflect() protoreflect.Message {
+	mi := &file_spindle_agent_v1_agent_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PtyResize.ProtoReflect.Descriptor instead.
+func (*PtyResize) Descriptor() ([]byte, []int) {
+	return file_spindle_agent_v1_agent_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *PtyResize) GetRows() uint32 {
+	if x != nil {
+		return x.Rows
+	}
+	return 0
+}
+
+func (x *PtyResize) GetCols() uint32 {
+	if x != nil {
+		return x.Cols
+	}
+	return 0
+}
+
 type Message struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
 	Id                   string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -796,13 +962,16 @@ type Message struct {
 	CacheDrainResult     *CacheDrainResult      `protobuf:"bytes,12,opt,name=cache_drain_result,json=cacheDrainResult,proto3" json:"cache_drain_result,omitempty"`
 	Poweroff             *Poweroff              `protobuf:"bytes,13,opt,name=poweroff,proto3" json:"poweroff,omitempty"`
 	PoweroffResult       *PoweroffResult        `protobuf:"bytes,14,opt,name=poweroff_result,json=poweroffResult,proto3" json:"poweroff_result,omitempty"`
+	OpenDebugShell       *OpenDebugShell        `protobuf:"bytes,15,opt,name=open_debug_shell,json=openDebugShell,proto3" json:"open_debug_shell,omitempty"`
+	PtyData              *PtyData               `protobuf:"bytes,16,opt,name=pty_data,json=ptyData,proto3" json:"pty_data,omitempty"`
+	PtyResize            *PtyResize             `protobuf:"bytes,17,opt,name=pty_resize,json=ptyResize,proto3" json:"pty_resize,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
 
 func (x *Message) Reset() {
 	*x = Message{}
-	mi := &file_spindle_agent_v1_agent_proto_msgTypes[13]
+	mi := &file_spindle_agent_v1_agent_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -814,7 +983,7 @@ func (x *Message) String() string {
 func (*Message) ProtoMessage() {}
 
 func (x *Message) ProtoReflect() protoreflect.Message {
-	mi := &file_spindle_agent_v1_agent_proto_msgTypes[13]
+	mi := &file_spindle_agent_v1_agent_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -827,7 +996,7 @@ func (x *Message) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Message.ProtoReflect.Descriptor instead.
 func (*Message) Descriptor() ([]byte, []int) {
-	return file_spindle_agent_v1_agent_proto_rawDescGZIP(), []int{13}
+	return file_spindle_agent_v1_agent_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Message) GetId() string {
@@ -928,6 +1097,27 @@ func (x *Message) GetPoweroffResult() *PoweroffResult {
 	return nil
 }
 
+func (x *Message) GetOpenDebugShell() *OpenDebugShell {
+	if x != nil {
+		return x.OpenDebugShell
+	}
+	return nil
+}
+
+func (x *Message) GetPtyData() *PtyData {
+	if x != nil {
+		return x.PtyData
+	}
+	return nil
+}
+
+func (x *Message) GetPtyResize() *PtyResize {
+	if x != nil {
+		return x.PtyResize
+	}
+	return nil
+}
+
 var File_spindle_agent_v1_agent_proto protoreflect.FileDescriptor
 
 const file_spindle_agent_v1_agent_proto_rawDesc = "" +
@@ -990,7 +1180,19 @@ const file_spindle_agent_v1_agent_proto_rawDesc = "" +
 	"\n" +
 	"\bPoweroff\"&\n" +
 	"\x0ePoweroffResult\x12\x14\n" +
-	"\x05error\x18\x01 \x01(\tR\x05error\"\xa8\b\n" +
+	"\x05error\x18\x01 \x01(\tR\x05error\"k\n" +
+	"\x0eOpenDebugShell\x12\x1d\n" +
+	"\n" +
+	"vsock_port\x18\x01 \x01(\rR\tvsockPort\x12\x12\n" +
+	"\x04term\x18\x02 \x01(\tR\x04term\x12\x12\n" +
+	"\x04rows\x18\x03 \x01(\rR\x04rows\x12\x12\n" +
+	"\x04cols\x18\x04 \x01(\rR\x04cols\"\x1d\n" +
+	"\aPtyData\x12\x12\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\"3\n" +
+	"\tPtyResize\x12\x12\n" +
+	"\x04rows\x18\x01 \x01(\rR\x04rows\x12\x12\n" +
+	"\x04cols\x18\x02 \x01(\rR\x04cols\"\x8e\n" +
+	"\n" +
 	"\aMessage\x12\x17\n" +
 	"\x02id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x02id\x12-\n" +
 	"\x05hello\x18\x02 \x01(\v2\x17.spindle.agent.v1.HelloR\x05hello\x12*\n" +
@@ -1011,7 +1213,11 @@ const file_spindle_agent_v1_agent_proto_rawDesc = "" +
 	"cacheDrain\x12P\n" +
 	"\x12cache_drain_result\x18\f \x01(\v2\".spindle.agent.v1.CacheDrainResultR\x10cacheDrainResult\x126\n" +
 	"\bpoweroff\x18\r \x01(\v2\x1a.spindle.agent.v1.PoweroffR\bpoweroff\x12I\n" +
-	"\x0fpoweroff_result\x18\x0e \x01(\v2 .spindle.agent.v1.PoweroffResultR\x0epoweroffResult:\xb9\x01\xbaH\xb5\x01\"\xb2\x01\n" +
+	"\x0fpoweroff_result\x18\x0e \x01(\v2 .spindle.agent.v1.PoweroffResultR\x0epoweroffResult\x12J\n" +
+	"\x10open_debug_shell\x18\x0f \x01(\v2 .spindle.agent.v1.OpenDebugShellR\x0eopenDebugShell\x124\n" +
+	"\bpty_data\x18\x10 \x01(\v2\x19.spindle.agent.v1.PtyDataR\aptyData\x12:\n" +
+	"\n" +
+	"pty_resize\x18\x11 \x01(\v2\x1b.spindle.agent.v1.PtyResizeR\tptyResize:\xe1\x01\xbaH\xdd\x01\"\xda\x01\n" +
 	"\x05hello\n" +
 	"\x04init\n" +
 	"\n" +
@@ -1025,7 +1231,11 @@ const file_spindle_agent_v1_agent_proto_rawDesc = "" +
 	"\vcache_drain\n" +
 	"\x12cache_drain_result\n" +
 	"\bpoweroff\n" +
-	"\x0fpoweroff_result\x10\x01B1Z/tangled.org/core/spindle/agentproto/gen;agentv1b\x06proto3"
+	"\x0fpoweroff_result\n" +
+	"\x10open_debug_shell\n" +
+	"\bpty_data\n" +
+	"\n" +
+	"pty_resize\x10\x01B1Z/tangled.org/core/spindle/agentproto/gen;agentv1b\x06proto3"
 
 var (
 	file_spindle_agent_v1_agent_proto_rawDescOnce sync.Once
@@ -1039,7 +1249,7 @@ func file_spindle_agent_v1_agent_proto_rawDescGZIP() []byte {
 	return file_spindle_agent_v1_agent_proto_rawDescData
 }
 
-var file_spindle_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_spindle_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_spindle_agent_v1_agent_proto_goTypes = []any{
 	(*Hello)(nil),                // 0: spindle.agent.v1.Hello
 	(*Init)(nil),                 // 1: spindle.agent.v1.Init
@@ -1054,7 +1264,10 @@ var file_spindle_agent_v1_agent_proto_goTypes = []any{
 	(*CacheDrainResult)(nil),     // 10: spindle.agent.v1.CacheDrainResult
 	(*Poweroff)(nil),             // 11: spindle.agent.v1.Poweroff
 	(*PoweroffResult)(nil),       // 12: spindle.agent.v1.PoweroffResult
-	(*Message)(nil),              // 13: spindle.agent.v1.Message
+	(*OpenDebugShell)(nil),       // 13: spindle.agent.v1.OpenDebugShell
+	(*PtyData)(nil),              // 14: spindle.agent.v1.PtyData
+	(*PtyResize)(nil),            // 15: spindle.agent.v1.PtyResize
+	(*Message)(nil),              // 16: spindle.agent.v1.Message
 }
 var file_spindle_agent_v1_agent_proto_depIdxs = []int32{
 	0,  // 0: spindle.agent.v1.Message.hello:type_name -> spindle.agent.v1.Hello
@@ -1070,11 +1283,14 @@ var file_spindle_agent_v1_agent_proto_depIdxs = []int32{
 	10, // 10: spindle.agent.v1.Message.cache_drain_result:type_name -> spindle.agent.v1.CacheDrainResult
 	11, // 11: spindle.agent.v1.Message.poweroff:type_name -> spindle.agent.v1.Poweroff
 	12, // 12: spindle.agent.v1.Message.poweroff_result:type_name -> spindle.agent.v1.PoweroffResult
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	13, // 13: spindle.agent.v1.Message.open_debug_shell:type_name -> spindle.agent.v1.OpenDebugShell
+	14, // 14: spindle.agent.v1.Message.pty_data:type_name -> spindle.agent.v1.PtyData
+	15, // 15: spindle.agent.v1.Message.pty_resize:type_name -> spindle.agent.v1.PtyResize
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_spindle_agent_v1_agent_proto_init() }
@@ -1088,7 +1304,7 @@ func file_spindle_agent_v1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_spindle_agent_v1_agent_proto_rawDesc), len(file_spindle_agent_v1_agent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

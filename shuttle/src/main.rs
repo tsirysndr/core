@@ -9,6 +9,7 @@ mod host_proxy;
 mod logging;
 mod nix_config;
 mod protocol;
+mod pty;
 mod session;
 
 use std::env;

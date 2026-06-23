@@ -169,18 +169,23 @@ type workflowState struct {
 	CacheReadURLs          []string
 	CacheTrustedPublicKeys []string
 	VM                     VMHandle
+	CID                    uint32
 	Agent                  *AgentSession
 	ReadCache              *ReadCacheProxy
 	UploadCache            *UploadCacheProxy
 	DNSProxy               *DNSProxy
 	WorkDir                string
 	NixOSToplevelCache     nixosToplevelCacheStore
+	StartedAt              time.Time // when the VM booted, for the max-lifetime cap
 }
 
 func (e *Engine) cleanupState(ctx context.Context, wid models.WorkflowId, state *workflowState) error {
 	if state == nil {
 		return nil
 	}
+
+	// stop advertising this VM for debug shells before we tear it down
+	e.unregisterDebugTarget(wid)
 
 	ctx = context.WithoutCancel(ctx)
 

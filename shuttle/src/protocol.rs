@@ -43,6 +43,9 @@ impl_reflect!(
     CacheDrainResult,
     Poweroff,
     PoweroffResult,
+    OpenDebugShell,
+    PtyData,
+    PtyResize,
     Message,
 );
 
@@ -79,6 +82,9 @@ pub fn kind(msg: &Message) -> &'static str {
         cache_drain_result => "cache_drain_result",
         poweroff => "poweroff",
         poweroff_result => "poweroff_result",
+        open_debug_shell => "open_debug_shell",
+        pty_data => "pty_data",
+        pty_resize => "pty_resize",
     })
     .unwrap_or_else(|| unreachable!("validated message has no payload"))
 }

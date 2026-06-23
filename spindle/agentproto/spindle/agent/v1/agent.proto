@@ -82,13 +82,44 @@ message PoweroffResult {
   string error = 1;
 }
 
+message OpenDebugShell {
+  uint32 vsock_port = 1;
+  string term = 2;
+  uint32 rows = 3;
+  uint32 cols = 4;
+}
+
+// changes meaning based on who sends this:
+// guest->host is shell output, host->guest is keyboard input
+message PtyData {
+  bytes data = 1;
+}
+
+message PtyResize {
+  uint32 rows = 1;
+  uint32 cols = 2;
+}
+
 message Message {
   option (buf.validate.message).oneof = {
     fields: [
-      "hello", "init", "exec_start", "exec_stdout", "exec_stderr", "exec_exit",
-      "activate_config", "activate_config_result", "built_paths", "cache_drain",
-      "cache_drain_result", "poweroff", "poweroff_result"
-    ],
+      "hello",
+      "init",
+      "exec_start",
+      "exec_stdout",
+      "exec_stderr",
+      "exec_exit",
+      "activate_config",
+      "activate_config_result",
+      "built_paths",
+      "cache_drain",
+      "cache_drain_result",
+      "poweroff",
+      "poweroff_result",
+      "open_debug_shell",
+      "pty_data",
+      "pty_resize"
+    ]
     required: true
   };
 
@@ -107,4 +138,7 @@ message Message {
   CacheDrainResult cache_drain_result = 12;
   Poweroff poweroff = 13;
   PoweroffResult poweroff_result = 14;
+  OpenDebugShell open_debug_shell = 15;
+  PtyData pty_data = 16;
+  PtyResize pty_resize = 17;
 }

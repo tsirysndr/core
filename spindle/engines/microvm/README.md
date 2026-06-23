@@ -41,8 +41,13 @@ This does not mean it *has* to be done via Nix, as long as your images are what
 spindle expects, they should work. That is:
 - a guest agent is present inside of the image and when that image boots it will
   get started,
-- `spindle-workflow` user exists,
-- and the work directory is configured (`/workspace`).
+- the `spindle-workflow` user exists, is unprivileged (non-zero uid/gid), and has
+  a usable login shell and home dir set in the image's passwd: workflow steps run
+  as this user, and the debug shell (see below) launches its passwd shell as a
+  login shell in its home dir. an unset or `nologin`/`false` shell breaks debug
+  ssh,
+- and the work directory is configured (`/workspace`, with `/workspace/repo` as
+  the per-step working dir).
 
 ## Image discovery
 
@@ -234,3 +239,27 @@ so future `GET`/`HEAD <hash>.narinfo` requests do not falsely dedupe a path that
 never made it to the destination store. The guest still only ever sees the same
 HTTP binary-cache upload protocol over vsock; it never gets direct access to
 SSH credentials or the destination store itself.
+
+### Debug ssh
+
+When a workflow fails, spindle can keep its microVM alive for a configured grace
+window (`MicroVMPipelines.SSH`) and print an `ssh` invocation so you can poke at
+the failed VM interactively. Spindle terminates the ssh connection itself and
+bridges a pty into the live guest over the agent's vsock; the guest stays
+keyless and never runs an ssh daemon.
+
+Access mirrors a git push: the ssh username is the job id, and the offered
+public key is sent to the job's repo knot (`sh.tangled.repo.checkPushAllowed`).
+The session is accepted only if that key is allowed to push to the job's repo.
+
+The shell is deliberately not configurable from either end. It always:
+- runs as the `spindle-workflow` user (the ssh username selects the *job*, not a
+  unix user),
+- uses that user's login shell from the image's passwd, launched as a login
+  shell (`-l`), and
+- starts in the dir where the repo was cloned to.
+
+The only things the client influences are the terminal type and window size
+(forwarded from the ssh pty request, and on resize). This relies on the image
+configuring `spindle-workflow` properly per the expectations above; in
+particular a missing or `nologin`/`false` won't work of course.

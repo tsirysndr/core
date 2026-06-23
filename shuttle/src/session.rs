@@ -5,6 +5,7 @@ use crate::exec;
 use crate::nix_config::{self, SYSTEMCTL_EXECUTABLE};
 use crate::on_payload;
 use crate::protocol::{self, Message, v1};
+use crate::pty;
 use crate::{activation, command};
 use anyhow::{Context, Result, bail};
 use std::time::Duration;
@@ -61,7 +62,7 @@ pub async fn run(host_cid: u32, port: u32) -> Result<()> {
     let read_result: Result<()> = loop {
         tokio::select! {
             read = protocol::read_message(&mut reader) => match read {
-                Ok(Some(msg)) => spawn_message_task(&mut tasks, msg, &out_tx, uploader.clone()),
+                Ok(Some(msg)) => spawn_message_task(&mut tasks, host_cid, msg, &out_tx, uploader.clone()),
                 Ok(None) => break Ok(()),
                 Err(error) => break Err(error).context("read message"),
             },
@@ -84,6 +85,7 @@ pub async fn run(host_cid: u32, port: u32) -> Result<()> {
 
 fn spawn_message_task(
     tasks: &mut JoinSet<()>,
+    host_cid: u32,
     msg: Message,
     out_tx: &Sender<Message>,
     uploader: Option<CacheUploadManager>,
@@ -94,6 +96,7 @@ fn spawn_message_task(
         exec_start => tasks.spawn(exec::run(msg.id, exec_start, out_tx.clone())),
         cache_drain => tasks.spawn(run_cache_drain(msg.id, cache_drain, out_tx.clone(), uploader)),
         poweroff => tasks.spawn(run_poweroff(msg.id, poweroff, out_tx.clone())),
+        open_debug_shell => tasks.spawn(pty::run(host_cid, open_debug_shell)),
     });
     if handle.is_none() {
         warn!(kind, "ignoring unsupported message");

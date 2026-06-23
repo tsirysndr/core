@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::{Gid, Pid, Uid, User, getgrouplist, setgid, setgroups, setuid};
-use std::ffi::{CString, OsStr, OsString};
+use pty_process::{Command as PtyCommand, OwnedReadPty, OwnedWritePty, Size};
+use std::ffi::{CString, OsString};
 use std::io;
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
@@ -215,16 +216,7 @@ fn spawn(spec: &mut Spec) -> Result<Child> {
     // group won't actually let it access the sock.
     // https://github.com/rust-lang/rust/issues/90747
     if let (Some(uid), Some(gid)) = (spec.uid, spec.gid) {
-        let username = User::from_uid(Uid::from_raw(uid))
-            .ok()
-            .flatten()
-            .map(|u| u.name)
-            .with_context(|| format!("lookup passwd entry for uid {uid}"))?;
-        let cname = CString::new(username)
-            .with_context(|| format!("username for uid {uid} contained a null byte"))?;
-        // resolve groups beforehand so we don't have to read /etc/group in the pre_exec
-        let groups =
-            getgrouplist(&cname, Gid::from_raw(gid)).context("resolve supplementary groups")?;
+        let groups = resolve_supplementary_groups(uid, gid)?;
         // SAFETY: pre_exec runs between fork and execve in the child.
         // we only call async-signal-safe syscalls and we don't touch any
         // shared state, no allocator, no mutexes, no globals.
@@ -242,7 +234,65 @@ fn spawn(spec: &mut Spec) -> Result<Child> {
     cmd.process_group(0);
 
     cmd.spawn()
-        .with_context(|| format!("spawn {}", display_os(&spec.program)))
+        .with_context(|| format!("spawn {:?}", &spec.program))
+}
+
+// resolve the supplementary group list up front so the pre_exec hook never has
+// to read /etc/group (which is not async-signal-safe) between fork and exec.
+fn resolve_supplementary_groups(uid: u32, gid: u32) -> Result<Vec<Gid>> {
+    let username = User::from_uid(Uid::from_raw(uid))
+        .ok()
+        .flatten()
+        .map(|u| u.name)
+        .with_context(|| format!("lookup passwd entry for uid {uid}"))?;
+    let cname = CString::new(username)
+        .with_context(|| format!("username for uid {uid} contained a null byte"))?;
+    getgrouplist(&cname, Gid::from_raw(gid)).context("resolve supplementary groups")
+}
+
+pub fn spawn_pty(spec: Spec, rows: u16, cols: u16) -> Result<(OwnedReadPty, OwnedWritePty, Child)> {
+    let (pty, pts) = pty_process::open().context("open pty")?;
+    pty.resize(Size::new(rows, cols)).context("set pty size")?;
+
+    let mut cmd = PtyCommand::new(&spec.program)
+        .args(&spec.args)
+        .envs(spec.env.iter().map(|(key, value)| (key, value)));
+    if let Some(cwd) = &spec.cwd {
+        cmd = cmd.current_dir(cwd);
+    }
+
+    // drop privileges in the child. this RELIES on pty-process composing our
+    // pre_exec hook *after* its own session setup: it wraps us as `move || {
+    // session_leader()?; ours()?; }`, so setsid + TIOCSCTTY run first (while
+    // still privileged) and only then do we drop to the workflow user. that
+    // ordering is what we want and we depend on it. if pty-process ever ran our
+    // hook first, the session setup would happen post-drop. (it'd likely still
+    // work, since setsid/TIOCSCTTY on our own pty need no privilege, but it is
+    // not the behaviour we're assuming here)
+    // don't use .uid()/.gid() here, they clear supplementary groups (see L195).
+    if let (Some(uid), Some(gid)) = (spec.uid, spec.gid) {
+        let groups = resolve_supplementary_groups(uid, gid)?;
+        // SAFETY: pre_exec runs between fork and execve in the child. every call
+        // below is async-signal-safe and touches no shared state.
+        cmd = unsafe {
+            cmd.pre_exec(move || {
+                setgroups(&groups).map_err(io::Error::from)?;
+                setgid(Gid::from_raw(gid)).map_err(io::Error::from)?;
+                setuid(Uid::from_raw(uid)).map_err(io::Error::from)?;
+                Ok(())
+            })
+        };
+    }
+
+    // spawn consumes the slave (dup'd onto the child's 0/1/2 and then closed in
+    // the parent), so the master reports EOF once the shell and all its children
+    // have exited.
+    let child = cmd
+        .spawn(pts)
+        .with_context(|| format!("spawn pty shell {:?}", &spec.program))?;
+
+    let (reader, writer) = pty.into_split();
+    Ok((reader, writer, child))
 }
 
 async fn wait_child(
@@ -327,6 +377,41 @@ fn spawn_reader(
     })
 }
 
-fn display_os(value: &OsStr) -> String {
-    value.to_string_lossy().into_owned()
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::AsyncReadExt;
+
+    #[tokio::test]
+    async fn pty_runs_a_shell_and_reports_exit() {
+        let spec = Spec::new("/bin/sh")
+            .arg("-c")
+            .arg("printf 'hello pty'; exit 7");
+        let (mut reader, _writer, mut child) = spawn_pty(spec, 24, 80).expect("spawn pty");
+
+        let mut output = Vec::new();
+        let mut chunk = [0u8; 1024];
+        loop {
+            match reader.read(&mut chunk).await {
+                Ok(0) => break,
+                Ok(n) => output.extend_from_slice(&chunk[..n]),
+                // linux signals slave-closed with EIO rather than EOF
+                Err(error) if error.raw_os_error() == Some(nix::libc::EIO) => break,
+                Err(error) => panic!("read pty master: {error}"),
+            }
+        }
+
+        let status = child.wait().await.expect("wait child");
+        let text = String::from_utf8_lossy(&output);
+        assert!(text.contains("hello pty"), "unexpected output: {text:?}");
+        assert_eq!(status.code(), Some(7));
+    }
+
+    #[tokio::test]
+    async fn pty_resize_succeeds() {
+        let spec = Spec::new("/bin/sh").arg("-c").arg("sleep 0.2");
+        let (_reader, writer, mut child) = spawn_pty(spec, 24, 80).expect("spawn pty");
+        writer.resize(Size::new(40, 120)).expect("resize");
+        let _ = child.wait().await;
+    }
 }

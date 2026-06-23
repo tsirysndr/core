@@ -94,6 +94,8 @@ type MicroVMPipelines struct {
 
 	AgingThreshold time.Duration `env:"AGING_THRESHOLD, default=30s"`
 
+	DebugSSH DebugSSH `env:",prefix=DEBUG_SSH_"`
+
 	EnableCgroups    bool   `env:"ENABLE_CGROUPS, default=false"`
 	CgroupParent     string `env:"CGROUP_PARENT, default=self"`
 	CgroupPidsMax    int64  `env:"CGROUP_PIDS_MAX, default=4096"`
@@ -106,6 +108,17 @@ type MicroVMPipelines struct {
 	CgroupIOWeight uint64 `env:"CGROUP_IO_WEIGHT, default=0"`
 	// memory.min that will get assigned to the supervisor (spindle itself) cgroup
 	CgroupSupervisorMemoryMinMiB int64 `env:"CGROUP_SUPERVISOR_MEMORY_MIN_MIB, default=512"`
+}
+
+type DebugSSH struct {
+	Enabled    bool   `env:"ENABLED, default=false"`
+	ListenAddr string `env:"LISTEN_ADDR, default=0.0.0.0:2222"`
+	JumpHost   string `env:"JUMP_HOST"`
+	Host       string `env:"HOST"`
+	// path to private key; if empty, spindle will generate one next to the db
+	HostKeyPath string `env:"HOST_KEY_PATH"`
+	// how long to keep a failed wf alive after failure, for sshing in
+	GracePeriod time.Duration `env:"GRACE_PERIOD, default=5m"`
 }
 
 type NixCache struct {

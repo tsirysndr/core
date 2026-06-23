@@ -113,6 +113,33 @@ pub struct PoweroffResult {
     pub error: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct OpenDebugShell {
+    #[prost(uint32, tag = "1")]
+    pub vsock_port: u32,
+    #[prost(string, tag = "2")]
+    pub term: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "3")]
+    pub rows: u32,
+    /// debug shells always run as the spindle-workflow user, with that user's
+    /// login shell, starting in its home dir. nothing here is client-specifiable.
+    #[prost(uint32, tag = "4")]
+    pub cols: u32,
+}
+/// changes meaning based on who sends this:
+/// guest->host is shell output, host->guest is keyboard input
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PtyData {
+    #[prost(bytes = "bytes", tag = "1")]
+    pub data: ::prost::bytes::Bytes,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PtyResize {
+    #[prost(uint32, tag = "1")]
+    pub rows: u32,
+    #[prost(uint32, tag = "2")]
+    pub cols: u32,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Message {
     #[prost(string, tag = "1")]
     pub id: ::prost::alloc::string::String,
@@ -142,5 +169,11 @@ pub struct Message {
     pub poweroff: ::core::option::Option<Poweroff>,
     #[prost(message, optional, tag = "14")]
     pub poweroff_result: ::core::option::Option<PoweroffResult>,
+    #[prost(message, optional, tag = "15")]
+    pub open_debug_shell: ::core::option::Option<OpenDebugShell>,
+    #[prost(message, optional, tag = "16")]
+    pub pty_data: ::core::option::Option<PtyData>,
+    #[prost(message, optional, tag = "17")]
+    pub pty_resize: ::core::option::Option<PtyResize>,
 }
 // @@protoc_insertion_point(module)

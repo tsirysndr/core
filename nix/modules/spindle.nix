@@ -278,6 +278,51 @@ in
                 '';
               };
             };
+
+            debugSsh = {
+              enable = mkOption {
+                type = types.bool;
+                default = false;
+                description = ''
+                  Enable the debug ssh server that lets authorized users ssh into a
+                  failed microVM to debug it.
+                '';
+              };
+              listenAddr = mkOption {
+                type = types.str;
+                default = "0.0.0.0:2222";
+                example = "0.0.0.0:2225";
+                description = "Address for the debug ssh server to listen on.";
+              };
+              host = mkOption {
+                type = types.str;
+                default = "";
+                example = "127.0.0.1";
+                description = "Host reached from the SSH jump host.";
+              };
+              jumpHost = mkOption {
+                type = types.str;
+                default = "";
+                example = "spindle.example.com";
+                description = "SSH jump host used in the printed debug command.";
+              };
+              hostKeyPath = mkOption {
+                type = with types; nullOr path;
+                default = null;
+                example = "/var/lib/spindle/debug_ssh_host_key";
+                description = ''
+                  Path to the ssh host key for the debug server. If null, one is generated
+                  once and persisted next to the spindle db.
+                '';
+              };
+              gracePeriod = mkOption {
+                type = types.str;
+                default = "5m";
+                description = ''
+                  How long a failed workflow's microVM is kept alive for the user to ssh in.
+                '';
+              };
+            };
           };
 
           nixCache = {
@@ -400,6 +445,12 @@ in
               "SPINDLE_MICROVM_PIPELINES_CGROUP_PIDS_MAX=${toString cfg.pipelines.microvm.cgroup.pidsMax}"
               "SPINDLE_MICROVM_PIPELINES_CGROUP_SWAP_MAX_MIB=${toString cfg.pipelines.microvm.cgroup.swapMaxMiB}"
               "SPINDLE_MICROVM_PIPELINES_CGROUP_SUPERVISOR_MEMORY_MIN_MIB=${toString cfg.pipelines.microvm.cgroup.supervisorMinMiB}"
+              "SPINDLE_MICROVM_PIPELINES_DEBUG_SSH_ENABLED=${lib.boolToString cfg.pipelines.microvm.debugSsh.enable}"
+              "SPINDLE_MICROVM_PIPELINES_DEBUG_SSH_LISTEN_ADDR=${cfg.pipelines.microvm.debugSsh.listenAddr}"
+              "SPINDLE_MICROVM_PIPELINES_DEBUG_SSH_HOST=${cfg.pipelines.microvm.debugSsh.host}"
+              "SPINDLE_MICROVM_PIPELINES_DEBUG_SSH_JUMP_HOST=${cfg.pipelines.microvm.debugSsh.jumpHost}"
+              "SPINDLE_MICROVM_PIPELINES_DEBUG_SSH_HOST_KEY_PATH=${optionalString (cfg.pipelines.microvm.debugSsh.hostKeyPath != null) (toString cfg.pipelines.microvm.debugSsh.hostKeyPath)}"
+              "SPINDLE_MICROVM_PIPELINES_DEBUG_SSH_GRACE_PERIOD=${cfg.pipelines.microvm.debugSsh.gracePeriod}"
               "SPINDLE_NIX_CACHE_READ_URLS=${concatStringsSep "," cfg.pipelines.nixCache.readUrls}"
               "SPINDLE_NIX_CACHE_TRUSTED_PUBLIC_KEYS=${concatStringsSep "," cfg.pipelines.nixCache.trustedPublicKeys}"
               "SPINDLE_NIX_CACHE_UPLOAD_URL=${cfg.pipelines.nixCache.uploadUrl}"
