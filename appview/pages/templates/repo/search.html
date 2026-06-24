@@ -1,0 +1,31 @@
+{{ define "title" }}Search &middot; {{ .RepoInfo.FullName }} &middot; Tangled{{ end }}
+
+{{ define "extrameta" }}
+    {{ template "repo/fragments/meta" . }}
+
+    {{ template "repo/fragments/og" (dict "RepoInfo" .RepoInfo) }}
+{{ end }}
+
+{{ define "repoContent" }}
+<main>
+  <div class="flex relative w-full mb-4">
+    <div class="flex-1 flex relative">
+      <span class="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400">
+        {{ i "search-code" "size-4" }}
+      </span>
+      <input
+        type="text"
+        name="q"
+        value=""
+        placeholder="Find files or code"
+        hx-get=""
+        hx-trigger="input changed delay:100ms from:input"
+        hx-target="#repo-files"
+        hx-swap="outerHTML"
+        class="font-mono flex-1 py-1 pl-8 pr-2 peer"
+      >
+    </div>
+  </div>
+  {{ template "repo/fragments/searchResults" dict }}
+</main>
+{{ end }}

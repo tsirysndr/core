@@ -76,6 +76,8 @@ func (rp *Repo) Router(mw *middleware.Middleware) http.Handler {
 		r.Get("/edit", rp.EditLabelPanel)
 	})
 
+	r.Get("/search", rp.Search)
+
 	// settings routes, needs auth
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.AuthMiddleware(rp.oauth))

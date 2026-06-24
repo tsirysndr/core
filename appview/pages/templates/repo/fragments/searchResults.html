@@ -1,0 +1,91 @@
+{{ define "repo/fragments/searchResults" }}
+<div id="repo-files" class="space-y-4 mb-6">
+  {{ if .ErrorMsg }}
+    <div class="flex items-center gap-2 my-2 bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 rounded px-3 py-2 text-red-600 dark:text-red-300 text-sm">
+      {{ i "circle-alert" "size-4" }}
+      <span>{{ .ErrorMsg }}</span>
+    </div>
+  {{ else }}
+    {{ range .Results }}
+      {{ template "resultCard" . }}
+    {{ else }}
+      <div class="text-base text-gray-500 flex items-center justify-center italic p-12 border border-gray-200 dark:border-gray-700 rounded">
+        <span>No results found.</span>
+      </div>
+    {{ end }}
+  {{ end }}
+</div>
+{{ end }}
+
+{{ define "resultCard" }}
+  {{ $owner := resolve .Repo.Did }}
+  {{ $slug  := .Repo.Slug }}
+  {{ if .File }}
+    {{/* filename match */}}
+    <div class="px-3.5 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-sm flex items-center justify-between">
+      <div class="flex items-center gap-2 min-w-0">
+        {{ i "file" "size-4 flex-shrink-0" }}
+        <a href="/{{ $owner }}/{{ $slug }}/blob/{{ .Commit }}/{{ .FilePath }}" class="truncate font-mono">
+          {{- range .File.NameSpans -}}
+            {{- if .Match -}}<span class="chunk-match-hl">{{ .Text }}</span>
+            {{- else -}}{{ .Text }}{{- end -}}
+          {{- end -}}
+        </a>
+      </div>
+      <div class="flex items-center gap-3.5">
+        {{ with .Language }}
+          {{ template "repo/fragments/colorBall" (dict "color" (langColor .)) }}
+          <span>{{ . }}</span>
+        {{ end }}
+      </div>
+    </div>
+  {{ else if .Chunks }}
+    {{/* chunk match */}}
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm divide-y divide-gray-200 dark:divide-gray-700">
+      <div class="px-3.5 py-2 text-sm flex items-center justify-between">
+        <div class="flex items-center gap-2 min-w-0">
+          {{ i "file" "size-4 flex-shrink-0" }}
+          <a href="/{{ $owner }}/{{ $slug }}/blob/{{ .Commit }}/{{ .FilePath }}" class="truncate font-mono">{{ .FilePath }}</a>
+        </div>
+        <div class="flex items-center gap-3.5">
+          {{ with .Language }}
+            {{ template "repo/fragments/colorBall" (dict "color" (langColor .)) }}
+            <span>{{ . }}</span>
+          {{ end }}
+        </div>
+      </div>
+      {{ range $i, $chunk := .Chunks }}
+        {{ if lt $i 3 }}
+          {{ if gt $i 0 }}
+            <div class="bg-gray-50 dark:bg-gray-700 text-center">
+              <span class="text-sm text-gray-500 dark:text-gray-400 select-none">···</span>
+            </div>
+          {{ end }}
+          {{ template "search/fragments/chunkBody" (dict "Owner" $owner "Slug" $slug "Commit" $.Commit "FilePath" $.FilePath "Chunk" $chunk) }}
+        {{ end }}
+      {{ end }}
+      {{ if gt (len .Chunks) 3 }}
+        <details class="group flex flex-col divide-y divide-gray-200 dark:divide-gray-700">
+          <summary class="bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1 py-0.5 cursor-pointer list-none group-open:order-last group-open:border-t border-gray-200 dark:border-gray-700">
+            <div class="flex group-open:hidden">
+              {{ i "chevron-down" "size-3 m-1" }}
+              <span class="text-sm select-none">Show {{ (slice .Chunks 3).MatchCount }} more matches</span>
+            </div>
+            <div class="hidden group-open:flex">
+              {{ i "chevron-up" "size-3 m-1" }}
+              <span class="text-sm select-none">Show less</span>
+            </div>
+          </summary>
+          {{ range $i, $chunk := .Chunks }}
+            {{ if ge $i 3 }}
+              <div class="bg-gray-50 dark:bg-gray-700 text-center">
+                <span class="text-sm text-gray-500 dark:text-gray-400 select-none">···</span>
+              </div>
+              {{ template "search/fragments/chunkBody" (dict "Owner" $owner "Slug" $slug "Commit" $.Commit "FilePath" $.FilePath "Chunk" $chunk) }}
+            {{ end }}
+          {{ end }}
+        </details>
+      {{ end }}
+    </div>
+  {{ end }}
+{{ end }}

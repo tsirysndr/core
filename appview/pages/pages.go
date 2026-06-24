@@ -930,6 +930,27 @@ func (p *Pages) RepoIndexPage(w io.Writer, params RepoIndexParams) error {
 	return p.executeRepo("repo/index", w, params)
 }
 
+type RepoSearchParams struct {
+	BaseParams
+	RepoInfo    repoinfo.RepoInfo
+	Active      string
+	FilterQuery string
+}
+
+func (p *Pages) RepoSearchPage(w io.Writer, params RepoSearchParams) error {
+	params.Active = "overview"
+	return p.executeRepo("repo/search", w, params)
+}
+
+type RepoSearchResultsFragmentParams struct {
+	Results  []SearchResult
+	ErrorMsg string
+}
+
+func (p *Pages) RepoSearchResultsFragment(w io.Writer, params RepoSearchResultsFragmentParams) error {
+	return p.executePlain("repo/fragments/searchResults", w, params)
+}
+
 type RepoLogParams struct {
 	BaseParams
 	RepoInfo        repoinfo.RepoInfo

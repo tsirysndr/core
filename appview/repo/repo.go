@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"tangled.org/core/appview/cloudflare"
+	"tangled.org/core/appview/codesearch"
 
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/config"
@@ -61,6 +62,7 @@ type Repo struct {
 	validator     *validator.Validator
 	cfClient      *cloudflare.Client
 	ogreClient    *ogre.Client
+	codesearch    *codesearch.CodeSearch
 }
 
 func New(
@@ -77,6 +79,7 @@ func New(
 	logger *slog.Logger,
 	validator *validator.Validator,
 	cfClient *cloudflare.Client,
+	codesearch *codesearch.CodeSearch,
 ) *Repo {
 	return &Repo{
 		oauth:         oauth,
@@ -93,6 +96,7 @@ func New(
 		validator:     validator,
 		cfClient:      cfClient,
 		ogreClient:    ogre.NewClient(config.Ogre.Host),
+		codesearch:    codesearch,
 	}
 }
 

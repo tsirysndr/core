@@ -412,6 +412,7 @@ func (s *State) RepoRouter(mw *middleware.Middleware) http.Handler {
 		log.SubLogger(s.logger, "repo"),
 		s.validator,
 		s.cfClient,
+		s.codesearch,
 	)
 	return repo.Router(mw)
 }

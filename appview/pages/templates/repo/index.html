@@ -24,6 +24,9 @@
             <a href="/{{ .RepoInfo.FullName }}/tags" class="inline-flex md:hidden items-center text-sm gap-1 font-bold">
               {{ i "tags" "w-4" "h-4" }} {{ scaleFmt (len .Tags) }}
             </a>
+            <a href="/{{ .RepoInfo.FullName }}/search" class="btn">
+              {{ i "search" "size-4" }}
+            </a>
             {{ template "repo/fragments/cloneDropdown" . }}
           </div>
         </div>
