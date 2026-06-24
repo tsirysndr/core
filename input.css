@@ -223,7 +223,7 @@
 
         .btn-flat {
             @apply inline-flex items-center justify-center
-          min-h-[30px] px-2 py-[6px]
+          min-h-[32px] px-2 py-[6px]
           rounded
           text-sm text-gray-900 dark:text-gray-100 cursor-pointer
           transition-colors duration-150 ease-in-out
@@ -1634,12 +1634,12 @@ actor-typeahead::part(menu) {
         -webkit-mask: radial-gradient(var(--r) at var(--r) 0, #0000 98%, #000);
         mask: radial-gradient(var(--r) at var(--r) 0, #0000 98%, #000);
     }
-    
+
     &::before {
         left: calc(-1 * var(--r));
         @apply -scale-x-100;
     }
-    
+
     &::after {
         right: calc(-1 * var(--r));
     }
