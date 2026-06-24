@@ -115,7 +115,8 @@ in {
   # put the devshell into the resulting image env.
   # we do this instead of using a `.nix` file because it lets us skip eval time.
   environment.etc = lib.mkIf (dependencies != []) {
-    "spindle/devshell.drv".source = spindleDevShell.drvPath;
+    # this is safe because we have the closure in the env also!
+    "spindle/devshell-drv".text = builtins.unsafeDiscardStringContext spindleDevShell.drvPath;
     "spindle/devshell-closure".source = pkgs.closureInfo {rootPaths = [spindleDevShell];};
   };
   services = builtins.mapAttrs (normalize (options.services or {})) (userConfig.services or {});

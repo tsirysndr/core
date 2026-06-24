@@ -10,7 +10,7 @@ use tracing::info;
 
 const USER_CONFIG_DIR: &str = "/run/spindle/user-config";
 const DEVSHELL_ENV_PATH: &str = "/run/spindle/devshell-env.sh";
-const DEVSHELL_DRV: &str = "/etc/spindle/devshell.drv";
+const DEVSHELL_DRV: &str = "/etc/spindle/devshell-drv";
 
 pub async fn run(id: String, req: v1::ActivateConfig, out: Sender<Message>) {
     let config_key = req.config_key.clone();
@@ -58,13 +58,15 @@ async fn activate(id: &str, req: &v1::ActivateConfig, out: &Sender<Message>) -> 
 }
 
 async fn write_devshell_env(timeout: Duration) -> Result<()> {
-    let drv = match fs::canonicalize(DEVSHELL_DRV) {
-        Ok(p) => p,
-        Err(_) => {
-            let _ = fs::remove_file(DEVSHELL_ENV_PATH);
-            return Ok(());
-        }
-    };
+    let pointer = Path::new(DEVSHELL_DRV);
+    if !pointer.exists() {
+        let _ = fs::remove_file(DEVSHELL_ENV_PATH);
+        return Ok(());
+    }
+    let drv = fs::read_to_string(&pointer)
+        .with_context(|| format!("read {pointer:?}"))?
+        .trim()
+        .to_owned();
 
     info!(
         ?drv,
@@ -72,11 +74,7 @@ async fn write_devshell_env(timeout: Duration) -> Result<()> {
     );
     let output = run_capture(
         Spec::new(nix_executable())
-            .args([
-                "print-dev-env".into(),
-                "--show-trace".into(),
-                drv.into_os_string(),
-            ])
+            .args(["print-dev-env", "--show-trace", &drv])
             .cwd(SPINDLE_RUN_DIR)
             .timeout(timeout),
     )

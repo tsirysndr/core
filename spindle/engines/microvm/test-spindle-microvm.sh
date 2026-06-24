@@ -338,7 +338,7 @@ run_vm() {
         --work-dir "$work_dir"
         --exec-timeout "$timeout"
         --port "${SPINDLE_TEST_VSOCK_PORT:-10240}"
-        --memory-mib 2049
+        --memory-mib 4096
     )
 
     if [ "$no_cache" -eq 0 ]; then
