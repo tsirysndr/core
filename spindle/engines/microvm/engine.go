@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -434,8 +435,15 @@ func (e *Engine) activateConfig(ctx context.Context, wid models.WorkflowId, stat
 		if record, ok, err := state.NixOSToplevelCache.Lookup(configKey); err != nil {
 			return err
 		} else if ok {
-			cachedToplevel = record.Toplevel
-			fmt.Fprintf(out, "realizing cached NixOS config %s\n", cachedToplevel)
+			// todo(dawn): we should probably use gc roots to eliminate TOCTOU
+			// the spindle will have to manage the gc roots, and for remote we have to
+			// ssh in to the host and add / remove gc root.
+			// we need to have this check anyway since the only check http caches can
+			// use is this one, since we cant manage gc roots there...
+			if e.anyCacheHasPath(ctx, state, record.Toplevel) {
+				cachedToplevel = record.Toplevel
+				fmt.Fprintf(out, "realizing cached NixOS config %s\n", cachedToplevel)
+			}
 		}
 	}
 	if cachedToplevel == "" {
@@ -478,6 +486,35 @@ func (e *Engine) activateConfig(ctx context.Context, wid models.WorkflowId, stat
 	}
 	fmt.Fprintf(out, "committed config cache metadata %s -> %s\n", configKey, result.Toplevel)
 	return nil
+}
+
+func (e *Engine) anyCacheHasPath(ctx context.Context, state *workflowState, storePath string) bool {
+	upstreams, err := BuildCacheUpstreams(e.cfg.NixCache.ReadURLs, state.CacheReadURLs)
+	if err != nil {
+		e.l.Warn("config cache check: build upstreams failed; treating as absent", "path", storePath, "error", err)
+		return false
+	}
+	if len(upstreams) == 0 {
+		return false
+	}
+	hash, _, err := parseStorePath(storePath)
+	if err != nil {
+		e.l.Warn("config cache check: invalid toplevel path; treating as absent", "path", storePath, "error", err)
+		return false
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, "http://upstream/"+hash+".narinfo", nil)
+	if err != nil {
+		e.l.Warn("config cache check: build request failed; treating as absent", "path", storePath, "error", err)
+		return false
+	}
+	resp, err := newNarinfoExistenceTransport(upstreams, e.l).RoundTrip(req)
+	if err != nil {
+		e.l.Warn("config cache check: narinfo probe failed; treating as absent", "path", storePath, "error", err)
+		return false
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return resp.StatusCode == http.StatusOK
 }
 
 func (e *Engine) DestroyWorkflow(ctx context.Context, wid models.WorkflowId) error {
