@@ -116,7 +116,7 @@ in {
   # we do this instead of using a `.nix` file because it lets us skip eval time.
   environment.etc = lib.mkIf (dependencies != []) {
     "spindle/devshell.drv".source = spindleDevShell.drvPath;
-    "spindle/devshell-inputs".source = spindleDevShell.inputDerivation;
+    "spindle/devshell-closure".source = pkgs.closureInfo {rootPaths = [spindleDevShell];};
   };
   services = builtins.mapAttrs (normalize (options.services or {})) (userConfig.services or {});
   virtualisation = builtins.mapAttrs (normalize (options.virtualisation or {})) (userConfig.virtualisation or {});

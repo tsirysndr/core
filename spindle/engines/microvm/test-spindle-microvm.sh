@@ -1,34 +1,70 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# dont export big captures like `out=$(run_vm ...)` into the environment.
+set +a
+# extglob enables the *(...) pattern strip_ansi uses for pure-bash CSI stripping
+shopt -s extglob
 # note: needs `sudo modprobe vhost_vsock`!
 
 log() {
     printf "\n\033[1;36m>>> %s\033[0m\n" "$*"
 }
 
+_strip_ansi_stream() {
+    local line
+    while IFS= read -r line || [ -n "$line" ]; do
+        line=${line//$'\e'\[*([0-9;])[a-zA-Z]/}
+        line=${line//$'\e'\([a-zA-Z]/}
+        printf '%s\n' "$line"
+    done
+}
+
 strip_ansi() {
-    local esc
-    esc=$(printf '\033')
-    sed -E "s/${esc}\[[0-9;]*[a-zA-Z]//g; s/${esc}\([a-zA-Z]//g" "$@"
+    if [ "$#" -gt 0 ]; then
+        local f
+        for f in "$@"; do
+            [ -r "$f" ] && _strip_ansi_stream < "$f"
+        done
+    else
+        _strip_ansi_stream
+    fi
 }
 
 # check_needles OUT NEEDLES...
+# each needle is an extended regex matched per line (mirrors `grep -qE`).
 check_needles() {
     local out="$1"
     shift
-    local clean
-    clean=$(echo "$out" | strip_ansi)
 
-    local needle missing=0
+    local -a lines
+    mapfile -t lines <<< "$out"
+
+    # strip ANSI per line (each line is short, so this stays cheap)
+    local i l
+    for i in "${!lines[@]}"; do
+        l=${lines[i]}
+        l=${l//$'\e'\[*([0-9;])[a-zA-Z]/}
+        l=${l//$'\e'\([a-zA-Z]/}
+        lines[i]=$l
+    done
+
+    local needle missing=0 line hit
     for needle in "$@"; do
-        if ! echo "$clean" | grep -qE "$needle"; then
+        hit=0
+        for line in "${lines[@]}"; do
+            if [[ $line =~ $needle ]]; then
+                hit=1
+                break
+            fi
+        done
+        if [ "$hit" -eq 0 ]; then
             echo "error: output missing '$needle'" >&2
             missing=1
         fi
     done
 
     if [ "$missing" -ne 0 ]; then
-        echo "$clean" >&2
+        printf '%s\n' "${lines[@]}" >&2
         return 1
     fi
 }
