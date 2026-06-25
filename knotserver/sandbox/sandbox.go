@@ -1,6 +1,10 @@
 package sandbox
 
-import "os/exec"
+import (
+	"fmt"
+	"os"
+	"os/exec"
+)
 
 // Backend wraps git subprocesses in a filesystem sandbox.
 type Backend interface {
@@ -13,6 +17,7 @@ type Backend interface {
 type NoopBackend struct{}
 
 func (n *NoopBackend) Wrap(repoPath string, cmd *exec.Cmd) (*exec.Cmd, error) {
+	cmd.Env = append(cmd.Env, fmt.Sprintf("HOME=%s", os.Getenv("HOME")))
 	cmd.Dir = repoPath
 	return cmd, nil
 }
