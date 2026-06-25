@@ -101,7 +101,9 @@
 {{ define "diffLayout" }}
   {{ $diff := index . 0 }}
   {{ $opts := index . 1 }}
-  {{ $padBottom := gt (len .) 2 }}
+  {{ $padBottom := and (gt (len .) 2) (index . 2) }}
+  {{ $blobBase := "" }}
+  {{ if gt (len .) 3 }}{{ $blobBase = index . 3 }}{{ end }}
 
   <div class="flex col-span-full flex-grow">
     <!-- left panel -->
@@ -115,7 +117,7 @@
 
     <!-- main content -->
     <div id="diff-files" class="flex-1 min-w-0 sticky top-12 {{ if $padBottom }}pb-12{{ end }}">
-      {{ template "diffFiles" (list $diff $opts) }}
+      {{ template "diffFiles" (list $diff $opts $blobBase) }}
     </div>
 
   </div>
@@ -124,6 +126,8 @@
 {{ define "diffFiles" }}
   {{ $diff := index . 0 }}
   {{ $opts := index . 1 }}
+  {{ $blobBase := "" }}
+  {{ if gt (len .) 2 }}{{ $blobBase = index . 2 }}{{ end }}
   {{ $files := $diff.ChangedFiles }}
   {{ $isSplit := $opts.Split }}
   <div class="flex flex-col gap-4">
@@ -133,7 +137,7 @@
       </div>
     {{ else }}
       {{ range $idx, $file := $files }}
-        {{ template "diffFile" (list $idx $file $isSplit) }}
+        {{ template "diffFile" (list $idx $file $isSplit false $blobBase) }}
       {{ end }}
     {{ end }}
   </div>
@@ -145,6 +149,8 @@
   {{ $isSplit := index . 2 }}
   {{ $collapsed := false }}
   {{ if gt (len .) 3 }}{{ $collapsed = index . 3 }}{{ end }}
+  {{ $blobBase := "" }}
+  {{ if gt (len .) 4 }}{{ $blobBase = index . 4 }}{{ end }}
   {{ $isGenerated := false }}
   {{ $isDeleted := false }}
   {{ with $file }}
@@ -182,6 +188,18 @@
               {{ end }}
             </div>
           </div>
+          <div class="flex items-center pr-1">
+          {{ if and $blobBase $n.New }}
+            <a
+              href="{{ $blobBase }}/{{ $n.New }}"
+              onclick="event.stopPropagation()"
+              class="btn-flat hidden md:flex"
+              title="Open file"
+            >
+              {{ i "eye" "size-4" }}
+              <span class="hidden md:inline">View file</span>
+            </a>
+          {{ end }}
           <label
             data-review-btn="file-{{ .Id }}"
             onclick="event.stopPropagation()"
@@ -197,6 +215,7 @@
             <span class="hidden peer-checked:inline text-green-600 dark:text-green-400">{{ i "circle-check" "size-4" }}</span>
             <span class="hidden md:inline">Reviewed</span>
           </label>
+          </div>
         </div>
       </summary>
 

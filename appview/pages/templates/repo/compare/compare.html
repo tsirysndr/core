@@ -21,5 +21,5 @@
 {{ end }}
 
 {{ define "contentAfter" }}
-  {{ template "repo/fragments/diff" (list .Diff .DiffOpts) }}
+  {{ template "repo/fragments/diff" (list .Diff .DiffOpts "" (printf "/%s/blob/%s" .RepoInfo.FullName (pathEscape .Head))) }}
 {{end}}
