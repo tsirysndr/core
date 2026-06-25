@@ -1,23 +1,32 @@
 {{ define "user/fragments/repoCard" }}
-  {{/* root, repo, fullName [,starButton [,starData{IsStarred,SubjectAt,StarCount,RepoName} [,compact]]] */}}
+  {{/* root, repo, fullName [,starButton [,starData{IsStarred,SubjectAt,StarCount,RepoName} [,compact [,cardLink]]]] */}}
   {{ $root := index . 0 }}
   {{ $repo := index . 1 }}
   {{ $fullName := index . 2 }}
   {{ $starButton := false }}
   {{ $starData := dict }}
   {{ $compact := false }}
+  {{ $cardLink := false }}
   {{ if gt (len .) 3 }}
     {{ $starButton = index . 3 }}
     {{ if gt (len .) 4 }}
       {{ $starData = index . 4 }}
       {{ if gt (len .) 5 }}
         {{ $compact = index . 5 }}
+        {{ if gt (len .) 6 }}
+          {{ $cardLink = index . 6 }}
+        {{ end }}
       {{ end }}
     {{ end }}
   {{ end }}
 
   {{ with $repo }}
+    {{ $repoOwner := resolve .Did }}
+    {{ if $cardLink }}
+    <a href="/{{ $repoOwner }}/{{ .Slug }}" data-nav-result class="hover:no-underline {{ if not $compact }} min-h-32 {{ end }} {{ if $compact }} hover:bg-gray-100 dark:hover:bg-gray-800/80 focus-within:bg-gray-100 dark:focus-within:bg-gray-800/80 {{ end }} py-4 px-6 gap-1 flex flex-col drop-shadow-sm bg-white dark:bg-gray-800">
+    {{ else }}
     <div class="{{ if not $compact }} min-h-32 {{ end }} {{ if $compact }} focus-within:bg-gray-100 dark:focus-within:bg-gray-800/80 {{ end }} py-4 px-6 gap-1 flex flex-col drop-shadow-sm bg-white dark:bg-gray-800">
+    {{ end }}
       <div class="dark:text-white flex items-center justify-between">
         <div class="flex items-center min-w-0 flex-1 mr-2">
           {{ if .Source }}
@@ -25,11 +34,12 @@
           {{ else }}
             {{ i "book-marked" "w-4 h-4 mr-1.5 shrink-0" }}
           {{ end }}
-          {{ $repoOwner := resolve .Did }}
-          {{- if $fullName -}}
-            <a href="/{{ $repoOwner }}/{{ .Slug }}" data-nav-result class="truncate min-w-0 {{ if $compact }} focus:outline-none {{ end }}">{{ $repoOwner }}/{{ .Name }}</a>
+          {{- $label := .Name -}}
+          {{- if $fullName -}}{{- $label = print $repoOwner "/" .Name -}}{{- end -}}
+          {{- if $cardLink -}}
+            <span class="truncate min-w-0">{{ $label }}</span>
           {{- else -}}
-            <a href="/{{ $repoOwner }}/{{ .Slug }}" data-nav-result class="truncate min-w-0 {{ if $compact }} focus:outline-none {{ end }}">{{ .Name }}</a>
+            <a href="/{{ $repoOwner }}/{{ .Slug }}" data-nav-result class="truncate min-w-0 {{ if $compact }} focus:outline-none {{ end }}">{{ $label }}</a>
           {{- end -}}
         </div>
         {{ if and $starButton $root.LoggedInUser }}
@@ -47,7 +57,11 @@
       {{ if .RepoStats }}
         {{ block "repoStats" .RepoStats }}{{ end }}
       {{ end }}
+    {{ if $cardLink }}
+    </a>
+    {{ else }}
     </div>
+    {{ end }}
   {{ end }}
 {{ end }}
 

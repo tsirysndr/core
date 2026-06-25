@@ -111,7 +111,7 @@
 {{ end }}
 
 {{ define "repoActions" }}
-  <div class="w-full sm:w-fit grid grid-cols-3 gap-2 z-auto">
+  <div class="w-full sm:w-fit grid grid-cols-3 gap-2">
     {{ template "fragments/starBtn"
       (dict "SubjectAt" .RepoInfo.RepoAt
             "IsStarred" .RepoInfo.IsStarred

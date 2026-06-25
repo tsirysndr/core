@@ -172,9 +172,9 @@
   {{ end }}
 
   <!-- backdrop overlay - only visible on mobile when open -->
-  <div id="bottomSheetBackdrop" class="fixed inset-0 bg-black/50 md:hidden opacity-0 pointer-events-none transition-opacity duration-300 z-40"></div>
+  <div id="bottomSheetBackdrop" class="fixed inset-0 bg-black/50 md:hidden opacity-0 pointer-events-none transition-opacity duration-300 z-20"></div>
   <!-- right panel - bottom sheet on mobile, side panel on desktop -->
-  <div id="subs" class="fixed bottom-0 left-0 right-0 z-50 w-full md:static md:z-auto md:max-h-screen md:sticky md:top-12 overflow-hidden">
+  <div id="subs" class="fixed bottom-0 left-0 right-0 z-30 w-full md:static md:z-auto md:max-h-screen md:sticky md:top-12 overflow-hidden">
     <details open id="bottomSheet" class="rounded-t-2xl md:rounded-t shadow-lg md:shadow-none group/panel">
       <summary class="
         flex gap-4 items-center justify-between

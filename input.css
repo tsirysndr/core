@@ -200,7 +200,7 @@
 
     @layer components {
         .btn {
-            @apply relative z-10 inline-flex overflow-hidden items-center justify-center
+            @apply relative z-0 inline-flex overflow-hidden items-center justify-center
           min-h-[32px] px-2 py-[6px] gap-1.5
           rounded border border-gray-200 dark:border-gray-700
           bg-white dark:bg-gray-800

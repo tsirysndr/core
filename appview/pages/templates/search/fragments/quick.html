@@ -30,7 +30,7 @@
 
 {{define "search/fragments/quickPage"}}
 {{- range .Repos -}}
-  {{ template "user/fragments/repoCard" (list $ . true false (dict) true) }}
+  {{ template "user/fragments/repoCard" (list $ . true false (dict) true true) }}
 {{- end -}}
 {{end}}
 

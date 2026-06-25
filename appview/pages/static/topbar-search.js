@@ -31,11 +31,14 @@
 
     const openMobile = () => {
         const overlay = $("mobile-search-overlay");
+        const subs = $("subs");
         if (!overlay || overlay.classList.contains("opacity-100")) return;
 
         overlay.classList.remove("opacity-0", "pointer-events-none");
         overlay.classList.add("opacity-100", "pointer-events-auto");
         overlay.setAttribute("aria-hidden", "false");
+
+        subs?.classList.remove("z-30");
 
         savedScrollY = window.scrollY;
         Object.assign(document.body.style, {
@@ -65,6 +68,7 @@
 
     const closeMobile = () => {
         const overlay = $("mobile-search-overlay");
+        const subs = $("subs");
         if (!overlay) return;
 
         overlay.classList.remove("opacity-100", "pointer-events-auto");
@@ -72,6 +76,8 @@
         overlay.setAttribute("aria-hidden", "true");
         overlay.style.height = "";
         overlay.style.top = "";
+
+        subs?.classList.add("z-30");
 
         const spacer = $("mobile-search-spacer");
         if (spacer) {
