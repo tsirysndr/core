@@ -109,13 +109,18 @@ func (t *Tap) processRepo(ctx context.Context, evt *tapc.RecordEventData) error 
 			t.logger.Warn("dropping repo record without repo_did", "did", evt.Did, "rkey", evt.Rkey)
 			return nil
 		}
+		repoDid, err := syntax.ParseDID(*record.RepoDid)
+		if err != nil {
+			t.logger.Warn("dropping repo record with invalid DID", "did", evt.Did, "rkey", evt.Rkey, "repo", repoDid)
+			return nil
+		}
 		repo := &models.Repo{
 			Did:        evt.Did,
 			Rkey:       evt.Rkey,
 			Cid:        evt.CID,
 			Name:       evt.Rkey.String(),
 			KnotDomain: knotUrl,
-			RepoDid:    syntax.DID(*record.RepoDid),
+			RepoDid:    repoDid,
 			State:      status,
 			ErrorMsg:   errMsg,
 			RetryAfter: 0, // clear retry info
