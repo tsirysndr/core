@@ -284,8 +284,8 @@ services:
     networks: [tngl]
 
   zoekt-webserver:
-    platform: linux/amd64
-    image: ghcr.io/sourcegraph/zoekt:sha-893a523
+    build:
+      context: https://tangled.org/boltless.me/zoekt.git#tngl
     volumes:
       - zoekt-index:/data/index
       - ./localinfra/certs/root.crt:/etc/ssl/certs/caddy.crt:ro

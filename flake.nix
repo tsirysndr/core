@@ -57,6 +57,10 @@
       url = "https://sqlite.org/2024/sqlite-amalgamation-3450100.zip";
       flake = false;
     };
+    fetch-tangled = {
+      url = "git+https://tangled.org/isabelroses.com/fetch-tangled";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = {
@@ -74,11 +78,16 @@
     actor-typeahead-src,
     mermaid-src,
     microvm,
+    fetch-tangled,
     ...
   }: let
     supportedSystems = ["x86_64-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin"];
     forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
-    nixpkgsFor = forAllSystems (system: nixpkgs.legacyPackages.${system});
+    nixpkgsFor = forAllSystems (system:
+      import nixpkgs {
+        inherit system;
+        overlays = [fetch-tangled.overlays.default];
+      });
 
     mkPackageSet = pkgs:
       pkgs.lib.makeScope pkgs.newScope (self: {
