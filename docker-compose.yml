@@ -133,6 +133,7 @@ services:
     networks: [tngl]
 
   spindle:
+    profiles: ["linux"]
     build:
       context: .
       dockerfile: localinfra/spindle.Dockerfile
