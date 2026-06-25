@@ -332,9 +332,13 @@ func (s *Signup) executeSignupTransaction(ctx context.Context, username, passwor
 	// if we get here, we've successfully created the account and added the email
 	success = true
 
-	s.pages.NoticeHTMLWithClears(w, "signup-msg", fmt.Sprintf(`Account created successfully. You can now
-		<a class="underline text-black dark:text-white" href="/login">login</a>
-		with <code>%s.tngl.sh</code>.`, username), "signup-error")
+	s.pages.NoticeHTMLWithClears(w, "signup-msg", fmt.Sprintf(`
+		<div class="w-full h-fit mt-4 p-4 bg-green-50 dark:bg-green-300 border border-green-200 dark:border-green-400 text-green-800 dark:text-green-900 rounded">
+    		Account created successfully.
+    		<br/>
+    		You can now <a class="dark:text-black hover:dark:text-black underline" href="/login">login</a> with <code>%s.tngl.sh</code>.
+    	</div>
+	`, username), "signup-error")
 
 	// clean up inflight signup asynchronously
 	go func() {
