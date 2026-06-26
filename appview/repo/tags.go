@@ -83,6 +83,11 @@ func (rp *Repo) Tag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tag := chi.URLParam(r, "tag")
+	tag, err = url.PathUnescape(tag)
+	if err != nil { // invalid tag name
+		rp.pages.Error404(w)
+		return
+	}
 
 	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
 
