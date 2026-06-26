@@ -394,7 +394,7 @@ module](https://tangled.org/tangled.org/core/blob/master/nix/modules/knot.nix)
 for a full list of options. Sample configurations:
 
 - [The test VM](https://tangled.org/tangled.org/core/blob/master/nix/vm.nix#L85)
-- [@pyrox.dev/nix](https://tangled.org/pyrox.dev/nix/blob/d19571cc1b5fe01035e1e6951ec8cf8a476b4dee/hosts/marvin/services/tangled.nix#L15-25)
+- [@pyrox.dev/nix](https://tangled.org/pyrox.dev/nix/blob/c2b644c214d278af12523618de952ee2eab1af3d/hosts/marvin/services/tangled.nix#L15-26)
 
 ## Docker
 
