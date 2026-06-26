@@ -13,7 +13,11 @@ import (
 
 func (rp *Repo) Search(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Hx-Request") == "true" {
-		rp.searchResultsFragment(w, r)
+		if rp.oauth.GetMultiAccountUser(r) != nil {
+			rp.searchResultsFragment(w, r)
+		} else {
+			w.WriteHeader(http.StatusForbidden)
+		}
 		return
 	}
 	if err := rp.pages.RepoSearchPage(w, pages.RepoSearchParams{

@@ -39,6 +39,10 @@ func (s *State) handleCodeSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if params.BaseParams.LoggedInUser == nil {
+		return
+	}
+
 	res, err := s.codesearch.Search(ctx, q, page)
 	if err != nil {
 		// repo-name-only queries belong to the repo search page; redirect with

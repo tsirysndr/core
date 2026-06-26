@@ -286,6 +286,8 @@ Disallow: /*/*/settings
 Disallow: /settings
 Disallow: /*/*/compare
 Disallow: /*/*/fork
+Disallow: /search
+Disallow: /*/*/search
 
 Crawl-delay: 1
 `
