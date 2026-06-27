@@ -1,0 +1,16 @@
+# Development only. Not for production use.
+cache:
+  allow-put-verb: true
+  hostname: "cache.local"
+  database-url: "sqlite:/storage/db.sqlite"
+  secret-key-path: "/keys/ncps-secret-key"
+  sign-narinfo: true
+  storage:
+    local: "/storage"
+  upstream:
+    urls:
+      - https://cache.nixos.org
+    public-keys:
+      - cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+server:
+  addr: "0.0.0.0:8501"

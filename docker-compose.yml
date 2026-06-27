@@ -132,6 +132,36 @@ services:
         condition: service_completed_successfully
     networks: [tngl]
 
+  ncps-migrate:
+    image: &ncps-image ghcr.io/kalbasit/ncps:v0.9.4
+    profiles: ["linux"]
+    restart: "no"
+    command:
+      - /bin/dbmate
+      - --migrations-dir=/share/ncps/db/migrations/sqlite
+      - --no-dump-schema
+      - --url=sqlite:/storage/db.sqlite
+      - up
+    volumes:
+      - ncps-data:/storage
+    networks: [tngl]
+
+  ncps:
+    image: *ncps-image
+    profiles: ["linux"]
+    restart: unless-stopped
+    environment:
+      ANALYTICS_REPORTING_ENABLED: "false"
+    command: ["/bin/ncps", "serve", "--config", "/etc/ncps/ncps.yaml"]
+    volumes:
+      - ncps-data:/storage
+      - ./localinfra/ncps.yaml:/etc/ncps/ncps.yaml:ro
+      - ./localinfra/ncps-secret-key:/keys/ncps-secret-key:ro
+    depends_on:
+      ncps-migrate:
+        condition: service_completed_successfully
+    networks: [tngl]
+
   spindle:
     profiles: ["linux"]
     build:
@@ -153,6 +183,12 @@ services:
       SPINDLE_MICROVM_PIPELINES_AGENT_PORT: "11240"
       SPINDLE_S3_LOG_BUCKET: ""
       SPINDLE_MICROVM_PIPELINES_ENABLE_CGROUPS: "false"
+      # route guest nix substitution + uploads through the local ncps cache.
+      # ncps re-signs on serve with cache.local's key, so the guest trusts the
+      # matching public key below (no signing happens in spindle itself).
+      SPINDLE_NIX_CACHE_READ_URLS: http://ncps:8501
+      SPINDLE_NIX_CACHE_TRUSTED_PUBLIC_KEYS: cache.local:F7YqpMzuBdILYd/v+wMZN2YKxCzliXQyFmeezOxw7rU=
+      SPINDLE_NIX_CACHE_UPLOAD_URL: http://ncps:8501/upload
     # these two are required for cgroups, uncomment if testing
     # privileged: true
     # cgroup: host
@@ -186,6 +222,8 @@ services:
         condition: service_started
       init-accounts:
         condition: service_completed_successfully
+      ncps:
+        condition: service_started
     networks: [tngl]
 
   knotmirror-tap:
@@ -327,6 +365,7 @@ volumes:
   knotmirror-data:
   spindle-data:
   spindle-logs:
+  ncps-data:
   init-state:
   go-cache:
   go-mod-cache:
