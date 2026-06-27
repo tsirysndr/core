@@ -2785,7 +2785,8 @@ network, you need to setup one of following:
 
 ## Commit is not marked as verified
 
-Presently, Tangled only supports SSH commit signatures.
+Tangled only supports SSH commit signatures. Ensure the SSH public key you use
+for signing is uploaded to Tangled.
 
 To sign commits using an SSH key with git:
 
