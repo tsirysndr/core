@@ -1,6 +1,8 @@
 use crate::command::{self, Spec};
 use crate::protocol::v1;
 use anyhow::{Context, Result};
+use nix::sys::signal::{self, Signal};
+use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fmt::Write as _;
@@ -160,36 +162,69 @@ fn write_file_atomic(path: impl AsRef<Path>, data: &[u8], mode: u32) -> Result<(
 const NIX_DAEMON_SOCKET: &str = "/nix/var/nix/daemon-socket/socket";
 
 async fn restart_nix_daemon() {
-    let systemd = Path::new(SYSTEMCTL_EXECUTABLE).exists();
-    let spec = if systemd {
-        Spec::new(SYSTEMCTL_EXECUTABLE)
+    if Path::new(SYSTEMCTL_EXECUTABLE).exists() {
+        let spec = Spec::new(SYSTEMCTL_EXECUTABLE)
             .args(["try-restart", "nix-daemon.service"])
-            .timeout(Duration::from_secs(5))
-    } else {
-        // on non-systemd we can just kill the daemon and it should restart
-        Spec::new("pkill")
-            .args(["-f", "nix-daemon"])
-            .timeout(Duration::from_secs(5))
-    };
+            .timeout(Duration::from_secs(5));
+        match command::run_capture(spec).await {
+            Ok(output) if output.success() => {}
+            Ok(output) => warn!(
+                exit_code = output.exit.exit_code,
+                error = ?output.exit.error,
+                output = %output.combined_lossy(),
+                "nix-daemon restart failed"
+            ),
+            Err(error) => warn!(%error, "nix-daemon restart failed"),
+        }
+        return;
+    }
 
-    match command::run_capture(spec).await {
-        Ok(output) if output.success() => {
-            if !systemd {
-                // init has to respawn the daemon before any step needs it
-                wait_for_nix_daemon_socket(Duration::from_secs(5)).await;
+    let old_pids = nix_daemon_pids();
+    if old_pids.is_empty() {
+        info!("no nix-daemon running, skipping restart");
+        return;
+    }
+    for pid in &old_pids {
+        if let Err(error) = signal::kill(*pid, Signal::SIGTERM) {
+            warn!(%error, pid = pid.as_raw(), "failed to signal nix-daemon");
+        }
+    }
+
+    // wait for nix daemon to be gone, kill is not sync
+    wait_pids_gone(&old_pids, Duration::from_secs(5)).await;
+    wait_for_nix_daemon_socket(Duration::from_secs(5)).await;
+}
+
+fn nix_daemon_pids() -> Vec<Pid> {
+    let self_pid = std::process::id();
+    let Ok(entries) = fs::read_dir("/proc") else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let pid = entry.file_name().to_str()?.parse::<i32>().ok()?;
+            if pid as u32 == self_pid {
+                return None;
             }
+            let comm = fs::read_to_string(entry.path().join("comm")).ok()?;
+            (comm.trim() == "nix-daemon").then(|| Pid::from_raw(pid))
+        })
+        .collect()
+}
+
+async fn wait_pids_gone(pids: &[Pid], timeout: Duration) {
+    let deadline = tokio::time::Instant::now() + timeout;
+    loop {
+        // signal 0 only checks for existence; Err (ESRCH) means it's gone
+        if !pids.iter().any(|pid| signal::kill(*pid, None).is_ok()) {
+            return;
         }
-        // pkill exits 1 when nothing matched, ie. no daemon to restart
-        Ok(output) if !systemd && output.exit.exit_code == 1 => {
-            info!("no nix-daemon running, skipping restart")
+        if tokio::time::Instant::now() >= deadline {
+            warn!("old nix-daemon did not exit before restart timeout");
+            return;
         }
-        Ok(output) => warn!(
-            exit_code = output.exit.exit_code,
-            error = ?output.exit.error,
-            output = %output.combined_lossy(),
-            "nix-daemon restart failed"
-        ),
-        Err(error) => warn!(%error, "nix-daemon restart failed"),
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
 }
 
