@@ -2,6 +2,7 @@
   pkgs,
   lib,
   options,
+  config,
   ...
 } @ args: let
   configPath = /run/spindle/user-config/config.json;
@@ -103,6 +104,11 @@
     name = "spindle-deps";
     packages = map resolvePackage dependencies;
   };
+  spindleDevEnv = spindleDevShell.overrideAttrs (_: {
+    name = "spindle-deps-env";
+    # materialize the devshell like how nix print-dev-env does internally
+    args = ["${config.nix.package.src}/src/nix/get-env.sh"];
+  });
 in {
   nix.registry = builtins.mapAttrs (name: _:
     lib.mkForce {
@@ -112,12 +118,8 @@ in {
       };
     })
   registry;
-  # put the devshell into the resulting image env.
-  # we do this instead of using a `.nix` file because it lets us skip eval time.
   environment.etc = lib.mkIf (dependencies != []) {
-    # this is safe because we have the closure in the env also!
-    "spindle/devshell-drv".text = builtins.unsafeDiscardStringContext spindleDevShell.drvPath;
-    "spindle/devshell-closure".source = pkgs.closureInfo {rootPaths = [spindleDevShell];};
+    "spindle/devshell-drv".text = "${spindleDevEnv}";
   };
   services = builtins.mapAttrs (normalize (options.services or {})) (userConfig.services or {});
   virtualisation = builtins.mapAttrs (normalize (options.virtualisation or {})) (userConfig.virtualisation or {});

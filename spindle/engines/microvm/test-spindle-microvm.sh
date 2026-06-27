@@ -632,9 +632,8 @@ test_activation_dependencies() {
     # dependencies live in the activation devshell now, not systemPackages, so a
     # step picks them up by sourcing the materialised env (this is what the
     # engine's RunStep does automatically; the CLI runner does not, so we do it
-    # here).
-    local out
-    out=$(run_vm --name "activation-dependencies" --timeout "600s" --activate "$config" -- /run/current-system/sw/bin/bash -l -c '
+    # here). this script is reused across the build and cache-hit runs below.
+    local job='
 env_file=/run/spindle/devshell-env.sh
 [ -f "$env_file" ] && echo "env_file=present" || echo "env_file=missing"
 
@@ -655,12 +654,30 @@ echo "includedir=$inc"
 
 # flakeref + aliased deps
 echo "hello=$(hello)"
-') || return 1
+'
+
+    local db_path="$TEMP_DIR/activation-dependencies.db"
+
+    # first run: build the config, materialise the devshell env profile, upload
+    # its closure, and record both toplevel + env profile in the db.
+    local out
+    out=$(run_vm --name "activation-dependencies" --timeout "600s" --activate "$config" --db "$db_path" --upload -- /run/current-system/sw/bin/bash -l -c "$job") || return 1
 
     check_needles "$out" \
         "env_file=present" "pkgconfig=[0-9]" "openssl_found=yes" \
         "openssl_version=[0-9]" "dev_headers=found" "hello=Hello, world!" || return 1
     echo "success: bare (pkg-config + openssl, dev headers found via PKG_CONFIG_PATH), flakeref, and aliased deps all resolved"
+
+    # second run: same config + db, no upload. the devshell .drv is absent (no
+    # eval happens on a cache hit), so the env must be re-read from the cached
+    # env profile. the deps must still resolve exactly as on the build run.
+    out=$(run_vm --name "activation-dependencies-cached" --timeout "300s" --activate "$config" --db "$db_path" -- /run/current-system/sw/bin/bash -l -c "$job") || return 1
+
+    check_needles "$out" \
+        "realizing cached NixOS config" \
+        "env_file=present" "pkgconfig=[0-9]" "openssl_found=yes" \
+        "openssl_version=[0-9]" "dev_headers=found" "hello=Hello, world!" || return 1
+    echo "success: cache-hit run re-read the devshell env from the cached profile (no drv) and all deps resolved"
 }
 
 test_activation_registry_pin() {
