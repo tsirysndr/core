@@ -69,10 +69,14 @@
     modprobe vsock_loopback
     modprobe ext4
 
-    # /dev/vda is the squashfs root; the first spindle volume backs /workspace
     if [ -b /dev/vdb ]; then
+      # setup disk backed nix store
       mount -t ext4 /dev/vdb /workspace
       install -d -o spindle-workflow -g spindle-workflow /workspace /workspace/repo
+      install -d /workspace/.nix/rw-store /workspace/.nix/rw-store-work /workspace/.nix/build
+      mount -t overlay overlay \
+        -o lowerdir=/nix/store,upperdir=/workspace/.nix/rw-store,workdir=/workspace/.nix/rw-store-work \
+        /nix/store
     fi
 
     ip link set lo up
@@ -84,7 +88,7 @@
 
   inittab = writeText "inittab" ''
     ::sysinit:/sbin/spindle-setup
-    ::respawn:/usr/local/bin/nix-daemon
+    ::respawn:env TMPDIR=/workspace/.nix/build /usr/local/bin/nix-daemon
     ::respawn:env NIX_REMOTE=daemon /usr/bin/shuttle
     ::ctrlaltdel:/sbin/reboot
   '';
@@ -101,6 +105,8 @@
     trusted-users = root
     allowed-users = spindle-workflow
     post-build-hook = /usr/libexec/spindle-post-build-hook
+    # keep build sandboxes on the /workspace disk, not the RAM-backed root tmpfs
+    build-dir = /workspace/.nix/build
     !include /run/spindle/nix.conf
   '';
 
