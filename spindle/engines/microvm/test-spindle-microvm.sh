@@ -814,6 +814,39 @@ echo "ran=$("$hello_path/bin/hello")"
     echo "success: alpine guest booted, ran as workflow user, wrote workspace, cloned + installed over the network, and substituted+ran a package from cache.nixos.org over HTTPS"
 }
 
+test_alpine_podman() {
+    # install podman via apk and run a real container as the workflow user.
+    # rootless podman lives entirely in the writable workspace (storage + runroot
+    # under XDG dirs there), uses podman's default storage driver, and pulls over
+    # the guest network like the other alpine tests.
+    local out
+    out=$(run_vm --spec "$ALPINE_IMAGE_SPEC_JSON" --name "alpine-podman" --timeout "300s" --no-cache -- /bin/sh -lc '
+set -eu
+# no env setup here on purpose: shuttle seeds USER/LOGNAME/HOME/SHELL from the
+# workflow users passwd entry and provisions XDG_RUNTIME_DIR, so rootless podman
+# works out of the box. asserting those below doubles as a check on that.
+
+# shadow-uidmap ships newuidmap/newgidmap which rootless podman uses to apply the
+# /etc/subuid + /etc/subgid ranges baked into the image.
+apk add podman shadow-uidmap
+echo "user=$(id -un) USER=$USER HOME=$HOME XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
+echo "newuidmap=$(command -v newuidmap)"
+echo "podman_version=$(podman --version)"
+
+podman info >/dev/null
+echo "storage_driver=$(podman info --format "{{.Store.GraphDriverName}}")"
+
+podman run --rm --network=host docker.io/library/alpine cat /etc/alpine-release | sed "s/^/container_release=/"
+podman run --rm --network=host docker.io/library/alpine echo container-ran-ok
+' sh) || return 1
+
+    check_needles "$out" \
+        "user=spindle-workflow USER=spindle-workflow HOME=/workspace XDG_RUNTIME_DIR=/run/user/970" \
+        "newuidmap=/" "podman_version=" \
+        "storage_driver=" "container_release=[0-9]+\." "container-ran-ok" || return 1
+    echo "success: alpine guest installed podman via apk and pulled + ran a rootless container"
+}
+
 # asserts a store path's narinfo shows up in the local cache, retrying briefly
 # since the post-build-hook enqueues uploads asynchronously.
 cache_has_path() {
@@ -914,6 +947,7 @@ echo "old_path=$old_path"
 TESTS=(
     test_alpine
     test_alpine_nix
+    test_alpine_podman
     test_realize
     test_build_upload
     test_ssh_store_upload

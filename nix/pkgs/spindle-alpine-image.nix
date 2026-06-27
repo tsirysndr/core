@@ -40,15 +40,26 @@
     mountpoint -q /sys || mount -t sysfs sys /sys
     mountpoint -q /dev || mount -t devtmpfs dev /dev
     mountpoint -q /dev/pts || {
-      mkdir -p /dev/pts
+      install -d /dev/pts
       mount -t devpts devpts /dev/pts
     }
     mountpoint -q /dev/shm || {
-      mkdir -p /dev/shm
+      install -d /dev/shm
       mount -t tmpfs -o mode=1777 shm /dev/shm
     }
     mountpoint -q /run || mount -t tmpfs -o mode=0755 run /run
     mountpoint -q /tmp || mount -t tmpfs -o mode=1777 tmp /tmp
+
+    # setup xdg runtime dir, podman eg. needs it
+    install -d -m 0700 -o spindle-workflow -g spindle-workflow /run/user/970
+
+    # cgroup2 setup, normally we would do this with rc-service
+    # but minirootfs does not ship with those so we set it up ourselves.
+    mountpoint -q /sys/fs/cgroup || {
+      install -d /sys/fs/cgroup
+      mount -t cgroup2 -o nsdelegate cgroup2 /sys/fs/cgroup
+      chown -R spindle-workflow:spindle-workflow /sys/fs/cgroup 2>/dev/null || true
+    }
 
     # the initramfs mdev leaves these 0660, which breaks non-root workflows
     chmod 666 /dev/null /dev/zero /dev/full /dev/random /dev/urandom /dev/tty /dev/ptmx 2>/dev/null
@@ -61,8 +72,7 @@
     # /dev/vda is the squashfs root; the first spindle volume backs /workspace
     if [ -b /dev/vdb ]; then
       mount -t ext4 /dev/vdb /workspace
-      mkdir -p /workspace/repo
-      chown spindle-workflow:spindle-workflow /workspace /workspace/repo
+      install -d -o spindle-workflow -g spindle-workflow /workspace /workspace/repo
     fi
 
     ip link set lo up
@@ -207,6 +217,13 @@ in
     echo "spindle-workflow:x:970:" >> rootfs/etc/group
     echo "spindle-workflow:!::0:::::" >> rootfs/etc/shadow
     mkdir -p rootfs/workspace
+
+    # subordinate id ranges so the workflow user can run rootless containers
+    # (podman/buildah): without these, user-namespace id mapping falls back to a
+    # single 970->0 map and any layer that chowns to another uid fails. the range
+    # is well clear of 970 and the 30000-block nixbld users.
+    echo "spindle-workflow:100000:65536" >> rootfs/etc/subuid
+    echo "spindle-workflow:100000:65536" >> rootfs/etc/subgid
 
     # setup nix build users for the daemon
     members=""

@@ -2,9 +2,10 @@ use crate::command::{self, OutKind, Spec};
 use crate::protocol::{self, Message, v1};
 use nix::unistd::{Group, User};
 use std::ffi::OsString;
+use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::mpsc::Sender;
-use tracing::info;
+use tracing::{info, warn};
 
 const DEFAULT_USER: &str = "spindle-workflow";
 
@@ -40,8 +41,20 @@ pub async fn run(id: String, req: v1::ExecStart, out: Sender<Message>) {
         }
     };
 
+    let mut env = run_as.login_env();
+    let runtime_dir = run_as.runtime_dir();
+    match runtime_dir.try_exists() {
+        Ok(true) => env.push((
+            OsString::from("XDG_RUNTIME_DIR"),
+            runtime_dir.into_os_string(),
+        )),
+        Ok(false) => {}
+        Err(err) => warn!(error = %err, "could not stat XDG_RUNTIME_DIR for workflow user"),
+    }
+
     let mut spec = Spec::new(req.argv[0].clone())
         .args(req.argv[1..].iter().cloned())
+        .envs(env)
         .envs(parse_env(&req.env))
         .run_as(run_as.uid, run_as.gid);
     if !req.cwd.is_empty() {
@@ -106,6 +119,23 @@ struct ResolvedUser {
     name: String,
     uid: u32,
     gid: u32,
+    home: OsString,
+    shell: OsString,
+}
+
+impl ResolvedUser {
+    fn login_env(&self) -> Vec<(OsString, OsString)> {
+        vec![
+            (OsString::from("USER"), OsString::from(&self.name)),
+            (OsString::from("LOGNAME"), OsString::from(&self.name)),
+            (OsString::from("HOME"), self.home.clone()),
+            (OsString::from("SHELL"), self.shell.clone()),
+        ]
+    }
+
+    fn runtime_dir(&self) -> PathBuf {
+        PathBuf::from(format!("/run/user/{}", self.uid))
+    }
 }
 
 fn resolve_user(spec: &str) -> Result<ResolvedUser, String> {
@@ -137,6 +167,8 @@ fn lookup_user(name: &str) -> Result<ResolvedUser, String> {
             name: name.to_owned(),
             uid: user.uid.as_raw(),
             gid: user.gid.as_raw(),
+            home: user.dir.into_os_string(),
+            shell: user.shell.into_os_string(),
         }),
         Ok(None) => {
             let uid = name
@@ -146,6 +178,8 @@ fn lookup_user(name: &str) -> Result<ResolvedUser, String> {
                 name: name.to_owned(),
                 uid,
                 gid: uid,
+                home: OsString::from("/"),
+                shell: OsString::from("/bin/sh"),
             })
         }
         Err(error) => Err(format!("lookup workflow user {name:?}: {error}")),
