@@ -1203,7 +1203,11 @@ func (t *CiDefs_Workflow) MarshalCBOR(w io.Writer) error {
 	}
 
 	cw := cbg.NewCborWriter(w)
-	fieldCount := 5
+	fieldCount := 6
+
+	if t.Error == nil {
+		fieldCount--
+	}
 
 	if t.FinishedAt == nil {
 		fieldCount--
@@ -1261,6 +1265,38 @@ func (t *CiDefs_Workflow) MarshalCBOR(w io.Writer) error {
 	}
 	if _, err := cw.WriteString(string(t.Name)); err != nil {
 		return err
+	}
+
+	// t.Error (string) (string)
+	if t.Error != nil {
+
+		if len("error") > 1000000 {
+			return xerrors.Errorf("Value in field \"error\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("error"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("error")); err != nil {
+			return err
+		}
+
+		if t.Error == nil {
+			if _, err := cw.Write(cbg.CborNull); err != nil {
+				return err
+			}
+		} else {
+			if len(*t.Error) > 1000000 {
+				return xerrors.Errorf("Value in field t.Error was too long")
+			}
+
+			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(*t.Error))); err != nil {
+				return err
+			}
+			if _, err := cw.WriteString(string(*t.Error)); err != nil {
+				return err
+			}
+		}
 	}
 
 	// t.Status (string) (string)
@@ -1414,6 +1450,27 @@ func (t *CiDefs_Workflow) UnmarshalCBOR(r io.Reader) (err error) {
 				}
 
 				t.Name = string(sval)
+			}
+			// t.Error (string) (string)
+		case "error":
+
+			{
+				b, err := cr.ReadByte()
+				if err != nil {
+					return err
+				}
+				if b != cbg.CborNull[0] {
+					if err := cr.UnreadByte(); err != nil {
+						return err
+					}
+
+					sval, err := cbg.ReadStringWithMax(cr, 1000000)
+					if err != nil {
+						return err
+					}
+
+					t.Error = (*string)(&sval)
+				}
 			}
 			// t.Status (string) (string)
 		case "status":

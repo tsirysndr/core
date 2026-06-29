@@ -74,6 +74,7 @@ func (t *CiDefs_Pipeline_Trigger) UnmarshalJSON(b []byte) error {
 
 // CiDefs_Workflow is a "workflow" in the sh.tangled.ci.defs schema.
 type CiDefs_Workflow struct {
+	Error      *string `json:"error,omitempty" cborgen:"error,omitempty"`
 	FinishedAt *string `json:"finishedAt,omitempty" cborgen:"finishedAt,omitempty"`
 	// id: Spindle-local workflow id. Unique per pipeline, usually same as name.
 	Id string `json:"id" cborgen:"id"`

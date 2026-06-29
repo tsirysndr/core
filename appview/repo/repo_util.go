@@ -88,13 +88,13 @@ func balanceIndexItems(commitCount, branchCount, tagCount, fileCount int) (commi
 	return
 }
 
-// fetch pipelines from DB and map by commit sha
+// fetch pipelines from spindle and map by commit sha
 func getPipelineStatuses(
 	ctx context.Context,
 	repo *models.Repo,
 	shas []string,
-) (map[string]*tangled.CiDefs_Pipeline, error) {
-	m := make(map[string]*tangled.CiDefs_Pipeline)
+) (map[string]types.Pipeline, error) {
+	m := make(map[string]types.Pipeline)
 
 	if len(shas) == 0 {
 		return m, nil
@@ -106,7 +106,7 @@ func getPipelineStatuses(
 
 	spindleUrl, err := hostutil.EnsureHttpScheme(repo.Spindle)
 	if err != nil {
-		return m, nil // Don't block repo rendering on bad spindle configuration
+		return m, nil
 	}
 
 	xrpcc := &indigoxrpc.Client{Host: spindleUrl}
@@ -116,7 +116,7 @@ func getPipelineStatuses(
 	}
 
 	for _, p := range out.Pipelines {
-		m[p.Commit] = p
+		m[p.Commit] = types.Pipeline{CiDefs_Pipeline: p}
 	}
 
 	return m, nil

@@ -161,8 +161,8 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 	}
 
 	// commitId -> latest pipeline
-	pipelines := func(ctx context.Context) map[string]tangled.CiDefs_Pipeline {
-		m := make(map[string]tangled.CiDefs_Pipeline)
+	pipelines := func(ctx context.Context) map[string]types.Pipeline {
+		m := make(map[string]types.Pipeline)
 		if f.Spindle == "" {
 			return m
 		}
@@ -182,7 +182,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 			if pipeline == nil {
 				continue
 			}
-			m[pipeline.Commit] = *pipeline
+			m[pipeline.Commit] = types.Pipeline{CiDefs_Pipeline: pipeline}
 		}
 		return m
 	}(r.Context())

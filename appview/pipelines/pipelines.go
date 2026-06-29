@@ -20,6 +20,7 @@ import (
 	"tangled.org/core/lexutil"
 	"tangled.org/core/orm"
 	"tangled.org/core/rbac"
+	"tangled.org/core/types"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
@@ -122,7 +123,7 @@ func (p *Pipelines) Index(w http.ResponseWriter, r *http.Request) {
 
 	// sh.tangled.ci.queryPipelines(repo, kind, limit=30)
 	xrpcc := indigoxrpc.Client{Host: spindleUrl}
-	out, err := tangled.CiQueryPipelines(r.Context(), &xrpcc, nil, "", 1, f.RepoDid)
+	out, err := tangled.CiQueryPipelines(r.Context(), &xrpcc, nil, "", 30, f.RepoDid)
 	if err != nil {
 		l.Error("failed to fetch pipelines", "err", err)
 		p.pages.Pipelines(w, pages.PipelinesParams{
@@ -135,10 +136,15 @@ func (p *Pipelines) Index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var pipelines []types.Pipeline
+	for _, pipeline := range out.Pipelines {
+		pipelines = append(pipelines, types.Pipeline{CiDefs_Pipeline: pipeline})
+	}
+
 	p.pages.Pipelines(w, pages.PipelinesParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:   p.repoResolver.GetRepoInfo(r, user),
-		Pipelines:  out.Pipelines,
+		Pipelines:  pipelines,
 		FilterKind: filterKind,
 		Total:      out.Total,
 	})
@@ -212,7 +218,7 @@ func (p *Pipelines) Workflow(w http.ResponseWriter, r *http.Request) {
 	p.pages.Workflow(w, pages.WorkflowParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:   p.repoResolver.GetRepoInfo(r, user),
-		Pipeline:   out,
+		Pipeline:   types.Pipeline{CiDefs_Pipeline: out},
 		Workflow:   workflowName,
 	})
 }
@@ -357,6 +363,8 @@ func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 				if err := <-done; !isExpectedClose(err) {
 					l.Error("spindle stream error", "err", err)
 				}
+				msg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, "finished")
+				_ = clientConn.WriteMessage(websocket.CloseMessage, msg)
 				return
 			}
 

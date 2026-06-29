@@ -16,6 +16,7 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"tangled.org/core/hostutil"
+	"tangled.org/core/types"
 )
 
 func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
@@ -264,8 +265,8 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// commitId -> latest pipeline
-	pipelines := func(ctx context.Context, shas []string) map[string]tangled.CiDefs_Pipeline {
-		m := make(map[string]tangled.CiDefs_Pipeline)
+	pipelines := func(ctx context.Context, shas []string) map[string]types.Pipeline {
+		m := make(map[string]types.Pipeline)
 		if f.Spindle == "" {
 			return m
 		}
@@ -285,7 +286,7 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 			if pipeline == nil {
 				continue
 			}
-			m[pipeline.Commit] = *pipeline
+			m[pipeline.Commit] = types.Pipeline{CiDefs_Pipeline: pipeline}
 		}
 		return m
 	}(r.Context(), shas)

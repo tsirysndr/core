@@ -254,9 +254,9 @@ func (rp *Repo) Commit(w http.ResponseWriter, r *http.Request) {
 		l.Error("failed to getPipelineStatuses", "err", err)
 		// non-fatal
 	}
-	var pipeline *tangled.CiDefs_Pipeline
+	var pipeline *types.Pipeline
 	if p, ok := pipelines[result.Diff.Commit.This]; ok {
-		pipeline = p
+		pipeline = &p
 	}
 
 	rp.pages.RepoCommit(w, pages.RepoCommitParams{

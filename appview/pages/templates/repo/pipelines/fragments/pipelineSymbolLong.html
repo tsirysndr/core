@@ -1,7 +1,7 @@
 {{ define "repo/pipelines/fragments/pipelineSymbolLong" }}
   {{ $pipeline := .Pipeline }}
   {{ $repoinfo := .RepoInfo }}
-  {{ $popoverId := printf "pipeline-status-%d" $pipeline.Id }}
+  {{ $popoverId := printf "pipeline-status-%s" $pipeline.Id }}
   
   <div class="relative inline-block">
     <button

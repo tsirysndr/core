@@ -73,8 +73,10 @@
                 <!-- ci status -->
                 <span class="text-xs">
                   {{ $pipeline := index $.Pipelines .Hash.String }}
-                  {{ if and $pipeline (gt (len $pipeline.Statuses) 0) }}
-                    {{ template "repo/pipelines/fragments/pipelineSymbolLong" (dict "Pipeline" $pipeline "RepoInfo" $.RepoInfo) }}
+                  {{ if $pipeline }}
+                    {{ if gt (len $pipeline.Statuses) 0 }}
+                      {{ template "repo/pipelines/fragments/pipelineSymbolLong" (dict "Pipeline" $pipeline "RepoInfo" $.RepoInfo) }}
+                    {{ end }}
                   {{ end }}
                 </span>
             </div>
@@ -157,11 +159,13 @@
 
                     <!-- ci status -->
                     {{ $pipeline := index $.Pipelines .Hash.String }}
-                    {{ if and $pipeline (gt (len $pipeline.Statuses) 0) }}
-                      <div class="inline-block px-1 select-none after:content-['·']"></div>
-                      <span class="text-sm">
-                        {{ template "repo/pipelines/fragments/pipelineSymbolLong" (dict "Pipeline" $pipeline "RepoInfo" $.RepoInfo) }}
-                      </span>
+                    {{ if $pipeline }}
+                      {{ if gt (len $pipeline.Statuses) 0 }}
+                        <div class="inline-block px-1 select-none after:content-['·']"></div>
+                        <span class="text-sm">
+                          {{ template "repo/pipelines/fragments/pipelineSymbolLong" (dict "Pipeline" $pipeline "RepoInfo" $.RepoInfo) }}
+                        </span>
+                      {{ end }}
                     {{ end }}
                 </div>
             </div>

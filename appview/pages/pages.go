@@ -242,7 +242,11 @@ func (p *Pages) executePlain(name string, w io.Writer, params any) error {
 		return err
 	}
 
-	return tpl.Execute(w, params)
+	err = tpl.Execute(w, params)
+	if err != nil {
+		p.logger.Error("failed to execute template", "template", name, "err", err)
+	}
+	return err
 }
 
 func (p *Pages) executeLogin(name string, w io.Writer, params any) error {
@@ -251,7 +255,11 @@ func (p *Pages) executeLogin(name string, w io.Writer, params any) error {
 		return err
 	}
 
-	return tpl.ExecuteTemplate(w, "layouts/base", params)
+	err = tpl.ExecuteTemplate(w, "layouts/base", params)
+	if err != nil {
+		p.logger.Error("failed to execute login template", "template", name, "err", err)
+	}
+	return err
 }
 
 func (p *Pages) execute(name string, w io.Writer, params any) error {
@@ -260,7 +268,11 @@ func (p *Pages) execute(name string, w io.Writer, params any) error {
 		return err
 	}
 
-	return tpl.ExecuteTemplate(w, "layouts/base", params)
+	err = tpl.ExecuteTemplate(w, "layouts/base", params)
+	if err != nil {
+		p.logger.Error("failed to execute template", "template", name, "err", err)
+	}
+	return err
 }
 
 func (p *Pages) executeRepo(name string, w io.Writer, params any) error {
@@ -269,7 +281,11 @@ func (p *Pages) executeRepo(name string, w io.Writer, params any) error {
 		return err
 	}
 
-	return tpl.ExecuteTemplate(w, "layouts/base", params)
+	err = tpl.ExecuteTemplate(w, "layouts/base", params)
+	if err != nil {
+		p.logger.Error("failed to execute repo template", "template", name, "err", err)
+	}
+	return err
 }
 
 func (p *Pages) executeProfile(name string, w io.Writer, params any) error {
@@ -278,7 +294,11 @@ func (p *Pages) executeProfile(name string, w io.Writer, params any) error {
 		return err
 	}
 
-	return tpl.ExecuteTemplate(w, "layouts/base", params)
+	err = tpl.ExecuteTemplate(w, "layouts/base", params)
+	if err != nil {
+		p.logger.Error("failed to execute profile template", "template", name, "err", err)
+	}
+	return err
 }
 
 type DollyParams struct {
@@ -891,7 +911,7 @@ type RepoIndexParams struct {
 	EmailToDid       map[string]string
 	VerifiedCommits  commitverify.VerifiedCommits
 	Languages        []types.RepoLanguageDetails
-	Pipelines        map[string]*tangled.CiDefs_Pipeline
+	Pipelines        map[string]types.Pipeline
 	NeedsKnotUpgrade bool
 	KnotUnreachable  bool
 	types.RepoIndexResponse
@@ -960,7 +980,7 @@ type RepoLogParams struct {
 	Active          string
 	EmailToDid      map[string]string
 	VerifiedCommits commitverify.VerifiedCommits
-	Pipelines       map[string]*tangled.CiDefs_Pipeline
+	Pipelines       map[string]types.Pipeline
 
 	types.RepoLogResponse
 }
@@ -975,7 +995,7 @@ type RepoCommitParams struct {
 	RepoInfo   repoinfo.RepoInfo
 	Active     string
 	EmailToDid map[string]string
-	Pipeline   *tangled.CiDefs_Pipeline
+	Pipeline   *types.Pipeline
 	DiffOpts   types.DiffOpts
 
 	// singular because it's always going to be just one
@@ -1376,7 +1396,7 @@ type RepoPullsParams struct {
 	FilterQuery        string
 	BaseFilterQuery    string
 	Stacks             []models.Stack
-	Pipelines          map[string]tangled.CiDefs_Pipeline
+	Pipelines          map[string]types.Pipeline
 	LabelDefs          map[string]*models.LabelDefinition
 	Page               pagination.Page
 	PullCount          int
@@ -1416,7 +1436,7 @@ type RepoSinglePullParams struct {
 	BranchDeleteStatus *models.BranchDeleteStatus
 	MergeCheck         types.MergeCheckResponse
 	ResubmitCheck      ResubmitResult
-	Pipelines          map[string]tangled.CiDefs_Pipeline
+	Pipelines          map[string]types.Pipeline
 	Diff               types.DiffRenderer
 	DiffOpts           types.DiffOpts
 	ActiveRound        int
@@ -1588,7 +1608,7 @@ func (p *Pages) RepoForks(w io.Writer, params RepoForksParams) error {
 type PipelinesParams struct {
 	BaseParams
 	RepoInfo   repoinfo.RepoInfo
-	Pipelines  []*tangled.CiDefs_Pipeline
+	Pipelines  []types.Pipeline
 	Active     string
 	FilterKind string
 	Total      int64
@@ -1642,7 +1662,7 @@ func (p *Pages) WorkflowSymbolOOB(w io.Writer, params WorkflowSymbolOOBParams) e
 type WorkflowParams struct {
 	BaseParams
 	RepoInfo repoinfo.RepoInfo
-	Pipeline *tangled.CiDefs_Pipeline
+	Pipeline types.Pipeline
 	Workflow string
 	LogUrl   string
 	Active   string

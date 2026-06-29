@@ -162,7 +162,7 @@ func (d *DB) mapToCiDefsPipeline(ctx context.Context, rkey string, created int64
 	var workflows []*tangled.CiDefs_Workflow
 	for _, wf := range raw.Workflows {
 		status := "pending"
-		var startedAt, finishedAt *string
+		var startedAt, finishedAt, wfError *string
 
 		if raw.TriggerMetadata != nil && raw.TriggerMetadata.Repo != nil {
 			wfId := models.WorkflowId{
@@ -177,6 +177,7 @@ func (d *DB) mapToCiDefsPipeline(ctx context.Context, rkey string, created int64
 			if err == nil && wfStatus != nil {
 				status = wfStatus.Status
 				startedAt, finishedAt = d.GetWorkflowTimes(wfId)
+				wfError = wfStatus.Error
 			}
 		}
 
@@ -186,6 +187,7 @@ func (d *DB) mapToCiDefsPipeline(ctx context.Context, rkey string, created int64
 			Status:     status,
 			StartedAt:  startedAt,
 			FinishedAt: finishedAt,
+			Error:      wfError,
 		})
 	}
 
