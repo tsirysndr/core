@@ -197,7 +197,7 @@ exists, so most "just turn this on" services are a one-liner!)
 
 ## The architecture
 
-![](https://assets.tangled.network/blog/microvm/diagram2.png)
+![](https://assets.tangled.network/blog/microvm/diagram3.png)
 
 ### Nix cache, both ways
 
