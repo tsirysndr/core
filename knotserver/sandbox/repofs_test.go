@@ -29,13 +29,14 @@ func TestChmodRepoTree(t *testing.T) {
 
 	cases := []struct {
 		path     string
-		wantMode os.FileMode
+		wantPerm os.FileMode
+		wantDir  bool
 	}{
-		{root, 0770},
-		{filepath.Join(root, "file.txt"), 0660},
-		{filepath.Join(root, "script.sh"), 0770},
-		{filepath.Join(root, "subdir"), 0770},
-		{filepath.Join(root, "subdir", "nested.txt"), 0660},
+		{root, 0770, true},
+		{filepath.Join(root, "file.txt"), 0660, false},
+		{filepath.Join(root, "script.sh"), 0770, false},
+		{filepath.Join(root, "subdir"), 0770, true},
+		{filepath.Join(root, "subdir", "nested.txt"), 0660, false},
 	}
 	for _, c := range cases {
 		info, err := os.Stat(c.path)
@@ -43,8 +44,38 @@ func TestChmodRepoTree(t *testing.T) {
 			t.Errorf("stat %s: %v", c.path, err)
 			continue
 		}
-		if got := info.Mode().Perm(); got != c.wantMode {
-			t.Errorf("%s: mode = %o, want %o", c.path, got, c.wantMode)
+		if got := info.Mode().Perm(); got != c.wantPerm {
+			t.Errorf("%s: perm = %o, want %o", c.path, got, c.wantPerm)
+		}
+		setgid := info.Mode()&os.ModeSetgid != 0
+		if c.wantDir && !setgid {
+			t.Errorf("%s: setgid bit not set on directory", c.path)
+		}
+		if !c.wantDir && setgid {
+			t.Errorf("%s: setgid bit set on non-directory", c.path)
+		}
+	}
+}
+
+func TestChmodRepoTree_SetsSetgidOnExistingDirs(t *testing.T) {
+	// Directories that already exist without the setgid bit should have it
+	// applied by the chmod walk; otherwise, files later created inside them
+	// by sandbox subprocesses would not inherit the directory's group.
+	root := t.TempDir()
+	mustMkdir(t, filepath.Join(root, "objects"), 0755)
+	mustMkdir(t, filepath.Join(root, "refs", "heads"), 0755)
+
+	if err := ChmodRepoTree(root); err != nil {
+		t.Fatalf("ChmodRepoTree: %v", err)
+	}
+
+	for _, p := range []string{root, filepath.Join(root, "objects"), filepath.Join(root, "refs"), filepath.Join(root, "refs", "heads")} {
+		info, err := os.Stat(p)
+		if err != nil {
+			t.Fatalf("stat %s: %v", p, err)
+		}
+		if info.Mode()&os.ModeSetgid == 0 {
+			t.Errorf("%s: setgid bit not set", p)
 		}
 	}
 }

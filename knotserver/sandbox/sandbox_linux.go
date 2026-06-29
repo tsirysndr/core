@@ -60,17 +60,27 @@ func (l *LandlockBackend) WrapMulti(paths []string, cmd *exec.Cmd) (*exec.Cmd, e
 	wrapped.Stderr = cmd.Stderr
 
 	// drop to the virtual UID if we can resolve one. the kernel handles
-	// fork -> setresuid -> chdir -> execve; requires CAP_SETUID/GID on the caller.
+	// fork -> setgroups -> setresgid -> setresuid -> chdir -> execve;
+	// requires CAP_SETUID/CAP_SETGID on the caller.
 	//
 	// the primary GID is intentionally set to the virtual UID, NOT the
 	// repo's group ownership. repo dirs are owned by virtualUID:gitGroup
 	// with mode 0770 so the knot service (in gitGroup) can read them, but
 	// sandbox subprocesses must not inherit gitGroup or they would gain
 	// group access to every other repo and lose cross-owner isolation.
+	//
+	// Groups is an empty (non-nil) slice and NoSetGroups is false so the
+	// kernel calls setgroups(0, NULL) and clears supplementary groups.
+	// NoSetGroups: true would skip setgroups entirely and the subprocess
+	// would inherit the parent's supplementary groups (including gitGroup).
 	if l.lookup != nil {
 		if uid, _, err := l.lookup(paths[0]); err == nil && uid > 0 {
 			wrapped.SysProcAttr = &syscall.SysProcAttr{
-				Credential: &syscall.Credential{Uid: uid, Gid: uid, NoSetGroups: true},
+				Credential: &syscall.Credential{
+					Uid:    uid,
+					Gid:    uid,
+					Groups: []uint32{},
+				},
 			}
 		}
 	}

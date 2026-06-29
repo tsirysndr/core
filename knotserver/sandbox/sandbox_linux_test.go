@@ -202,8 +202,14 @@ func TestLandlockBackend_WrapMulti_LookupSetsCredential(t *testing.T) {
 	if cred.Gid != 100042 {
 		t.Errorf("Credential.Gid = %d, want 100042 (must equal Uid, not lookup's gid 1234)", cred.Gid)
 	}
-	if !cred.NoSetGroups {
-		t.Error("NoSetGroups should be true")
+	// NoSetGroups must be false (the default) so the kernel calls
+	// setgroups(0, NULL) and clears supplementary groups. NoSetGroups: true
+	// would let the subprocess inherit the parent's groups (gitGroup).
+	if cred.NoSetGroups {
+		t.Error("NoSetGroups must be false so supplementary groups get cleared")
+	}
+	if len(cred.Groups) != 0 {
+		t.Errorf("Groups = %v, want empty (no supplementary groups granted)", cred.Groups)
 	}
 }
 

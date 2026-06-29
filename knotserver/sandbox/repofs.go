@@ -10,15 +10,21 @@ import (
 	"syscall"
 )
 
-// ChmodRepoTree sets directory modes to 0770 and file modes to 0660 under
-// root, preserving the executable bit on files (hook scripts need it).
-// Symlinks are skipped since their mode is not meaningful.
+// ChmodRepoTree sets directory modes to 2770 (with the setgid bit) and
+// file modes to 0660 under root, preserving the executable bit on files
+// (hook scripts need it). Symlinks are skipped since their mode is not
+// meaningful.
 //
 // The group bits exist so the knot service (running as the git user, which
 // is in the git group that owns the repos) can still read and write the
 // repo via group permissions even though the repo's UID owner is a virtual
-// UID. Sandbox subprocesses run with NoSetGroups: true so they don't gain
-// group access and cross-owner isolation still holds.
+// UID. Sandbox subprocesses drop supplementary groups so cross-owner
+// isolation still holds.
+//
+// The setgid bit on directories makes new files and subdirectories created
+// by sandbox subprocesses inherit the directory's group (the git group)
+// rather than the subprocess's primary group (the virtual UID). Without
+// it, sandbox-created files would be unreadable to the knot service.
 func ChmodRepoTree(root string) error {
 	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -28,7 +34,7 @@ func ChmodRepoTree(root string) error {
 			return nil
 		}
 		if d.IsDir() {
-			return os.Chmod(path, 0770)
+			return os.Chmod(path, 0770|os.ModeSetgid)
 		}
 		info, err := d.Info()
 		if err != nil {
