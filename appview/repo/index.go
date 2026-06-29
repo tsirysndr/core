@@ -3,6 +3,7 @@ package repo
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -27,6 +28,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-enry/go-enry/v2"
+	"github.com/samber/lo"
 )
 
 func (rp *Repo) Index(w http.ResponseWriter, r *http.Request) {
@@ -130,24 +132,35 @@ func (rp *Repo) Index(w http.ResponseWriter, r *http.Request) {
 			// non-fatal
 		} else if ref == "" { // when request didn't specified ref, we are fetching default branch.
 			if err := func(repo syntax.DID, ref string, langs []*tangled.GitTempListLanguages_Language) error {
+				current := lo.SliceToMap(langs, func(lang *tangled.GitTempListLanguages_Language) (string, int64) {
+					return lang.Name, lang.Size
+				})
+
+				existing, err := db.GetRepoLanguages(rp.db, repo, ref)
+				if err != nil {
+					return err
+				}
+				if maps.Equal(current, existing) {
+					return nil
+				}
+
 				tx, err := rp.db.Begin()
 				if err != nil {
 					return err
 				}
 				defer tx.Rollback()
 
-				var mlangs []models.RepoLanguage
-				for _, lang := range langs {
-					mlangs = append(mlangs, models.RepoLanguage{
+				mlangs := lo.Map(langs, func(lang *tangled.GitTempListLanguages_Language, _ int) models.RepoLanguage {
+					return models.RepoLanguage{
 						RepoDid:      repo,
 						Ref:          ref,
 						IsDefaultRef: true,
 						Language:     lang.Name,
 						Bytes:        lang.Size,
-					})
-				}
+					}
+				})
 
-				if err := db.UpdateRepoLanguages(tx, syntax.DID(f.RepoDid), ref, mlangs); err != nil {
+				if err := db.UpdateRepoLanguages(tx, repo, ref, mlangs); err != nil {
 					return err
 				}
 

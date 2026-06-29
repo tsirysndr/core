@@ -52,6 +52,29 @@ func DeleteRepoLanguages(e Execer, filters ...orm.Filter) error {
 	return err
 }
 
+func GetRepoLanguages(e Execer, repoDid syntax.DID, ref string) (map[string]int64, error) {
+	rows, err := e.Query(
+		`select language, bytes from repo_languages where repo_did = ? and ref = ?`,
+		repoDid, ref,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make(map[string]int64)
+	for rows.Next() {
+		var language string
+		var bytes int64
+		if err := rows.Scan(&language, &bytes); err != nil {
+			return nil, err
+		}
+		out[language] = bytes
+	}
+
+	return out, rows.Err()
+}
+
 func UpdateRepoLanguages(tx *sql.Tx, repoDid syntax.DID, ref string, langs []models.RepoLanguage) error {
 	err := DeleteRepoLanguages(
 		tx,

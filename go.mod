@@ -63,6 +63,7 @@ require (
 	github.com/prometheus/procfs v0.19.2
 	github.com/redis/go-redis/v9 v9.7.3
 	github.com/resend/resend-go/v3 v3.5.0
+	github.com/samber/lo v1.38.1
 	github.com/sethvargo/go-envconfig v1.1.0
 	github.com/sourcegraph/zoekt v0.0.0-20260605122240-893a523804f1
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
