@@ -33,16 +33,21 @@ import (
 	"tangled.org/core/appview/notify"
 	"tangled.org/core/appview/repoverify"
 	"tangled.org/core/appview/serververify"
+	"tangled.org/core/consts"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/orm"
 	"tangled.org/core/rbac"
 )
 
+type RepoPermissionChecker interface {
+	HasRepoPermissionErr(ctx context.Context, repo *models.Repo, userDid, perm string) (bool, error)
+}
+
 type Ingester struct {
 	Ctx              context.Context
 	Db               *db.DB
 	Enforcer         *rbac.Enforcer
-	Acl              *knotacl.Service
+	Acl              RepoPermissionChecker
 	IdResolver       *idresolver.Resolver
 	Cache            *cache.Cache
 	Config           *config.Config
@@ -105,8 +110,12 @@ func (i *Ingester) Ingest() processFunc {
 				err = i.ingestString(e, l)
 			case tangled.RepoIssueNSID:
 				err = i.ingestIssue(ctx, e, l)
+			case tangled.RepoIssueStateNSID:
+				err = i.ingestState(ctx, e, l, issueStateSpec)
 			case tangled.RepoPullNSID:
 				err = i.ingestPull(ctx, e, l)
+			case tangled.RepoPullStatusNSID:
+				err = i.ingestState(ctx, e, l, pullStatusSpec)
 			case tangled.FeedCommentNSID:
 				err = i.ingestComment(e, l)
 			case tangled.RepoIssueCommentNSID:
@@ -1393,11 +1402,18 @@ func (i *Ingester) ingestIssue(ctx context.Context, e *jmodels.Event, l *slog.Lo
 			return err
 		}
 
+		if err := db.ResolveIssueState(tx, issue.AtUri()); err != nil {
+			l.Error("failed to resolve issue state", "err", err)
+			return err
+		}
+
 		err = tx.Commit()
 		if err != nil {
 			l.Error("failed to commit txn", "err", err)
 			return err
 		}
+
+		i.drainPendingState(ctx, issue.AtUri(), issueStateSpec, l)
 
 		l.Info("ingested record")
 		return nil
@@ -1553,11 +1569,18 @@ func (i *Ingester) ingestPull(ctx context.Context, e *jmodels.Event, l *slog.Log
 			return err
 		}
 
+		if err := db.ResolvePullStatus(tx, pull.AtUri()); err != nil {
+			l.Error("failed to resolve pull status", "err", err)
+			return err
+		}
+
 		err = tx.Commit()
 		if err != nil {
 			l.Error("failed to commit txn", "err", err)
 			return err
 		}
+
+		i.drainPendingState(ctx, pull.AtUri(), pullStatusSpec, l)
 
 		l.Info("ingested record")
 		return nil
@@ -1588,6 +1611,286 @@ func (i *Ingester) ingestPull(ctx context.Context, e *jmodels.Event, l *slog.Log
 	}
 
 	return nil
+}
+
+func (i *Ingester) authorizeStateRecord(ctx context.Context, repo *models.Repo, subjectAuthorDid, recordAuthorDid string, l *slog.Logger) (bool, error) {
+	if recordAuthorDid == subjectAuthorDid {
+		return true, nil
+	}
+	if recordAuthorDid == consts.TangledDid {
+		return true, nil
+	}
+
+	ok, err := i.Acl.HasRepoPermissionErr(ctx, repo, recordAuthorDid, "repo:push")
+	if err != nil {
+		if errors.Is(err, knotacl.ErrKnotUnreachable) {
+			l.Warn("ingesting state record without permission check", "did", recordAuthorDid, "err", err)
+			return true, nil
+		}
+		return false, err
+	}
+	return ok, nil
+}
+
+type stateIngestSpec struct {
+	subjectNSID string
+	parse       func(did, rkey string, raw json.RawMessage) (models.StateRecord, error)
+	findSubject func(e db.Execer, subject syntax.ATURI) (repo *models.Repo, authorDid string, found bool, err error)
+	put         func(tx *sql.Tx, rec models.StateRecord) (syntax.ATURI, error)
+	resolve     func(tx *sql.Tx, subject syntax.ATURI) error
+	recompute   func(tx *sql.Tx, subject syntax.ATURI) error
+	del         func(tx *sql.Tx, did, rkey string) (syntax.ATURI, error)
+}
+
+var issueStateSpec = stateIngestSpec{
+	subjectNSID: tangled.RepoIssueNSID,
+	parse: func(did, rkey string, raw json.RawMessage) (models.StateRecord, error) {
+		record := tangled.RepoIssueState{}
+		if err := json.Unmarshal(raw, &record); err != nil {
+			return models.StateRecord{}, fmt.Errorf("invalid record: %w", err)
+		}
+		return models.IssueStateFromRecord(did, rkey, record)
+	},
+	findSubject: func(e db.Execer, subject syntax.ATURI) (*models.Repo, string, bool, error) {
+		issues, err := db.GetIssues(e, orm.FilterEq("at_uri", subject))
+		if err != nil {
+			return nil, "", false, err
+		}
+		if len(issues) != 1 || issues[0].Repo == nil {
+			return nil, "", false, nil
+		}
+		return issues[0].Repo, issues[0].Did, true, nil
+	},
+	put:       db.PutIssueState,
+	resolve:   db.ResolveIssueState,
+	recompute: db.RecomputeIssueState,
+	del:       db.DeleteIssueState,
+}
+
+var pullStatusSpec = stateIngestSpec{
+	subjectNSID: tangled.RepoPullNSID,
+	parse: func(did, rkey string, raw json.RawMessage) (models.StateRecord, error) {
+		record := tangled.RepoPullStatus{}
+		if err := json.Unmarshal(raw, &record); err != nil {
+			return models.StateRecord{}, fmt.Errorf("invalid record: %w", err)
+		}
+		return models.PullStatusFromRecord(did, rkey, record)
+	},
+	findSubject: func(e db.Execer, subject syntax.ATURI) (*models.Repo, string, bool, error) {
+		pulls, err := db.GetPulls(e, orm.FilterEq("at_uri", subject))
+		if err != nil {
+			return nil, "", false, err
+		}
+		if len(pulls) != 1 || pulls[0].Repo == nil {
+			return nil, "", false, nil
+		}
+		return pulls[0].Repo, pulls[0].OwnerDid, true, nil
+	},
+	put:       db.PutPullStatus,
+	resolve:   db.ResolvePullStatus,
+	recompute: db.RecomputePullStatus,
+	del:       db.DeletePullStatus,
+}
+
+func (i *Ingester) ingestState(ctx context.Context, e *jmodels.Event, l *slog.Logger, spec stateIngestSpec) error {
+	did := e.Did
+	rkey := e.Commit.RKey
+	nsid := e.Commit.Collection
+
+	l = l.With("handler", "ingestState", "nsid", nsid)
+
+	switch e.Commit.Operation {
+	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
+		return i.applyStateRecord(ctx, did, rkey, nsid, e.Commit.Record, spec, l)
+	case jmodels.CommitOperationDelete:
+		return i.deleteStateRecord(ctx, did, rkey, nsid, spec, l)
+	}
+
+	return nil
+}
+
+func (i *Ingester) applyStateRecord(ctx context.Context, did, rkey, nsid string, raw []byte, spec stateIngestSpec, l *slog.Logger) error {
+	rec, err := spec.parse(did, rkey, json.RawMessage(raw))
+	if err != nil {
+		return err
+	}
+	if string(rec.Subject.Collection()) != spec.subjectNSID {
+		return fmt.Errorf("state subject is not %s: %s", spec.subjectNSID, rec.Subject)
+	}
+
+	repo, authorDid, found, err := spec.findSubject(i.Db, rec.Subject)
+	if err != nil {
+		return fmt.Errorf("failed to look up state subject: %w", err)
+	}
+	if !found {
+		return i.parkStateRecord(ctx, did, rkey, nsid, rec.Subject, raw, l)
+	}
+
+	authorized, err := i.authorizeStateRecord(ctx, repo, authorDid, did, l)
+	if err != nil {
+		return i.parkStateRecord(ctx, did, rkey, nsid, rec.Subject, raw, l)
+	}
+
+	tx, err := i.Db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := db.UnparkStateRecord(tx, did, rkey, nsid); err != nil {
+		return fmt.Errorf("failed to unpark state record: %w", err)
+	}
+
+	if !authorized {
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		l.Warn("dropped unauthorized state record", "did", did, "rkey", rkey, "subject", rec.Subject)
+		return nil
+	}
+
+	priorSubject, err := spec.put(tx, rec)
+	if err != nil {
+		return fmt.Errorf("failed to put state record: %w", err)
+	}
+	if err := spec.resolve(tx, rec.Subject); err != nil {
+		return fmt.Errorf("failed to resolve state: %w", err)
+	}
+	if priorSubject != "" {
+		if err := spec.recompute(tx, priorSubject); err != nil {
+			return fmt.Errorf("failed to recompute prior subject state: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	l.Info("ingested record")
+	return nil
+}
+
+func (i *Ingester) deleteStateRecord(ctx context.Context, did, rkey, nsid string, spec stateIngestSpec, l *slog.Logger) error {
+	tx, err := i.Db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := db.UnparkStateRecord(tx, did, rkey, nsid); err != nil {
+		return fmt.Errorf("failed to unpark state record: %w", err)
+	}
+	subject, err := spec.del(tx, did, rkey)
+	if err != nil {
+		return fmt.Errorf("failed to delete state record: %w", err)
+	}
+	if subject != "" {
+		if err := spec.recompute(tx, subject); err != nil {
+			return fmt.Errorf("failed to recompute state: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	l.Info("ingested record")
+	return nil
+}
+
+func (i *Ingester) parkStateRecord(ctx context.Context, did, rkey, nsid string, subject syntax.ATURI, raw []byte, l *slog.Logger) error {
+	tx, err := i.Db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := db.ParkStateRecord(tx, db.PendingStateRecord{
+		Did:     did,
+		Rkey:    rkey,
+		Nsid:    nsid,
+		Subject: subject,
+		Record:  raw,
+	}); err != nil {
+		return fmt.Errorf("failed to park state record: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	l.Info("parked state record for retry", "subject", subject)
+	return nil
+}
+
+func (i *Ingester) drainPendingState(ctx context.Context, subject syntax.ATURI, spec stateIngestSpec, l *slog.Logger) {
+	pending, err := db.PendingStateRecordsForSubject(i.Db, subject)
+	if err != nil {
+		l.Error("failed to load pending state records", "err", err, "subject", subject)
+		return
+	}
+	for _, p := range pending {
+		if err := i.applyStateRecord(ctx, p.Did, p.Rkey, p.Nsid, p.Record, spec, l); err != nil {
+			l.Error("failed to drain pending state record", "err", err, "did", p.Did, "rkey", p.Rkey)
+		}
+	}
+}
+
+const (
+	pendingStateReconcileInterval = time.Hour
+	pendingStateRecordTTL         = 7 * 24 * time.Hour
+)
+
+func stateSpecForSubject(subject syntax.ATURI) (stateIngestSpec, bool) {
+	switch string(subject.Collection()) {
+	case tangled.RepoIssueNSID:
+		return issueStateSpec, true
+	case tangled.RepoPullNSID:
+		return pullStatusSpec, true
+	default:
+		return stateIngestSpec{}, false
+	}
+}
+
+func (i *Ingester) StartPendingStateReconciler() {
+	i.ReconcilePendingState()
+
+	ticker := time.NewTicker(pendingStateReconcileInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-i.Ctx.Done():
+			return
+		case <-ticker.C:
+			i.ReconcilePendingState()
+		}
+	}
+}
+
+func (i *Ingester) ReconcilePendingState() {
+	l := i.Logger.With("handler", "reconcilePendingState")
+
+	subjects, err := db.DistinctPendingStateSubjects(i.Db)
+	if err != nil {
+		l.Error("failed to list pending state subjects", "err", err)
+	}
+	for _, subject := range subjects {
+		spec, ok := stateSpecForSubject(subject)
+		if !ok {
+			continue
+		}
+		i.drainPendingState(i.Ctx, subject, spec, l)
+	}
+
+	cutoff := time.Now().Add(-pendingStateRecordTTL).UTC().Format(time.RFC3339)
+	evicted, err := db.EvictStalePendingStateRecords(i.Db, cutoff)
+	if err != nil {
+		l.Error("failed to evict stale pending state records", "err", err)
+		return
+	}
+	if evicted > 0 {
+		l.Warn("evicted stale pending state records", "count", evicted, "olderThan", cutoff)
+	}
 }
 
 // ingestIssueComment ingests legacy sh.tangled.repo.issue.comment deletions
