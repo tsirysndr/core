@@ -1,6 +1,9 @@
 when:
   - event: push
     branch: master
+    paths:
+      - blog/**
+      - cmd/blog/**
 
 engine: microvm
 image: nixos
