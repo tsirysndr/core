@@ -9323,7 +9323,7 @@ func (t *RepoIssueState) MarshalCBOR(w io.Writer) error {
 
 	cw := cbg.NewCborWriter(w)
 
-	if _, err := cw.Write([]byte{163}); err != nil {
+	if _, err := cw.Write([]byte{164}); err != nil {
 		return err
 	}
 
@@ -9391,6 +9391,29 @@ func (t *RepoIssueState) MarshalCBOR(w io.Writer) error {
 	if _, err := cw.WriteString(string(t.State)); err != nil {
 		return err
 	}
+
+	// t.CreatedAt (string) (string)
+	if len("createdAt") > 1000000 {
+		return xerrors.Errorf("Value in field \"createdAt\" was too long")
+	}
+
+	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("createdAt"))); err != nil {
+		return err
+	}
+	if _, err := cw.WriteString(string("createdAt")); err != nil {
+		return err
+	}
+
+	if len(t.CreatedAt) > 1000000 {
+		return xerrors.Errorf("Value in field t.CreatedAt was too long")
+	}
+
+	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(t.CreatedAt))); err != nil {
+		return err
+	}
+	if _, err := cw.WriteString(string(t.CreatedAt)); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -9419,7 +9442,7 @@ func (t *RepoIssueState) UnmarshalCBOR(r io.Reader) (err error) {
 
 	n := extra
 
-	nameBuf := make([]byte, 5)
+	nameBuf := make([]byte, 9)
 	for i := uint64(0); i < n; i++ {
 		nameLen, ok, err := cbg.ReadFullStringIntoBuf(cr, nameBuf, 1000000)
 		if err != nil {
@@ -9467,6 +9490,17 @@ func (t *RepoIssueState) UnmarshalCBOR(r io.Reader) (err error) {
 				}
 
 				t.State = string(sval)
+			}
+			// t.CreatedAt (string) (string)
+		case "createdAt":
+
+			{
+				sval, err := cbg.ReadStringWithMax(cr, 1000000)
+				if err != nil {
+					return err
+				}
+
+				t.CreatedAt = string(sval)
 			}
 
 		default:
@@ -10733,7 +10767,7 @@ func (t *RepoPullStatus) MarshalCBOR(w io.Writer) error {
 
 	cw := cbg.NewCborWriter(w)
 
-	if _, err := cw.Write([]byte{163}); err != nil {
+	if _, err := cw.Write([]byte{164}); err != nil {
 		return err
 	}
 
@@ -10801,6 +10835,29 @@ func (t *RepoPullStatus) MarshalCBOR(w io.Writer) error {
 	if _, err := cw.WriteString(string(t.Status)); err != nil {
 		return err
 	}
+
+	// t.CreatedAt (string) (string)
+	if len("createdAt") > 1000000 {
+		return xerrors.Errorf("Value in field \"createdAt\" was too long")
+	}
+
+	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("createdAt"))); err != nil {
+		return err
+	}
+	if _, err := cw.WriteString(string("createdAt")); err != nil {
+		return err
+	}
+
+	if len(t.CreatedAt) > 1000000 {
+		return xerrors.Errorf("Value in field t.CreatedAt was too long")
+	}
+
+	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(t.CreatedAt))); err != nil {
+		return err
+	}
+	if _, err := cw.WriteString(string(t.CreatedAt)); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -10829,7 +10886,7 @@ func (t *RepoPullStatus) UnmarshalCBOR(r io.Reader) (err error) {
 
 	n := extra
 
-	nameBuf := make([]byte, 6)
+	nameBuf := make([]byte, 9)
 	for i := uint64(0); i < n; i++ {
 		nameLen, ok, err := cbg.ReadFullStringIntoBuf(cr, nameBuf, 1000000)
 		if err != nil {
@@ -10877,6 +10934,17 @@ func (t *RepoPullStatus) UnmarshalCBOR(r io.Reader) (err error) {
 				}
 
 				t.Status = string(sval)
+			}
+			// t.CreatedAt (string) (string)
+		case "createdAt":
+
+			{
+				sval, err := cbg.ReadStringWithMax(cr, 1000000)
+				if err != nil {
+					return err
+				}
+
+				t.CreatedAt = string(sval)
 			}
 
 		default:

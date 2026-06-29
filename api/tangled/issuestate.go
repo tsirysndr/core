@@ -18,6 +18,7 @@ func init() {
 // RECORDTYPE: RepoIssueState
 type RepoIssueState struct {
 	LexiconTypeID string `json:"$type,const=sh.tangled.repo.issue.state" cborgen:"$type,const=sh.tangled.repo.issue.state"`
+	CreatedAt     string `json:"createdAt" cborgen:"createdAt"`
 	Issue         string `json:"issue" cborgen:"issue"`
 	// state: state of the issue
 	State string `json:"state" cborgen:"state"`

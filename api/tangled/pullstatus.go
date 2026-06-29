@@ -18,6 +18,7 @@ func init() {
 // RECORDTYPE: RepoPullStatus
 type RepoPullStatus struct {
 	LexiconTypeID string `json:"$type,const=sh.tangled.repo.pull.status" cborgen:"$type,const=sh.tangled.repo.pull.status"`
+	CreatedAt     string `json:"createdAt" cborgen:"createdAt"`
 	Pull          string `json:"pull" cborgen:"pull"`
 	// status: status of the pull request
 	Status string `json:"status" cborgen:"status"`
