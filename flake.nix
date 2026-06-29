@@ -49,6 +49,10 @@
       url = "https://cdn.jsdelivr.net/npm/mermaid@11.12.3/dist/mermaid.min.js";
       flake = false;
     };
+    hls-src = {
+      url = "https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js";
+      flake = false;
+    };
     ibm-plex-mono-src = {
       url = "https://github.com/IBM/plex/releases/download/%40ibm%2Fplex-mono%401.1.0/ibm-plex-mono.zip";
       flake = false;
@@ -77,6 +81,7 @@
     ibm-plex-mono-src,
     actor-typeahead-src,
     mermaid-src,
+    hls-src,
     microvm,
     fetch-tangled,
     ...
@@ -140,7 +145,7 @@
         lexgen = self.callPackage ./nix/pkgs/lexgen.nix {inherit indigo;};
         goat = self.callPackage ./nix/pkgs/goat.nix {inherit indigo;};
         appview-static-files = self.callPackage ./nix/pkgs/appview-static-files.nix {
-          inherit htmx-src htmx-ws-src lucide-src inter-fonts-src ibm-plex-mono-src actor-typeahead-src mermaid-src;
+          inherit htmx-src htmx-ws-src lucide-src inter-fonts-src ibm-plex-mono-src actor-typeahead-src mermaid-src hls-src;
         };
         appview = self.callPackage ./nix/pkgs/appview.nix {};
         blog = self.callPackage ./nix/pkgs/blog.nix {};

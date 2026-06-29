@@ -110,6 +110,18 @@
         "type": "github"
       }
     },
+    "hls-src": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-mmxgaQRXXWzRG6/OlOn5efV+NmzhvmXTQaFbODqh0b8=",
+        "type": "file",
+        "url": "https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"
+      }
+    },
     "htmx-src": {
       "flake": false,
       "locked": {
@@ -245,6 +257,7 @@
         "fetch-tangled": "fetch-tangled",
         "flake-compat": "flake-compat",
         "gomod2nix": "gomod2nix",
+        "hls-src": "hls-src",
         "htmx-src": "htmx-src",
         "htmx-ws-src": "htmx-ws-src",
         "ibm-plex-mono-src": "ibm-plex-mono-src",
