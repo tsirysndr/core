@@ -44,10 +44,19 @@
     system = pkgs.stdenv.hostPlatform.system;
     flake = getFlake flakeRef;
     notFound = throw "Package ${pkgName} not found in ${flakeRef}";
+    # pkgName may be dotted (e.g. "python3Packages.requests"), so walk the
+    # attr path rather than doing a single dotted-string lookup
+    pkgPath = lib.splitString "." pkgName;
+    inPackages = ["packages" system] ++ pkgPath;
+    inLegacy = ["legacyPackages" system] ++ pkgPath;
   in
     if flakeRef == "nixpkgs" && !(registry ? nixpkgs)
-    then pkgs.${pkgName} or notFound
-    else flake.legacyPackages.${system}.${pkgName} or flake.packages.${system}.${pkgName} or notFound;
+    then lib.attrByPath pkgPath notFound pkgs
+    else if lib.hasAttrByPath inLegacy flake
+    then lib.getAttrFromPath inLegacy flake
+    else if lib.hasAttrByPath inPackages flake
+    then lib.getAttrFromPath inPackages flake
+    else notFound;
 
   # strings are resolved as package references only where the option type
   # actually expects packages; everything else passes through untouched
