@@ -49,6 +49,8 @@ func (x *Xrpc) Router() http.Handler {
 	// service query endpoints (no auth required)
 	r.Get("/"+tangled.OwnerNSID, x.Owner)
 	r.Get("/"+tangled.CiPipelineSubscribeLogsNSID, x.HandleCiPipelineSubscribeLogs)
+	r.Get("/"+tangled.CiQueryPipelinesNSID, x.HandleCiQueryPipelines)
+	r.Get("/"+tangled.CiGetPipelineNSID, x.HandleCiGetPipeline)
 
 	return r
 }
