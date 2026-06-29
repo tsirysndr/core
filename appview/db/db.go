@@ -2372,6 +2372,55 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "add-issue-pull-state-tables", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			create table if not exists issue_states (
+				id integer primary key autoincrement,
+				did text not null,
+				rkey text not null,
+				at_uri text generated always as ('at://' || did || '/' || 'sh.tangled.repo.issue.state' || '/' || rkey) stored,
+
+				subject text not null,
+				state text not null check (state in ('open', 'closed')),
+				created_micros integer not null,
+
+				unique(did, rkey),
+				foreign key (subject) references issues(at_uri) on delete cascade
+			);
+			create index if not exists idx_issue_states_subject on issue_states(subject);
+
+			create table if not exists pull_states (
+				id integer primary key autoincrement,
+				did text not null,
+				rkey text not null,
+				at_uri text generated always as ('at://' || did || '/' || 'sh.tangled.repo.pull.status' || '/' || rkey) stored,
+
+				subject text not null,
+				status text not null check (status in ('open', 'closed', 'merged')),
+				created_micros integer not null,
+
+				unique(did, rkey),
+				foreign key (subject) references pulls(at_uri) on delete cascade
+			);
+			create index if not exists idx_pull_states_subject on pull_states(subject);
+
+			create table if not exists pending_state_records (
+				id integer primary key autoincrement,
+				did text not null,
+				rkey text not null,
+				nsid text not null,
+
+				subject text not null,
+				record blob not null,
+				created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+
+				unique(did, rkey, nsid)
+			);
+			create index if not exists idx_pending_state_subject on pending_state_records(subject);
+		`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,
