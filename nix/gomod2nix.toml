@@ -749,6 +749,9 @@ schema = 3
   [mod."github.com/ryanuber/go-glob"]
     version = "v1.0.0"
     hash = "sha256-YkMl1utwUhi3E0sHK23ISpAsPyj4+KeXyXKoFYGXGVY="
+  [mod."github.com/samber/lo"]
+    version = "v1.38.1"
+    hash = "sha256-P0awJtu/YJIG+jrSrttBCIIf+JTn4y1VZvgJAR9nncY="
   [mod."github.com/sergi/go-diff"]
     version = "v1.1.0"
     hash = "sha256-8NJMabldpf40uwQN20T6QXx5KORDibCBJL02KD661xY="

@@ -24,8 +24,8 @@ import (
 	"tangled.org/core/patchutil"
 	"tangled.org/core/types"
 
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 )
 
 const ApplicationGzip = "application/gzip"
