@@ -424,7 +424,7 @@ func (s *Spindle) processKnotStream(ctx context.Context, src eventconsumer.Sourc
 		}
 
 		// NOTE: we are blindly trusting the knot that it will return only repos it own
-		repoCloneUri := s.newRepoCloneUrl(src.Key(), repoDid)
+		repoCloneUri := s.newRepoCloneUrl(src.Host, repoDid)
 		repoPath := s.newRepoPath(repoDid)
 		if err := git.SparseSyncGitRepo(ctx, repoCloneUri, repoPath, event.NewSha); err != nil {
 			return fmt.Errorf("sync git repo: %w", err)

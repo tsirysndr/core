@@ -21,7 +21,7 @@ RUN --mount=type=cache,target=/go/cache \
     go build -tags libsqlite3 -o /out/spindle ./cmd/spindle && \
     go build -tags libsqlite3 -o /out/spindle-microvm-run ./cmd/spindle-microvm-run
 
-FROM alpine:3.20
+FROM alpine:3.24
 
 RUN apk add --no-cache \
     bash \

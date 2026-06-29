@@ -72,22 +72,34 @@ func SparseSyncGitRepo(ctx context.Context, cloneUri, path, rev string) error {
 	if err != nil {
 		return err
 	}
+	if exist {
+		gitDirExist, err := isDir(path + "/.git")
+		if err != nil {
+			return err
+		}
+		if !gitDirExist {
+			if err := os.RemoveAll(path); err != nil {
+				return fmt.Errorf("cleanup invalid git dir: %w", err)
+			}
+			exist = false
+		}
+	}
 	if rev == "" {
 		rev = "HEAD"
 	}
 	if !exist {
-		if err := exec.Command("git", "clone", "--no-checkout", "--depth=1", "--filter=tree:0", "--revision="+rev, cloneUri, path).Run(); err != nil {
+		if err := exec.CommandContext(ctx, "git", "clone", "--no-checkout", "--depth=1", "--filter=tree:0", "--revision="+rev, cloneUri, path).Run(); err != nil {
 			return fmt.Errorf("git clone: %w", err)
 		}
-		if err := exec.Command("git", "-C", path, "sparse-checkout", "set", "--no-cone", WorkflowDir).Run(); err != nil {
+		if err := exec.CommandContext(ctx, "git", "-C", path, "sparse-checkout", "set", "--no-cone", WorkflowDir).Run(); err != nil {
 			return fmt.Errorf("git sparse-checkout set: %w", err)
 		}
 	} else {
-		if err := exec.Command("git", "-C", path, "fetch", "--depth=1", "--filter=tree:0", "origin", rev).Run(); err != nil {
-			return fmt.Errorf("git pull: %w", err)
+		if err := exec.CommandContext(ctx, "git", "-C", path, "fetch", "--depth=1", "--filter=tree:0", "origin", rev).Run(); err != nil {
+			return fmt.Errorf("git fetch: %w", err)
 		}
 	}
-	if err := exec.Command("git", "-C", path, "checkout", rev).Run(); err != nil {
+	if err := exec.CommandContext(ctx, "git", "-C", path, "checkout", rev).Run(); err != nil {
 		return fmt.Errorf("git checkout: %w", err)
 	}
 	return nil
