@@ -2365,6 +2365,13 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return nil
 	})
 
+	orm.RunMigration(conn, logger, "add-author-to-bluesky-posts", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			alter table bluesky_posts add column author_did text not null default '';
+		`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,

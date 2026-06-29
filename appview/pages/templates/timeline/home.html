@@ -446,11 +446,12 @@
 {{ end }}
 
 {{ define "post" }}
+  {{ $author := or .AuthorDid "tangled.org" }}
   <div class="bg-white dark:bg-gray-800 rounded shadow-sm border border-gray-200 dark:border-gray-700 px-6 py-4 flex flex-col gap-2 break-inside-avoid mb-6">
     <div class="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
-      <span class="flex items-center gap-2">
-        {{ template "user/fragments/picHandle" "tangled.org" }}
-      </span>
+      <a href="https://bsky.app/profile/{{ $author }}" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 no-underline hover:no-underline">
+        {{ template "user/fragments/picHandle" $author }}
+      </a>
       <span>{{ template "repo/fragments/shortTimeAgo" .CreatedAt }}</span>
     </div>
     <p class="text-gray-900 dark:text-gray-100 text-base leading-relaxed whitespace-pre-wrap">{{ .Text }}</p>
@@ -480,7 +481,7 @@
       {{ end }}
     {{ end }}
 
-    <a href="https://bsky.app/profile/tangled.org/post/{{ .Rkey }}"
+    <a href="https://bsky.app/profile/{{ $author }}/post/{{ .Rkey }}"
       target="_blank"
       rel="noopener noreferrer"
       class="flex items-center justify-between gap-4 text-sm text-gray-500 dark:text-gray-400 pt-2 no-underline hover:no-underline">

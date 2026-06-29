@@ -8,6 +8,7 @@ import (
 )
 
 type BskyPost struct {
+	AuthorDid   string
 	Rkey        string
 	Text        string
 	CreatedAt   time.Time
@@ -54,7 +55,7 @@ func NewBskyPostFromView(postView *apibsky.FeedDefs_PostView) (*BskyPost, error)
 		quoteCount = *postView.QuoteCount
 	}
 
-	return &BskyPost{
+	post := &BskyPost{
 		Rkey:        atUri.RecordKey().String(),
 		Text:        feedPost.Text,
 		CreatedAt:   createdAt,
@@ -68,5 +69,11 @@ func NewBskyPostFromView(postView *apibsky.FeedDefs_PostView) (*BskyPost, error)
 		ReplyCount:  replyCount,
 		RepostCount: repostCount,
 		QuoteCount:  quoteCount,
-	}, nil
+	}
+
+	if author := postView.Author; author != nil {
+		post.AuthorDid = author.Did
+	}
+
+	return post, nil
 }

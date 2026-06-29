@@ -14,8 +14,8 @@ func InsertBlueskyPosts(e Execer, posts []models.BskyPost) error {
 	}
 
 	stmt, err := e.Prepare(`
-		insert or replace into bluesky_posts (rkey, text, created_at, langs, facets, embed, like_count, reply_count, repost_count, quote_count)
-		values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		insert or replace into bluesky_posts (rkey, text, created_at, langs, facets, embed, like_count, reply_count, repost_count, quote_count, author_did)
+		values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -46,6 +46,7 @@ func InsertBlueskyPosts(e Execer, posts []models.BskyPost) error {
 			post.ReplyCount,
 			post.RepostCount,
 			post.QuoteCount,
+			post.AuthorDid,
 		)
 		if err != nil {
 			return err
@@ -64,7 +65,7 @@ func nullString(b []byte) any {
 
 func GetBlueskyPosts(e Execer, limit int) ([]models.BskyPost, error) {
 	query := `
-		select rkey, text, created_at, langs, facets, embed, like_count, reply_count, repost_count, quote_count
+		select rkey, text, created_at, langs, facets, embed, like_count, reply_count, repost_count, quote_count, author_did
 		from bluesky_posts
 		order by created_at desc
 		limit ?
@@ -81,8 +82,9 @@ func GetBlueskyPosts(e Execer, limit int) ([]models.BskyPost, error) {
 		var rkey, text, createdAt string
 		var langs, facets, embed sql.Null[string]
 		var likeCount, replyCount, repostCount, quoteCount int64
+		var authorDid string
 
-		err := rows.Scan(&rkey, &text, &createdAt, &langs, &facets, &embed, &likeCount, &replyCount, &repostCount, &quoteCount)
+		err := rows.Scan(&rkey, &text, &createdAt, &langs, &facets, &embed, &likeCount, &replyCount, &repostCount, &quoteCount, &authorDid)
 		if err != nil {
 			return nil, err
 		}
@@ -94,6 +96,7 @@ func GetBlueskyPosts(e Execer, limit int) ([]models.BskyPost, error) {
 			ReplyCount:  replyCount,
 			RepostCount: repostCount,
 			QuoteCount:  quoteCount,
+			AuthorDid:   authorDid,
 		}
 
 		if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
