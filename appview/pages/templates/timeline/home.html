@@ -19,6 +19,42 @@
     <!-- Additional SEO -->
     <meta name="description" content="The next-generation social coding platform. Host repositories on your infrastructure with knots, use stacked pull requests, and run CI with spindles." />
     <link rel="canonical" href="https://tangled.org" />
+
+    <!-- hls.js: play bluesky video embeds -->
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        const videos = document.querySelectorAll('video[data-hls]');
+        if (!videos.length) return;
+
+        const attach = () => {
+          videos.forEach((video) => {
+            const src = video.dataset.hls;
+            if (video.canPlayType('application/vnd.apple.mpegurl')) {
+              // safari can play HLS natively
+              video.src = src;
+            } else if (window.Hls && Hls.isSupported()) {
+              const hls = new Hls();
+              hls.loadSource(src);
+              hls.attachMedia(video);
+            }
+          });
+        };
+
+        // only fetch hls.js when a browser actually needs it
+        const needsHls = Array.from(videos).some(
+          (v) => !v.canPlayType('application/vnd.apple.mpegurl')
+        );
+        if (!needsHls) {
+          attach();
+          return;
+        }
+
+        const script = document.createElement('script');
+        script.src = '/static/hls.min.js';
+        script.onload = attach;
+        document.head.appendChild(script);
+      });
+    </script>
 {{ end }}
 
 
@@ -475,9 +511,15 @@
           </div>
         </a>
       {{ else if .Embed.EmbedVideo_View }}
-        <div class="rounded overflow-hidden bg-gray-100 dark:bg-gray-700 aspect-video flex items-center justify-center">
-          <span class="text-gray-500 dark:text-gray-400 text-sm">Video embed</span>
-        </div>
+        <video
+          class="rounded w-full h-auto max-h-[32rem] bg-black border border-gray-200 dark:border-gray-700"
+          controls
+          preload="none"
+          playsinline
+          {{ with .Embed.EmbedVideo_View.Thumbnail }}poster="{{ . }}"{{ end }}
+          {{ with .Embed.EmbedVideo_View.Alt }}aria-label="{{ . }}"{{ end }}
+          data-hls="{{ .Embed.EmbedVideo_View.Playlist }}"
+        ></video>
       {{ end }}
     {{ end }}
 
