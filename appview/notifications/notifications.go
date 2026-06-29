@@ -261,6 +261,7 @@ func (n *Notifications) toggleRead(w http.ResponseWriter, r *http.Request, read 
 		err = db.MarkNotificationUnread(n.db, notificationID, userDid)
 	}
 	if err != nil {
+		n.logger.Error("failed to toggle notification read state", "err", err)
 		http.Error(w, "Failed to update notification", http.StatusInternalServerError)
 		return
 	}
@@ -287,6 +288,7 @@ func (n *Notifications) markAllRead(w http.ResponseWriter, r *http.Request) {
 
 	err := db.MarkAllNotificationsRead(n.db, userDid)
 	if err != nil {
+		n.logger.Error("failed to mark all notifications as read", "err", err)
 		http.Error(w, "Failed to mark all notifications as read", http.StatusInternalServerError)
 		return
 	}
