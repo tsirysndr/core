@@ -28,7 +28,7 @@ func (s *Pulls) PullComment(w http.ResponseWriter, r *http.Request) {
 
 	roundNumberStr := chi.URLParam(r, "round")
 	roundNumber, err := strconv.Atoi(roundNumberStr)
-	if err != nil || roundNumber >= len(pull.Submissions) {
+	if err != nil || roundNumber < 0 || roundNumber >= len(pull.Submissions) {
 		http.Error(w, "bad round id", http.StatusBadRequest)
 		l.Error("failed to parse round id", "err", err, "round_number_str", roundNumberStr)
 		return

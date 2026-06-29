@@ -9,7 +9,7 @@
     hx-swap="beforeend"
     hx-disabled-elt="find button[type='submit']"
     hx-on::before-request="this.querySelector('.error').innerHTML = ''"
-    hx-on::after-request="if(event.detail.successful) this.reset()"
+    hx-on::after-request="if(event.detail.successful) htmx.ajax('GET', '/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/round/{{ .RoundNumber }}/actions', {target: '#actions-{{ .RoundNumber }}', swap: 'outerHTML'})"
   >
     <input name="subject-uri" type="hidden" value="{{ .Pull.AtUri }}">
     <input name="pull-round-idx" type="hidden" value="{{ .RoundNumber }}">

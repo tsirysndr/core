@@ -136,7 +136,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 	if r, err := strconv.Atoi(roundId); err == nil {
 		roundIdInt = r
 	}
-	if roundIdInt >= len(pull.Submissions) {
+	if roundIdInt < 0 || roundIdInt >= len(pull.Submissions) {
 		http.Error(w, "bad round id", http.StatusBadRequest)
 		l.Error("failed to parse round id", "err", err, "round_number", roundIdInt)
 		return
