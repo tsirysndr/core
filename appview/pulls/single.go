@@ -18,6 +18,7 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-chi/chi/v5"
+	"tangled.org/core/hostutil"
 )
 
 // htmx fragment
@@ -161,13 +162,21 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 
 	// commitId -> latest pipeline
 	pipelines := func(ctx context.Context) map[string]tangled.CiDefs_Pipeline {
-		xrpcc := &indigoxrpc.Client{Host: f.Spindle}
+		m := make(map[string]tangled.CiDefs_Pipeline)
+		if f.Spindle == "" {
+			return m
+		}
+		spindleUrl, err := hostutil.EnsureHttpScheme(f.Spindle)
+		if err != nil {
+			l.Error("invalid spindle host", "host", f.Spindle, "err", err)
+			return m
+		}
+		xrpcc := &indigoxrpc.Client{Host: spindleUrl}
 		out, err := tangled.CiQueryPipelines(ctx, xrpcc, shas, "", 0, f.RepoDid)
 		if err != nil {
 			l.Error("failed to fetch pipelines", "err", err)
+			return m
 		}
-
-		m := make(map[string]tangled.CiDefs_Pipeline)
 
 		for _, pipeline := range out.Pipelines {
 			if pipeline == nil {

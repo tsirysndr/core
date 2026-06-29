@@ -10,6 +10,7 @@ import (
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/models"
+	"tangled.org/core/hostutil"
 	"tangled.org/core/types"
 )
 
@@ -87,9 +88,7 @@ func balanceIndexItems(commitCount, branchCount, tagCount, fileCount int) (commi
 	return
 }
 
-// grab pipelines from DB and munge that into a hashmap with commit sha as key
-//
-// golang is so blessed that it requires 35 lines of imperative code for this
+// fetch pipelines from DB and map by commit sha
 func getPipelineStatuses(
 	ctx context.Context,
 	repo *models.Repo,
@@ -101,7 +100,16 @@ func getPipelineStatuses(
 		return m, nil
 	}
 
-	xrpcc := &indigoxrpc.Client{Host: repo.Spindle}
+	if repo.Spindle == "" {
+		return m, nil
+	}
+
+	spindleUrl, err := hostutil.EnsureHttpScheme(repo.Spindle)
+	if err != nil {
+		return m, nil // Don't block repo rendering on bad spindle configuration
+	}
+
+	xrpcc := &indigoxrpc.Client{Host: spindleUrl}
 	out, err := tangled.CiQueryPipelines(ctx, xrpcc, shas, "", 0, repo.RepoDid)
 	if err != nil {
 		return nil, err

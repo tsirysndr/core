@@ -96,12 +96,43 @@ func (p *Pipelines) Index(w http.ResponseWriter, r *http.Request) {
 		filterKind = "all"
 	}
 
+	if f.Spindle == "" {
+		p.pages.Pipelines(w, pages.PipelinesParams{
+			BaseParams: pages.BaseParamsFromContext(r.Context()),
+			RepoInfo:   p.repoResolver.GetRepoInfo(r, user),
+			Pipelines:  nil,
+			FilterKind: filterKind,
+			Total:      0,
+		})
+		return
+	}
+
+	spindleUrl, err := hostutil.EnsureHttpScheme(f.Spindle)
+	if err != nil {
+		l.Error("invalid spindle host", "host", f.Spindle, "err", err)
+		p.pages.Pipelines(w, pages.PipelinesParams{
+			BaseParams: pages.BaseParamsFromContext(r.Context()),
+			RepoInfo:   p.repoResolver.GetRepoInfo(r, user),
+			Pipelines:  nil,
+			FilterKind: filterKind,
+			Total:      0,
+		})
+		return
+	}
+
 	// sh.tangled.ci.queryPipelines(repo, kind, limit=30)
-	xrpcc := indigoxrpc.Client{Host: f.Spindle}
+	xrpcc := indigoxrpc.Client{Host: spindleUrl}
 	out, err := tangled.CiQueryPipelines(r.Context(), &xrpcc, nil, "", 1, f.RepoDid)
 	if err != nil {
 		l.Error("failed to fetch pipelines", "err", err)
-		panic("unimplemented") // spindle failure, appview should not fail.
+		p.pages.Pipelines(w, pages.PipelinesParams{
+			BaseParams: pages.BaseParamsFromContext(r.Context()),
+			RepoInfo:   p.repoResolver.GetRepoInfo(r, user),
+			Pipelines:  nil,
+			FilterKind: filterKind,
+			Total:      0,
+		})
+		return
 	}
 
 	p.pages.Pipelines(w, pages.PipelinesParams{
@@ -143,7 +174,19 @@ func (p *Pipelines) Workflow(w http.ResponseWriter, r *http.Request) {
 	// TODO: change url path to:
 	// /{owner}/{slug}/pipelines/{spindle-did}/{pipeline-id}/workflow/{workflow-id}
 
-	xrpcc := &indigoxrpc.Client{Host: f.Spindle}
+	if f.Spindle == "" {
+		p.pages.Error404(w)
+		return
+	}
+
+	spindleUrl, err := hostutil.EnsureHttpScheme(f.Spindle)
+	if err != nil {
+		l.Error("invalid spindle host", "host", f.Spindle, "err", err)
+		p.pages.Error404(w)
+		return
+	}
+
+	xrpcc := &indigoxrpc.Client{Host: spindleUrl}
 	out, err := tangled.CiGetPipeline(r.Context(), xrpcc, pipelineId.String())
 	if err != nil {
 		// TODO(boltless): change behavior based on error
@@ -237,10 +280,16 @@ func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
+	spindleUrl, err := hostutil.EnsureHttpScheme(f.Spindle)
+	if err != nil {
+		l.Error("invalid spindle host", "host", f.Spindle, "err", err)
+		return
+	}
+
 	evChan := make(chan *tangled.CiPipelineSubscribeLogs_Event, 100)
 	done := make(chan error, 1)
 	sched := &webLogScheduler{ch: evChan}
-	xrpcc := &lexutil.Client{Client: indigoxrpc.Client{Host: f.Spindle}}
+	xrpcc := &lexutil.Client{Client: indigoxrpc.Client{Host: spindleUrl}}
 	go func() {
 		done <- tangled.CiPipelineSubscribeLogs(ctx, xrpcc, pipelineId.String(), []string{workflowName}, sched)
 	}()
