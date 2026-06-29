@@ -307,6 +307,13 @@ in {
     options = ["bind"];
     depends = ["/persist"];
   };
+  # bind mount /tmp so our tmp is disk backed...
+  fileSystems."/tmp" = {
+    device = "/persist/tmp";
+    fsType = "none";
+    options = ["bind"];
+    depends = ["/persist"];
+  };
 
   # create bind sources before local-fs.target, which means we have to do this
   # at initrd time
@@ -322,6 +329,9 @@ in {
     };
     "/sysroot/persist/var".d = {
       mode = "0755";
+    };
+    "/sysroot/persist/tmp".d = {
+      mode = "1777";
     };
   };
 }

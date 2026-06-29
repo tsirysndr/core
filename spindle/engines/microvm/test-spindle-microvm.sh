@@ -500,10 +500,16 @@ case "$http_version" in
         ;;
 esac
 
+if [ "$(stat -c %d /tmp)" = "$(stat -c %d /workspace)" ]; then
+    echo "tmp_on_persist=yes"
+else
+    echo "tmp_on_persist=no"
+fi
+
 /run/current-system/sw/bin/nix-store --realise "$store_path" >/dev/null
 ' bash "$test_store_path") || return 1
 
-    check_needles "$out" "^http_version=2(\\.0)?$" || return 1
+    check_needles "$out" "^http_version=2(\\.0)?$" "^tmp_on_persist=yes$" || return 1
     echo "success: store path realized from cache and cache proxy accepted cleartext HTTP/2"
 }
 
