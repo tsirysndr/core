@@ -142,8 +142,10 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 			tangled.RepoArtifactNSID,
 			tangled.RepoIssueCommentNSID,
 			tangled.RepoIssueNSID,
+			tangled.RepoIssueStateNSID,
 			tangled.RepoNSID,
 			tangled.RepoPullNSID,
+			tangled.RepoPullStatusNSID,
 			tangled.RepoPullCommentNSID,
 			tangled.SpindleMemberNSID,
 			tangled.SpindleNSID,
@@ -201,6 +203,7 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 	}
 
 	go ingester.SweepPendingVerifications()
+	go ingester.StartPendingStateReconciler()
 
 	var cfClient *cloudflare.Client
 	if config.Cloudflare.ApiToken != "" {
