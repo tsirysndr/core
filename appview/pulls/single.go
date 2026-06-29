@@ -226,10 +226,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		vouchSkips[ownerDid] = skipped
 	}
 
-	patch := pull.Submissions[roundIdInt].CombinedPatch()
 	var diff types.DiffRenderer
-	diff = patchutil.AsNiceDiff(patch, pull.TargetBranch)
-
 	if interdiff {
 		currentPatch, err := patchutil.AsDiff(pull.Submissions[roundIdInt].CombinedPatch())
 		if err != nil {
@@ -246,6 +243,8 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		}
 
 		diff = patchutil.Interdiff(previousPatch, currentPatch)
+	} else {
+		diff = s.combinedDiff(pull, roundIdInt)
 	}
 
 	err = s.pages.RepoSinglePull(w, pages.RepoSinglePullParams{
@@ -273,6 +272,18 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 	if err != nil {
 		l.Error("failed to render page", "err", err)
 	}
+}
+
+func (s *Pulls) combinedDiff(pull *models.Pull, round int) types.DiffRenderer {
+	submission := pull.Submissions[round]
+	key := fmt.Sprintf("%s|%d|%s", pull.AtUri(), round, submission.SourceRev)
+	if cached, ok := s.diffCache.Get(key); ok {
+		return cached
+	}
+
+	diff := patchutil.AsNiceDiff(submission.CombinedPatch(), pull.TargetBranch)
+	s.diffCache.Add(key, diff)
+	return diff
 }
 
 func (s *Pulls) RepoSinglePull(w http.ResponseWriter, r *http.Request) {

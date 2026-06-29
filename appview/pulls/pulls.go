@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"time"
 
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
@@ -21,11 +22,18 @@ import (
 	"tangled.org/core/idresolver"
 	"tangled.org/core/ogre"
 	"tangled.org/core/patchutil"
+	"tangled.org/core/types"
 
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 )
 
 const ApplicationGzip = "application/gzip"
+
+const (
+	diffCacheSize = 128
+	diffCacheTTL  = 15 * time.Minute
+)
 
 type Pulls struct {
 	oauth            *oauth.OAuth
@@ -40,6 +48,7 @@ type Pulls struct {
 	logger           *slog.Logger
 	indexer          *pulls_indexer.Indexer
 	ogreClient       *ogre.Client
+	diffCache        *expirable.LRU[string, types.DiffRenderer]
 }
 
 func New(
@@ -68,6 +77,7 @@ func New(
 		logger:           logger,
 		indexer:          indexer,
 		ogreClient:       ogre.NewClient(config.Ogre.Host),
+		diffCache:        expirable.NewLRU[string, types.DiffRenderer](diffCacheSize, nil, diffCacheTTL),
 	}
 }
 
