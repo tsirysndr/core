@@ -26,6 +26,14 @@
       >Cancel</button>
     </div>
     {{ end }}
+    {{ with (index .Pipeline.Statuses .Workflow).Latest }}
+      {{ if .Error }}
+      <div class="mb-2 flex items-start gap-2 p-3 rounded border border-red-200 dark:border-red-900/60 bg-red-50/60 dark:bg-red-950/20 text-red-700 dark:text-red-400 text-sm">
+        {{ i "triangle-alert" "size-4 shrink-0 mt-0.5" }}
+        <span class="font-mono break-words whitespace-pre-wrap">{{- .Error -}}</span>
+      </div>
+      {{ end }}
+    {{ end }}
     {{ block "logs" . }} {{ end }}
   </div>
 </section>

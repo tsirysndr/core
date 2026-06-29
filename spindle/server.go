@@ -427,6 +427,8 @@ func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source,
 		for _, w := range tpl.Workflows {
 			if w != nil {
 				if _, ok := s.engs[w.Engine]; !ok {
+					s.l.Error("workflow failed: unknown engine",
+						"pipeline", pipelineId, "workflow", w.Name, "engine", w.Engine)
 					err = s.db.StatusFailed(models.WorkflowId{
 						PipelineId: pipelineId,
 						Name:       w.Name,
@@ -446,6 +448,8 @@ func (s *Spindle) processPipeline(ctx context.Context, src eventconsumer.Source,
 
 				ewf, err := s.engs[w.Engine].InitWorkflow(*w, tpl)
 				if err != nil {
+					s.l.Error("workflow failed: init workflow",
+						"pipeline", pipelineId, "workflow", w.Name, "engine", w.Engine, "err", err)
 					err = s.db.StatusFailed(models.WorkflowId{
 						PipelineId: pipelineId,
 						Name:       w.Name,

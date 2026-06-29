@@ -104,6 +104,9 @@ func (e *Engine) InitWorkflow(twf tangled.Pipeline_Workflow, tpl tangled.Pipelin
 	swf := &models.Workflow{}
 	var dwf manifestWorkflow
 
+	if err := engine.DescribeManifestError(twf.Raw, manifestWorkflow{}); err != nil {
+		return nil, err
+	}
 	if err := yaml.Unmarshal([]byte(twf.Raw), &dwf); err != nil {
 		return nil, err
 	}

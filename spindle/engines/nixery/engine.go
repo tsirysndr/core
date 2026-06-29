@@ -91,8 +91,10 @@ func (e *Engine) InitWorkflow(twf tangled.Pipeline_Workflow, tpl tangled.Pipelin
 		Dependencies map[string][]string `yaml:"dependencies"`
 		Environment  map[string]string   `yaml:"environment"`
 	}{}
-	err := yaml.Unmarshal([]byte(twf.Raw), &dwf)
-	if err != nil {
+	if err := engine.DescribeManifestError(twf.Raw, dwf); err != nil {
+		return nil, err
+	}
+	if err := yaml.Unmarshal([]byte(twf.Raw), &dwf); err != nil {
 		return nil, err
 	}
 
