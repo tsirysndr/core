@@ -23,7 +23,7 @@ func (rp *Repo) Search(w http.ResponseWriter, r *http.Request) {
 	if err := rp.pages.RepoSearchPage(w, pages.RepoSearchParams{
 		BaseParams:  pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:    rp.repoResolver.GetRepoInfo(r, rp.oauth.GetMultiAccountUser(r)),
-		FilterQuery: "",
+		FilterQuery: r.URL.Query().Get("q"),
 	}); err != nil {
 		rp.logger.Error("failed to render", "err", err)
 	}
@@ -39,6 +39,7 @@ func (rp *Repo) searchResultsFragment(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 
 	var params pages.RepoSearchResultsFragmentParams
+	params.Query = q
 	defer func() {
 		if err := rp.pages.RepoSearchResultsFragment(w, params); err != nil {
 			l.Error("failed to render", "err", err)

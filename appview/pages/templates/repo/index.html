@@ -12,8 +12,27 @@
         {{ if .Languages }}
             {{ block "repoLanguages" . }}{{ end }}
         {{ end }}
-        <div class="flex items-center justify-between pb-5">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-5">
           {{ block "branchSelector" . }}{{ end }}
+          <form id="search-form" class="relative flex items-center h-[32px] order-last w-full md:order-none md:w-64" method="GET" action="/{{ .RepoInfo.FullName }}/search">
+            <span class="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+              {{ i "search-code" "w-4 h-4" }}
+            </span>
+            <input
+              id="search-q"
+              class="w-full h-full py-1 pl-8 pr-8 peer"
+              type="search"
+              name="q"
+              placeholder="Find files or code..."
+            >
+            <button
+              type="button"
+              onclick="const i=document.getElementById('search-q');i.value='';i.focus();"
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hidden peer-[:not(:placeholder-shown)]:block"
+            >
+              {{ i "x" "w-4 h-4" }}
+            </button>
+          </form>
           <div class="flex items-center gap-3">
             <a href="/{{ .RepoInfo.FullName }}/commits/{{ .Ref | urlquery }}" class="inline-flex md:hidden items-center text-sm gap-1 font-bold">
               {{ i "git-commit-horizontal" "w-4" "h-4" }} {{ scaleFmt .TotalCommits }}
@@ -23,9 +42,6 @@
             </a>
             <a href="/{{ .RepoInfo.FullName }}/tags" class="inline-flex md:hidden items-center text-sm gap-1 font-bold">
               {{ i "tags" "w-4" "h-4" }} {{ scaleFmt (len .Tags) }}
-            </a>
-            <a href="/{{ .RepoInfo.FullName }}/search" class="btn">
-              {{ i "search" "size-4" }}
             </a>
             {{ template "repo/fragments/cloneDropdown" . }}
           </div>
@@ -68,7 +84,7 @@
 {{ end }}
 
 {{ define "branchSelector" }}
-  <div class="flex gap-2 items-center justify-between w-full">
+  <div class="flex gap-2 items-center justify-between flex-1 min-w-0">
     <div class="flex gap-2 items-stretch">
       <select
           onchange="window.location.href = '/{{ .RepoInfo.FullName }}/tree/' + encodeURIComponent(this.value)"
@@ -365,4 +381,3 @@
        {{ template "repo/fragments/readme" . }}
     {{- end -}}
 {{ end }}
-

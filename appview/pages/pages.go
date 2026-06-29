@@ -943,6 +943,7 @@ func (p *Pages) RepoSearchPage(w io.Writer, params RepoSearchParams) error {
 }
 
 type RepoSearchResultsFragmentParams struct {
+	Query    string
 	Results  []SearchResult
 	ErrorMsg string
 }
