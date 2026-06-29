@@ -76,6 +76,38 @@
       }
     })();
   </script>
+  <script>
+    (function() {
+      const isPermalink = (id) => id.startsWith('comment-') || id.startsWith('round-');
+
+      const reveal = () => {
+        const raw = window.location.hash.slice(1);
+        if (!raw) return;
+        let id;
+        try { id = decodeURIComponent(raw); } catch (e) { return; }
+        if (!isPermalink(id)) return;
+        const target = document.getElementById(id);
+        if (!target) return;
+
+        for (let el = target.parentElement; el; el = el.parentElement) {
+          if (el.tagName === 'DETAILS') el.open = true;
+        }
+
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          target.scrollIntoView({ block: 'center' });
+          const card = target.closest('.group\\/comment') || target;
+          card.classList.add('comment-hl');
+        }));
+      };
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', reveal);
+      } else {
+        reveal();
+      }
+      window.addEventListener('hashchange', reveal);
+    })();
+  </script>
 {{ end }}
 
 {{ define "repoContentLayout" }}
@@ -271,7 +303,7 @@
   {{ $lastIdx := index . 2 }}
   {{ $root := index . 3 }}
   {{ $round := $item.RoundNumber }}
-  <div class="
+  <div id="round-{{ $round }}" class="
     w-full shadow-sm  border overflow-clip
 
     {{ if eq $round 0 }}rounded-b{{ else }}rounded{{ end }}
@@ -362,14 +394,14 @@
         {{ else }}
         text-gray-500 dark:text-gray-400 hover:text-gray-500 dark:hover:text-gray-300
         {{ end }}
-        " href="#round-#{{ $round }}">
+        " href="#round-{{ $round }}">
         {{ template "repo/fragments/shortTime" $item.Created }}
       </a>
     </span>
     <div class="flex gap-2 items-center">
       {{ if or $root.IsInterdiff (ne $root.ActiveRound $round) }}
       <a class="btn-flat flex items-center gap-2 no-underline hover:no-underline text-sm"
-        href="/{{ $root.RepoInfo.FullName }}/pulls/{{ $root.Pull.PullId }}/round/{{ $round }}?{{ safeUrl $root.DiffOpts.Encode }}#round-#{{ $round }}">
+        href="/{{ $root.RepoInfo.FullName }}/pulls/{{ $root.Pull.PullId }}/round/{{ $round }}?{{ safeUrl $root.DiffOpts.Encode }}#round-{{ $round }}">
         {{ i "diff" "w-4 h-4" }}
         Diff
       </a>
@@ -544,14 +576,13 @@
         </span>
       </div>
     </summary>
-    <div>
+    <div id="pull-comments-{{ $round }}">
       {{ range $item.Comments }}
-        {{ template "comment"
-          (dict "LoggedInUser"      $root.LoggedInUser
-                "Reactions"         (index (asReactionMapMap $root.Reactions) .FeedCommentAtUri)
-                "UserReacted"       (index (asReactionStatusMapMap $root.UserReacted) .FeedCommentAtUri)
-                "VouchRelationship" (index $root.VouchRelationships .Did)
-                "Comment"           .) }}
+        {{ template "fragments/comment/pullComment"
+          (dict "LoggedInUser" $root.LoggedInUser
+                "Reactions"    (index (asReactionMapMap $root.Reactions) .FeedCommentAtUri)
+                "UserReacted"  (index (asReactionStatusMapMap $root.UserReacted) .FeedCommentAtUri)
+                "Comment"      .) }}
       {{ end }}
     </div>
     {{ if gt $c 0}}
@@ -584,20 +615,6 @@
           "Loading" (eq $lastIdx $item.RoundNumber)) }}
     </div>
   </details>
-{{ end }}
-
-{{ define "comment" }}
-<div class="flex gap-2 -ml-4 py-4 w-full mx-auto group/comment">
-  <!-- left column: profile picture -->
-  <div class="flex-shrink-0 h-fit relative">
-    {{ template "user/fragments/picLink" (list .Comment.Did.String "size-8") }}
-  </div>
-  <!-- right column: name and body in two rows -->
-  <div class="flex-1 min-w-0">
-    {{ template "fragments/comment/commentHeader" . }}
-    {{ template "fragments/comment/commentBody" . }}
-  </div>
-</div>
 {{ end }}
 
 {{ define "loginPrompt" }}

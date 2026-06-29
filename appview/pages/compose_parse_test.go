@@ -30,6 +30,9 @@ func TestPullComposeTemplatesParse(t *testing.T) {
 		{"pullCompareForks", []string{"repo/pulls/fragments/pullCompareForks"}},
 		{"pullCompareBranches", []string{"repo/pulls/fragments/pullCompareBranches"}},
 		{"pullCompareForksBranches", []string{"repo/pulls/fragments/pullCompareForksBranches"}},
+		{"pull.html via repo base", []string{"layouts/base", "layouts/repobase", "repo/pulls/pull"}},
+		{"pullNewComment", []string{"repo/pulls/fragments/pullNewComment"}},
+		{"pullComment", []string{"fragments/comment/pullComment"}},
 	}
 
 	for _, c := range cases {

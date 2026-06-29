@@ -1877,6 +1877,18 @@ func (p *Pages) CommentBodyFragment(w io.Writer, params CommentBodyFragmentParam
 	return p.executePlain("fragments/comment/commentBody", w, params)
 }
 
+type PullCommentFragmentParams struct {
+	LoggedInUser *oauth.MultiAccountUser
+	Comment      models.Comment
+	Reactions    map[models.ReactionKind]models.ReactionDisplayData
+	UserReacted  map[models.ReactionKind]bool
+	HxSwapOob    bool
+}
+
+func (p *Pages) PullCommentFragment(w io.Writer, params PullCommentFragmentParams) error {
+	return p.executePlain("fragments/comment/pullComment", w, params)
+}
+
 type CommentHeaderFragmentParams struct {
 	Comment     models.Comment
 	Reactions   map[models.ReactionKind]models.ReactionDisplayData

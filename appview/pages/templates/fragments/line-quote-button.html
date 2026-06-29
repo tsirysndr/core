@@ -66,8 +66,10 @@
 
     const highlightFromHash = () => {
       clearHl('line-range-hl');
-      const hash = decodeURIComponent(window.location.hash.slice(1));
+      let hash;
+      try { hash = decodeURIComponent(window.location.hash.slice(1)); } catch (e) { return; }
       if (!hash) return;
+      if (hash.startsWith('comment-') || hash.startsWith('round-')) return;
       const parts = hash.split('~');
       const startEl = document.getElementById(parts[0]);
 

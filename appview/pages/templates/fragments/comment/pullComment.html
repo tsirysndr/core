@@ -1,0 +1,13 @@
+{{ define "fragments/comment/pullComment" }}
+<div class="flex gap-2 -ml-4 py-4 w-full mx-auto group/comment">
+  <!-- left column: profile picture -->
+  <div class="flex-shrink-0 h-fit relative">
+    {{ template "user/fragments/picLink" (list .Comment.Did.String "size-8") }}
+  </div>
+  <!-- right column: name and body in two rows -->
+  <div class="flex-1 min-w-0">
+    {{ template "fragments/comment/commentHeader" . }}
+    {{ template "fragments/comment/commentBody" . }}
+  </div>
+</div>
+{{ end }}

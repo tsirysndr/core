@@ -94,6 +94,18 @@ func (s *State) NewComment(w http.ResponseWriter, r *http.Request) {
 	noticeId := "comment-error"
 	ctx := r.Context()
 
+	var pullRoundIdx *int
+	if pullRoundIdxRaw := r.FormValue("pull-round-idx"); pullRoundIdxRaw != "" {
+		roundIdx, err := strconv.Atoi(pullRoundIdxRaw)
+		if err != nil {
+			l.Warn("invalid round idx", "err", err)
+			s.pages.Notice(w, noticeId, "pull round index should be valid integer")
+			return
+		}
+		pullRoundIdx = &roundIdx
+		noticeId = fmt.Sprintf("comment-error-%d", roundIdx)
+	}
+
 	body := r.FormValue("body")
 	if body == "" {
 		s.pages.Notice(w, noticeId, "Body is required")
@@ -163,17 +175,6 @@ func (s *State) NewComment(w http.ResponseWriter, r *http.Request) {
 	subject := comatproto.RepoStrongRef{
 		Uri: subjectUri.String(),
 		Cid: subjectCid.String(),
-	}
-
-	var pullRoundIdx *int
-	if pullRoundIdxRaw := r.FormValue("pull-round-idx"); pullRoundIdxRaw != "" {
-		roundIdx, err := strconv.Atoi(pullRoundIdxRaw)
-		if err != nil {
-			l.Warn("invalid round idx", "err", err)
-			s.pages.Notice(w, noticeId, "pull round index should be valid integer")
-			return
-		}
-		pullRoundIdx = &roundIdx
 	}
 
 	var replyTo *comatproto.RepoStrongRef
@@ -294,6 +295,21 @@ func (s *State) NewComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.notifier.NewComment(ctx, &comment, mentions)
+
+	if pullRoundIdx != nil {
+		var buf bytes.Buffer
+		if err := s.pages.PullCommentFragment(&buf, pages.PullCommentFragmentParams{
+			LoggedInUser: user,
+			Comment:      comment,
+		}); err != nil {
+			l.Error("failed to render pull comment fragment", "err", err)
+			s.pages.HxRefresh(w)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		w.Write(buf.Bytes())
+		return
+	}
 
 	// TODO: return comment or reply-comment fragment
 	// onattach, htmx-callback to focus on comment.

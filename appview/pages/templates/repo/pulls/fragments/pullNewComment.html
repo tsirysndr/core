@@ -5,8 +5,10 @@
     class="w-full flex flex-wrap gap-2 group"
     hx-post="/comment"
     hx-trigger="submit, keydown[(ctrlKey || metaKey) && key=='Enter'] from:find textarea"
-    hx-swap="none"
+    hx-target="#pull-comments-{{ .RoundNumber }}"
+    hx-swap="beforeend"
     hx-disabled-elt="find button[type='submit']"
+    hx-on::before-request="this.querySelector('.error').innerHTML = ''"
     hx-on::after-request="if(event.detail.successful) this.reset()"
   >
     <input name="subject-uri" type="hidden" value="{{ .Pull.AtUri }}">
@@ -19,7 +21,7 @@
       placeholder="Add to the discussion..."></textarea
     >
     {{ template "replyActions" . }}
-    <div id="pull-comment"></div>
+    <div id="comment-error-{{ .RoundNumber }}" class="error"></div>
   </form>
 </div>
 {{ end }}
