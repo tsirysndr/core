@@ -100,7 +100,16 @@
       {{ template "codeSearchResults" . }}
     {{ end }}
   {{ else }}
-    {{ template "repoSearchResults" . }}
+    {{ if not .LoggedInUser }}
+      <div class="flex items-center gap-2 my-2 bg-orange-50 dark:bg-orange-900/30 border border-orange-300 dark:border-orange-700 rounded px-3 py-2 text-orange-600 dark:text-orange-300 text-sm">
+        {{ i "circle-alert" "size-4" }}
+        {{ $url := "/search?type=repo" -}}
+        <span>Global repository search is temporarily disabled to unauthenticated users.
+          <a href="/login?return_url={{ $url }}" class="underline">Login</a> to search repos.</span>
+      </div>
+    {{ else }}
+      {{ template "repoSearchResults" . }}
+    {{ end }}
   {{ end }}
 {{ end }}
 

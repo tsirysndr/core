@@ -49,6 +49,11 @@ func (s *State) handleRepoSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	// blame me
+	if params.BaseParams.LoggedInUser == nil {
+		return
+	}
+
 	var language string
 	if lang := cmp.Or(q.Get("language"), q.Get("lang")); lang != nil {
 		language = *lang
