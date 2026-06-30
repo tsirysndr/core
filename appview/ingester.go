@@ -209,9 +209,15 @@ func (i *Ingester) ingestStar(ctx context.Context, e *jmodels.Event, l *slog.Log
 		record := tangled.FeedStar{}
 		unmarshalErr := json.Unmarshal(raw, &record)
 
+		createdAt, parseErr := time.Parse(time.RFC3339, record.CreatedAt)
+		if parseErr != nil {
+			createdAt = time.Now()
+		}
+
 		star := models.Star{
-			Did:  did,
-			Rkey: e.Commit.RKey,
+			Did:     did,
+			Rkey:    e.Commit.RKey,
+			Created: createdAt,
 		}
 
 		switch {
