@@ -182,7 +182,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 			if pipeline == nil {
 				continue
 			}
-			m[pipeline.Commit] = types.Pipeline{CiDefs_Pipeline: pipeline}
+			m[pipeline.Commit] = types.Pipeline{CiPipeline: pipeline}
 		}
 		return m
 	}(r.Context())

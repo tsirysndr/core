@@ -17,8 +17,8 @@ const (
 // CiGetPipeline calls the XRPC method "sh.tangled.ci.getPipeline".
 //
 // pipeline: Spindle-local pipeline id
-func CiGetPipeline(ctx context.Context, c util.LexClient, pipeline string) (*CiDefs_Pipeline, error) {
-	var out CiDefs_Pipeline
+func CiGetPipeline(ctx context.Context, c util.LexClient, pipeline string) (*CiPipeline, error) {
+	var out CiPipeline
 
 	params := map[string]interface{}{}
 	params["pipeline"] = pipeline

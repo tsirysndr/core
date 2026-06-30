@@ -142,7 +142,7 @@ func (p *Pipelines) Index(w http.ResponseWriter, r *http.Request) {
 
 	var pipelines []types.Pipeline
 	for _, pipeline := range out.Pipelines {
-		pipelines = append(pipelines, types.Pipeline{CiDefs_Pipeline: pipeline})
+		pipelines = append(pipelines, types.Pipeline{CiPipeline: pipeline})
 	}
 
 	p.pages.Pipelines(w, pages.PipelinesParams{
@@ -222,7 +222,7 @@ func (p *Pipelines) Workflow(w http.ResponseWriter, r *http.Request) {
 	p.pages.Workflow(w, pages.WorkflowParams{
 		BaseParams: pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:   p.repoResolver.GetRepoInfo(r, user),
-		Pipeline:   types.Pipeline{CiDefs_Pipeline: out},
+		Pipeline:   types.Pipeline{CiPipeline: out},
 		Workflow:   workflowName,
 	})
 }
@@ -233,13 +233,13 @@ var upgrader = websocket.Upgrader{
 }
 
 type webLogScheduler struct {
-	ch chan *tangled.CiPipelineSubscribeLogs_Event
+	ch chan *tangled.CiSubscribePipelineLogs_Event
 }
 
-var _ lexutil.Scheduler[tangled.CiPipelineSubscribeLogs_Event] = (*webLogScheduler)(nil)
+var _ lexutil.Scheduler[tangled.CiSubscribePipelineLogs_Event] = (*webLogScheduler)(nil)
 
 // AddWork implements [lexutil.Scheduler].
-func (w *webLogScheduler) AddWork(ctx context.Context, _ string, val *tangled.CiPipelineSubscribeLogs_Event) error {
+func (w *webLogScheduler) AddWork(ctx context.Context, _ string, val *tangled.CiSubscribePipelineLogs_Event) error {
 	select {
 	case w.ch <- val:
 		return nil
@@ -296,12 +296,12 @@ func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	evChan := make(chan *tangled.CiPipelineSubscribeLogs_Event, 100)
+	evChan := make(chan *tangled.CiSubscribePipelineLogs_Event, 100)
 	done := make(chan error, 1)
 	sched := &webLogScheduler{ch: evChan}
 	xrpcc := &lexutil.Client{Client: indigoxrpc.Client{Host: spindleUrl}}
 	go func() {
-		done <- tangled.CiPipelineSubscribeLogs(ctx, xrpcc, pipelineId.String(), []string{workflowName}, sched)
+		done <- tangled.CiSubscribePipelineLogs(ctx, xrpcc, pipelineId.String(), []string{workflowName}, sched)
 	}()
 
 	var lastWriteLk sync.Mutex
@@ -570,16 +570,16 @@ func (p *Pipelines) retry(w http.ResponseWriter, r *http.Request, only string) {
 	}
 	redirectWf := workflows[0]
 
-	spindleClient, err := p.spindleServiceClient(r, f.Spindle, tangled.CiPipelineTriggerPipelineNSID)
+	spindleClient, err := p.spindleServiceClient(r, f.Spindle, tangled.CiTriggerPipelineNSID)
 	if err != nil {
 		fail("failed to authorize with spindle", err)
 		return
 	}
 
-	out, err := tangled.CiPipelineTriggerPipeline(
+	out, err := tangled.CiTriggerPipeline(
 		r.Context(),
 		spindleClient,
-		&tangled.CiPipelineTriggerPipeline_Input{
+		&tangled.CiTriggerPipeline_Input{
 			Repo:      string(f.RepoAt()),
 			Sha:       orig.Commit,
 			Workflows: workflows,

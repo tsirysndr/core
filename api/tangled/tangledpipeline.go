@@ -15,7 +15,7 @@ const (
 func init() {
 	util.RegisterType("sh.tangled.pipeline", &Pipeline{})
 } //
-// DEPRECATED: use sh.tangled.ci.defs#pipeline instead
+// DEPRECATED: use sh.tangled.ci.pipeline instead
 //
 // RECORDTYPE: Pipeline
 type Pipeline struct {

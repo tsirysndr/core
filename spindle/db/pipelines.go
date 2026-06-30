@@ -11,7 +11,7 @@ import (
 	"tangled.org/core/spindle/models"
 )
 
-func (d *DB) QueryPipelines(ctx context.Context, repoDid string, commits []string, cursor string, limit int) ([]*tangled.CiDefs_Pipeline, string, int64, error) {
+func (d *DB) QueryPipelines(ctx context.Context, repoDid string, commits []string, cursor string, limit int) ([]*tangled.CiPipeline, string, int64, error) {
 	if limit <= 0 {
 		limit = 30
 	}
@@ -59,7 +59,7 @@ func (d *DB) QueryPipelines(ctx context.Context, repoDid string, commits []strin
 	}
 	defer rows.Close()
 
-	var pipelines []*tangled.CiDefs_Pipeline
+	var pipelines []*tangled.CiPipeline
 	var lastCreated int64
 
 	for rows.Next() {
@@ -75,7 +75,7 @@ func (d *DB) QueryPipelines(ctx context.Context, repoDid string, commits []strin
 			continue
 		}
 
-		p, err := d.mapToCiDefsPipeline(ctx, rkey, created, rawPipeline)
+		p, err := d.mapToCiPipeline(ctx, rkey, created, rawPipeline)
 		if err != nil {
 			return nil, "", 0, err
 		}
@@ -90,7 +90,7 @@ func (d *DB) QueryPipelines(ctx context.Context, repoDid string, commits []strin
 	return pipelines, nextCursor, total, nil
 }
 
-func (d *DB) GetPipeline(ctx context.Context, rkey string) (*tangled.CiDefs_Pipeline, error) {
+func (d *DB) GetPipeline(ctx context.Context, rkey string) (*tangled.CiPipeline, error) {
 	var eventJson string
 	var created int64
 	err := d.QueryRowContext(ctx,
@@ -113,10 +113,10 @@ func (d *DB) GetPipeline(ctx context.Context, rkey string) (*tangled.CiDefs_Pipe
 		return nil, err
 	}
 
-	return d.mapToCiDefsPipeline(ctx, rkey, created, rawPipeline)
+	return d.mapToCiPipeline(ctx, rkey, created, rawPipeline)
 }
 
-func (d *DB) mapToCiDefsPipeline(ctx context.Context, rkey string, created int64, raw tangled.Pipeline) (*tangled.CiDefs_Pipeline, error) {
+func (d *DB) mapToCiPipeline(ctx context.Context, rkey string, created int64, raw tangled.Pipeline) (*tangled.CiPipeline, error) {
 	createdAtStr := time.Unix(0, created).Format(time.RFC3339)
 
 	var repoDidStr string
@@ -129,7 +129,7 @@ func (d *DB) mapToCiDefsPipeline(ctx context.Context, rkey string, created int64
 	}
 
 	commitSha := ""
-	var trigger tangled.CiDefs_Pipeline_Trigger
+	var trigger tangled.CiPipeline_Trigger
 
 	if raw.TriggerMetadata != nil {
 		switch raw.TriggerMetadata.Kind {
@@ -160,7 +160,7 @@ func (d *DB) mapToCiDefsPipeline(ctx context.Context, rkey string, created int64
 		}
 	}
 
-	var workflows []*tangled.CiDefs_Workflow
+	var workflows []*tangled.CiPipeline_Workflow
 	for _, wf := range raw.Workflows {
 		status := "pending"
 		var startedAt, finishedAt, wfError *string
@@ -182,7 +182,7 @@ func (d *DB) mapToCiDefsPipeline(ctx context.Context, rkey string, created int64
 			}
 		}
 
-		workflows = append(workflows, &tangled.CiDefs_Workflow{
+		workflows = append(workflows, &tangled.CiPipeline_Workflow{
 			Id:         wf.Name,
 			Name:       wf.Name,
 			Status:     status,
@@ -192,7 +192,7 @@ func (d *DB) mapToCiDefsPipeline(ctx context.Context, rkey string, created int64
 		})
 	}
 
-	return &tangled.CiDefs_Pipeline{
+	return &tangled.CiPipeline{
 		Id:        rkey,
 		Commit:    commitSha,
 		Repo:      &repoDidStr,

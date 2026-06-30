@@ -8,7 +8,7 @@ import (
 
 // helper functions against generated code
 
-func workflowElapsed(wf *tangled.CiDefs_Workflow, now time.Time) time.Duration {
+func workflowElapsed(wf *tangled.CiPipeline_Workflow, now time.Time) time.Duration {
 	if wf.StartedAt == nil {
 		return 0
 	}
@@ -33,7 +33,7 @@ var finishedStatuses = map[string]bool{
 	"success":   true,
 }
 
-func pipelineFinished(p *tangled.CiDefs_Pipeline) bool {
+func pipelineFinished(p *tangled.CiPipeline) bool {
 	for _, wf := range p.Workflows {
 		if !finishedStatuses[wf.Status] {
 			return false

@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "sh.tangled.ci.pipeline.triggerPipeline",
+  "id": "sh.tangled.ci.triggerPipeline",
   "defs": {
     "main": {
       "type": "procedure",

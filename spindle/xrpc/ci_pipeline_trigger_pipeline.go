@@ -30,7 +30,7 @@ func (x *Xrpc) TriggerPipeline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var input tangled.CiPipelineTriggerPipeline_Input
+	var input tangled.CiTriggerPipeline_Input
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		fail(xrpcerr.GenericError(err))
 		return
@@ -62,7 +62,7 @@ func (x *Xrpc) TriggerPipeline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := writeJson(w, http.StatusOK, tangled.CiPipelineTriggerPipeline_Output{
+	if err := writeJson(w, http.StatusOK, tangled.CiTriggerPipeline_Output{
 		Pipeline: pipelineAt.String(),
 	}); err != nil {
 		l.Error("failed to write response", "err", err)

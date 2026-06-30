@@ -31,7 +31,7 @@ func (s StatusKind) IsStart() bool {
 }
 
 type WorkflowStatus struct {
-	*tangled.CiDefs_Workflow
+	*tangled.CiPipeline_Workflow
 	PipelineCreatedAt *string
 }
 
@@ -40,21 +40,21 @@ func (w WorkflowStatus) Latest() WorkflowStatus {
 }
 
 func (w WorkflowStatus) Error() string {
-	if w.CiDefs_Workflow == nil || w.CiDefs_Workflow.Error == nil {
+	if w.CiPipeline_Workflow == nil || w.CiPipeline_Workflow.Error == nil {
 		return ""
 	}
-	return *w.CiDefs_Workflow.Error
+	return *w.CiPipeline_Workflow.Error
 }
 
 func (w WorkflowStatus) Status() StatusKind {
-	if w.CiDefs_Workflow == nil {
+	if w.CiPipeline_Workflow == nil {
 		return ""
 	}
-	return StatusKind(w.CiDefs_Workflow.Status)
+	return StatusKind(w.CiPipeline_Workflow.Status)
 }
 
 func (w WorkflowStatus) TimeTaken() time.Duration {
-	if w.CiDefs_Workflow == nil || w.StartedAt == nil || w.FinishedAt == nil || *w.StartedAt == "" || *w.FinishedAt == "" {
+	if w.CiPipeline_Workflow == nil || w.StartedAt == nil || w.FinishedAt == nil || *w.StartedAt == "" || *w.FinishedAt == "" {
 		return 0
 	}
 	t1, err1 := time.Parse(time.RFC3339, *w.StartedAt)
@@ -67,9 +67,9 @@ func (w WorkflowStatus) TimeTaken() time.Duration {
 
 func (w WorkflowStatus) Created() time.Time {
 	var timeStr string
-	if w.CiDefs_Workflow != nil && w.StartedAt != nil && *w.StartedAt != "" {
+	if w.CiPipeline_Workflow != nil && w.StartedAt != nil && *w.StartedAt != "" {
 		timeStr = *w.StartedAt
-	} else if w.CiDefs_Workflow != nil && w.FinishedAt != nil && *w.FinishedAt != "" {
+	} else if w.CiPipeline_Workflow != nil && w.FinishedAt != nil && *w.FinishedAt != "" {
 		timeStr = *w.FinishedAt
 	} else if w.PipelineCreatedAt != nil && *w.PipelineCreatedAt != "" {
 		timeStr = *w.PipelineCreatedAt
@@ -85,27 +85,27 @@ func (w WorkflowStatus) Created() time.Time {
 }
 
 type Trigger struct {
-	*tangled.CiDefs_Pipeline_Trigger
+	*tangled.CiPipeline_Trigger
 }
 
 func (t Trigger) IsPush() bool {
-	return t.CiDefs_Pipeline_Trigger != nil && t.CiDefs_Pipeline_Trigger.CiTrigger_Push != nil
+	return t.CiPipeline_Trigger != nil && t.CiPipeline_Trigger.CiTrigger_Push != nil
 }
 
 func (t Trigger) IsPullRequest() bool {
-	return t.CiDefs_Pipeline_Trigger != nil && t.CiDefs_Pipeline_Trigger.CiTrigger_PullRequest != nil
+	return t.CiPipeline_Trigger != nil && t.CiPipeline_Trigger.CiTrigger_PullRequest != nil
 }
 
 func (t Trigger) IsManual() bool {
-	return t.CiDefs_Pipeline_Trigger != nil && t.CiDefs_Pipeline_Trigger.CiTrigger_Manual != nil
+	return t.CiPipeline_Trigger != nil && t.CiPipeline_Trigger.CiTrigger_Manual != nil
 }
 
 func (t Trigger) TargetRef() string {
-	if t.CiDefs_Pipeline_Trigger == nil {
+	if t.CiPipeline_Trigger == nil {
 		return ""
 	}
-	if t.CiDefs_Pipeline_Trigger.CiTrigger_Push != nil {
-		ref := t.CiDefs_Pipeline_Trigger.CiTrigger_Push.Ref
+	if t.CiPipeline_Trigger.CiTrigger_Push != nil {
+		ref := t.CiPipeline_Trigger.CiTrigger_Push.Ref
 		if strings.HasPrefix(ref, "refs/heads/") {
 			return strings.TrimPrefix(ref, "refs/heads/")
 		}
@@ -114,17 +114,17 @@ func (t Trigger) TargetRef() string {
 		}
 		return ref
 	}
-	if t.CiDefs_Pipeline_Trigger.CiTrigger_PullRequest != nil {
-		return t.CiDefs_Pipeline_Trigger.CiTrigger_PullRequest.TargetBranch
+	if t.CiPipeline_Trigger.CiTrigger_PullRequest != nil {
+		return t.CiPipeline_Trigger.CiTrigger_PullRequest.TargetBranch
 	}
 	return ""
 }
 
 func (t Trigger) PRSourceBranch() string {
-	if t.CiDefs_Pipeline_Trigger == nil || t.CiDefs_Pipeline_Trigger.CiTrigger_PullRequest == nil {
+	if t.CiPipeline_Trigger == nil || t.CiPipeline_Trigger.CiTrigger_PullRequest == nil {
 		return ""
 	}
-	sb := t.CiDefs_Pipeline_Trigger.CiTrigger_PullRequest.SourceBranch
+	sb := t.CiPipeline_Trigger.CiTrigger_PullRequest.SourceBranch
 	if sb == nil {
 		return ""
 	}
@@ -132,27 +132,27 @@ func (t Trigger) PRSourceBranch() string {
 }
 
 type Pipeline struct {
-	*tangled.CiDefs_Pipeline
+	*tangled.CiPipeline
 }
 
 func (p Pipeline) Valid() bool {
-	return p.CiDefs_Pipeline != nil
+	return p.CiPipeline != nil
 }
 
 func (p Pipeline) Id() string {
-	if p.CiDefs_Pipeline == nil {
+	if p.CiPipeline == nil {
 		return ""
 	}
-	return p.CiDefs_Pipeline.Id
+	return p.CiPipeline.Id
 }
 
 func (p Pipeline) Statuses() map[string]WorkflowStatus {
 	m := make(map[string]WorkflowStatus)
-	if p.CiDefs_Pipeline != nil {
-		for _, w := range p.CiDefs_Pipeline.Workflows {
+	if p.CiPipeline != nil {
+		for _, w := range p.CiPipeline.Workflows {
 			m[w.Name] = WorkflowStatus{
-				CiDefs_Workflow:   w,
-				PipelineCreatedAt: p.CreatedAt,
+				CiPipeline_Workflow: w,
+				PipelineCreatedAt:   p.CreatedAt,
 			}
 		}
 	}
@@ -161,8 +161,8 @@ func (p Pipeline) Statuses() map[string]WorkflowStatus {
 
 func (p Pipeline) Counts() map[string]int {
 	m := make(map[string]int)
-	if p.CiDefs_Pipeline != nil {
-		for _, w := range p.CiDefs_Pipeline.Workflows {
+	if p.CiPipeline != nil {
+		for _, w := range p.CiPipeline.Workflows {
 			m[w.Status]++
 		}
 	}
@@ -177,21 +177,21 @@ func (p Pipeline) InProgress() bool {
 }
 
 func (p Pipeline) ShortStatusSummary() string {
-	if p.CiDefs_Pipeline == nil {
+	if p.CiPipeline == nil {
 		return ""
 	}
 	counts := p.Counts()
-	total := len(p.CiDefs_Pipeline.Workflows)
+	total := len(p.CiPipeline.Workflows)
 	successes := counts["success"]
 	return fmt.Sprintf("%d/%d", successes, total)
 }
 
 func (p Pipeline) LongStatusSummary() string {
-	if p.CiDefs_Pipeline == nil {
+	if p.CiPipeline == nil {
 		return ""
 	}
 	counts := p.Counts()
-	total := len(p.CiDefs_Pipeline.Workflows)
+	total := len(p.CiPipeline.Workflows)
 	var parts []string
 	states := []string{"success", "failed", "timeout", "cancelled", "running", "pending"}
 	for _, state := range states {
@@ -203,18 +203,18 @@ func (p Pipeline) LongStatusSummary() string {
 }
 
 func (p Pipeline) TimeTaken() time.Duration {
-	if p.CiDefs_Pipeline == nil {
+	if p.CiPipeline == nil {
 		return 0
 	}
 	var s time.Duration
-	for _, w := range p.CiDefs_Pipeline.Workflows {
-		s += WorkflowStatus{CiDefs_Workflow: w}.TimeTaken()
+	for _, w := range p.CiPipeline.Workflows {
+		s += WorkflowStatus{CiPipeline_Workflow: w}.TimeTaken()
 	}
 	return s
 }
 
 func (p Pipeline) Created() time.Time {
-	if p.CiDefs_Pipeline == nil || p.CreatedAt == nil || *p.CreatedAt == "" {
+	if p.CiPipeline == nil || p.CreatedAt == nil || *p.CreatedAt == "" {
 		return time.Time{}
 	}
 	t, err := time.Parse(time.RFC3339, *p.CreatedAt)
@@ -225,27 +225,27 @@ func (p Pipeline) Created() time.Time {
 }
 
 func (p Pipeline) Trigger() Trigger {
-	if p.CiDefs_Pipeline == nil {
+	if p.CiPipeline == nil {
 		return Trigger{nil}
 	}
-	return Trigger{p.CiDefs_Pipeline.Trigger}
+	return Trigger{p.CiPipeline.Trigger}
 }
 
 func (p Pipeline) IsResponding() bool {
-	return p.CiDefs_Pipeline != nil && len(p.CiDefs_Pipeline.Workflows) > 0
+	return p.CiPipeline != nil && len(p.CiPipeline.Workflows) > 0
 }
 
 func (p Pipeline) Sha() string {
-	if p.CiDefs_Pipeline == nil {
+	if p.CiPipeline == nil {
 		return ""
 	}
-	return p.CiDefs_Pipeline.Commit
+	return p.CiPipeline.Commit
 }
 
 func (p Pipeline) Workflows() []string {
 	var ws []string
-	if p.CiDefs_Pipeline != nil {
-		for _, w := range p.CiDefs_Pipeline.Workflows {
+	if p.CiPipeline != nil {
+		for _, w := range p.CiPipeline.Workflows {
 			ws = append(ws, w.Name)
 		}
 	}

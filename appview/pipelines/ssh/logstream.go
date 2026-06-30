@@ -22,20 +22,20 @@ type logDoneMsg struct {
 }
 
 type logEventMsg struct {
-	ev     *tangled.CiPipelineSubscribeLogs_Event
-	events chan *tangled.CiPipelineSubscribeLogs_Event
+	ev     *tangled.CiSubscribePipelineLogs_Event
+	events chan *tangled.CiSubscribePipelineLogs_Event
 	done   chan error
 }
 
 type eventScheduler struct {
-	ch chan *tangled.CiPipelineSubscribeLogs_Event
+	ch chan *tangled.CiSubscribePipelineLogs_Event
 }
 
 func newEventScheduler() *eventScheduler {
-	return &eventScheduler{ch: make(chan *tangled.CiPipelineSubscribeLogs_Event, 1024)}
+	return &eventScheduler{ch: make(chan *tangled.CiSubscribePipelineLogs_Event, 1024)}
 }
 
-func (s *eventScheduler) AddWork(ctx context.Context, _ string, v *tangled.CiPipelineSubscribeLogs_Event) error {
+func (s *eventScheduler) AddWork(ctx context.Context, _ string, v *tangled.CiSubscribePipelineLogs_Event) error {
 	select {
 	case s.ch <- v:
 		return nil

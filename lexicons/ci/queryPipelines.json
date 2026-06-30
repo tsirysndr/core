@@ -48,7 +48,7 @@
             },
             "pipelines": {
               "type": "array",
-              "items": { "type": "ref", "ref": "sh.tangled.ci.defs#pipeline" }
+              "items": { "type": "ref", "ref": "sh.tangled.ci.pipeline" }
             }
           }
         }

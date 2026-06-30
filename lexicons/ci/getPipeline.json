@@ -19,7 +19,7 @@
         "encoding": "application/json",
         "schema": {
           "type": "ref",
-          "ref": "sh.tangled.ci.defs#pipeline"
+          "ref": "sh.tangled.ci.pipeline"
         }
       },
       "errors": [

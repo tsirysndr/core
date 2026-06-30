@@ -31,8 +31,8 @@ var TangledScopes = []string{
 
 	"rpc:sh.tangled.knot.addMember?aud=*",
 	"rpc:sh.tangled.knot.removeMember?aud=*",
-	"rpc:sh.tangled.ci.pipeline.triggerPipeline?aud=*",
-	"rpc:sh.tangled.pipeline.cancelPipeline?aud=*",
+	"rpc:sh.tangled.ci.triggerPipeline?aud=*",
+	"rpc:sh.tangled.ci.cancelPipeline?aud=*",
 	"rpc:sh.tangled.repo.addCollaborator?aud=*",
 	"rpc:sh.tangled.repo.addSecret?aud=*",
 	"rpc:sh.tangled.repo.create?aud=*",

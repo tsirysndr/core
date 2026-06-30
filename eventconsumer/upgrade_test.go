@@ -22,7 +22,7 @@ func sqliteCursorStore(t *testing.T) cursor.Store {
 	return store
 }
 
-func drainProcessed(t *testing.T, store cursor.Store, source Source) []int64 {
+func drainProcessed(t *testing.T, store cursor.Store, source Source, expected int) []int64 {
 	t.Helper()
 
 	var mu sync.Mutex
@@ -43,25 +43,22 @@ func drainProcessed(t *testing.T, store cursor.Store, source Source) []int64 {
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
+	defer cancel()
 	c.Start(ctx)
 	c.AddSource(ctx, source)
 
 	deadline := time.Now().Add(3 * time.Second)
-	last, stable := -1, 0
 	for time.Now().Before(deadline) {
-		time.Sleep(100 * time.Millisecond)
 		mu.Lock()
 		n := len(seen)
 		mu.Unlock()
-		if n == last {
-			if stable++; stable >= 3 && n > 0 {
-				break
-			}
-		} else {
-			last, stable = n, 0
+		if n >= expected {
+			break
 		}
+		time.Sleep(20 * time.Millisecond)
 	}
+
+	c.Stop()
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -78,7 +75,7 @@ func TestSpindleUpgrade_OrphanedCursorReplaysFromZero(t *testing.T) {
 	store := sqliteCursorStore(t)
 	store.Set(source.Host, 5)
 
-	seen := drainProcessed(t, store, source)
+	seen := drainProcessed(t, store, source, 8)
 
 	if len(seen) != 8 {
 		t.Fatalf("orphaned bare-host cursor processed %d events, want a full replay of 8: %v", len(seen), seen)
@@ -97,7 +94,7 @@ func TestSpindleUpgrade_MigratedCursorResumesNoReplay(t *testing.T) {
 
 	MigrateLegacyCursor(store, source)
 
-	seen := drainProcessed(t, store, source)
+	seen := drainProcessed(t, store, source, 3)
 
 	if len(seen) != 3 {
 		t.Fatalf("migrated cursor processed %d events, want a resume of 3: %v", len(seen), seen)

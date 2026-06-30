@@ -59,13 +59,13 @@ func (x *Xrpc) Router() http.Handler {
 		r.Post("/"+tangled.RepoAddSecretNSID, x.AddSecret)
 		r.Post("/"+tangled.RepoRemoveSecretNSID, x.RemoveSecret)
 		r.Get("/"+tangled.RepoListSecretsNSID, x.ListSecrets)
-		r.Post("/"+tangled.CiPipelineCancelPipelineNSID, x.CancelPipeline)
-		r.Post("/"+tangled.CiPipelineTriggerPipelineNSID, x.TriggerPipeline)
+		r.Post("/"+tangled.CiCancelPipelineNSID, x.CancelPipeline)
+		r.Post("/"+tangled.CiTriggerPipelineNSID, x.TriggerPipeline)
 	})
 
 	// service query endpoints (no auth required)
 	r.Get("/"+tangled.OwnerNSID, x.Owner)
-	r.Get("/"+tangled.CiPipelineSubscribeLogsNSID, x.HandleCiPipelineSubscribeLogs)
+	r.Get("/"+tangled.CiSubscribePipelineLogsNSID, x.HandleCiSubscribePipelineLogs)
 	r.Get("/"+tangled.CiQueryPipelinesNSID, x.HandleCiQueryPipelines)
 	r.Get("/"+tangled.CiGetPipelineNSID, x.HandleCiGetPipeline)
 

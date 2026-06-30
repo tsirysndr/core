@@ -16,8 +16,8 @@ const (
 
 // CiQueryPipelines_Output is the output of a sh.tangled.ci.queryPipelines call.
 type CiQueryPipelines_Output struct {
-	Cursor    *string            `json:"cursor,omitempty" cborgen:"cursor,omitempty"`
-	Pipelines []*CiDefs_Pipeline `json:"pipelines" cborgen:"pipelines"`
+	Cursor    *string       `json:"cursor,omitempty" cborgen:"cursor,omitempty"`
+	Pipelines []*CiPipeline `json:"pipelines" cborgen:"pipelines"`
 	// total: Maximum number of pipelines
 	Total int64 `json:"total" cborgen:"total"`
 }

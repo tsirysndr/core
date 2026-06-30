@@ -662,7 +662,7 @@ func (t *ActorProfile) UnmarshalCBOR(r io.Reader) (err error) {
 
 	return nil
 }
-func (t *CiDefs_Pipeline) MarshalCBOR(w io.Writer) error {
+func (t *CiPipeline) MarshalCBOR(w io.Writer) error {
 	if t == nil {
 		_, err := w.Write(cbg.CborNull)
 		return err
@@ -761,7 +761,7 @@ func (t *CiDefs_Pipeline) MarshalCBOR(w io.Writer) error {
 		return err
 	}
 
-	// t.Trigger (tangled.CiDefs_Pipeline_Trigger) (struct)
+	// t.Trigger (tangled.CiPipeline_Trigger) (struct)
 	if len("trigger") > 1000000 {
 		return xerrors.Errorf("Value in field \"trigger\" was too long")
 	}
@@ -809,7 +809,7 @@ func (t *CiDefs_Pipeline) MarshalCBOR(w io.Writer) error {
 		}
 	}
 
-	// t.Workflows ([]*tangled.CiDefs_Workflow) (slice)
+	// t.Workflows ([]*tangled.CiPipeline_Workflow) (slice)
 	if len("workflows") > 1000000 {
 		return xerrors.Errorf("Value in field \"workflows\" was too long")
 	}
@@ -837,8 +837,8 @@ func (t *CiDefs_Pipeline) MarshalCBOR(w io.Writer) error {
 	return nil
 }
 
-func (t *CiDefs_Pipeline) UnmarshalCBOR(r io.Reader) (err error) {
-	*t = CiDefs_Pipeline{}
+func (t *CiPipeline) UnmarshalCBOR(r io.Reader) (err error) {
+	*t = CiPipeline{}
 
 	cr := cbg.NewCborReader(r)
 
@@ -857,7 +857,7 @@ func (t *CiDefs_Pipeline) UnmarshalCBOR(r io.Reader) (err error) {
 	}
 
 	if extra > cbg.MaxLength {
-		return fmt.Errorf("CiDefs_Pipeline: map struct too large (%d)", extra)
+		return fmt.Errorf("CiPipeline: map struct too large (%d)", extra)
 	}
 
 	n := extra
@@ -921,7 +921,7 @@ func (t *CiDefs_Pipeline) UnmarshalCBOR(r io.Reader) (err error) {
 
 				t.Commit = string(sval)
 			}
-			// t.Trigger (tangled.CiDefs_Pipeline_Trigger) (struct)
+			// t.Trigger (tangled.CiPipeline_Trigger) (struct)
 		case "trigger":
 
 			{
@@ -934,7 +934,7 @@ func (t *CiDefs_Pipeline) UnmarshalCBOR(r io.Reader) (err error) {
 					if err := cr.UnreadByte(); err != nil {
 						return err
 					}
-					t.Trigger = new(CiDefs_Pipeline_Trigger)
+					t.Trigger = new(CiPipeline_Trigger)
 					if err := t.Trigger.UnmarshalCBOR(cr); err != nil {
 						return xerrors.Errorf("unmarshaling t.Trigger pointer: %w", err)
 					}
@@ -962,7 +962,7 @@ func (t *CiDefs_Pipeline) UnmarshalCBOR(r io.Reader) (err error) {
 					t.CreatedAt = (*string)(&sval)
 				}
 			}
-			// t.Workflows ([]*tangled.CiDefs_Workflow) (slice)
+			// t.Workflows ([]*tangled.CiPipeline_Workflow) (slice)
 		case "workflows":
 
 			maj, extra, err = cr.ReadHeader()
@@ -979,7 +979,7 @@ func (t *CiDefs_Pipeline) UnmarshalCBOR(r io.Reader) (err error) {
 			}
 
 			if extra > 0 {
-				t.Workflows = make([]*CiDefs_Workflow, extra)
+				t.Workflows = make([]*CiPipeline_Workflow, extra)
 			}
 
 			for i := 0; i < int(extra); i++ {
@@ -1001,7 +1001,7 @@ func (t *CiDefs_Pipeline) UnmarshalCBOR(r io.Reader) (err error) {
 							if err := cr.UnreadByte(); err != nil {
 								return err
 							}
-							t.Workflows[i] = new(CiDefs_Workflow)
+							t.Workflows[i] = new(CiPipeline_Workflow)
 							if err := t.Workflows[i].UnmarshalCBOR(cr); err != nil {
 								return xerrors.Errorf("unmarshaling t.Workflows[i] pointer: %w", err)
 							}
@@ -1022,7 +1022,7 @@ func (t *CiDefs_Pipeline) UnmarshalCBOR(r io.Reader) (err error) {
 
 	return nil
 }
-func (t *CiDefs_Pipeline_Trigger) MarshalCBOR(w io.Writer) error {
+func (t *CiPipeline_Trigger) MarshalCBOR(w io.Writer) error {
 	if t == nil {
 		_, err := w.Write(cbg.CborNull)
 		return err
@@ -1084,8 +1084,8 @@ func (t *CiDefs_Pipeline_Trigger) MarshalCBOR(w io.Writer) error {
 	return nil
 }
 
-func (t *CiDefs_Pipeline_Trigger) UnmarshalCBOR(r io.Reader) (err error) {
-	*t = CiDefs_Pipeline_Trigger{}
+func (t *CiPipeline_Trigger) UnmarshalCBOR(r io.Reader) (err error) {
+	*t = CiPipeline_Trigger{}
 
 	cr := cbg.NewCborReader(r)
 
@@ -1104,7 +1104,7 @@ func (t *CiDefs_Pipeline_Trigger) UnmarshalCBOR(r io.Reader) (err error) {
 	}
 
 	if extra > cbg.MaxLength {
-		return fmt.Errorf("CiDefs_Pipeline_Trigger: map struct too large (%d)", extra)
+		return fmt.Errorf("CiPipeline_Trigger: map struct too large (%d)", extra)
 	}
 
 	n := extra
@@ -1196,7 +1196,7 @@ func (t *CiDefs_Pipeline_Trigger) UnmarshalCBOR(r io.Reader) (err error) {
 
 	return nil
 }
-func (t *CiDefs_Workflow) MarshalCBOR(w io.Writer) error {
+func (t *CiPipeline_Workflow) MarshalCBOR(w io.Writer) error {
 	if t == nil {
 		_, err := w.Write(cbg.CborNull)
 		return err
@@ -1388,8 +1388,8 @@ func (t *CiDefs_Workflow) MarshalCBOR(w io.Writer) error {
 	return nil
 }
 
-func (t *CiDefs_Workflow) UnmarshalCBOR(r io.Reader) (err error) {
-	*t = CiDefs_Workflow{}
+func (t *CiPipeline_Workflow) UnmarshalCBOR(r io.Reader) (err error) {
+	*t = CiPipeline_Workflow{}
 
 	cr := cbg.NewCborReader(r)
 
@@ -1408,7 +1408,7 @@ func (t *CiDefs_Workflow) UnmarshalCBOR(r io.Reader) (err error) {
 	}
 
 	if extra > cbg.MaxLength {
-		return fmt.Errorf("CiDefs_Workflow: map struct too large (%d)", extra)
+		return fmt.Errorf("CiPipeline_Workflow: map struct too large (%d)", extra)
 	}
 
 	n := extra
@@ -1536,7 +1536,7 @@ func (t *CiDefs_Workflow) UnmarshalCBOR(r io.Reader) (err error) {
 
 	return nil
 }
-func (t *CiPipelineSubscribeLogs_Control) MarshalCBOR(w io.Writer) error {
+func (t *CiSubscribePipelineLogs_Control) MarshalCBOR(w io.Writer) error {
 	if t == nil {
 		_, err := w.Write(cbg.CborNull)
 		return err
@@ -1750,8 +1750,8 @@ func (t *CiPipelineSubscribeLogs_Control) MarshalCBOR(w io.Writer) error {
 	return nil
 }
 
-func (t *CiPipelineSubscribeLogs_Control) UnmarshalCBOR(r io.Reader) (err error) {
-	*t = CiPipelineSubscribeLogs_Control{}
+func (t *CiSubscribePipelineLogs_Control) UnmarshalCBOR(r io.Reader) (err error) {
+	*t = CiSubscribePipelineLogs_Control{}
 
 	cr := cbg.NewCborReader(r)
 
@@ -1770,7 +1770,7 @@ func (t *CiPipelineSubscribeLogs_Control) UnmarshalCBOR(r io.Reader) (err error)
 	}
 
 	if extra > cbg.MaxLength {
-		return fmt.Errorf("CiPipelineSubscribeLogs_Control: map struct too large (%d)", extra)
+		return fmt.Errorf("CiSubscribePipelineLogs_Control: map struct too large (%d)", extra)
 	}
 
 	n := extra
@@ -1924,7 +1924,7 @@ func (t *CiPipelineSubscribeLogs_Control) UnmarshalCBOR(r io.Reader) (err error)
 
 	return nil
 }
-func (t *CiPipelineSubscribeLogs_Data) MarshalCBOR(w io.Writer) error {
+func (t *CiSubscribePipelineLogs_Data) MarshalCBOR(w io.Writer) error {
 	if t == nil {
 		_, err := w.Write(cbg.CborNull)
 		return err
@@ -2052,8 +2052,8 @@ func (t *CiPipelineSubscribeLogs_Data) MarshalCBOR(w io.Writer) error {
 	return nil
 }
 
-func (t *CiPipelineSubscribeLogs_Data) UnmarshalCBOR(r io.Reader) (err error) {
-	*t = CiPipelineSubscribeLogs_Data{}
+func (t *CiSubscribePipelineLogs_Data) UnmarshalCBOR(r io.Reader) (err error) {
+	*t = CiSubscribePipelineLogs_Data{}
 
 	cr := cbg.NewCborReader(r)
 
@@ -2072,7 +2072,7 @@ func (t *CiPipelineSubscribeLogs_Data) UnmarshalCBOR(r io.Reader) (err error) {
 	}
 
 	if extra > cbg.MaxLength {
-		return fmt.Errorf("CiPipelineSubscribeLogs_Data: map struct too large (%d)", extra)
+		return fmt.Errorf("CiSubscribePipelineLogs_Data: map struct too large (%d)", extra)
 	}
 
 	n := extra

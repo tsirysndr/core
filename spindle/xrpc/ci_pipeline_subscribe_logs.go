@@ -17,7 +17,7 @@ import (
 	"tangled.org/core/spindle/models"
 )
 
-func (x *Xrpc) HandleCiPipelineSubscribeLogs(w http.ResponseWriter, r *http.Request) {
+func (x *Xrpc) HandleCiSubscribePipelineLogs(w http.ResponseWriter, r *http.Request) {
 	var (
 		pipelineQuery = r.URL.Query().Get("pipeline")
 		workflows     = r.URL.Query()["workflows"]
@@ -142,7 +142,7 @@ func (x *Xrpc) handleSubscribeLogs(w http.ResponseWriter, r *http.Request, pipel
 		}
 	}()
 
-	eventsChan := make(chan tangled.CiPipelineSubscribeLogs_Event, 128)
+	eventsChan := make(chan tangled.CiSubscribePipelineLogs_Event, 128)
 	wg := sync.WaitGroup{}
 
 	// 4. start a tail reader goroutine for each workflow
@@ -225,7 +225,7 @@ func (x *Xrpc) handleSubscribeLogs(w http.ResponseWriter, r *http.Request, pipel
 						logLine = models.NewDataLogLine(0, line.Text, "stdout")
 					}
 
-					var ev tangled.CiPipelineSubscribeLogs_Event
+					var ev tangled.CiSubscribePipelineLogs_Event
 					timeStr := logLine.Time.Format(time.RFC3339)
 					if logLine.Time.IsZero() {
 						timeStr = time.Now().Format(time.RFC3339)
@@ -236,7 +236,7 @@ func (x *Xrpc) handleSubscribeLogs(w http.ResponseWriter, r *http.Request, pipel
 						if logLine.StepKind == models.StepKindSystem {
 							stepKindStr = "system"
 						}
-						ev = tangled.CiPipelineSubscribeLogs_Event{Control: &tangled.CiPipelineSubscribeLogs_Control{
+						ev = tangled.CiSubscribePipelineLogs_Event{Control: &tangled.CiSubscribePipelineLogs_Control{
 							Time:     timeStr,
 							Workflow: wfName,
 							Step:     int64(logLine.StepId),
@@ -250,7 +250,7 @@ func (x *Xrpc) handleSubscribeLogs(w http.ResponseWriter, r *http.Request, pipel
 						if streamType != "stdout" && streamType != "stderr" {
 							streamType = "stdout"
 						}
-						ev = tangled.CiPipelineSubscribeLogs_Event{Data: &tangled.CiPipelineSubscribeLogs_Data{
+						ev = tangled.CiSubscribePipelineLogs_Event{Data: &tangled.CiSubscribePipelineLogs_Data{
 							Time:     timeStr,
 							Workflow: wfName,
 							Step:     int64(logLine.StepId),

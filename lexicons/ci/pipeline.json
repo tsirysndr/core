@@ -1,9 +1,10 @@
 {
   "lexicon": 1,
-  "id": "sh.tangled.ci.defs",
+  "id": "sh.tangled.ci.pipeline",
   "defs": {
-    "pipeline": {
+    "main": {
       "type": "object",
+      "description": "A CI pipeline. Record-like, but owned by the spindle rather than a PDS.",
       "required": ["id", "trigger", "commit", "workflows"],
       "properties": {
         "id": {

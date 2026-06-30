@@ -25,7 +25,7 @@ var (
 type tickMsg time.Time
 
 type statusUpdateMsg struct {
-	pipeline *tangled.CiDefs_Pipeline
+	pipeline *tangled.CiPipeline
 }
 
 type statusUpdateErrMsg struct{ err error }
@@ -33,7 +33,7 @@ type statusUpdateErrMsg struct{ err error }
 type pipelineModel struct {
 	renderer *lipgloss.Renderer
 	xrpcc    *extlexutil.Client
-	pipeline *tangled.CiDefs_Pipeline
+	pipeline *tangled.CiPipeline
 	selected int
 	logs     map[string]*workflowLogs
 
@@ -55,7 +55,7 @@ type workflowLogs struct {
 	ready     bool
 }
 
-func newPipelineModel(renderer *lipgloss.Renderer, xrpcc *extlexutil.Client, pipeline *tangled.CiDefs_Pipeline, width, height int) *pipelineModel {
+func newPipelineModel(renderer *lipgloss.Renderer, xrpcc *extlexutil.Client, pipeline *tangled.CiPipeline, width, height int) *pipelineModel {
 	logs := make(map[string]*workflowLogs, len(pipeline.Workflows))
 	for _, wf := range pipeline.Workflows {
 		logs[wf.Name] = &workflowLogs{stepIndex: make(map[int64]int)}
@@ -95,14 +95,14 @@ func (m *pipelineModel) subscribeCmd() tea.Cmd {
 
 	pipelineId := m.pipeline.Id
 	go func() {
-		err := tangled.CiPipelineSubscribeLogs(ctx, m.xrpcc, pipelineId, nil, sched)
+		err := tangled.CiSubscribePipelineLogs(ctx, m.xrpcc, pipelineId, nil, sched)
 		done <- err
 	}()
 
 	return readEventCmd(sched.ch, done)
 }
 
-func readEventCmd(events chan *tangled.CiPipelineSubscribeLogs_Event, done chan error) tea.Cmd {
+func readEventCmd(events chan *tangled.CiSubscribePipelineLogs_Event, done chan error) tea.Cmd {
 	return func() tea.Msg {
 		ev, ok := <-events
 		if !ok {
@@ -295,7 +295,7 @@ func (m *pipelineModel) refreshRunning() {
 }
 
 // applyEvent routes a decoded subscribeLogs event into the matching workflow.
-func (m *pipelineModel) applyEvent(ev *tangled.CiPipelineSubscribeLogs_Event) {
+func (m *pipelineModel) applyEvent(ev *tangled.CiSubscribePipelineLogs_Event) {
 	switch {
 	case ev.Error != nil:
 		if ev.Error.Message != "" {
@@ -447,7 +447,7 @@ func shortSha(sha string) string {
 	return sha
 }
 
-func triggerLine(r *lipgloss.Renderer, t *tangled.CiDefs_Pipeline_Trigger, sha string) string {
+func triggerLine(r *lipgloss.Renderer, t *tangled.CiPipeline_Trigger, sha string) string {
 	hash := shortSha(sha)
 	dim := r.NewStyle().Faint(true)
 	if t == nil {
