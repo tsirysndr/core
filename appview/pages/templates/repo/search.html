@@ -20,8 +20,11 @@
         placeholder="Find files or code"
         hx-get=""
         hx-trigger="{{ if .FilterQuery }}load, {{ end }}input changed delay:100ms from:input"
+        hx-get="/{{ .RepoInfo.FullName }}/search"
+        hx-trigger="{{ if .FilterQuery }}load, {{ end }}keydown[key=='Enter'] from:#repo-search-input, input changed delay:100ms from:#repo-search-input"
         hx-target="#repo-files"
         hx-swap="outerHTML"
+        hx-replace-url="true"
         autofocus
         class="font-mono flex-1 py-1 pl-8 pr-2 peer"
       >
