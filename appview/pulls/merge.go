@@ -20,14 +20,17 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "MergePull")
 
 	user := s.oauth.GetMultiAccountUser(r)
-	if user != nil {
-		l = l.With("user", user.Did)
+	if user == nil {
+		l.Error("nil user")
+		s.pages.Notice(w, "pull-action-error", "You must be logged in to merge this pull.")
+		return
 	}
+	l = l.With("user", user.Did)
 
 	f, err := s.repoResolver.Resolve(r)
 	if err != nil {
 		l.Error("failed to resolve repo", "err", err)
-		s.pages.Notice(w, "pull-merge-error", "Failed to merge pull request. Try again later.")
+		s.pages.Notice(w, "pull-action-error", "Failed to merge pull request. Try again later.")
 		return
 	}
 	l = l.With("repo_at", f.RepoAt().String())
@@ -35,7 +38,7 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 	pull, ok := r.Context().Value("pull").(*models.Pull)
 	if !ok {
 		l.Error("failed to get pull")
-		s.pages.Notice(w, "pull-merge-error", "Failed to merge patch. Try again later.")
+		s.pages.Notice(w, "pull-action-error", "Failed to merge patch. Try again later.")
 		return
 	}
 	l = l.With("pull_id", pull.PullId, "target_branch", pull.TargetBranch)
@@ -43,7 +46,7 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 	stack, ok := r.Context().Value("stack").(models.Stack)
 	if !ok {
 		l.Error("failed to get stack")
-		s.pages.Notice(w, "pull-merge-error", "Failed to merge patch. Try again later.")
+		s.pages.Notice(w, "pull-action-error", "Failed to merge patch. Try again later.")
 		return
 	}
 
@@ -94,34 +97,39 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		l.Error("failed to connect to knot server", "err", err, "knot", f.Knot)
-		s.pages.Notice(w, "pull-merge-error", "Failed to merge pull request. Try again later.")
+		s.pages.Notice(w, "pull-action-error", "Failed to merge pull request. Try again later.")
 		return
 	}
 
 	err = tangled.RepoMerge(r.Context(), client, mergeInput)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		s.logger.Error("failed to merge", "xrpcerr", xrpcerr, "err", err)
-		s.pages.Notice(w, "pull-merge-error", xrpcerr.Error())
+		s.pages.Notice(w, "pull-action-error", xrpcerr.Error())
 		return
 	}
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		l.Error("failed to start transaction", "err", err)
-		s.pages.Notice(w, "pull-merge-error", "Failed to merge pull request. Try again later.")
-		return
-	}
-	defer tx.Rollback()
 
 	var atUris []syntax.ATURI
 	for _, p := range pullsToMerge {
 		atUris = append(atUris, p.AtUri())
 		p.State = models.PullMerged
 	}
+
+	if err := s.writePullStatusRecords(r, user.Did, atUris, models.StateMerged); err != nil {
+		l.Error("failed to write pull status records after merge", "err", err)
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		l.Error("failed to start transaction", "err", err)
+		s.pages.Notice(w, "pull-action-error", "Failed to merge pull request. Try again later.")
+		return
+	}
+	defer tx.Rollback()
+
 	err = db.MergePulls(tx, orm.FilterEq("repo_did", string(f.RepoDid)), orm.FilterIn("at_uri", atUris))
 	if err != nil {
 		l.Error("failed to update pull request status in database", "err", err)
-		s.pages.Notice(w, "pull-merge-error", "Failed to merge pull request. Try again later.")
+		s.pages.Notice(w, "pull-action-error", "Failed to merge pull request. Try again later.")
 		return
 	}
 
@@ -129,7 +137,7 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// TODO: this is unsound, we should also revert the merge from the knotserver here
 		l.Error("failed to commit merge transaction", "err", err)
-		s.pages.Notice(w, "pull-merge-error", "Failed to merge pull request. Try again later.")
+		s.pages.Notice(w, "pull-action-error", "Failed to merge pull request. Try again later.")
 		return
 	}
 

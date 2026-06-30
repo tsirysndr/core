@@ -400,7 +400,7 @@ func (s *Pulls) resubmitStackedPullHelper(
 	newStack, err := s.newStack(r.Context(), repo, userDid, targetBranch, pull.PullSource, formatPatches, blobs, nil, nil)
 	if err != nil {
 		l.Error("failed to create resubmitted stack", "err", err)
-		s.pages.Notice(w, "pull-merge-error", "Failed to merge pull request. Try again later.")
+		s.pages.Notice(w, "pull-resubmit-error", "Failed to resubmit pull request. Try again later.")
 		return
 	}
 

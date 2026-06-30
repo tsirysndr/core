@@ -2,8 +2,10 @@ package models
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	"github.com/samber/lo"
 	"tangled.org/core/api/tangled"
 )
 
@@ -69,4 +71,43 @@ func PullStatusFromRecord(did, rkey string, record tangled.RepoPullStatus) (Stat
 	default:
 		return StateRecord{}, fmt.Errorf("unknown pull status variant: %q", record.Status)
 	}
+}
+
+func AsIssueStateRecord(subject syntax.ATURI, value StateValue, createdAt time.Time) (tangled.RepoIssueState, error) {
+	var variant string
+	switch value {
+	case StateOpen:
+		variant = tangled.RepoIssueStateOpen
+	case StateClosed:
+		variant = tangled.RepoIssueStateClosed
+	default:
+		return tangled.RepoIssueState{}, fmt.Errorf("invalid issue state: %q", value)
+	}
+	return tangled.RepoIssueState{
+		Issue:     subject.String(),
+		State:     variant,
+		CreatedAt: createdAt.UTC().Format(syntax.AtprotoDatetimeLayout),
+	}, nil
+}
+
+func AsPullStatusRecords(subjects []syntax.ATURI, value StateValue, createdAt time.Time) ([]tangled.RepoPullStatus, error) {
+	var variant string
+	switch value {
+	case StateOpen:
+		variant = tangled.RepoPullStatusOpen
+	case StateClosed:
+		variant = tangled.RepoPullStatusClosed
+	case StateMerged:
+		variant = tangled.RepoPullStatusMerged
+	default:
+		return nil, fmt.Errorf("invalid pull status: %q", value)
+	}
+	created := createdAt.UTC().Format(syntax.AtprotoDatetimeLayout)
+	return lo.Map(subjects, func(subject syntax.ATURI, _ int) tangled.RepoPullStatus {
+		return tangled.RepoPullStatus{
+			Pull:      subject.String(),
+			Status:    variant,
+			CreatedAt: created,
+		}
+	}), nil
 }

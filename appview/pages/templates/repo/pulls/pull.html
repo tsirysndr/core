@@ -595,6 +595,7 @@
       {{ if eq $lastIdx $item.RoundNumber }}
         {{ block "mergeStatus" $root }} {{ end }}
         <div id="resubmit-banner"></div>
+        <div id="pull-action-error" class="error"></div>
       {{ end }}
     </div>
     <div hx-include="this" class="relative -ml-10 bg-gray-50 dark:bg-gray-900">

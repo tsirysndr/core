@@ -78,3 +78,69 @@ func TestPullStatusFromRecord_Variants(t *testing.T) {
 		t.Fatal("unknown pull status variant must be rejected")
 	}
 }
+
+func TestAsIssueStateRecord_RoundTrip(t *testing.T) {
+	const rkey = "3jzfcijpj2z2a"
+	subject := syntax.ATURI(testIssueSubject)
+	created := time.Date(2026, 6, 30, 12, 30, 15, int(123*time.Millisecond), time.UTC)
+
+	for _, value := range []StateValue{StateOpen, StateClosed} {
+		rec, err := AsIssueStateRecord(subject, value, created)
+		if err != nil {
+			t.Fatalf("AsIssueStateRecord(%q): %v", value, err)
+		}
+		if rec.Issue != testIssueSubject {
+			t.Fatalf("Issue = %q, want %q", rec.Issue, testIssueSubject)
+		}
+
+		back, err := IssueStateFromRecord("did:plc:akshay", rkey, rec)
+		if err != nil {
+			t.Fatalf("IssueStateFromRecord after AsIssueStateRecord(%q): %v", value, err)
+		}
+		if back.Value != value {
+			t.Fatalf("round-trip value = %q, want %q", back.Value, value)
+		}
+		if back.SortMicros != created.UnixMicro() {
+			t.Fatalf("round-trip SortMicros = %d, want %d", back.SortMicros, created.UnixMicro())
+		}
+	}
+
+	if _, err := AsIssueStateRecord(subject, StateMerged, created); err == nil {
+		t.Fatal("merged is not a valid issue state and must be rejected")
+	}
+}
+
+func TestAsPullStatusRecords_RoundTrip(t *testing.T) {
+	const rkey = "3jzfcijpj2z2a"
+	subject := syntax.ATURI("at://did:plc:limpet/sh.tangled.repo.pull/p1")
+	created := time.Date(2026, 6, 30, 12, 30, 15, int(123*time.Millisecond), time.UTC)
+
+	for _, value := range []StateValue{StateOpen, StateClosed, StateMerged} {
+		recs, err := AsPullStatusRecords([]syntax.ATURI{subject}, value, created)
+		if err != nil {
+			t.Fatalf("AsPullStatusRecords(%q): %v", value, err)
+		}
+		if len(recs) != 1 {
+			t.Fatalf("AsPullStatusRecords(%q) returned %d records, want 1", value, len(recs))
+		}
+		rec := recs[0]
+		if rec.Pull != subject.String() {
+			t.Fatalf("Pull = %q, want %q", rec.Pull, subject)
+		}
+
+		back, err := PullStatusFromRecord("did:plc:akshay", rkey, rec)
+		if err != nil {
+			t.Fatalf("PullStatusFromRecord after AsPullStatusRecords(%q): %v", value, err)
+		}
+		if back.Value != value {
+			t.Fatalf("round-trip value = %q, want %q", back.Value, value)
+		}
+		if back.SortMicros != created.UnixMicro() {
+			t.Fatalf("round-trip SortMicros = %d, want %d", back.SortMicros, created.UnixMicro())
+		}
+	}
+
+	if _, err := AsPullStatusRecords([]syntax.ATURI{subject}, "bogus", created); err == nil {
+		t.Fatal("invalid pull status value must be rejected")
+	}
+}

@@ -329,6 +329,11 @@ func (rp *Issues) DeleteIssue(w http.ResponseWriter, r *http.Request) {
 func (rp *Issues) CloseIssue(w http.ResponseWriter, r *http.Request) {
 	l := rp.logger.With("handler", "CloseIssue")
 	user := rp.oauth.GetMultiAccountUser(r)
+	if user == nil {
+		l.Error("nil user")
+		rp.pages.Notice(w, "issue-action", "You must be logged in to close this issue.")
+		return
+	}
 	f, err := rp.repoResolver.Resolve(r)
 	if err != nil {
 		l.Error("failed to get repo and knot", "err", err)
@@ -349,6 +354,12 @@ func (rp *Issues) CloseIssue(w http.ResponseWriter, r *http.Request) {
 
 	// TODO: make this more granular
 	if isIssueOwner || isRepoOwner || isCollaborator {
+		if err := rp.writeIssueStateRecord(r, user.Did, issue.AtUri(), models.StateClosed); err != nil {
+			l.Error("failed to write issue state record", "err", err)
+			rp.pages.Notice(w, "issue-action", "Failed to close issue. Try again later.")
+			return
+		}
+
 		err = db.CloseIssues(
 			rp.db,
 			orm.FilterEq("id", issue.Id),
@@ -377,6 +388,11 @@ func (rp *Issues) CloseIssue(w http.ResponseWriter, r *http.Request) {
 func (rp *Issues) ReopenIssue(w http.ResponseWriter, r *http.Request) {
 	l := rp.logger.With("handler", "ReopenIssue")
 	user := rp.oauth.GetMultiAccountUser(r)
+	if user == nil {
+		l.Error("nil user")
+		rp.pages.Notice(w, "issue-action", "You must be logged in to reopen this issue.")
+		return
+	}
 	f, err := rp.repoResolver.Resolve(r)
 	if err != nil {
 		l.Error("failed to get repo and knot", "err", err)
@@ -396,6 +412,12 @@ func (rp *Issues) ReopenIssue(w http.ResponseWriter, r *http.Request) {
 	isIssueOwner := user.Did == issue.Did
 
 	if isCollaborator || isRepoOwner || isIssueOwner {
+		if err := rp.writeIssueStateRecord(r, user.Did, issue.AtUri(), models.StateOpen); err != nil {
+			l.Error("failed to write issue state record", "err", err)
+			rp.pages.Notice(w, "issue-action", "Failed to reopen issue. Try again later.")
+			return
+		}
+
 		err := db.ReopenIssues(
 			rp.db,
 			orm.FilterEq("id", issue.Id),
@@ -419,6 +441,28 @@ func (rp *Issues) ReopenIssue(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusUnauthorized)
 		return
 	}
+}
+
+func (rp *Issues) writeIssueStateRecord(r *http.Request, actorDid string, subject syntax.ATURI, value models.StateValue) error {
+	client, err := rp.oauth.AuthorizedClient(r)
+	if err != nil {
+		return err
+	}
+
+	record, err := models.AsIssueStateRecord(subject, value, time.Now())
+	if err != nil {
+		return err
+	}
+
+	_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
+		Collection: tangled.RepoIssueStateNSID,
+		Repo:       actorDid,
+		Rkey:       tid.TID(),
+		Record: &lexutil.LexiconTypeDecoder{
+			Val: &record,
+		},
+	})
+	return err
 }
 
 func (rp *Issues) RepoIssues(w http.ResponseWriter, r *http.Request) {
