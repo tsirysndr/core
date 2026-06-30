@@ -2,8 +2,8 @@
 atroot: true
 template:
 slug: spindle-microvm
-title: Spindle's new microVM engine
-subtitle: How we built the new QEMU-based microVM engine
+title: Tangled CI runs on microVMs
+subtitle: How we built spindle's new QEMU-based microVM engine
 date: 2026-06-16
 image: https://assets.tangled.network/blog/microvm.png
 authors:
@@ -12,11 +12,17 @@ authors:
     handle: ptr.pet
 ---
 
-Spindle gains a second engine: `microvm`. Each workflow gets its own little
-virtual machine, a whole real environment you can do anything inside. It's an
-upgrade from the Nixery engine while staying fully compatible with it, so if you
-already have a working Nixery workflow, just change `nixery` to `microvm` and it
-will work!
+Our CI service now supports a new engine: `microvm`. If you're new here, our CI
+runners -- [spindles](/ci) -- support a pluggable interface for workflow
+execution. Until now, our flagship instance at spindle.tangled.sh only
+supported a [Nixery-based
+engine](https://docs.tangled.org/spindles#nixery-engine).
+
+Now, with the new microVM engine, each workflow gets its own little virtual
+machine, a whole real environment you can do anything inside. It's an upgrade
+from the Nixery engine while staying fully compatible with it, so if you
+already have a working Nixery workflow, just change `nixery` to `microvm` and
+it will work!
 
 The interesting part is NixOS images: you configure the machine directly from
 the workflow file. A few things you can do:
@@ -57,7 +63,7 @@ dependencies, your services, and any other Nix derivation built inside the
 microVM get pushed to spindle's Nix cache, so the next workflow that needs them
 doesn't rebuild those. More on that [below](#the-nix-cache-both-ways).
 
-And like everything else in tangled, the whole thing is self-hostable, so you
+And like everything else in Tangled, the whole thing is self-hostable, so you
 can run your own spindle with the microVM engine on your own hardware (see the
 [self-hosting
 guide](https://docs.tangled.org/spindles.html#self-hosting-guide)). If you want
@@ -366,4 +372,4 @@ A few things that are coming next:
   more info if something unexpected fails so you don't sit around there running
   the workflow 10 times over.
 
-Feel free to come and ask any questions you might have on https://chat.tangled.sh!
+Feel free to come and ask any questions you might have on https://chat.tangled.org!
