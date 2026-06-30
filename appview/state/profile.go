@@ -53,6 +53,10 @@ func (s *State) Profile(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+var profileScripts = map[string]string{
+	"did:plc:3fwecdnvtcscjnrx2p4n7alz": "/static/profile-fx/orrery.js",
+}
+
 func (s *State) profile(r *http.Request) (*pages.ProfileCard, error) {
 	didOrHandle := chi.URLParam(r, "user")
 	if didOrHandle == "" {
@@ -136,7 +140,8 @@ func (s *State) profile(r *http.Request) (*pages.ProfileCard, error) {
 			FollowersCount: followStats.Followers,
 			FollowingCount: followStats.Following,
 		},
-		Punchcard: punchcard,
+		Punchcard:     punchcard,
+		ProfileScript: profileScripts[did],
 	}, nil
 }
 

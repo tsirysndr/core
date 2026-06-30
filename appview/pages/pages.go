@@ -681,6 +681,7 @@ type ProfileCard struct {
 	Profile           *models.Profile
 	Stats             ProfileStats
 	Active            string
+	ProfileScript     string
 }
 
 type ProfileStats struct {

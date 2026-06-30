@@ -54,6 +54,9 @@
           {{ template "user/fragments/profileCard" .Card }}
           {{ if .Card.Punchcard }}
             {{ block "punchcard" .Card.Punchcard }} {{ end }}
+            {{ with .Card.ProfileScript }}
+              <script defer type="module" src="{{ . }}?v=1"></script>
+            {{ end }}
           {{ end }}
         </div>
       </div>
@@ -110,7 +113,7 @@
         {{ .Total | int64 | commaFmt }} commits
       </span>
     </p>
-      <div class="grid grid-cols-28 md:grid-cols-14 gap-y-3 w-full h-full">
+      <div data-punchcard class="grid grid-cols-28 md:grid-cols-14 gap-y-3 w-full h-full">
         {{ range .Punches }}
           {{ $count := .Count }}
           {{ $theme := "bg-gray-200 dark:bg-gray-700 size-[4px]" }}
