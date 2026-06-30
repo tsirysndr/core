@@ -65,7 +65,7 @@ func (p *Pages) MakeIssueUrl(ctx context.Context, uri syntax.ATURI) (string, err
 	if err != nil {
 		return "", fmt.Errorf("failed to make repo url: %w", err)
 	}
-	return path.Join(repoUrl, "issues", strconv.FormatInt(issue.Id, 10)), nil
+	return path.Join(repoUrl, "issues", strconv.Itoa(issue.IssueId)), nil
 }
 
 func (p *Pages) MakePullUrl(ctx context.Context, uri syntax.ATURI, roundIdx int) (string, error) {
@@ -77,7 +77,7 @@ func (p *Pages) MakePullUrl(ctx context.Context, uri syntax.ATURI, roundIdx int)
 	if err != nil {
 		return "", fmt.Errorf("failed to make repo url: %w", err)
 	}
-	return path.Join(repoUrl, "pulls", strconv.Itoa(pull.ID), "rounds", strconv.Itoa(roundIdx)), nil
+	return path.Join(repoUrl, "pulls", strconv.Itoa(pull.PullId), "rounds", strconv.Itoa(roundIdx)), nil
 }
 
 func (p *Pages) makeRepoUrlInner(ctx context.Context, repo *models.Repo) (string, error) {

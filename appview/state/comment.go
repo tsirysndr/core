@@ -303,12 +303,11 @@ func (s *State) NewComment(w http.ResponseWriter, r *http.Request) {
 			Comment:      comment,
 		}); err != nil {
 			l.Error("failed to render pull comment fragment", "err", err)
-			s.pages.HxRefresh(w)
+		} else {
+			w.Header().Set("Content-Type", "text/html")
+			w.Write(buf.Bytes())
 			return
 		}
-		w.Header().Set("Content-Type", "text/html")
-		w.Write(buf.Bytes())
-		return
 	}
 
 	target, err := s.pages.MakeCommentUrl(ctx, comment.AtUri())
