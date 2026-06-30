@@ -88,7 +88,7 @@
     <div class="flex gap-2 items-stretch">
       <select
           onchange="window.location.href = '/{{ .RepoInfo.FullName }}/tree/' + encodeURIComponent(this.value)"
-          class="p-1 border max-w-32 border-gray-200 bg-white dark:bg-gray-800 dark:text-white dark:border-gray-700"
+          class="max-w-32 sm:max-w-64"
       >
           <optgroup label="Branches ({{len .Branches}})" class="bold text-sm">
               {{ range .Branches }}

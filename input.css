@@ -97,8 +97,8 @@
         input,
         textarea {
             @apply block rounded p-3
-            bg-gray-50 dark:bg-gray-800 dark:text-white
-            border border-gray-300 dark:border-gray-600
+            bg-white dark:bg-gray-800 dark:text-white
+            border border-gray-200 dark:border-gray-600
             focus:outline-none focus:ring-1 focus:ring-gray-400 dark:focus:ring-gray-500;
         }
 
@@ -187,6 +187,15 @@
             input[type="radio"]:disabled:checked {
                 background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><circle cx='6' cy='6' r='4.5' fill='rgb(107,114,128)'/></svg>");
             }
+        }
+
+        select {
+            @apply flex items-center rounded p-2 h-[32px]
+            border border-gray-200 
+            bg-white
+            dark:text-white 
+            dark:bg-gray-800 dark:border-gray-700 
+            ;
         }
 
         details summary::-webkit-details-marker {
