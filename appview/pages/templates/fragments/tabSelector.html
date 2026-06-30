@@ -21,10 +21,12 @@
          {{ i $value.Icon "size-4" }}
        {{ end }}
 
-       {{ with $value.Meta }}
-         {{ . }}
-       {{ end }}
-
+       <span class="hidden sm:inline">
+        {{ with $value.Meta }}
+          {{ . }}
+        {{ end }}
+       </span>
+       
        {{ $value.Value }}
       </button>
       {{ else }}
@@ -40,11 +42,13 @@
        {{ if $value.Icon }}
          {{ i $value.Icon "size-4" }}
        {{ end }}
-
-       {{ with $value.Meta }}
-         {{ . }}
-       {{ end }}
-
+       
+       <span class="hidden sm:inline">
+        {{ with $value.Meta }}
+          {{ . }}
+        {{ end }}
+       </span>
+       
        {{ $value.Value }}
       </a>
       {{ end }}
