@@ -12,20 +12,15 @@ authors:
     handle: ptr.pet
 ---
 
-Our CI service now supports a new engine: `microvm`. If you're new here, our CI
-runners -- [spindles](/ci) -- support a pluggable interface for workflow
-execution. Until now, our flagship instance at spindle.tangled.sh only
-supported a [Nixery-based
-engine](https://docs.tangled.org/spindles#nixery-engine).
+Spindles are the self-hostable CI runners. It now supports a
+new mode of execution using QEMU MicroVMs. With the new
+microVM engine, each workflow gets its own little virtual
+machine, a whole real environment you can do anything
+inside.
 
-Now, with the new microVM engine, each workflow gets its own little virtual
-machine, a whole real environment you can do anything inside. It's an upgrade
-from the Nixery engine while staying fully compatible with it, so if you
-already have a working Nixery workflow, just change `nixery` to `microvm` and
-it will work!
-
-The interesting part is NixOS images: you configure the machine directly from
-the workflow file. A few things you can do:
+The interesting part is NixOS images: you configure the
+machine directly from the workflow file. A few things you
+can do:
 
 You can bring services up:
 
@@ -49,7 +44,7 @@ steps:
     command: docker build ...
 ```
 
-And you can use non-NixOS images too:
+And you can use non-NixOS images:
 
 ```yaml
 image: alpine
@@ -57,6 +52,11 @@ steps:
   - name: install golang
     command: apk add go
 ```
+
+It's an upgrade from the existing Nixery engine while
+staying fully compatible with it, so if you already have a
+working Nixery workflow, just change `nixery` to `microvm`
+and it will work!
 
 It's quick on the second run, too, because it caches aggressively: your
 dependencies, your services, and any other Nix derivation built inside the
