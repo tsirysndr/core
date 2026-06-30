@@ -41,7 +41,7 @@
     <div class="px-3.5 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-sm flex items-center justify-between">
       <div class="flex items-center gap-2 min-w-0">
         {{ i "file" "size-4 flex-shrink-0" }}
-        <a href="/{{ $owner }}/{{ $slug }}/blob/{{ .Commit }}/{{ .FilePath }}" class="truncate font-mono">
+        <a href="/{{ $owner }}/{{ $slug }}/blob/{{ .Commit }}/{{ .FilePath }}" class="truncate">
           {{- range .File.NameSpans -}}
             {{- if .Match -}}<span class="chunk-match-hl">{{ .Text }}</span>
             {{- else -}}{{ .Text }}{{- end -}}
@@ -61,7 +61,7 @@
       <div class="px-3.5 py-2 text-sm flex items-center justify-between">
         <div class="flex items-center gap-2 min-w-0">
           {{ i "file" "size-4 flex-shrink-0" }}
-          <a href="/{{ $owner }}/{{ $slug }}/blob/{{ .Commit }}/{{ .FilePath }}" class="truncate font-mono">{{ .FilePath }}</a>
+          <a href="/{{ $owner }}/{{ $slug }}/blob/{{ .Commit }}/{{ .FilePath }}" class="truncate">{{ .FilePath }}</a>
         </div>
         <div class="flex items-center gap-3.5">
           {{ with .Language }}
