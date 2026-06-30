@@ -598,26 +598,16 @@ func (i *Ingester) ingestProfile(ctx context.Context, e *jmodels.Event, l *slog.
 			PreferredHandle: preferredHandle,
 		}
 
-		tx, err := i.Db.Begin()
-		if err != nil {
-			return fmt.Errorf("failed to start transaction: %w", err)
-		}
-		defer tx.Rollback()
-
-		err = db.ValidateProfile(tx, &profile)
+		err = db.ValidateProfile(i.Db, &profile)
 		if err != nil {
 			return fmt.Errorf("invalid profile record")
 		}
 
-		err = db.UpsertProfile(tx, &profile)
+		err = db.UpsertProfile(i.Db, &profile)
 		if err != nil {
 			return fmt.Errorf("upserting profile: %w", err)
 		}
 
-		err = tx.Commit()
-		if err != nil {
-			return fmt.Errorf("tx.Commit: %w", err)
-		}
 		if i.Cache != nil {
 			pipe := i.Cache.Pipeline()
 			didKey := fmt.Sprintf(cache.PreferredHandleByDid, did)

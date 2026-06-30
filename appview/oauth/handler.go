@@ -336,14 +336,8 @@ func (o *OAuth) ensureTangledProfile(sessData *oauth.ClientSessionData) {
 		return
 	}
 
-	tx, err := o.Db.BeginTx(ctx, nil)
-	if err != nil {
-		l.Error("failed to start transaction", "err", err)
-		return
-	}
-
 	emptyProfile := &models.Profile{Did: did}
-	if err := db.UpsertProfile(tx, emptyProfile); err != nil {
+	if err := db.UpsertProfile(o.Db, emptyProfile); err != nil {
 		l.Error("failed to create empty profile in DB", "err", err)
 		return
 	}

@@ -130,9 +130,15 @@ func monthsBetween(from, to time.Time) int {
 	return years*12 + months
 }
 
-func UpsertProfile(tx *sql.Tx, profile *models.Profile) error {
+func UpsertProfile(e *DB, profile *models.Profile) error {
+	tx, err := e.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
 	// update links
-	_, err := tx.Exec(`delete from profile_links where did = ?`, profile.Did)
+	_, err = tx.Exec(`delete from profile_links where did = ?`, profile.Did)
 	if err != nil {
 		return err
 	}
@@ -227,6 +233,10 @@ func UpsertProfile(tx *sql.Tx, profile *models.Profile) error {
 			log.Println("profile_pinned_repositories", "err", err)
 			return err
 		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
 	}
 	return nil
 }

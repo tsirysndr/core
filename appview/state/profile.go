@@ -884,20 +884,6 @@ func (s *State) UpdateProfilePins(w http.ResponseWriter, r *http.Request) {
 func (s *State) updateProfile(profile *models.Profile, w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "updateProfile")
 	user := s.oauth.GetMultiAccountUser(r)
-	tx, err := s.db.BeginTx(r.Context(), nil)
-	if err != nil {
-		l.Error("failed to start transaction", "err", err)
-		s.pages.Notice(w, "update-profile", "Failed to update profile, try again later.")
-		return
-	}
-	defer tx.Rollback()
-
-	err = db.UpsertProfile(tx, profile)
-	if err != nil {
-		l.Error("failed to update profile", "err", err)
-		s.pages.Notice(w, "update-profile", "Failed to update profile, try again later.")
-		return
-	}
 
 	client, err := s.oauth.AuthorizedClient(r)
 	if err != nil {
@@ -952,7 +938,7 @@ func (s *State) updateProfile(profile *models.Profile, w http.ResponseWriter, r 
 		return
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := db.UpsertProfile(s.db, profile); err != nil {
 		// db failed, but PDS operation succeed.
 		// log error and continue
 		l.Error("failed to update profile in DB", "err", err)
@@ -1193,15 +1179,7 @@ func (s *State) UploadProfileAvatar(w http.ResponseWriter, r *http.Request) {
 	}
 	profile.Avatar = uploadBlobResp.Blob.Ref.String()
 
-	tx, err := s.db.BeginTx(r.Context(), nil)
-	if err != nil {
-		l.Error("failed to start transaction", "err", err)
-		s.pages.HxRefresh(w)
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	err = db.UpsertProfile(tx, profile)
+	err = db.UpsertProfile(s.db, profile)
 	if err != nil {
 		l.Error("failed to update profile in DB", "err", err)
 		s.pages.HxRefresh(w)
@@ -1271,15 +1249,7 @@ func (s *State) RemoveProfileAvatar(w http.ResponseWriter, r *http.Request) {
 	}
 	profile.Avatar = ""
 
-	tx, err := s.db.BeginTx(r.Context(), nil)
-	if err != nil {
-		l.Error("failed to start transaction", "err", err)
-		s.pages.HxRefresh(w)
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	err = db.UpsertProfile(tx, profile)
+	err = db.UpsertProfile(s.db, profile)
 	if err != nil {
 		l.Error("failed to update profile in DB", "err", err)
 		s.pages.HxRefresh(w)
