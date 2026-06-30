@@ -14,16 +14,47 @@
   <div class="col-span-1 md:col-span-3">
     <!-- TODO(boltless): explicitly check for pipeline cancel permission -->
     {{ if $.RepoInfo.Roles.IsOwner }}
-    <div class="flex justify-between mb-2">
-      <div id="workflow-error" class="text-red-500 dark:text-red-400"></div>
+    {{ $status := (index .Pipeline.Statuses .Workflow).Latest.Status }}
+    <div class="flex justify-between items-center mb-2">
       <button
-        class="btn"
-        hx-post="/{{ $.RepoInfo.FullName }}/pipelines/{{ .Pipeline.Id }}/workflow/{{ .Workflow }}/cancel"
+        class="btn group"
+        hx-post="/{{ $.RepoInfo.FullName }}/pipelines/{{ .Pipeline.Id }}/retry"
         hx-swap="none"
-        {{ if (index .Pipeline.Statuses .Workflow).Latest.Status.IsFinish -}}
+        hx-disabled-elt="this"
+        {{ if .Pipeline.InProgress -}}
           disabled
         {{- end }}
-      >Cancel</button>
+      >
+        {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
+        <span class="group-[.htmx-request]:hidden">Retry pipeline</span>
+      </button>
+      <div class="flex items-center gap-2">
+        <div id="workflow-error" class="text-red-500 dark:text-red-400"></div>
+        <button
+          class="btn group"
+          hx-post="/{{ $.RepoInfo.FullName }}/pipelines/{{ .Pipeline.Id }}/workflow/{{ .Workflow }}/retry"
+          hx-swap="none"
+          hx-disabled-elt="this"
+          {{ if not $status.IsFinish -}}
+            disabled
+          {{- end }}
+        >
+          {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
+          <span class="group-[.htmx-request]:hidden">Retry workflow</span>
+        </button>
+        <button
+          class="btn group"
+          hx-post="/{{ $.RepoInfo.FullName }}/pipelines/{{ .Pipeline.Id }}/workflow/{{ .Workflow }}/cancel"
+          hx-swap="none"
+          hx-disabled-elt="this"
+          {{ if $status.IsFinish -}}
+            disabled
+          {{- end }}
+        >
+          {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
+          <span class="group-[.htmx-request]:hidden">Cancel</span>
+        </button>
+      </div>
     </div>
     {{ end }}
     {{ with (index .Pipeline.Statuses .Workflow).Latest }}

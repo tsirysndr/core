@@ -3,6 +3,7 @@ package pipelines
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -44,9 +45,12 @@ func (p *Pipelines) Router(mw *middleware.Middleware) http.Handler {
 	r.Get("/", p.Index)
 	r.Get("/{pipeline}/workflow/{workflow}", p.Workflow)
 	r.Get("/{pipeline}/workflow/{workflow}/logs", p.Logs)
-	r.
-		With(mw.RepoPermissionMiddleware("repo:owner")).
-		Post("/{pipeline}/workflow/{workflow}/cancel", p.CancelWorkflow)
+	r.Group(func(r chi.Router) {
+		r.Use(mw.RepoPermissionMiddleware("repo:owner"))
+		r.Post("/{pipeline}/workflow/{workflow}/cancel", p.CancelWorkflow)
+		r.Post("/{pipeline}/retry", p.RetryPipeline)
+		r.Post("/{pipeline}/workflow/{workflow}/retry", p.RetryWorkflow)
+	})
 
 	return r
 }
@@ -462,26 +466,20 @@ func (p *Pipelines) CancelWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	l = l.With("pipeline", pipelineId, "workflow", workflowName)
 
-	hostname, noTLS, err := hostutil.ParseHostname(f.Spindle)
+	spindleClient, err := p.spindleServiceClient(r, f.Spindle, tangled.CiPipelineCancelPipelineNSID)
 	if err != nil {
-		http.Error(w, "invalid spindle hostname", http.StatusBadRequest)
+		l.Error("failed to prepare spindle client", "err", err)
+		p.pages.Notice(w, errorId, "Failed to cancel workflow")
 		return
 	}
 
-	spindleClient, err := p.oauth.ServiceClient(
-		r,
-		oauth.WithService(hostname),
-		oauth.WithLxm(tangled.CiPipelineCancelPipelineNSID),
-		oauth.WithDev(noTLS),
-		oauth.WithTimeout(time.Second*30), // workflow cleanup usually takes time
-	)
-
+	pipelineAtUri := fmt.Sprintf("at://did:web:%s/%s/%s", f.Knot, tangled.PipelineNSID, pipelineId.String())
 	if err := tangled.CiPipelineCancelPipeline(
 		r.Context(),
 		spindleClient,
 		&tangled.CiPipelineCancelPipeline_Input{
 			Repo:      string(f.RepoAt()),
-			Pipeline:  pipelineId.String(),
+			Pipeline:  pipelineAtUri,
 			Workflows: []string{workflowName},
 		},
 	); err != nil {
@@ -490,4 +488,139 @@ func (p *Pipelines) CancelWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	l.Debug("canceled workflow")
+}
+
+// RetryPipeline retries all workflows in a pipeline
+func (p *Pipelines) RetryPipeline(w http.ResponseWriter, r *http.Request) {
+	p.retry(w, r, "")
+}
+
+// RetryWorkflow retries a single workflow in a pipeline
+func (p *Pipelines) RetryWorkflow(w http.ResponseWriter, r *http.Request) {
+	p.retry(w, r, chi.URLParam(r, "workflow"))
+}
+
+// retry triggers a new pipeline run for the original commit, either for all or a single workflow
+func (p *Pipelines) retry(w http.ResponseWriter, r *http.Request, only string) {
+	user := p.oauth.GetMultiAccountUser(r)
+	l := p.logger.With("handler", "retry", "only", only)
+	errorId := "workflow-error"
+
+	// fail logs the error and shows a notice to the user
+	fail := func(msg string, err error) {
+		if err != nil {
+			l.Error(msg, "err", err)
+			p.pages.Notice(w, errorId, fmt.Sprintf("%s: %v", msg, err))
+		} else {
+			l.Error(msg)
+			p.pages.Notice(w, errorId, msg)
+		}
+	}
+
+	f, err := p.repoResolver.Resolve(r)
+	if err != nil {
+		fail("failed to resolve repository", err)
+		return
+	}
+	l = l.With("repo", f.RepoDid)
+
+	if f.Spindle == "" {
+		fail("this repository has no spindle configured", nil)
+		return
+	}
+
+	pipelineId, err := syntax.ParseTID(chi.URLParam(r, "pipeline"))
+	if err != nil {
+		l.Debug("invalid pipeline id", "id", pipelineId)
+		p.pages.Error404(w)
+		return
+	}
+	l = l.With("pipeline", pipelineId)
+
+	spindleUrl, err := hostutil.EnsureHttpScheme(f.Spindle)
+	if err != nil {
+		fail("invalid spindle host", err)
+		return
+	}
+
+	// fetch the original pipeline to replay the same commit and workflows
+	queryClient := &indigoxrpc.Client{Host: spindleUrl}
+	orig, err := tangled.CiGetPipeline(r.Context(), queryClient, pipelineId.String())
+	if err != nil {
+		fail("failed to load the original pipeline", err)
+		return
+	}
+	if orig.Commit == "" {
+		fail("cannot retry: the original pipeline has no commit", nil)
+		return
+	}
+
+	// figure out which workflows to run and where to redirect
+	var workflows []string
+	if only != "" {
+		workflows = []string{only}
+	} else {
+		for _, wf := range orig.Workflows {
+			workflows = append(workflows, wf.Name)
+		}
+	}
+	if len(workflows) == 0 {
+		fail("cannot retry: the original pipeline has no workflows", nil)
+		return
+	}
+	redirectWf := workflows[0]
+
+	spindleClient, err := p.spindleServiceClient(r, f.Spindle, tangled.CiPipelineTriggerPipelineNSID)
+	if err != nil {
+		fail("failed to authorize with spindle", err)
+		return
+	}
+
+	out, err := tangled.CiPipelineTriggerPipeline(
+		r.Context(),
+		spindleClient,
+		&tangled.CiPipelineTriggerPipeline_Input{
+			Repo:      string(f.RepoAt()),
+			Sha:       orig.Commit,
+			Workflows: workflows,
+		},
+	)
+	if err != nil {
+		fail("spindle rejected the trigger", err)
+		return
+	}
+
+	newAt, err := syntax.ParseATURI(out.Pipeline)
+	if err != nil {
+		fail("pipeline triggered, but the response was malformed", err)
+		return
+	}
+	newId := newAt.RecordKey().String()
+	l = l.With("new", newId)
+	l.Info("pipeline retried")
+
+	repoInfo := p.repoResolver.GetRepoInfo(r, user)
+	dest := fmt.Sprintf("/%s/pipelines/%s/workflow/%s", repoInfo.FullName(), newId, redirectWf)
+
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", dest)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	http.Redirect(w, r, dest, http.StatusSeeOther)
+}
+
+// spindleServiceClient builds an authed spindle xrpc client
+func (p *Pipelines) spindleServiceClient(r *http.Request, spindle, lxm string) (*indigoxrpc.Client, error) {
+	hostname, noTLS, err := hostutil.ParseHostname(spindle)
+	if err != nil {
+		return nil, err
+	}
+	return p.oauth.ServiceClient(
+		r,
+		oauth.WithService(hostname),
+		oauth.WithLxm(lxm),
+		oauth.WithDev(noTLS),
+		oauth.WithTimeout(time.Second*30),
+	)
 }

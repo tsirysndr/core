@@ -96,6 +96,10 @@ func (t Trigger) IsPullRequest() bool {
 	return t.CiDefs_Pipeline_Trigger != nil && t.CiDefs_Pipeline_Trigger.CiTrigger_PullRequest != nil
 }
 
+func (t Trigger) IsManual() bool {
+	return t.CiDefs_Pipeline_Trigger != nil && t.CiDefs_Pipeline_Trigger.CiTrigger_Manual != nil
+}
+
 func (t Trigger) TargetRef() string {
 	if t.CiDefs_Pipeline_Trigger == nil {
 		return ""
@@ -163,6 +167,13 @@ func (p Pipeline) Counts() map[string]int {
 		}
 	}
 	return m
+}
+
+// InProgress reports whether any workflow in the pipeline is still pending or
+// running (i.e. the pipeline has not fully settled).
+func (p Pipeline) InProgress() bool {
+	counts := p.Counts()
+	return counts["pending"] > 0 || counts["running"] > 0
 }
 
 func (p Pipeline) ShortStatusSummary() string {
