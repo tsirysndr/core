@@ -37,6 +37,7 @@ const W = [-2, -1, 0, 1, 2].flatMap((ox) => [-2, -1, 0, 1, 2].map((oy) => [ox, o
 
 const cn = 28;
 const cw = 14;
+const bc = "aspect-square rounded-full max-w-full max-h-full size-[4px] bg-gray-200 dark:bg-gray-700";
 const wq = "(min-width: 768px)";
 const dq = "(prefers-color-scheme: dark)";
 const rq = "(prefers-reduced-motion: reduce)";
@@ -122,6 +123,7 @@ const w = (arr) => (arr.length <= B ? arr : arr.slice(arr.length - B));
 const o = (N, j) => {
   const f = Array.from(N.children, (c) => c.firstElementChild).filter(Boolean);
   f.forEach((el) => {
+    el.className = bc;
     el.style.transition = "none";
     el.style.transformOrigin = "center";
     el.style.willChange = "background-color, transform";

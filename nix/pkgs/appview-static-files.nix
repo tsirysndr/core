@@ -31,6 +31,7 @@ runCommandLocal "appview-static-files" {
   cp -f ${inter-fonts-src}/InterVariable*.ttf fonts/
   cp -f ${ibm-plex-mono-src}/fonts/complete/woff2/IBMPlexMono*.woff2 fonts/
   cp -f ${actor-typeahead-src}/actor-typeahead.js .
+  cp -rf ${src}/appview/pages/profile-fx .
 
   ${dolly}/bin/dolly -output logos/dolly.png -size 180
   ${dolly}/bin/dolly -output logos/dolly.ico -size 48

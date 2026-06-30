@@ -9,7 +9,6 @@ spindle/spindle-microvm-run
 result
 !.gitkeep
 !appview/pages/static/topbar-search.js
-!appview/pages/static/profile-fx/
 out/
 node_modules/
 patches
