@@ -72,9 +72,10 @@ The spec is validated at resolve time (required fields, positive sizes etc.),
 and right before launch we also check the referenced files actually exist on
 disk and that the host has the commands we need: `mkfs.ext4` for volume
 formatting, plus whatever the selected runner requires. For QEMU that's the QEMU
-binary for the spec's arch, `/dev/vhost-vsock`, `/dev/kvm` (if KVM is enabled),
-and the `ip`, `mount`, `slirp4netns`, `unshare` toolchain when the image has
-network interfaces.
+binary for the spec's arch, `/dev/vhost-vsock` (for guest vsock configuration),
+`/dev/vsock` (for host listener sockets), `/dev/kvm` (if KVM is enabled), `/dev/net/tun`
+(for guest networking), and the `ip`, `mount`, `slirp4netns`, `unshare` toolchain when the
+image has network interfaces.
 
 ## microVM lifecycle
 

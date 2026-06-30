@@ -1555,13 +1555,25 @@ clear error. You'll need:
   used to sandbox guest networking.
 - `/dev/kvm`: for hardware acceleration (unless you disable
   KVM with `SPINDLE_MICROVM_PIPELINES_ENABLE_KVM=false`).
-- `/dev/vhost-vsock`: the guest agent talks to spindle over
-  vsock.
+- `/dev/vhost-vsock`: used by QEMU to enable guest-to-host vsock
+  communication.
+- `/dev/vsock`: used by spindle on the host to listen on vsock ports
+  and accept guest agent connections.
+- `/dev/net/tun`: required by `slirp4netns` to set up tap devices
+  for sandboxed guest networking.
 
 On NixOS, the [spindle
 module](https://tangled.org/tangled.org/core/blob/master/nix/modules/spindle.nix)
 puts `qemu`, `e2fsprogs`, `slirp4netns`, `iproute2` and
 `util-linux` on the service's `PATH` for you.
+
+#### Container virtualization
+
+Running `spindle` inside a container (e.g., Docker, Podman, or LXD) requires passing host device nodes into the container and granting the runtime additional privileges. Because spindle uses nested namespaces (`unshare`) and helper tools (`slirp4netns`), the container configuration will require:
+
+- `/dev/vsock`, `/dev/vhost-vsock`, `/dev/kvm`, and `/dev/net/tun` mapped from the host.
+- `NET_ADMIN` and `SYS_ADMIN` capabilities to manage network namespaces and mounts inside the container.
+- Relaxed seccomp filters (e.g., `seccomp=unconfined`) and SELinux/AppArmor containment if they restrict namespace creation or device access.
 
 #### Building images
 
