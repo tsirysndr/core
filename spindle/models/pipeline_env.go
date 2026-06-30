@@ -8,8 +8,7 @@ import (
 	"tangled.org/core/workflow"
 )
 
-// PipelineEnvVars extracts environment variables from pipeline trigger metadata.
-// These are framework-provided variables that are injected into workflow steps.
+// PipelineEnvVars builds the standard CI environment variables for a pipeline
 func PipelineEnvVars(tr *tangled.Pipeline_TriggerMetadata, pipelineId PipelineId) map[string]string {
 	if tr == nil {
 		return nil
@@ -17,13 +16,13 @@ func PipelineEnvVars(tr *tangled.Pipeline_TriggerMetadata, pipelineId PipelineId
 
 	env := make(map[string]string)
 
-	// Standard CI environment variable
+	// standard CI env vars
 	env["CI"] = "true"
 
 	env["TANGLED_PIPELINE_ID"] = pipelineId.AtUri().String()
 	env["TANGLED_PIPELINE_KIND"] = tr.Kind
 
-	// Repo info
+	// repo info
 	if tr.Repo != nil {
 		env["TANGLED_REPO_KNOT"] = tr.Repo.Knot
 		env["TANGLED_REPO_DID"] = tr.Repo.Did
@@ -55,14 +54,14 @@ func PipelineEnvVars(tr *tangled.Pipeline_TriggerMetadata, pipelineId PipelineId
 
 	case workflow.TriggerKindPullRequest:
 		if tr.PullRequest != nil {
-			// For PRs, the "ref" is the source branch
+			// for PRs, ref is the source branch
 			env["TANGLED_REF"] = "refs/heads/" + tr.PullRequest.SourceBranch
 			env["TANGLED_REF_NAME"] = tr.PullRequest.SourceBranch
 			env["TANGLED_REF_TYPE"] = "branch"
 			env["TANGLED_SHA"] = tr.PullRequest.SourceSha
 			env["TANGLED_COMMIT_SHA"] = tr.PullRequest.SourceSha
 
-			// PR-specific variables
+			// PR-specific env vars
 			env["TANGLED_PR_SOURCE_BRANCH"] = tr.PullRequest.SourceBranch
 			env["TANGLED_PR_TARGET_BRANCH"] = tr.PullRequest.TargetBranch
 			env["TANGLED_PR_SOURCE_SHA"] = tr.PullRequest.SourceSha
@@ -70,9 +69,20 @@ func PipelineEnvVars(tr *tangled.Pipeline_TriggerMetadata, pipelineId PipelineId
 		}
 
 	case workflow.TriggerKindManual:
-		// Manual triggers may not have ref/sha info
-		// Include any manual inputs if present
 		if tr.Manual != nil {
+			env["TANGLED_SHA"] = tr.Manual.Sha
+			env["TANGLED_COMMIT_SHA"] = tr.Manual.Sha
+			if tr.Manual.Ref != nil && *tr.Manual.Ref != "" {
+				refName := plumbing.ReferenceName(*tr.Manual.Ref)
+				refType := "branch"
+				if refName.IsTag() {
+					refType = "tag"
+				}
+				env["TANGLED_REF"] = *tr.Manual.Ref
+				env["TANGLED_REF_NAME"] = refName.Short()
+				env["TANGLED_REF_TYPE"] = refType
+			}
+			// include manual inputs if present
 			for _, pair := range tr.Manual.Inputs {
 				env["TANGLED_INPUT_"+strings.ToUpper(pair.Key)] = pair.Value
 			}

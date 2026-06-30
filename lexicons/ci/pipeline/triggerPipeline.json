@@ -1,0 +1,62 @@
+{
+  "lexicon": 1,
+  "id": "sh.tangled.ci.pipeline.triggerPipeline",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Manually trigger a pipeline at an explicit commit. Runs the named workflows, or every workflow defined in the repo when none are named.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["repo", "sha"],
+          "properties": {
+            "repo": {
+              "type": "string",
+              "format": "at-uri",
+              "description": "AT-URI of the sh.tangled.repo record"
+            },
+            "sha": {
+              "type": "string",
+              "minLength": 40,
+              "maxLength": 40,
+              "description": "commit SHA to run the pipeline at"
+            },
+            "ref": {
+              "type": "string",
+              "description": "optional ref the SHA was resolved from, for display"
+            },
+            "workflows": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "workflow name"
+              },
+              "description": "Workflow names to run. When not provided, every dispatchable workflow is run."
+            }
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["pipeline"],
+          "properties": {
+            "pipeline": {
+              "type": "string",
+              "format": "at-uri",
+              "description": "AT-URI of the created pipeline"
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "InvalidRequest",
+          "description": "Invalid request parameters"
+        }
+      ]
+    }
+  }
+}

@@ -163,6 +163,7 @@ func TestPipelineEnvVars_ManualWithInputs(t *testing.T) {
 	tr := &tangled.Pipeline_TriggerMetadata{
 		Kind: string(workflow.TriggerKindManual),
 		Manual: &tangled.Pipeline_ManualTriggerData{
+			Sha: "manualsha789",
 			Inputs: []*tangled.Pipeline_Pair{
 				{Key: "version", Value: "1.0.0"},
 				{Key: "environment", Value: "production"},
@@ -189,12 +190,16 @@ func TestPipelineEnvVars_ManualWithInputs(t *testing.T) {
 		t.Errorf("Expected TANGLED_INPUT_ENVIRONMENT='production', got '%s'", env["TANGLED_INPUT_ENVIRONMENT"])
 	}
 
-	// Manual triggers shouldn't have ref/sha variables
-	if _, ok := env["TANGLED_REF"]; ok {
-		t.Error("Manual trigger should not have TANGLED_REF")
+	// Manual triggers carry the explicit SHA
+	if env["TANGLED_SHA"] != "manualsha789" {
+		t.Errorf("Expected TANGLED_SHA='manualsha789', got '%s'", env["TANGLED_SHA"])
 	}
-	if _, ok := env["TANGLED_SHA"]; ok {
-		t.Error("Manual trigger should not have TANGLED_SHA")
+	if env["TANGLED_COMMIT_SHA"] != "manualsha789" {
+		t.Errorf("Expected TANGLED_COMMIT_SHA='manualsha789', got '%s'", env["TANGLED_COMMIT_SHA"])
+	}
+	// No ref was supplied, so ref vars stay unset
+	if _, ok := env["TANGLED_REF"]; ok {
+		t.Error("Manual trigger without a ref should not have TANGLED_REF")
 	}
 }
 

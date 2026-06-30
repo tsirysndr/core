@@ -111,6 +111,7 @@ func TestBuildCloneStep_ManualTrigger(t *testing.T) {
 	tr := tangled.Pipeline_TriggerMetadata{
 		Kind: string(workflow.TriggerKindManual),
 		Manual: &tangled.Pipeline_ManualTriggerData{
+			Sha:    "manualsha456",
 			Inputs: nil,
 		},
 		Repo: &tangled.Pipeline_TriggerRepo{
@@ -123,7 +124,6 @@ func TestBuildCloneStep_ManualTrigger(t *testing.T) {
 
 	step := BuildCloneStep(twf, tr, false)
 
-	// Manual triggers don't have a SHA yet (TODO), so git fetch won't include a SHA
 	allCmds := strings.Join(step.Commands(), " ")
 	// Should still have basic git commands
 	if !strings.Contains(allCmds, "git init") {
@@ -131,6 +131,10 @@ func TestBuildCloneStep_ManualTrigger(t *testing.T) {
 	}
 	if !strings.Contains(allCmds, "git fetch") {
 		t.Error("Commands should contain 'git fetch'")
+	}
+	// Manual triggers now carry an explicit SHA, which the fetch targets
+	if !strings.Contains(allCmds, "manualsha456") {
+		t.Error("Commands should contain the manual trigger SHA")
 	}
 }
 

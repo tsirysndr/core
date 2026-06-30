@@ -396,6 +396,7 @@ func (s *Spindle) XrpcRouter() http.Handler {
 		Vault:       s.vault,
 		Notifier:    s.Notifier(),
 		ServiceAuth: serviceAuth,
+		Trigger:     s,
 	}
 
 	return x.Router()
@@ -431,78 +432,158 @@ func (s *Spindle) processKnotStream(ctx context.Context, src eventconsumer.Sourc
 		}
 		l.Info("synced git repo")
 
-		scheme := "https"
-		if s.cfg.Server.Dev {
-			scheme = "http"
-		}
-		client := &indigoxrpc.Client{Host: fmt.Sprintf("%s://%s", scheme, repo.Knot)}
-
-		// HACK: fetch current default branch
-		// TODO: this should be included in refUpdate event
-		defaultBranch, _ := func(repo syntax.DID) (string, error) {
-			defaultBranchOut, err := tangled.RepoGetDefaultBranch(ctx, client, repo.String())
-			if err != nil {
-				return "", err
-			}
-			return defaultBranchOut.Name, nil
-		}(repoDid)
-
-		compiler := workflow.Compiler{
-			ChangedFiles: event.ChangedFiles,
-			Trigger: tangled.Pipeline_TriggerMetadata{
-				Kind: string(workflow.TriggerKindPush),
-				Push: &tangled.Pipeline_PushTriggerData{
-					Ref:    event.Ref,
-					OldSha: event.OldSha,
-					NewSha: event.NewSha,
-				},
-				Repo: &tangled.Pipeline_TriggerRepo{
-					Did:           repo.Owner.String(),
-					Knot:          repo.Knot,
-					Repo:          (*string)(&repo.Rkey),
-					RepoDid:       (*string)(&repoDid),
-					DefaultBranch: defaultBranch,
-				},
-			},
-		}
-
-		// load workflow definitions from rev (without spindle context)
-		rawPipeline, err := s.loadPipeline(ctx, repoCloneUri, repoPath, event.NewSha)
+		triggerRepo, err := s.buildTriggerRepo(ctx, repo)
 		if err != nil {
-			return fmt.Errorf("loading pipeline: %w", err)
-		}
-		if len(rawPipeline) == 0 {
-			l.Info("no workflow definition find for the repo. skipping the event")
-			return nil
-		}
-		tpl := compiler.Compile(compiler.Parse(rawPipeline))
-		// TODO: pass compile error to workflow log
-		for _, w := range compiler.Diagnostics.Errors {
-			l.Error(w.String())
-		}
-		for _, w := range compiler.Diagnostics.Warnings {
-			l.Warn(w.String())
-		}
-		if len(tpl.Workflows) == 0 {
-			l.Info("no workflow matching trigger 'push'. skipping the event")
-			return nil
+			return fmt.Errorf("building trigger repo: %w", err)
 		}
 
-		pipelineId := models.PipelineId{
-			Knot: tpl.TriggerMetadata.Repo.Knot,
-			Rkey: tid.TID(),
+		trigger := tangled.Pipeline_TriggerMetadata{
+			Kind: string(workflow.TriggerKindPush),
+			Push: &tangled.Pipeline_PushTriggerData{
+				Ref:    event.Ref,
+				OldSha: event.OldSha,
+				NewSha: event.NewSha,
+			},
+			Repo: triggerRepo,
 		}
-		if err := s.db.CreatePipelineEvent(pipelineId.Rkey, tpl, s.n); err != nil {
-			l.Error("failed to create pipeline event", "err", err)
-			return nil
-		}
-		err = s.processPipeline(ctx, repoDid, tpl, pipelineId)
+
+		pipelineId, err := s.runPipeline(ctx, repoDid, trigger, event.ChangedFiles, repoCloneUri, repoPath, event.NewSha, nil)
 		if err != nil {
 			return err
 		}
+		if pipelineId.Rkey == "" {
+			l.Info("no workflow matched 'push' trigger, skipping the event")
+			return nil
+		}
+		l.Info("pipeline triggered", "pipeline", pipelineId.AtUri())
 	}
 
 	return nil
+}
+
+// buildTriggerRepo gathers trigger metadata, resolving default branch from the knot
+func (s *Spindle) buildTriggerRepo(ctx context.Context, repo *db.Repo) (*tangled.Pipeline_TriggerRepo, error) {
+	scheme := "https"
+	if s.cfg.Server.Dev {
+		scheme = "http"
+	}
+	client := &indigoxrpc.Client{Host: fmt.Sprintf("%s://%s", scheme, repo.Knot)}
+
+	// todo(dawn): this should be in the refUpdate event itself to save a roundtrip
+	defaultBranch := ""
+	if out, err := tangled.RepoGetDefaultBranch(ctx, client, repo.RepoDid.String()); err == nil {
+		defaultBranch = out.Name
+	}
+
+	rkey := string(repo.Rkey)
+	repoDid := repo.RepoDid.String()
+	return &tangled.Pipeline_TriggerRepo{
+		Did:           repo.Owner.String(),
+		Knot:          repo.Knot,
+		Repo:          &rkey,
+		RepoDid:       &repoDid,
+		DefaultBranch: defaultBranch,
+	}, nil
+}
+
+// runPipeline compiles and enqueues the pipeline for the given revision
+func (s *Spindle) runPipeline(ctx context.Context, repoDid syntax.DID, trigger tangled.Pipeline_TriggerMetadata, changedFiles []string, repoCloneUri, repoPath, rev string, only []string) (models.PipelineId, error) {
+	l := log.FromContext(ctx)
+
+	compiler := workflow.Compiler{
+		ChangedFiles: changedFiles,
+		Trigger:      trigger,
+	}
+
+	rawPipeline, err := s.loadPipeline(ctx, repoCloneUri, repoPath, rev)
+	if err != nil {
+		return models.PipelineId{}, fmt.Errorf("loading pipeline: %w", err)
+	}
+	if len(rawPipeline) == 0 {
+		return models.PipelineId{}, nil
+	}
+
+	tpl := compiler.Compile(compiler.Parse(rawPipeline))
+	// todo(dawn): pass compile error to workflow log
+	for _, w := range compiler.Diagnostics.Errors {
+		l.Error(w.String())
+	}
+	for _, w := range compiler.Diagnostics.Warnings {
+		l.Warn(w.String())
+	}
+
+	if len(only) > 0 {
+		tpl.Workflows = filterWorkflows(tpl.Workflows, only)
+	}
+	if len(tpl.Workflows) == 0 {
+		return models.PipelineId{}, nil
+	}
+
+	pipelineId := models.PipelineId{
+		Knot: trigger.Repo.Knot,
+		Rkey: tid.TID(),
+	}
+	if err := s.db.CreatePipelineEvent(pipelineId.Rkey, tpl, s.n); err != nil {
+		return models.PipelineId{}, fmt.Errorf("creating pipeline event: %w", err)
+	}
+	err = s.processPipeline(repoDid, tpl, pipelineId)
+	return pipelineId, err
+}
+
+// filterWorkflows filters workflows to the requested names
+func filterWorkflows(workflows []*tangled.Pipeline_Workflow, only []string) []*tangled.Pipeline_Workflow {
+	allowed := make(map[string]struct{}, len(only))
+	for _, n := range only {
+		allowed[n] = struct{}{}
+	}
+	var filtered []*tangled.Pipeline_Workflow
+	for _, w := range workflows {
+		if w == nil {
+			continue
+		}
+		if _, ok := allowed[w.Name]; ok {
+			filtered = append(filtered, w)
+		}
+	}
+	return filtered
+}
+
+// TriggerManual dispatches a pipeline manually at sha
+func (s *Spindle) TriggerManual(ctx context.Context, repoDid syntax.DID, sha, ref string, workflows []string) (syntax.ATURI, error) {
+	repo, err := s.db.GetRepoByDid(repoDid)
+	if err != nil {
+		return "", fmt.Errorf("unknown repoDid %s: %w", repoDid, err)
+	}
+
+	triggerRepo, err := s.buildTriggerRepo(ctx, repo)
+	if err != nil {
+		return "", fmt.Errorf("building trigger repo: %w", err)
+	}
+
+	var refPtr *string
+	if ref != "" {
+		refPtr = &ref
+	}
+	trigger := tangled.Pipeline_TriggerMetadata{
+		Kind: string(workflow.TriggerKindManual),
+		Manual: &tangled.Pipeline_ManualTriggerData{
+			Sha: sha,
+			Ref: refPtr,
+		},
+		Repo: triggerRepo,
+	}
+
+	repoCloneUri := s.newRepoCloneUrl(repo.Knot, repoDid)
+	repoPath := s.newRepoPath(repoDid)
+
+	pipelineId, err := s.runPipeline(ctx, repoDid, trigger, nil, repoCloneUri, repoPath, sha, workflows)
+	if err != nil {
+		return "", err
+	}
+	if pipelineId.Rkey == "" {
+		return "", xrpc.ErrNoMatchingWorkflows
+	}
+	return pipelineId.AtUri(), nil
 }
 
 func (s *Spindle) loadPipeline(ctx context.Context, repoUri, repoPath, rev string) (workflow.RawPipeline, error) {
@@ -543,7 +624,7 @@ func (s *Spindle) loadPipeline(ctx context.Context, repoUri, repoPath, rev strin
 	return rawPipeline, nil
 }
 
-func (s *Spindle) processPipeline(ctx context.Context, repoDid syntax.DID, tpl tangled.Pipeline, pipelineId models.PipelineId) error {
+func (s *Spindle) processPipeline(repoDid syntax.DID, tpl tangled.Pipeline, pipelineId models.PipelineId) error {
 	// Build pipeline environment variables once for all workflows
 	pipelineEnv := models.PipelineEnvVars(tpl.TriggerMetadata, pipelineId)
 
@@ -553,7 +634,8 @@ func (s *Spindle) processPipeline(ctx context.Context, repoDid syntax.DID, tpl t
 		if w == nil {
 			continue
 		}
-		if _, ok := s.engs[w.Engine]; !ok {
+		eng, ok := s.engs[w.Engine]
+		if !ok {
 			err := s.db.StatusFailed(models.WorkflowId{
 				PipelineId: pipelineId,
 				Name:       w.Name,
@@ -565,13 +647,7 @@ func (s *Spindle) processPipeline(ctx context.Context, repoDid syntax.DID, tpl t
 			continue
 		}
 
-		eng := s.engs[w.Engine]
-
-		if _, ok := workflows[eng]; !ok {
-			workflows[eng] = []models.Workflow{}
-		}
-
-		ewf, err := s.engs[w.Engine].InitWorkflow(*w, tpl)
+		ewf, err := eng.InitWorkflow(*w, tpl)
 		if err != nil {
 			err = s.db.StatusFailed(models.WorkflowId{
 				PipelineId: pipelineId,
@@ -597,7 +673,7 @@ func (s *Spindle) processPipeline(ctx context.Context, repoDid syntax.DID, tpl t
 	// enqueue pipeline
 	ok := s.jq.Enqueue(repoDid, queue.Job{
 		Run: func() error {
-			engine.StartWorkflows(log.SubLogger(s.l, "engine"), s.vault, s.cfg, s.db, s.n, ctx, &models.Pipeline{
+			engine.StartWorkflows(log.SubLogger(s.l, "engine"), s.vault, s.cfg, s.db, s.n, s.rootCtx, &models.Pipeline{
 				RepoDid:   repoDid,
 				Workflows: workflows,
 			}, pipelineId)

@@ -1,11 +1,14 @@
 package xrpc
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/go-chi/chi/v5"
 
 	"tangled.org/core/api/tangled"
@@ -22,6 +25,18 @@ import (
 
 const ActorDid = serviceauth.ActorDid
 
+// ErrNoMatchingWorkflows is returned when a manual dispatch resolves to no
+// workflows to run: the repo defines none at the requested commit, or none of
+// the requested workflow names exist.
+var ErrNoMatchingWorkflows = errors.New("no workflows to run")
+
+// PipelineTrigger builds and enqueues a manually-dispatched pipeline. It is
+// implemented by *spindle.Spindle, which owns the queue and engines; the xrpc
+// handler only does auth and input validation before delegating here.
+type PipelineTrigger interface {
+	TriggerManual(ctx context.Context, repoDid syntax.DID, sha, ref string, workflows []string) (syntax.ATURI, error)
+}
+
 type Xrpc struct {
 	Logger      *slog.Logger
 	Db          *db.DB
@@ -32,6 +47,7 @@ type Xrpc struct {
 	Vault       secrets.Manager
 	Notifier    *notifier.Notifier
 	ServiceAuth *serviceauth.ServiceAuth
+	Trigger     PipelineTrigger
 }
 
 func (x *Xrpc) Router() http.Handler {
@@ -43,7 +59,8 @@ func (x *Xrpc) Router() http.Handler {
 		r.Post("/"+tangled.RepoAddSecretNSID, x.AddSecret)
 		r.Post("/"+tangled.RepoRemoveSecretNSID, x.RemoveSecret)
 		r.Get("/"+tangled.RepoListSecretsNSID, x.ListSecrets)
-		r.Post("/"+tangled.PipelineCancelPipelineNSID, x.CancelPipeline)
+		r.Post("/"+tangled.CiPipelineCancelPipelineNSID, x.CancelPipeline)
+		r.Post("/"+tangled.CiPipelineTriggerPipelineNSID, x.TriggerPipeline)
 	})
 
 	// service query endpoints (no auth required)
@@ -67,8 +84,5 @@ func writeError(w http.ResponseWriter, e xrpcerr.XrpcError, status int) {
 func writeJson(w http.ResponseWriter, status int, response any) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		return err
-	}
-	return nil
+	return json.NewEncoder(w).Encode(response)
 }

@@ -433,7 +433,7 @@ func (t *Tap) processPull(ctx context.Context, evt *tapc.RecordEventData) error 
 			l.Error("failed to create pipeline event", "err", err)
 			return nil
 		}
-		err = t.spindle.processPipeline(ctx, repo.RepoDid, tpl, pipelineId)
+		err = t.spindle.processPipeline(repo.RepoDid, tpl, pipelineId)
 		if err != nil {
 			// don't retry
 			l.Error("failed processing pipeline", "err", err)

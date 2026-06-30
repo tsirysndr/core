@@ -471,18 +471,18 @@ func (p *Pipelines) CancelWorkflow(w http.ResponseWriter, r *http.Request) {
 	spindleClient, err := p.oauth.ServiceClient(
 		r,
 		oauth.WithService(hostname),
-		oauth.WithLxm(tangled.PipelineCancelPipelineNSID),
+		oauth.WithLxm(tangled.CiPipelineCancelPipelineNSID),
 		oauth.WithDev(noTLS),
 		oauth.WithTimeout(time.Second*30), // workflow cleanup usually takes time
 	)
 
-	if err := tangled.PipelineCancelPipeline(
+	if err := tangled.CiPipelineCancelPipeline(
 		r.Context(),
 		spindleClient,
-		&tangled.PipelineCancelPipeline_Input{
-			Repo:     string(f.RepoAt()),
-			Pipeline: pipelineId.String(),
-			Workflow: workflowName,
+		&tangled.CiPipelineCancelPipeline_Input{
+			Repo:      string(f.RepoAt()),
+			Pipeline:  pipelineId.String(),
+			Workflows: []string{workflowName},
 		},
 	); err != nil {
 		l.Error("failed to cancel workflow", "err", err)

@@ -99,10 +99,10 @@ func extractCommitSHA(tr tangled.Pipeline_TriggerMetadata) (string, error) {
 		return tr.PullRequest.SourceSha, nil
 
 	case workflow.TriggerKindManual:
-		// Manual triggers don't have an explicit SHA in the metadata
-		// For now, return empty string - could be enhanced to fetch from default branch
-		// TODO: Implement manual trigger SHA resolution (fetch default branch HEAD)
-		return "", nil
+		if tr.Manual == nil {
+			return "", fmt.Errorf("manual trigger metadata is nil")
+		}
+		return tr.Manual.Sha, nil
 
 	default:
 		return "", fmt.Errorf("unknown trigger kind: %s", tr.Kind)

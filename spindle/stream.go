@@ -91,8 +91,6 @@ func (s *Spindle) streamLogsFromDisk(ctx context.Context, conn *websocket.Conn, 
 
 	filePath := models.LogFilePath(s.cfg.Server.LogDir, wid)
 
-
-
 	config := tail.Config{
 		Follow:    !isFinished,
 		ReOpen:    !isFinished,

@@ -96,7 +96,7 @@ func FromFile(name string, contents []byte) (Workflow, error) {
 
 // if any of the constraints on a workflow is true, return true
 func (w *Workflow) Match(trigger tangled.Pipeline_TriggerMetadata, changedFiles []string) (bool, error) {
-	// manual triggers always run the workflow
+	// manual dispatch skips matching constraints since selection is done by the caller
 	if trigger.Manual != nil {
 		return true, nil
 	}

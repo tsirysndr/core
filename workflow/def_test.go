@@ -496,3 +496,25 @@ func TestConstraintMatchTag_GlobPatterns(t *testing.T) {
 		})
 	}
 }
+
+func TestMatch_ManualDispatch(t *testing.T) {
+	// manual dispatch is policy-free: every workflow matches regardless of its
+	// declared event/branch/tag/path constraints. Selection is the caller's job.
+	manualTrigger := tangled.Pipeline_TriggerMetadata{
+		Kind:   string(TriggerKindManual),
+		Manual: &tangled.Pipeline_ManualTriggerData{Sha: "deadbeef"},
+	}
+
+	workflows := []Workflow{
+		{When: nil},
+		{When: []Constraint{{Event: []string{"push"}, Branch: []string{"main"}}}},
+		{When: []Constraint{{Event: []string{"pull_request"}, Paths: []string{"src/**"}}}},
+		{When: []Constraint{{Event: []string{"push"}, Tag: []string{"v*"}}}},
+	}
+
+	for i, wf := range workflows {
+		result, err := wf.Match(manualTrigger, nil)
+		assert.NoError(t, err)
+		assert.True(t, result, "workflow %d should match a manual dispatch", i)
+	}
+}

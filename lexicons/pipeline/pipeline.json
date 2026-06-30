@@ -140,7 +140,20 @@
     },
     "manualTriggerData": {
       "type": "object",
+      "required": [
+        "sha"
+      ],
       "properties": {
+        "sha": {
+          "type": "string",
+          "description": "commit SHA the manual run targets",
+          "minLength": 40,
+          "maxLength": 40
+        },
+        "ref": {
+          "type": "string",
+          "description": "optional ref the SHA was resolved from, for display and TANGLED_REF"
+        },
         "inputs": {
           "type": "array",
           "items": {

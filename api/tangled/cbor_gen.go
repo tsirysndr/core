@@ -7511,13 +7511,72 @@ func (t *Pipeline_ManualTriggerData) MarshalCBOR(w io.Writer) error {
 	}
 
 	cw := cbg.NewCborWriter(w)
-	fieldCount := 1
+	fieldCount := 3
 
 	if t.Inputs == nil {
 		fieldCount--
 	}
 
+	if t.Ref == nil {
+		fieldCount--
+	}
+
 	if _, err := cw.Write(cbg.CborEncodeMajorType(cbg.MajMap, uint64(fieldCount))); err != nil {
+		return err
+	}
+
+	// t.Ref (string) (string)
+	if t.Ref != nil {
+
+		if len("ref") > 1000000 {
+			return xerrors.Errorf("Value in field \"ref\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("ref"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("ref")); err != nil {
+			return err
+		}
+
+		if t.Ref == nil {
+			if _, err := cw.Write(cbg.CborNull); err != nil {
+				return err
+			}
+		} else {
+			if len(*t.Ref) > 1000000 {
+				return xerrors.Errorf("Value in field t.Ref was too long")
+			}
+
+			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(*t.Ref))); err != nil {
+				return err
+			}
+			if _, err := cw.WriteString(string(*t.Ref)); err != nil {
+				return err
+			}
+		}
+	}
+
+	// t.Sha (string) (string)
+	if len("sha") > 1000000 {
+		return xerrors.Errorf("Value in field \"sha\" was too long")
+	}
+
+	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("sha"))); err != nil {
+		return err
+	}
+	if _, err := cw.WriteString(string("sha")); err != nil {
+		return err
+	}
+
+	if len(t.Sha) > 1000000 {
+		return xerrors.Errorf("Value in field t.Sha was too long")
+	}
+
+	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(t.Sha))); err != nil {
+		return err
+	}
+	if _, err := cw.WriteString(string(t.Sha)); err != nil {
 		return err
 	}
 
@@ -7593,7 +7652,39 @@ func (t *Pipeline_ManualTriggerData) UnmarshalCBOR(r io.Reader) (err error) {
 		}
 
 		switch string(nameBuf[:nameLen]) {
-		// t.Inputs ([]*tangled.Pipeline_Pair) (slice)
+		// t.Ref (string) (string)
+		case "ref":
+
+			{
+				b, err := cr.ReadByte()
+				if err != nil {
+					return err
+				}
+				if b != cbg.CborNull[0] {
+					if err := cr.UnreadByte(); err != nil {
+						return err
+					}
+
+					sval, err := cbg.ReadStringWithMax(cr, 1000000)
+					if err != nil {
+						return err
+					}
+
+					t.Ref = (*string)(&sval)
+				}
+			}
+			// t.Sha (string) (string)
+		case "sha":
+
+			{
+				sval, err := cbg.ReadStringWithMax(cr, 1000000)
+				if err != nil {
+					return err
+				}
+
+				t.Sha = string(sval)
+			}
+			// t.Inputs ([]*tangled.Pipeline_Pair) (slice)
 		case "inputs":
 
 			maj, extra, err = cr.ReadHeader()

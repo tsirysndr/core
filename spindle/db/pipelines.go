@@ -154,6 +154,7 @@ func (d *DB) mapToCiDefsPipeline(ctx context.Context, rkey string, created int64
 			}
 		case "manual":
 			if raw.TriggerMetadata.Manual != nil {
+				commitSha = raw.TriggerMetadata.Manual.Sha
 				trigger.CiTrigger_Manual = &tangled.CiTrigger_Manual{}
 			}
 		}

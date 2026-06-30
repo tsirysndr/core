@@ -168,8 +168,6 @@ func (x *Xrpc) handleSubscribeLogs(w http.ResponseWriter, r *http.Request, pipel
 
 			filePath := models.LogFilePath(x.Config.Server.LogDir, wid)
 
-
-
 			tailConfig := tail.Config{
 				Follow:    !isFinished,
 				ReOpen:    !isFinished,

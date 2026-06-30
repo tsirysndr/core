@@ -35,6 +35,10 @@ type Pipeline_CloneOpts struct {
 // Pipeline_ManualTriggerData is a "manualTriggerData" in the sh.tangled.pipeline schema.
 type Pipeline_ManualTriggerData struct {
 	Inputs []*Pipeline_Pair `json:"inputs,omitempty" cborgen:"inputs,omitempty"`
+	// ref: optional ref the SHA was resolved from, for display and TANGLED_REF
+	Ref *string `json:"ref,omitempty" cborgen:"ref,omitempty"`
+	// sha: commit SHA the manual run targets
+	Sha string `json:"sha" cborgen:"sha"`
 }
 
 // Pipeline_Pair is a "pair" in the sh.tangled.pipeline schema.
