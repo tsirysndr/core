@@ -66,11 +66,14 @@
         </span>
       </div>
       <div class="flex items-center gap-2">
+        {{ $hasAvatar := false }}{{ range .Meta.Authors }}{{ if tinyAvatar .Handle }}{{ $hasAvatar = true }}{{ end }}{{ end }}
+        {{ if $hasAvatar }}
         <div class="inline-flex items-center -space-x-2 shrink-0">
           {{ range .Meta.Authors }}
-          <img src="{{ tinyAvatar .Handle }}" class="size-5 rounded-full border border-gray-300 dark:border-gray-700" alt="{{ .Name }}" title="{{ .Name }}" />
+          {{ $av := tinyAvatar .Handle }}{{ if $av }}<img src="{{ $av }}" class="size-5 rounded-full border border-gray-300 dark:border-gray-700" alt="{{ .Name }}" title="{{ .Name }}" />{{ end }}
           {{ end }}
         </div>
+        {{ end }}
         <div class="text-sm text-gray-400 dark:text-gray-500 shrink-0">
           {{ $date := .ParsedDate }}{{ $date | shortTimeFmt }}
         </div>

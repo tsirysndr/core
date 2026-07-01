@@ -27,7 +27,9 @@
     CGO_ENABLED = 1;
   };
 in
-  runCommandLocal "blog" {} ''
+  runCommandLocal "blog" {
+    TANGLED_AVATAR_SHARED_SECRET = builtins.getEnv "TANGLED_AVATAR_SHARED_SECRET";
+  } ''
     mkdir -p working
     cp -r --no-preserve=mode ${src}/blog working/
     cp -r --no-preserve=mode ${src}/appview working/

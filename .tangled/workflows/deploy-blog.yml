@@ -9,38 +9,13 @@ engine: microvm
 image: nixos
 
 dependencies:
-  - go
-  - gcc
   - nodejs
-  - tailwindcss
 
 steps:
-  - name: patch static dir
+  - name: build blog
     command: |
-      mkdir -p appview/pages/static/logos
-
-  - name: build dolly
-    command: |
-      go build -o dolly.out ./cmd/dolly
-
-  - name: generate favicons
-    command: |
-      ./dolly.out -template appview/pages/templates/fragments/dolly -output appview/pages/static/logos/dolly.png -size 180
-      ./dolly.out -template appview/pages/templates/fragments/dolly -output appview/pages/static/logos/dolly.ico -size 48
-      ./dolly.out -template appview/pages/templates/fragments/dolly -output appview/pages/static/logos/dolly.svg -color currentColor -favicon
-
-  - name: generate css
-    command: |
-      tailwindcss -i input.css -o appview/pages/static/tw.css
-
-  - name: build blog cmd
-    command: |
-      go build -o blog.out ./cmd/blog
-
-  - name: build static site
-    command: |
-      ./blog.out build
+      nix build .#blog --impure
 
   - name: deploy
     command: |
-      npx --yes wrangler pages deploy --branch master --project-name tangled-blog ./build
+      npx --yes wrangler pages deploy --branch master --project-name tangled-blog ./result
