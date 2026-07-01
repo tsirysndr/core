@@ -1,0 +1,21 @@
+when:
+  - event: push
+    branch: master
+    paths:
+      - docs/**
+      - input.css
+
+engine: microvm
+image: nixos
+
+dependencies:
+  - nodejs
+
+steps:
+  - name: build docs
+    command: |
+      nix build .#docs
+
+  - name: deploy
+    command: |
+      npx --yes wrangler pages deploy --branch master --project-name tangled-docs ./result/
