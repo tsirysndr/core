@@ -174,6 +174,31 @@ type PipelineStatus struct {
 	ExitCode     int
 }
 
+func (ps PipelineStatus) ErrorMessage() string {
+	if ps.Error == nil {
+		return ""
+	}
+	line, _, _ := strings.Cut(*ps.Error, "\n")
+	return line
+}
+
+func (ps PipelineStatus) ErrorDetails() string {
+	if ps.Error == nil {
+		return ""
+	}
+	_, rest, _ := strings.Cut(*ps.Error, "\n")
+	if rest == "" {
+		return ""
+	}
+
+	const truncateTo = 15
+	lines := strings.Split(rest, "\n")
+	if len(lines) <= truncateTo {
+		return rest
+	}
+	return strings.Join(lines[:truncateTo], "\n") + "\n…"
+}
+
 func (ps *PipelineStatus) PipelineAt() syntax.ATURI {
 	return syntax.ATURI(fmt.Sprintf("at://did:web:%s/%s/%s", ps.PipelineKnot, tangled.PipelineNSID, ps.PipelineRkey))
 }
