@@ -223,6 +223,9 @@ func (p *Pages) funcMap() template.FuncMap {
 		"plural":     english.Plural,
 		"relTimeFmt": humanize.Time,
 		"shortRelTimeFmt": func(t time.Time) string {
+			if t.Unix() == 0 {
+				return "at the beginning of time"
+			}
 			return humanize.CustomRelTime(t, time.Now(), "", "", []humanize.RelTimeMagnitude{
 				{D: time.Second, Format: "now", DivBy: time.Second},
 				{D: 2 * time.Second, Format: "1s %s", DivBy: 1},
