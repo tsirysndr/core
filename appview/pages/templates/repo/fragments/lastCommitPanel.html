@@ -1,6 +1,6 @@
 {{ define "repo/fragments/lastCommitPanel" }}
   {{ $messageParts := splitN .LastCommitInfo.Message "\n\n" 2 }}
-  <div class="pb-2 mb-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-wrap text-sm gap-2">
+  <div class="pb-2 mb-3 border-b border-gray-200 dark:border-gray-700 hidden md:flex items-center justify-between flex-wrap text-sm gap-2">
     <div class="flex flex-wrap items-center gap-1">
       {{ if .LastCommitInfo.Author }}
         {{ $authorDid := index .EmailToDid .LastCommitInfo.Author.Email }}

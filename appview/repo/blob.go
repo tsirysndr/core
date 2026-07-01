@@ -24,6 +24,7 @@ import (
 	"github.com/bluesky-social/indigo/util"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-chi/chi/v5"
+	enry "github.com/go-enry/go-enry/v2"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/filemode"
 )
@@ -201,6 +202,18 @@ func (rp *Repo) Blob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	baseName := filepath.Base(filePath)
+	lang, ok := enry.GetLanguageByExtension(baseName)
+	if !ok {
+		lang, ok = enry.GetLanguageByFilename(baseName)
+	}
+	if !ok && blobView.Contents != "" {
+		lang = enry.GetLanguage(baseName, []byte(blobView.Contents))
+	}
+	if group := enry.GetLanguageGroup(lang); group != "" {
+		lang = group
+	}
+
 	user := rp.oauth.GetMultiAccountUser(r)
 	rp.pages.RepoBlob(w, pages.RepoBlobParams{
 		BaseParams:     pages.BaseParamsFromContext(r.Context()),
@@ -212,6 +225,7 @@ func (rp *Repo) Blob(w http.ResponseWriter, r *http.Request) {
 		ShowRendered:   r.URL.Query().Get("code") != "true",
 		Ref:            ref,
 		Path:           filePath,
+		Language:       lang,
 	})
 }
 
@@ -232,6 +246,27 @@ func (rp *Repo) RepoBlobRaw(w http.ResponseWriter, r *http.Request) {
 	filePath, _ = url.PathUnescape(filePath)
 
 	blobURL := generateBlobURL(rp.config.KnotMirror.Url, f, ref, filePath)
+
+	if r.URL.Query().Get("download") == "1" {
+		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, blobURL, nil)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		resp, err := util.RobustHTTPClient().Do(req)
+		if err != nil || resp.StatusCode != http.StatusOK {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		defer resp.Body.Close()
+
+		filename := filepath.Base(filePath)
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, filename))
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.Header().Set("Cache-Control", "public, no-cache")
+		io.Copy(w, resp.Body)
+		return
+	}
 
 	w.Header().Set("Cache-Control", "public, no-cache")
 	http.Redirect(w, r, blobURL, http.StatusFound)

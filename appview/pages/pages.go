@@ -1112,6 +1112,7 @@ type RepoBlobParams struct {
 	LastCommitInfo *types.LastCommitInfo
 	Ref            string
 	Path           string
+	Language       string
 }
 
 func (p *Pages) RepoBlob(w io.Writer, params RepoBlobParams) error {
