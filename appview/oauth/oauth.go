@@ -22,6 +22,7 @@ import (
 	"golang.org/x/sync/singleflight"
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
+	"tangled.org/core/hostutil"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/rbac"
 	"tangled.org/core/xrpc/serviceauth"
@@ -443,6 +444,20 @@ func (o *OAuth) ServiceClient(r *http.Request, os ...ServiceClientOpt) (*xrpc.Cl
 			Timeout: opts.timeout,
 		},
 	}, nil
+}
+
+func (o *OAuth) SpindleServiceClient(r *http.Request, spindle, lxm string) (*xrpc.Client, error) {
+	hostname, noTLS, err := hostutil.ParseHostname(spindle)
+	if err != nil {
+		return nil, err
+	}
+	return o.ServiceClient(
+		r,
+		WithService(hostname),
+		WithLxm(lxm),
+		WithDev(noTLS),
+		WithTimeout(time.Second*30),
+	)
 }
 
 func (o *OAuth) StartElevatedAuthFlow(ctx context.Context, w http.ResponseWriter, r *http.Request, did string, extraScopes []string, returnURL string) (string, error) {

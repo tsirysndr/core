@@ -16,9 +16,9 @@ import (
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
-	"tangled.org/core/appview/repoverify"
 	"tangled.org/core/orm"
 	"tangled.org/core/rbac"
+	"tangled.org/core/repoverify"
 )
 
 func mustKnotURL(t *testing.T, raw string) *url.URL {

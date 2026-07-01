@@ -28,6 +28,7 @@ import (
 	"tangled.org/core/log"
 	"tangled.org/core/notifier"
 	"tangled.org/core/rbac"
+	"tangled.org/core/repoverify"
 	"tangled.org/core/spindle/config"
 	"tangled.org/core/spindle/db"
 	"tangled.org/core/spindle/engine"
@@ -64,6 +65,7 @@ type Spindle struct {
 	cfg      *config.Config
 	ks       *eventconsumer.Consumer
 	res      *idresolver.Resolver
+	verify   repoverify.Verifier
 	vault    secrets.Manager
 	motd     []byte
 	motdMu   sync.RWMutex
@@ -156,6 +158,7 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB, engines map[string]m
 		jq:      jq,
 		cfg:     cfg,
 		res:     resolver,
+		verify:  repoverify.New(resolver, cfg.Server.Dev),
 		vault:   vault,
 		motd:    defaultMotd,
 		rootCtx: ctx,
@@ -447,7 +450,7 @@ func (s *Spindle) processKnotStream(ctx context.Context, src eventconsumer.Sourc
 			Repo: triggerRepo,
 		}
 
-		pipelineId, err := s.runPipeline(ctx, repoDid, trigger, event.ChangedFiles, repoCloneUri, repoPath, event.NewSha, nil)
+		pipelineId, err := s.runPipeline(ctx, repoDid, trigger, event.ChangedFiles, repoCloneUri, repoPath, event.NewSha, nil, triggerRepo)
 		if err != nil {
 			return err
 		}
@@ -463,31 +466,70 @@ func (s *Spindle) processKnotStream(ctx context.Context, src eventconsumer.Sourc
 
 // buildTriggerRepo gathers trigger metadata, resolving default branch from the knot
 func (s *Spindle) buildTriggerRepo(ctx context.Context, repo *db.Repo) (*tangled.Pipeline_TriggerRepo, error) {
+	rkey := string(repo.Rkey)
+	repoDid := repo.RepoDid.String()
+	return s.buildTriggerRepoFrom(ctx, repo.Knot, repo.Owner.String(), rkey, repoDid), nil
+}
+
+func (s *Spindle) buildTriggerRepoFrom(ctx context.Context, knot, did, rkey, repoDid string) *tangled.Pipeline_TriggerRepo {
 	scheme := "https"
 	if s.cfg.Server.Dev {
 		scheme = "http"
 	}
-	client := &indigoxrpc.Client{Host: fmt.Sprintf("%s://%s", scheme, repo.Knot)}
+	client := &indigoxrpc.Client{Host: fmt.Sprintf("%s://%s", scheme, knot)}
 
-	// todo(dawn): this should be in the refUpdate event itself to save a roundtrip
+	// this should maybe (?) be in the refUpdate event itself to save a roundtrip
 	defaultBranch := ""
-	if out, err := tangled.RepoGetDefaultBranch(ctx, client, repo.RepoDid.String()); err == nil {
+	if out, err := tangled.RepoGetDefaultBranch(ctx, client, repoDid); err == nil {
 		defaultBranch = out.Name
 	}
 
-	rkey := string(repo.Rkey)
-	repoDid := repo.RepoDid.String()
+	var rkeyPtr *string
+	if rkey != "" {
+		rkeyPtr = &rkey
+	}
 	return &tangled.Pipeline_TriggerRepo{
-		Did:           repo.Owner.String(),
-		Knot:          repo.Knot,
-		Repo:          &rkey,
+		Did:           did,
+		Knot:          knot,
+		Repo:          rkeyPtr,
 		RepoDid:       &repoDid,
 		DefaultBranch: defaultBranch,
-	}, nil
+	}
 }
 
-// runPipeline compiles and enqueues the pipeline for the given revision
-func (s *Spindle) runPipeline(ctx context.Context, repoDid syntax.DID, trigger tangled.Pipeline_TriggerMetadata, changedFiles []string, repoCloneUri, repoPath, rev string, only []string) (models.PipelineId, error) {
+func (s *Spindle) resolvePipelineSourceRepo(ctx context.Context, trigger *tangled.Pipeline_TriggerMetadata) (*tangled.Pipeline_TriggerRepo, error) {
+	if trigger == nil {
+		return nil, nil
+	}
+	if trigger.SourceRepo == nil || *trigger.SourceRepo == "" {
+		return trigger.Repo, nil
+	}
+	repoDid, err := syntax.ParseDID(*trigger.SourceRepo)
+	if err != nil {
+		return nil, fmt.Errorf("parse sourceRepo %s: %w", *trigger.SourceRepo, err)
+	}
+	return s.resolveSourceRepoInfo(ctx, repoDid)
+}
+
+// resolveSourceRepoInfo resolves trigger-repo metadata for a source repo DID.
+func (s *Spindle) resolveSourceRepoInfo(ctx context.Context, repoDid syntax.DID) (*tangled.Pipeline_TriggerRepo, error) {
+	repo, err := s.db.GetRepoByDid(repoDid)
+	if err == nil {
+		return s.buildTriggerRepo(ctx, repo)
+	}
+
+	// verify repo, we don't want git sync to point to arbitrary endpoints
+	res, err := s.verify(ctx, repoverify.RepoDid(repoDid))
+	if err != nil {
+		return nil, fmt.Errorf("verify sourceRepo %s: %w", repoDid, err)
+	}
+	return s.buildTriggerRepoFrom(ctx, res.KnotURL.Host, res.OwnerDid.String(), res.Rkey, repoDid.String()), nil
+}
+
+// runPipeline compiles and enqueues the pipeline for the given revision.
+// sourceRepo is the resolved repo the code was checked out from, forwarded to
+// processPipeline for env vars.
+func (s *Spindle) runPipeline(ctx context.Context, repoDid syntax.DID, trigger tangled.Pipeline_TriggerMetadata, changedFiles []string, repoCloneUri, repoPath, rev string, only []string, sourceRepo *tangled.Pipeline_TriggerRepo) (models.PipelineId, error) {
 	l := log.FromContext(ctx)
 
 	compiler := workflow.Compiler{
@@ -526,7 +568,7 @@ func (s *Spindle) runPipeline(ctx context.Context, repoDid syntax.DID, trigger t
 	if err := s.db.CreatePipelineEvent(pipelineId.Rkey, tpl, s.n); err != nil {
 		return models.PipelineId{}, fmt.Errorf("creating pipeline event: %w", err)
 	}
-	err = s.processPipeline(repoDid, tpl, pipelineId)
+	err = s.processPipeline(repoDid, tpl, pipelineId, sourceRepo)
 	return pipelineId, err
 }
 
@@ -548,8 +590,9 @@ func filterWorkflows(workflows []*tangled.Pipeline_Workflow, only []string) []*t
 	return filtered
 }
 
-// TriggerManual dispatches a pipeline manually at sha
-func (s *Spindle) TriggerManual(ctx context.Context, repoDid syntax.DID, sha, ref string, workflows []string) (syntax.ATURI, error) {
+// TriggerManual dispatches a pipeline at sha, authorized against and recorded
+// under repoDid. sourceRepo, pull, and inputs are optional trigger payload.
+func (s *Spindle) TriggerManual(ctx context.Context, repoDid syntax.DID, sha, ref string, workflows []string, sourceRepo syntax.DID, pull xrpc.PullContext, inputs []*tangled.Pipeline_Pair) (syntax.ATURI, error) {
 	repo, err := s.db.GetRepoByDid(repoDid)
 	if err != nil {
 		return "", fmt.Errorf("unknown repoDid %s: %w", repoDid, err)
@@ -560,23 +603,48 @@ func (s *Spindle) TriggerManual(ctx context.Context, repoDid syntax.DID, sha, re
 		return "", fmt.Errorf("building trigger repo: %w", err)
 	}
 
-	var refPtr *string
-	if ref != "" {
-		refPtr = &ref
-	}
-	trigger := tangled.Pipeline_TriggerMetadata{
-		Kind: string(workflow.TriggerKindManual),
-		Manual: &tangled.Pipeline_ManualTriggerData{
-			Sha: sha,
-			Ref: refPtr,
-		},
-		Repo: triggerRepo,
+	trigger := tangled.Pipeline_TriggerMetadata{Repo: triggerRepo}
+	if pull.IsPullRequest {
+		var pullAt *string
+		if pull.Pull != "" {
+			pullAtStr := pull.Pull.String()
+			pullAt = &pullAtStr
+		}
+		trigger.Kind = string(workflow.TriggerKindPullRequest)
+		trigger.PullRequest = &tangled.Pipeline_PullRequestTriggerData{
+			SourceBranch: pull.SourceBranch,
+			TargetBranch: pull.TargetBranch,
+			SourceSha:    sha,
+			Pull:         pullAt,
+		}
+	} else {
+		var refPtr *string
+		if ref != "" {
+			refPtr = &ref
+		}
+		trigger.Kind = string(workflow.TriggerKindManual)
+		trigger.Manual = &tangled.Pipeline_ManualTriggerData{
+			Sha:    sha,
+			Ref:    refPtr,
+			Inputs: inputs,
+		}
 	}
 
 	repoCloneUri := s.newRepoCloneUrl(repo.Knot, repoDid)
 	repoPath := s.newRepoPath(repoDid)
+	sourceInfo := triggerRepo // default: code comes from the repo itself
+	if sourceRepo != "" && sourceRepo != repoDid {
+		sourceInfo, err = s.resolveSourceRepoInfo(ctx, sourceRepo)
+		if err != nil {
+			return "", err
+		}
+		sourceRepoStr := sourceRepo.String()
+		trigger.SourceRepo = &sourceRepoStr
+		repoCloneUri = models.BuildRepoURL(sourceInfo)
+		repoPath = s.newRepoPath(sourceRepo)
+	}
 
-	pipelineId, err := s.runPipeline(ctx, repoDid, trigger, nil, repoCloneUri, repoPath, sha, workflows)
+	pipelineId, err := s.runPipeline(ctx, repoDid, trigger, nil, repoCloneUri, repoPath, sha, workflows, sourceInfo)
 	if err != nil {
 		return "", err
 	}
@@ -624,9 +692,26 @@ func (s *Spindle) loadPipeline(ctx context.Context, repoUri, repoPath, rev strin
 	return rawPipeline, nil
 }
 
-func (s *Spindle) processPipeline(repoDid syntax.DID, tpl tangled.Pipeline, pipelineId models.PipelineId) error {
-	// Build pipeline environment variables once for all workflows
-	pipelineEnv := models.PipelineEnvVars(tpl.TriggerMetadata, pipelineId)
+// processPipeline enqueues the workflows in tpl.
+func (s *Spindle) processPipeline(repoDid syntax.DID, tpl tangled.Pipeline, pipelineId models.PipelineId, sourceRepo *tangled.Pipeline_TriggerRepo) error {
+	// derive security-relevant things like whether this run is trusted and can be passed
+	// secrets to from the original metadata.
+	pipelineEnv := models.PipelineEnvVarsForSource(tpl.TriggerMetadata, pipelineId, sourceRepo)
+	trustedSource := true
+	if tm := tpl.TriggerMetadata; tm != nil && tm.SourceRepo != nil &&
+		*tm.SourceRepo != "" && *tm.SourceRepo != repoDid.String() {
+		trustedSource = false
+	}
+
+	// swap the repo with our sourceRepo if we are running a pipeline on a fork.
+	// the metadata stays the same. we check whether the repo is trusted above,
+	// so this only affects the clone URL.
+	initTpl := tpl
+	if sourceRepo != nil && tpl.TriggerMetadata != nil {
+		tm := *tpl.TriggerMetadata
+		tm.Repo = sourceRepo
+		initTpl.TriggerMetadata = &tm
+	}
 
 	// filter & init workflows
 	workflows := make(map[models.Engine][]models.Workflow)
@@ -647,7 +732,7 @@ func (s *Spindle) processPipeline(repoDid syntax.DID, tpl tangled.Pipeline, pipe
 			continue
 		}
 
-		ewf, err := eng.InitWorkflow(*w, tpl)
+		ewf, err := eng.InitWorkflow(*w, initTpl)
 		if err != nil {
 			err = s.db.StatusFailed(models.WorkflowId{
 				PipelineId: pipelineId,
@@ -674,8 +759,9 @@ func (s *Spindle) processPipeline(repoDid syntax.DID, tpl tangled.Pipeline, pipe
 	ok := s.jq.Enqueue(repoDid, queue.Job{
 		Run: func() error {
 			engine.StartWorkflows(log.SubLogger(s.l, "engine"), s.vault, s.cfg, s.db, s.n, s.rootCtx, &models.Pipeline{
-				RepoDid:   repoDid,
-				Workflows: workflows,
+				RepoDid:       repoDid,
+				Workflows:     workflows,
+				TrustedSource: trustedSource,
 			}, pipelineId)
 			return nil
 		},

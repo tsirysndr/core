@@ -11,9 +11,9 @@ import (
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/reporesolver"
-	xrpcclient "tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/orm"
 	"tangled.org/core/types"
+	xrpcclient "tangled.org/core/xrpc/xrpcclient"
 
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-chi/chi/v5"

@@ -10,10 +10,10 @@ import (
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pages"
-	"tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/orm"
 	"tangled.org/core/patchutil"
 	"tangled.org/core/types"
+	"tangled.org/core/xrpc/xrpcclient"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
@@ -187,6 +187,16 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		return m
 	}(r.Context())
 
+	var workflowsChanged bool
+	var changedWorkflows []string
+	if _, hasPipeline := pipelines[pull.LatestSha()]; pull.IsForkBased() && !hasPipeline {
+		changedWorkflows, err = changedWorkflowFiles(pull.LatestSubmission().CombinedPatch())
+		if err != nil {
+			l.Error("failed to inspect latest round's patch for workflow changes", "err", err)
+		}
+		workflowsChanged = len(changedWorkflows) > 0
+	}
+
 	entities := []syntax.ATURI{pull.AtUri()}
 	for _, s := range pull.Submissions {
 		for _, c := range s.Comments {
@@ -273,6 +283,9 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		DiffOpts:           diffOpts,
 		ActiveRound:        roundIdInt,
 		IsInterdiff:        interdiff,
+
+		WorkflowsChanged:     workflowsChanged,
+		ChangedWorkflowFiles: changedWorkflows,
 
 		Reactions:   reactions,
 		UserReacted: userReactions,

@@ -10,9 +10,9 @@ import (
 
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/pages"
-	xrpcclient "tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/patchutil"
 	"tangled.org/core/types"
+	xrpcclient "tangled.org/core/xrpc/xrpcclient"
 
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-chi/chi/v5"

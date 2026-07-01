@@ -8,8 +8,8 @@ import (
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
-	xrpcclient "tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/types"
+	xrpcclient "tangled.org/core/xrpc/xrpcclient"
 
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 )

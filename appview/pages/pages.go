@@ -1442,6 +1442,12 @@ type RepoSinglePullParams struct {
 	ActiveRound        int
 	IsInterdiff        bool
 
+	// WorkflowsChanged and ChangedWorkflowFiles describe whether the latest
+	// round's patch touches .tangled/workflows/, for warning maintainers
+	// before they manually trigger CI on a fork-based pull request.
+	WorkflowsChanged     bool
+	ChangedWorkflowFiles []string
+
 	Reactions   map[syntax.ATURI]map[models.ReactionKind]models.ReactionDisplayData
 	UserReacted map[syntax.ATURI]map[models.ReactionKind]bool
 

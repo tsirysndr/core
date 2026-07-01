@@ -33,8 +33,6 @@ import (
 	"tangled.org/core/appview/pages"
 	pipelinessh "tangled.org/core/appview/pipelines/ssh"
 	"tangled.org/core/appview/reporesolver"
-	"tangled.org/core/appview/repoverify"
-	xrpcclient "tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/consts"
 	"tangled.org/core/eventconsumer"
 	"tangled.org/core/idresolver"
@@ -43,6 +41,8 @@ import (
 	tlog "tangled.org/core/log"
 	"tangled.org/core/orm"
 	"tangled.org/core/rbac"
+	"tangled.org/core/repoverify"
+	xrpcclient "tangled.org/core/xrpc/xrpcclient"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/atclient"

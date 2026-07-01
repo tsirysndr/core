@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	"github.com/bluesky-social/indigo/xrpc"
 
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/rbac"
@@ -36,23 +34,83 @@ func (x *Xrpc) TriggerPipeline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(input.Sha) != 40 {
-		fail(xrpcerr.GenericError(fmt.Errorf("sha must be a 40-character commit hash")))
-		return
-	}
-
 	repoDid, xerr, ok := x.resolveOwnedRepo(r.Context(), actorDid, input.Repo)
 	if !ok {
 		fail(xerr)
 		return
 	}
 
+	var sha string
 	ref := ""
-	if input.Ref != nil {
-		ref = *input.Ref
+	var sourceRepo syntax.DID
+	var pull PullContext
+	var inputs []*tangled.Pipeline_Pair
+
+	switch {
+	case input.Trigger == nil:
+		fail(xrpcerr.GenericError(fmt.Errorf("trigger is required")))
+		return
+
+	case input.Trigger.CiTrigger_Manual != nil:
+		manual := input.Trigger.CiTrigger_Manual
+		sha = manual.Sha
+		if manual.Ref != nil {
+			ref = *manual.Ref
+		}
+		parsed, err := parseOptionalDID("sourceRepo", manual.SourceRepo)
+		if err != nil {
+			fail(xrpcerr.GenericError(err))
+			return
+		}
+		sourceRepo = parsed
+		inputs = ciTriggerPairsToPipelinePairs(manual.Inputs)
+
+	case input.Trigger.CiTrigger_PullRequest != nil:
+		pr := input.Trigger.CiTrigger_PullRequest
+		sha = pr.SourceSha
+		parsed, err := parseOptionalDID("sourceRepo", pr.SourceRepo)
+		if err != nil {
+			fail(xrpcerr.GenericError(err))
+			return
+		}
+		sourceRepo = parsed
+
+		if pr.TargetBranch == "" {
+			fail(xrpcerr.GenericError(fmt.Errorf("pull request trigger targetBranch is required")))
+			return
+		}
+
+		var pullAt syntax.ATURI
+		if pr.Pull != nil {
+			var err error
+			pullAt, err = syntax.ParseATURI(*pr.Pull)
+			if err != nil {
+				fail(xrpcerr.InvalidRepoError(*pr.Pull))
+				return
+			}
+		}
+		sourceBranch := ""
+		if pr.SourceBranch != nil {
+			sourceBranch = *pr.SourceBranch
+		}
+		pull = PullContext{
+			IsPullRequest: true,
+			Pull:          pullAt,
+			SourceBranch:  sourceBranch,
+			TargetBranch:  pr.TargetBranch,
+		}
+
+	default:
+		fail(xrpcerr.GenericError(fmt.Errorf("unsupported trigger variant")))
+		return
 	}
 
-	pipelineAt, err := x.Trigger.TriggerManual(r.Context(), repoDid, input.Sha, ref, input.Workflows)
+	if len(sha) != 40 {
+		fail(xrpcerr.GenericError(fmt.Errorf("sha must be a 40-character commit hash")))
+		return
+	}
+
+	pipelineAt, err := x.Trigger.TriggerManual(r.Context(), repoDid, sha, ref, input.Workflows, sourceRepo, pull, inputs)
 	if errors.Is(err, ErrNoMatchingWorkflows) {
 		fail(xrpcerr.GenericError(err))
 		return
@@ -69,37 +127,58 @@ func (x *Xrpc) TriggerPipeline(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// resolveOwnedRepo resolves a repo AT-URI to DID and checks owner auth
-func (x *Xrpc) resolveOwnedRepo(ctx context.Context, actorDid syntax.DID, repoAtUri string) (syntax.DID, xrpcerr.XrpcError, bool) {
-	repoAt, err := syntax.ParseATURI(repoAtUri)
+func parseOptionalDID(field string, value *string) (syntax.DID, error) {
+	if value == nil || *value == "" {
+		return "", nil
+	}
+	did, err := syntax.ParseDID(*value)
 	if err != nil {
-		return "", xrpcerr.InvalidRepoError(repoAtUri), false
+		return "", fmt.Errorf("invalid %s DID %q: %w", field, *value, err)
 	}
+	return did, nil
+}
 
-	ident, err := x.Resolver.ResolveIdent(ctx, repoAt.Authority().String())
-	if err != nil || ident.Handle.IsInvalidHandle() {
-		return "", xrpcerr.GenericError(fmt.Errorf("failed to resolve handle: %w", err)), false
+func ciTriggerPairsToPipelinePairs(inputs []*tangled.CiTrigger_Pair) []*tangled.Pipeline_Pair {
+	if len(inputs) == 0 {
+		return nil
 	}
-
-	xrpcc := xrpc.Client{Host: ident.PDSEndpoint()}
-	resp, err := atproto.RepoGetRecord(ctx, &xrpcc, "", tangled.RepoNSID, repoAt.Authority().String(), repoAt.RecordKey().String())
-	if err != nil {
-		return "", xrpcerr.GenericError(err), false
+	pairs := make([]*tangled.Pipeline_Pair, 0, len(inputs))
+	for _, input := range inputs {
+		if input == nil {
+			continue
+		}
+		pairs = append(pairs, &tangled.Pipeline_Pair{
+			Key:   input.Key,
+			Value: input.Value,
+		})
 	}
+	return pairs
+}
 
-	repoRec, ok := resp.Value.Val.(*tangled.Repo)
+// resolveOwnedRepo resolves a repository DID and checks push auth.
+func (x *Xrpc) resolveOwnedRepo(ctx context.Context, actorDid syntax.DID, repoDidStr string) (syntax.DID, xrpcerr.XrpcError, bool) {
+	repoDid, xerr, ok := x.resolveKnownRepoDid(repoDidStr)
 	if !ok {
-		return "", xrpcerr.RepoNotFoundError, false
+		return "", xerr, false
 	}
-	if repoRec.RepoDid == nil || *repoRec.RepoDid == "" {
-		return "", xrpcerr.GenericError(fmt.Errorf("repo record %s has no repoDid", repoAt)), false
-	}
-	repoDid := *repoRec.RepoDid
 
-	isPushAllowed, err := x.Enforcer.IsPushAllowed(actorDid.String(), rbac.ThisServer, repoDid)
+	isPushAllowed, err := x.Enforcer.IsPushAllowed(actorDid.String(), rbac.ThisServer, repoDid.String())
 	if err != nil || !isPushAllowed {
 		return "", xrpcerr.AccessControlError(actorDid.String()), false
 	}
 
-	return syntax.DID(repoDid), xrpcerr.XrpcError{}, true
+	return repoDid, xrpcerr.XrpcError{}, true
+}
+
+func (x *Xrpc) resolveKnownRepoDid(repoDidStr string) (syntax.DID, xrpcerr.XrpcError, bool) {
+	repoDid, err := syntax.ParseDID(repoDidStr)
+	if err != nil {
+		return "", xrpcerr.GenericError(fmt.Errorf("invalid repo DID %q: %w", repoDidStr, err)), false
+	}
+
+	if _, err := x.Db.GetRepoByDid(repoDid); err != nil {
+		return "", xrpcerr.RepoNotFoundError, false
+	}
+
+	return repoDid, xrpcerr.XrpcError{}, true
 }

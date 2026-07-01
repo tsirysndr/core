@@ -35,11 +35,26 @@ import (
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages/markup"
 	"tangled.org/core/appview/pages/markup/sanitizer"
+	"tangled.org/core/appview/pages/repoinfo"
 	"tangled.org/core/crypto"
 	"tangled.org/core/idresolver"
+	"tangled.org/core/orm"
+	"tangled.org/core/types"
 )
 
 type tab map[string]string
+
+func (p *Pages) ownerSlashRepo(repo *models.Repo) string {
+	ownerId, err := p.resolver.ResolveIdent(context.Background(), repo.Did)
+	if err != nil {
+		return repo.RepoIdentifier()
+	}
+	handle := ownerId.Handle
+	if handle != "" && !handle.IsInvalidHandle() {
+		return string(handle) + "/" + repo.Slug()
+	}
+	return repo.RepoIdentifier()
+}
 
 func (p *Pages) funcMap() template.FuncMap {
 	return template.FuncMap{
@@ -91,16 +106,42 @@ func (p *Pages) funcMap() template.FuncMap {
 			}
 			return identity.PDSEndpoint()
 		},
-		"ownerSlashRepo": func(repo *models.Repo) string {
-			ownerId, err := p.resolver.ResolveIdent(context.Background(), repo.Did)
-			if err != nil {
-				return repo.RepoIdentifier()
+		"ownerSlashRepo": p.ownerSlashRepo,
+		"pipelineCommitPath": func(repoInfo repoinfo.RepoInfo, pipeline types.Pipeline) string {
+			sha := pipeline.Sha()
+			if sourceRepo := pipeline.SourceRepo(); sourceRepo != nil {
+				if repo, err := db.GetRepoByDid(p.db, *sourceRepo); err == nil && repo != nil {
+					return "/" + p.ownerSlashRepo(repo) + "/commit/" + sha
+				}
 			}
-			handle := ownerId.Handle
-			if handle != "" && !handle.IsInvalidHandle() {
-				return string(handle) + "/" + repo.Slug()
+			return "/" + repoInfo.FullName() + "/commit/" + sha
+		},
+		"pipelineSourceLabel": func(pipeline types.Pipeline) string {
+			branch := pipeline.Trigger().PRSourceBranch()
+			if branch == "" {
+				return branch
 			}
-			return repo.RepoIdentifier()
+			sourceRepo := pipeline.SourceRepo()
+			if sourceRepo == nil {
+				return branch
+			}
+			repo, err := db.GetRepoByDid(p.db, *sourceRepo)
+			if err != nil || repo == nil {
+				return branch
+			}
+			return p.ownerSlashRepo(repo) + "/" + branch
+		},
+		"pipelinePullPath": func(pipeline types.Pipeline) string {
+			pullAtStr := pipeline.Trigger().PRUri()
+			if pullAtStr == "" {
+				return ""
+			}
+			// GetPull's reverse-mapping already populates pull.Repo
+			pull, err := db.GetPull(p.db, orm.FilterEq("at_uri", pullAtStr))
+			if err != nil || pull == nil || pull.Repo == nil {
+				return ""
+			}
+			return fmt.Sprintf("/%s/pulls/%d", p.ownerSlashRepo(pull.Repo), pull.PullId)
 		},
 		"truncateAt30": func(s string) string {
 			if len(s) <= 30 {

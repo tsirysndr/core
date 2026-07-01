@@ -83,7 +83,6 @@ func TestBuildCloneStep_PullRequestTrigger(t *testing.T) {
 			SourceSha:    "pr-sha-789",
 			SourceBranch: "feature-branch",
 			TargetBranch: "main",
-			Action:       "opened",
 		},
 		Repo: &tangled.Pipeline_TriggerRepo{
 			Knot:    "example.com",
@@ -98,6 +97,41 @@ func TestBuildCloneStep_PullRequestTrigger(t *testing.T) {
 	allCmds := strings.Join(step.Commands(), " ")
 	if !strings.Contains(allCmds, "pr-sha-789") {
 		t.Error("Commands should contain PR commit SHA")
+	}
+}
+
+func TestBuildCloneStep_SourceRepo(t *testing.T) {
+	twf := tangled.Pipeline_Workflow{
+		Clone: &tangled.Pipeline_CloneOpts{
+			Depth: 1,
+			Skip:  false,
+		},
+	}
+	sourceRepoDid := "did:plc:fork"
+	tr := tangled.Pipeline_TriggerMetadata{
+		Kind: string(workflow.TriggerKindPullRequest),
+		PullRequest: &tangled.Pipeline_PullRequestTriggerData{
+			SourceSha:    "pr-sha-789",
+			SourceBranch: "feature-branch",
+			TargetBranch: "main",
+		},
+		Repo: &tangled.Pipeline_TriggerRepo{
+			Knot:    "fork.example.com",
+			Did:     "did:plc:user456",
+			Repo:    sp("fork-repo"),
+			RepoDid: &sourceRepoDid,
+		},
+		SourceRepo: &sourceRepoDid,
+	}
+
+	step := BuildCloneStep(twf, tr, false)
+
+	allCmds := strings.Join(step.Commands(), " ")
+	if !strings.Contains(allCmds, "https://fork.example.com/did:plc:fork") {
+		t.Error("Commands should clone from source repo URL")
+	}
+	if strings.Contains(allCmds, "https://target.example.com/did:plc:target") {
+		t.Error("Commands should not clone from target repo URL when sourceRepo is set")
 	}
 }
 

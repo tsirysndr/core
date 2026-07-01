@@ -50,6 +50,11 @@ func (s *Pulls) Router(mw *middleware.Middleware) http.Handler {
 				r.Post("/merge", s.MergePull)
 				// maybe lock, etc.
 			})
+
+			r.Group(func(r chi.Router) {
+				r.Use(mw.RepoPermissionMiddleware("repo:push"))
+				r.Post("/trigger-ci", s.TriggerCi)
+			})
 		})
 	})
 	return r

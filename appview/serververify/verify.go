@@ -8,9 +8,9 @@ import (
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/db"
-	"tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/orm"
 	"tangled.org/core/rbac"
+	"tangled.org/core/xrpc/xrpcclient"
 )
 
 var (

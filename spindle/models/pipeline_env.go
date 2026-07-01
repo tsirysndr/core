@@ -10,6 +10,10 @@ import (
 
 // PipelineEnvVars builds the standard CI environment variables for a pipeline
 func PipelineEnvVars(tr *tangled.Pipeline_TriggerMetadata, pipelineId PipelineId) map[string]string {
+	return PipelineEnvVarsForSource(tr, pipelineId, nil)
+}
+
+func PipelineEnvVarsForSource(tr *tangled.Pipeline_TriggerMetadata, pipelineId PipelineId, sourceRepo *tangled.Pipeline_TriggerRepo) map[string]string {
 	if tr == nil {
 		return nil
 	}
@@ -22,18 +26,28 @@ func PipelineEnvVars(tr *tangled.Pipeline_TriggerMetadata, pipelineId PipelineId
 	env["TANGLED_PIPELINE_ID"] = pipelineId.AtUri().String()
 	env["TANGLED_PIPELINE_KIND"] = tr.Kind
 
-	// repo info
-	if tr.Repo != nil {
-		env["TANGLED_REPO_KNOT"] = tr.Repo.Knot
-		env["TANGLED_REPO_DID"] = tr.Repo.Did
-		if tr.Repo.Repo != nil {
-			env["TANGLED_REPO_NAME"] = *tr.Repo.Repo
+	if tr.SourceRepo != nil && *tr.SourceRepo != "" {
+		env["TANGLED_PIPELINE_SOURCE"] = *tr.SourceRepo
+	} else if tr.Repo != nil && tr.Repo.RepoDid != nil {
+		env["TANGLED_PIPELINE_SOURCE"] = *tr.Repo.RepoDid
+	}
+
+	// prefer source repo, e.g. if this is a wf running on a fork
+	repoInfo := tr.Repo
+	if sourceRepo != nil {
+		repoInfo = sourceRepo
+	}
+	if repoInfo != nil {
+		env["TANGLED_REPO_KNOT"] = repoInfo.Knot
+		env["TANGLED_REPO_DID"] = repoInfo.Did
+		if repoInfo.Repo != nil {
+			env["TANGLED_REPO_NAME"] = *repoInfo.Repo
 		}
-		if tr.Repo.RepoDid != nil {
-			env["TANGLED_REPO_REPO_DID"] = *tr.Repo.RepoDid
+		if repoInfo.RepoDid != nil {
+			env["TANGLED_REPO_REPO_DID"] = *repoInfo.RepoDid
 		}
-		env["TANGLED_REPO_DEFAULT_BRANCH"] = tr.Repo.DefaultBranch
-		env["TANGLED_REPO_URL"] = BuildRepoURL(tr.Repo)
+		env["TANGLED_REPO_DEFAULT_BRANCH"] = repoInfo.DefaultBranch
+		env["TANGLED_REPO_URL"] = BuildRepoURL(repoInfo)
 	}
 
 	switch workflow.TriggerKind(tr.Kind) {
@@ -62,10 +76,11 @@ func PipelineEnvVars(tr *tangled.Pipeline_TriggerMetadata, pipelineId PipelineId
 			env["TANGLED_COMMIT_SHA"] = tr.PullRequest.SourceSha
 
 			// PR-specific env vars
+			env["TANGLED_PIPELINE_SOURCE_BRANCH"] = tr.PullRequest.SourceBranch
+			env["TANGLED_PIPELINE_TARGET_BRANCH"] = tr.PullRequest.TargetBranch
 			env["TANGLED_PR_SOURCE_BRANCH"] = tr.PullRequest.SourceBranch
 			env["TANGLED_PR_TARGET_BRANCH"] = tr.PullRequest.TargetBranch
 			env["TANGLED_PR_SOURCE_SHA"] = tr.PullRequest.SourceSha
-			env["TANGLED_PR_ACTION"] = tr.PullRequest.Action
 		}
 
 	case workflow.TriggerKindManual:

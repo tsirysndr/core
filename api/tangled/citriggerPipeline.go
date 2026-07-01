@@ -6,6 +6,8 @@ package tangled
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	"github.com/bluesky-social/indigo/lex/util"
 )
@@ -16,14 +18,48 @@ const (
 
 // CiTriggerPipeline_Input is the input argument to a sh.tangled.ci.triggerPipeline call.
 type CiTriggerPipeline_Input struct {
-	// ref: optional ref the SHA was resolved from, for display
-	Ref *string `json:"ref,omitempty" cborgen:"ref,omitempty"`
-	// repo: AT-URI of the sh.tangled.repo record
+	// repo: Target repository DID. Auth is checked against this repo.
 	Repo string `json:"repo" cborgen:"repo"`
-	// sha: commit SHA to run the pipeline at
-	Sha string `json:"sha" cborgen:"sha"`
+	// trigger: Trigger metadata for this dispatch.
+	Trigger *CiTriggerPipeline_Input_Trigger `json:"trigger" cborgen:"trigger"`
 	// workflows: Workflow names to run. When not provided, every dispatchable workflow is run.
 	Workflows []string `json:"workflows,omitempty" cborgen:"workflows,omitempty"`
+}
+
+// Trigger metadata for this dispatch.
+type CiTriggerPipeline_Input_Trigger struct {
+	CiTrigger_Manual      *CiTrigger_Manual
+	CiTrigger_PullRequest *CiTrigger_PullRequest
+}
+
+func (t *CiTriggerPipeline_Input_Trigger) MarshalJSON() ([]byte, error) {
+	if t.CiTrigger_Manual != nil {
+		t.CiTrigger_Manual.LexiconTypeID = "sh.tangled.ci.trigger#manual"
+		return json.Marshal(t.CiTrigger_Manual)
+	}
+	if t.CiTrigger_PullRequest != nil {
+		t.CiTrigger_PullRequest.LexiconTypeID = "sh.tangled.ci.trigger#pullRequest"
+		return json.Marshal(t.CiTrigger_PullRequest)
+	}
+	return nil, fmt.Errorf("cannot marshal empty enum")
+}
+func (t *CiTriggerPipeline_Input_Trigger) UnmarshalJSON(b []byte) error {
+	typ, err := util.TypeExtract(b)
+	if err != nil {
+		return err
+	}
+
+	switch typ {
+	case "sh.tangled.ci.trigger#manual":
+		t.CiTrigger_Manual = new(CiTrigger_Manual)
+		return json.Unmarshal(b, t.CiTrigger_Manual)
+	case "sh.tangled.ci.trigger#pullRequest":
+		t.CiTrigger_PullRequest = new(CiTrigger_PullRequest)
+		return json.Unmarshal(b, t.CiTrigger_PullRequest)
+
+	default:
+		return nil
+	}
 }
 
 // CiTriggerPipeline_Output is the output of a sh.tangled.ci.triggerPipeline call.

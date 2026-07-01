@@ -2,7 +2,7 @@
 
 package tangled
 
-// schema: sh.tangled.ci.pipeline.cancelPipeline
+// schema: sh.tangled.pipeline.cancelPipeline
 
 import (
 	"context"
@@ -11,22 +11,22 @@ import (
 )
 
 const (
-	CiPipelineCancelPipelineNSID = "sh.tangled.ci.pipeline.cancelPipeline"
+	PipelineCancelPipelineNSID = "sh.tangled.pipeline.cancelPipeline"
 )
 
-// CiPipelineCancelPipeline_Input is the input argument to a sh.tangled.ci.pipeline.cancelPipeline call.
-type CiPipelineCancelPipeline_Input struct {
-	// pipeline: pipeline TID
+// PipelineCancelPipeline_Input is the input argument to a sh.tangled.pipeline.cancelPipeline call.
+type PipelineCancelPipeline_Input struct {
+	// pipeline: pipeline at-uri
 	Pipeline string `json:"pipeline" cborgen:"pipeline"`
-	// repo: git repository DID
+	// repo: repo at-uri, spindle can't resolve repo from pipeline at-uri yet
 	Repo string `json:"repo" cborgen:"repo"`
-	// workflows: Workflow names to filter. When not provided, entire pipeline will be canceled.
-	Workflows []string `json:"workflows,omitempty" cborgen:"workflows,omitempty"`
+	// workflow: workflow name
+	Workflow string `json:"workflow" cborgen:"workflow"`
 }
 
-// CiPipelineCancelPipeline calls the XRPC method "sh.tangled.ci.pipeline.cancelPipeline".
-func CiPipelineCancelPipeline(ctx context.Context, c util.LexClient, input *CiPipelineCancelPipeline_Input) error {
-	if err := c.LexDo(ctx, util.Procedure, "application/json", "sh.tangled.ci.pipeline.cancelPipeline", nil, input, nil); err != nil {
+// PipelineCancelPipeline calls the XRPC method "sh.tangled.pipeline.cancelPipeline".
+func PipelineCancelPipeline(ctx context.Context, c util.LexClient, input *PipelineCancelPipeline_Input) error {
+	if err := c.LexDo(ctx, util.Procedure, "application/json", "sh.tangled.pipeline.cancelPipeline", nil, input, nil); err != nil {
 		return err
 	}
 

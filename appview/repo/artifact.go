@@ -13,11 +13,11 @@ import (
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pages"
-	"tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/orm"
 	"tangled.org/core/tid"
 	"tangled.org/core/types"
 	"tangled.org/core/xrpc"
+	"tangled.org/core/xrpc/xrpcclient"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"

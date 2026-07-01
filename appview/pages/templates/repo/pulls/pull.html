@@ -514,9 +514,8 @@
   {{ $item := index . 0 }}
   {{ $root := index . 3 }}
   {{ $pipeline := index $root.Pipelines $item.SourceRev }}
-  {{ with $pipeline }}
-    {{ $id := .Id }}
-    {{ if .Statuses }}
+  {{ if and $pipeline $pipeline.Statuses }}
+    {{ $id := $pipeline.Id }}
       <details class="group/pipeline">
         <summary class="cursor-pointer list-none flex items-center gap-2">
           {{ template "repo/pipelines/fragments/pipelineSymbol" (dict "Pipeline" $pipeline "ShortSummary" false) }}
@@ -526,7 +525,7 @@
           </div>
         </summary>
           <div class="my-2 grid grid-cols-1 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700">
-            {{ range $name, $all := .Statuses }}
+            {{ range $name, $all := $pipeline.Statuses }}
             <a href="/{{ $root.RepoInfo.FullName }}/pipelines/{{ $id }}/workflow/{{ $name }}" class="no-underline hover:no-underline hover:bg-gray-100/25 hover:dark:bg-gray-700/25">
               <div
                 class="flex gap-2 items-center justify-between p-2">
@@ -550,7 +549,8 @@
             {{ end }}
           </div>
       </details>
-    {{ end }}
+  {{ else if and $root.Pull.IsForkBased (eq $item.RoundNumber $root.Pull.LastRoundNumber) $root.RepoInfo.Roles.IsOwner }}
+    {{ template "repo/pulls/fragments/triggerCi" $root }}
   {{ end }}
 {{ end }}
 

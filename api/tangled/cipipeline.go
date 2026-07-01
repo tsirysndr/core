@@ -26,6 +26,8 @@ type CiPipeline struct {
 	Id string `json:"id" cborgen:"id"`
 	// repo: Repository DID
 	Repo *string `json:"repo,omitempty" cborgen:"repo,omitempty"`
+	// sourceRepo: Repository DID that the commit was checked out from, if different from repo (e.g. a fork for a fork-based pull request)
+	SourceRepo *string `json:"sourceRepo,omitempty" cborgen:"sourceRepo,omitempty"`
 	// trigger: Trigger event metadata
 	Trigger *CiPipeline_Trigger `json:"trigger" cborgen:"trigger"`
 	// workflows: Triggered workflows

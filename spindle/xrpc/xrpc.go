@@ -25,16 +25,19 @@ import (
 
 const ActorDid = serviceauth.ActorDid
 
-// ErrNoMatchingWorkflows is returned when a manual dispatch resolves to no
-// workflows to run: the repo defines none at the requested commit, or none of
-// the requested workflow names exist.
 var ErrNoMatchingWorkflows = errors.New("no workflows to run")
 
-// PipelineTrigger builds and enqueues a manually-dispatched pipeline. It is
-// implemented by *spindle.Spindle, which owns the queue and engines; the xrpc
-// handler only does auth and input validation before delegating here.
+// this is to break an import cycle. spindle imports this package for Xrpc,
+// so this package can't import *spindle.Spindle back.
 type PipelineTrigger interface {
-	TriggerManual(ctx context.Context, repoDid syntax.DID, sha, ref string, workflows []string) (syntax.ATURI, error)
+	TriggerManual(ctx context.Context, repoDid syntax.DID, sha, ref string, workflows []string, sourceRepo syntax.DID, pull PullContext, inputs []*tangled.Pipeline_Pair) (syntax.ATURI, error)
+}
+
+type PullContext struct {
+	IsPullRequest bool
+	Pull          syntax.ATURI
+	SourceBranch  string
+	TargetBranch  string
 }
 
 type Xrpc struct {

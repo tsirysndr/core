@@ -23,9 +23,14 @@
     },
     "pullRequest": {
       "type": "object",
-      "required": ["targetBranch", "sourceSha", "action"],
+      "required": ["targetBranch", "sourceSha"],
       "description": "TODO: reference PR record with strongRef instead of embedding raw values",
       "properties": {
+        "sourceRepo": {
+          "type": "string",
+          "format": "did",
+          "description": "Repository DID to check out code and workflow definitions from, if different from the target repo."
+        },
         "sourceBranch": {
           "type": "string"
         },
@@ -37,14 +42,52 @@
           "minLength": 40,
           "maxLength": 40
         },
-        "action": {
-          "type": "string"
+        "pull": {
+          "type": "string",
+          "format": "at-uri",
+          "description": "AT-URI of the sh.tangled.repo.pull record this run belongs to"
         }
       }
     },
     "manual": {
       "type": "object",
-      "properties": {}
+      "required": ["sha"],
+      "properties": {
+        "sha": {
+          "type": "string",
+          "description": "commit SHA the manual run targets",
+          "minLength": 40,
+          "maxLength": 40
+        },
+        "ref": {
+          "type": "string",
+          "description": "optional ref the SHA was resolved from, for display and TANGLED_REF"
+        },
+        "sourceRepo": {
+          "type": "string",
+          "format": "did",
+          "description": "Repository DID to check out code and workflow definitions from, if different from the target repo."
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "ref",
+            "ref": "#pair"
+          }
+        }
+      }
+    },
+    "pair": {
+      "type": "object",
+      "required": ["key", "value"],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
     }
   }
 }

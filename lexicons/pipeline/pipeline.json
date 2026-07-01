@@ -59,6 +59,11 @@
         "manual": {
           "type": "ref",
           "ref": "#manualTriggerData"
+        },
+        "sourceRepo": {
+          "type": "string",
+          "format": "did",
+          "description": "Repository DID that code and workflow definitions are checked out from, when different from repo (e.g. a fork's commit for a fork-based manual trigger). If absent, source uses repo itself."
         }
       }
     },
@@ -118,8 +123,7 @@
       "required": [
         "sourceBranch",
         "targetBranch",
-        "sourceSha",
-        "action"
+        "sourceSha"
       ],
       "properties": {
         "sourceBranch": {
@@ -133,8 +137,10 @@
           "minLength": 40,
           "maxLength": 40
         },
-        "action": {
-          "type": "string"
+        "pull": {
+          "type": "string",
+          "format": "at-uri",
+          "description": "AT-URI of the sh.tangled.repo.pull record this run belongs to"
         }
       }
     },

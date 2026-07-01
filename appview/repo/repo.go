@@ -27,7 +27,6 @@ import (
 	"tangled.org/core/appview/pagination"
 	"tangled.org/core/appview/reporesolver"
 	"tangled.org/core/appview/sites"
-	xrpcclient "tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/consts"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/ogre"
@@ -35,6 +34,7 @@ import (
 	"tangled.org/core/rbac"
 	"tangled.org/core/tid"
 	"tangled.org/core/xrpc/serviceauth"
+	xrpcclient "tangled.org/core/xrpc/xrpcclient"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/atclient"

@@ -111,16 +111,14 @@ func extractCommitSHA(tr tangled.Pipeline_TriggerMetadata) (string, error) {
 
 // BuildRepoURL constructs the repository URL from repo metadata.
 func BuildRepoURL(repo *tangled.Pipeline_TriggerRepo) string {
-	if repo == nil {
+	if repo == nil || repo.RepoDid == nil {
 		return ""
 	}
-
 	host, noSSL, _ := hostutil.ParseHostname(repo.Knot)
 	scheme := "https"
 	if noSSL {
 		scheme = "http"
 	}
-
 	return fmt.Sprintf("%s://%s/%s", scheme, host, *repo.RepoDid)
 }
 

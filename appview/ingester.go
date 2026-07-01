@@ -31,12 +31,12 @@ import (
 	"tangled.org/core/appview/mentions"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
-	"tangled.org/core/appview/repoverify"
 	"tangled.org/core/appview/serververify"
 	"tangled.org/core/consts"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/orm"
 	"tangled.org/core/rbac"
+	"tangled.org/core/repoverify"
 )
 
 type RepoPermissionChecker interface {

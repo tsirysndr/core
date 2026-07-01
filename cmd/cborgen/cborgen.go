@@ -21,6 +21,7 @@ func main() {
 		tangled.CiSubscribePipelineLogs_Control{},
 		tangled.CiSubscribePipelineLogs_Data{},
 		tangled.CiTrigger_Manual{},
+		tangled.CiTrigger_Pair{},
 		tangled.CiTrigger_PullRequest{},
 		tangled.CiTrigger_Push{},
 		tangled.FeedComment{},

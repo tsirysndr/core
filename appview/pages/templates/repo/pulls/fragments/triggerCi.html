@@ -1,0 +1,49 @@
+{{ define "repo/pulls/fragments/runCiButton" }}
+  <button
+    class="btn-flat p-2 flex items-center gap-2 flex-shrink-0 group"
+    hx-post="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/trigger-ci{{ if .Confirm }}?confirm=1{{ end }}"
+    hx-swap="none"
+    hx-disabled-elt="this"
+    {{ if .Confirm }}hx-confirm="{{ .Confirm }}"{{ end }}
+  >
+    {{ i "circle-play" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
+    {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+    Run CI
+  </button>
+{{ end }}
+
+{{ define "repo/pulls/fragments/triggerCi" }}
+{{ if .WorkflowsChanged }}
+<details class="group/ci">
+  <summary class="flex items-center justify-between gap-2 cursor-pointer list-none">
+    <div class="flex items-center gap-2 min-w-0 text-amber-600 dark:text-amber-500">
+      {{ i "triangle-alert" "w-4 h-4 flex-shrink-0" }}
+      <span class="font-medium truncate">Workflow files changed in this round</span>
+      <div class="text-sm text-gray-500 dark:text-gray-400">
+        <span class="group-open/ci:hidden inline">Expand</span>
+        <span class="hidden group-open/ci:inline">Collapse</span>
+      </div>
+    </div>
+  </summary>
+  <ul class="space-y-1 mt-2 overflow-x-auto">
+    {{ range .ChangedWorkflowFiles }}
+      <li class="flex items-center whitespace-nowrap">
+        {{ i "file-warning" "inline-flex w-4 h-4 mr-1.5 text-amber-600 dark:text-amber-500 flex-shrink-0" }}
+        <span class="font-mono">{{ . }}</span>
+      </li>
+    {{ end }}
+  </ul>
+  <div class="mt-2">
+    {{ $confirm := printf "Workflow files changed in this round (%s). Review before running. Run anyway?" (join .ChangedWorkflowFiles ", ") }}
+    {{ template "repo/pulls/fragments/runCiButton" (dict "RepoInfo" .RepoInfo "Pull" .Pull "Confirm" $confirm) }}
+  </div>
+</details>
+{{ else }}
+<div class="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+  {{ i "circle-play" "w-4 h-4 flex-shrink-0" }}
+  <span class="font-medium">CI hasn't run on the latest commit</span>
+  {{ template "repo/pulls/fragments/runCiButton" (dict "RepoInfo" .RepoInfo "Pull" .Pull "Confirm" "") }}
+</div>
+{{ end }}
+<div id="pull-error" class="text-red-500 dark:text-red-400"></div>
+{{ end }}

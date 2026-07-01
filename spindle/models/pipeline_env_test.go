@@ -110,7 +110,6 @@ func TestPipelineEnvVars_PullRequest(t *testing.T) {
 			SourceBranch: "feature-branch",
 			TargetBranch: "main",
 			SourceSha:    "pr-sha-789",
-			Action:       "opened",
 		},
 		Repo: &tangled.Pipeline_TriggerRepo{
 			Knot:    "example.com",
@@ -145,6 +144,12 @@ func TestPipelineEnvVars_PullRequest(t *testing.T) {
 	}
 
 	// Check PR-specific variables
+	if env["TANGLED_PIPELINE_SOURCE_BRANCH"] != "feature-branch" {
+		t.Errorf("Expected TANGLED_PIPELINE_SOURCE_BRANCH='feature-branch', got '%s'", env["TANGLED_PIPELINE_SOURCE_BRANCH"])
+	}
+	if env["TANGLED_PIPELINE_TARGET_BRANCH"] != "main" {
+		t.Errorf("Expected TANGLED_PIPELINE_TARGET_BRANCH='main', got '%s'", env["TANGLED_PIPELINE_TARGET_BRANCH"])
+	}
 	if env["TANGLED_PR_SOURCE_BRANCH"] != "feature-branch" {
 		t.Errorf("Expected TANGLED_PR_SOURCE_BRANCH='feature-branch', got '%s'", env["TANGLED_PR_SOURCE_BRANCH"])
 	}
@@ -154,8 +159,47 @@ func TestPipelineEnvVars_PullRequest(t *testing.T) {
 	if env["TANGLED_PR_SOURCE_SHA"] != "pr-sha-789" {
 		t.Errorf("Expected TANGLED_PR_SOURCE_SHA='pr-sha-789', got '%s'", env["TANGLED_PR_SOURCE_SHA"])
 	}
-	if env["TANGLED_PR_ACTION"] != "opened" {
-		t.Errorf("Expected TANGLED_PR_ACTION='opened', got '%s'", env["TANGLED_PR_ACTION"])
+}
+
+func TestPipelineEnvVars_SourceRepo(t *testing.T) {
+	sourceRepoDid := "did:plc:fork"
+	tr := &tangled.Pipeline_TriggerMetadata{
+		Kind: string(workflow.TriggerKindPullRequest),
+		PullRequest: &tangled.Pipeline_PullRequestTriggerData{
+			SourceBranch: "feature-branch",
+			TargetBranch: "main",
+			SourceSha:    "pr-sha-789",
+		},
+		Repo: &tangled.Pipeline_TriggerRepo{
+			Knot:    "target.example.com",
+			Did:     "did:plc:user123",
+			Repo:    sp("target-repo"),
+			RepoDid: sp("did:plc:target"),
+		},
+		SourceRepo: &sourceRepoDid,
+	}
+	sourceRepo := &tangled.Pipeline_TriggerRepo{
+		Knot:          "fork.example.com",
+		Did:           "did:plc:user456",
+		Repo:          sp("fork-repo"),
+		RepoDid:       &sourceRepoDid,
+		DefaultBranch: "feature-branch",
+	}
+	id := PipelineId{
+		Knot: "target.example.com",
+		Rkey: "123123",
+	}
+
+	env := PipelineEnvVarsForSource(tr, id, sourceRepo)
+
+	if env["TANGLED_PIPELINE_SOURCE"] != sourceRepoDid {
+		t.Errorf("Expected TANGLED_PIPELINE_SOURCE='%s', got '%s'", sourceRepoDid, env["TANGLED_PIPELINE_SOURCE"])
+	}
+	if env["TANGLED_REPO_URL"] != "https://fork.example.com/did:plc:fork" {
+		t.Errorf("Expected TANGLED_REPO_URL to point at source repo, got '%s'", env["TANGLED_REPO_URL"])
+	}
+	if env["TANGLED_REPO_REPO_DID"] != sourceRepoDid {
+		t.Errorf("Expected TANGLED_REPO_REPO_DID='%s', got '%s'", sourceRepoDid, env["TANGLED_REPO_REPO_DID"])
 	}
 }
 

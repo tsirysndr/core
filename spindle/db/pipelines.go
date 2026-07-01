@@ -9,6 +9,7 @@ import (
 
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/spindle/models"
+	"tangled.org/core/workflow"
 )
 
 func (d *DB) QueryPipelines(ctx context.Context, repoDid string, commits []string, cursor string, limit int) ([]*tangled.CiPipeline, string, int64, error) {
@@ -17,7 +18,7 @@ func (d *DB) QueryPipelines(ctx context.Context, repoDid string, commits []strin
 	}
 
 	var query string
-	var args []interface{}
+	var args []any
 	query = `
 		select
 			rkey, event, created from events
@@ -33,7 +34,11 @@ func (d *DB) QueryPipelines(ctx context.Context, repoDid string, commits []strin
 			placeholders[i] = "?"
 			args = append(args, commits[i])
 		}
-		query += " and json_extract(event, '$.triggerMetadata.push.newSha') in (" + strings.Join(placeholders, ",") + ")"
+		query += ` and coalesce(
+			json_extract(event, '$.triggerMetadata.push.newSha'),
+			json_extract(event, '$.triggerMetadata.pullRequest.sourceSha'),
+			json_extract(event, '$.triggerMetadata.manual.sha')
+		) in (` + strings.Join(placeholders, ",") + ")"
 	}
 
 	if cursor != "" {
@@ -75,7 +80,7 @@ func (d *DB) QueryPipelines(ctx context.Context, repoDid string, commits []strin
 			continue
 		}
 
-		p, err := d.mapToCiPipeline(ctx, rkey, created, rawPipeline)
+		p, err := d.mapToCiPipeline(rkey, created, rawPipeline)
 		if err != nil {
 			return nil, "", 0, err
 		}
@@ -113,10 +118,10 @@ func (d *DB) GetPipeline(ctx context.Context, rkey string) (*tangled.CiPipeline,
 		return nil, err
 	}
 
-	return d.mapToCiPipeline(ctx, rkey, created, rawPipeline)
+	return d.mapToCiPipeline(rkey, created, rawPipeline)
 }
 
-func (d *DB) mapToCiPipeline(ctx context.Context, rkey string, created int64, raw tangled.Pipeline) (*tangled.CiPipeline, error) {
+func (d *DB) mapToCiPipeline(rkey string, created int64, raw tangled.Pipeline) (*tangled.CiPipeline, error) {
 	createdAtStr := time.Unix(0, created).Format(time.RFC3339)
 
 	var repoDidStr string
@@ -132,8 +137,8 @@ func (d *DB) mapToCiPipeline(ctx context.Context, rkey string, created int64, ra
 	var trigger tangled.CiPipeline_Trigger
 
 	if raw.TriggerMetadata != nil {
-		switch raw.TriggerMetadata.Kind {
-		case "push":
+		switch workflow.TriggerKind(raw.TriggerMetadata.Kind) {
+		case workflow.TriggerKindPush:
 			if raw.TriggerMetadata.Push != nil {
 				commitSha = raw.TriggerMetadata.Push.NewSha
 				trigger.CiTrigger_Push = &tangled.CiTrigger_Push{
@@ -142,20 +147,26 @@ func (d *DB) mapToCiPipeline(ctx context.Context, rkey string, created int64, ra
 					Ref:    raw.TriggerMetadata.Push.Ref,
 				}
 			}
-		case "pullRequest":
+		case workflow.TriggerKindPullRequest:
 			if raw.TriggerMetadata.PullRequest != nil {
 				commitSha = raw.TriggerMetadata.PullRequest.SourceSha
 				trigger.CiTrigger_PullRequest = &tangled.CiTrigger_PullRequest{
-					Action:       raw.TriggerMetadata.PullRequest.Action,
 					SourceBranch: &raw.TriggerMetadata.PullRequest.SourceBranch,
+					SourceRepo:   raw.TriggerMetadata.SourceRepo,
 					SourceSha:    raw.TriggerMetadata.PullRequest.SourceSha,
 					TargetBranch: raw.TriggerMetadata.PullRequest.TargetBranch,
+					Pull:         raw.TriggerMetadata.PullRequest.Pull,
 				}
 			}
-		case "manual":
+		case workflow.TriggerKindManual:
 			if raw.TriggerMetadata.Manual != nil {
 				commitSha = raw.TriggerMetadata.Manual.Sha
-				trigger.CiTrigger_Manual = &tangled.CiTrigger_Manual{}
+				trigger.CiTrigger_Manual = &tangled.CiTrigger_Manual{
+					Inputs:     pipelinePairsToCiTriggerPairs(raw.TriggerMetadata.Manual.Inputs),
+					Ref:        raw.TriggerMetadata.Manual.Ref,
+					Sha:        raw.TriggerMetadata.Manual.Sha,
+					SourceRepo: raw.TriggerMetadata.SourceRepo,
+				}
 			}
 		}
 	}
@@ -192,14 +203,37 @@ func (d *DB) mapToCiPipeline(ctx context.Context, rkey string, created int64, ra
 		})
 	}
 
+	var sourceRepo *string
+	if raw.TriggerMetadata != nil {
+		sourceRepo = raw.TriggerMetadata.SourceRepo
+	}
+
 	return &tangled.CiPipeline{
-		Id:        rkey,
-		Commit:    commitSha,
-		Repo:      &repoDidStr,
-		CreatedAt: &createdAtStr,
-		Trigger:   &trigger,
-		Workflows: workflows,
+		Id:         rkey,
+		Commit:     commitSha,
+		Repo:       &repoDidStr,
+		CreatedAt:  &createdAtStr,
+		Trigger:    &trigger,
+		Workflows:  workflows,
+		SourceRepo: sourceRepo,
 	}, nil
+}
+
+func pipelinePairsToCiTriggerPairs(inputs []*tangled.Pipeline_Pair) []*tangled.CiTrigger_Pair {
+	if len(inputs) == 0 {
+		return nil
+	}
+	pairs := make([]*tangled.CiTrigger_Pair, 0, len(inputs))
+	for _, input := range inputs {
+		if input == nil {
+			continue
+		}
+		pairs = append(pairs, &tangled.CiTrigger_Pair{
+			Key:   input.Key,
+			Value: input.Value,
+		})
+	}
+	return pairs
 }
 
 func (d *DB) GetWorkflowTimes(workflowId models.WorkflowId) (startedAt, finishedAt *string) {

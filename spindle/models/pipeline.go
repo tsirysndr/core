@@ -5,6 +5,8 @@ import "github.com/bluesky-social/indigo/atproto/syntax"
 type Pipeline struct {
 	RepoDid   syntax.DID
 	Workflows map[Engine][]Workflow
+	// whether the code being ran was checked out from RepoDid itself
+	TrustedSource bool
 }
 
 type Step interface {

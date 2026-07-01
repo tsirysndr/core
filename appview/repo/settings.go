@@ -20,11 +20,11 @@ import (
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/sites"
-	xrpcclient "tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/consts"
 	"tangled.org/core/orm"
 	"tangled.org/core/sets"
 	"tangled.org/core/types"
+	xrpcclient "tangled.org/core/xrpc/xrpcclient"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"

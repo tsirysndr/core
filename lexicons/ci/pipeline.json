@@ -29,6 +29,11 @@
           "type": "string",
           "description": "Commit Id this pipeline is running on"
         },
+        "sourceRepo": {
+          "type": "string",
+          "format": "did",
+          "description": "Repository DID that the commit was checked out from, if different from repo (e.g. a fork for a fork-based pull request)"
+        },
         "createdAt": {
           "type": "string",
           "format": "datetime"

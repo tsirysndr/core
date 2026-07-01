@@ -669,13 +669,17 @@ func (t *CiPipeline) MarshalCBOR(w io.Writer) error {
 	}
 
 	cw := cbg.NewCborWriter(w)
-	fieldCount := 6
+	fieldCount := 7
 
 	if t.CreatedAt == nil {
 		fieldCount--
 	}
 
 	if t.Repo == nil {
+		fieldCount--
+	}
+
+	if t.SourceRepo == nil {
 		fieldCount--
 	}
 
@@ -834,6 +838,38 @@ func (t *CiPipeline) MarshalCBOR(w io.Writer) error {
 		}
 
 	}
+
+	// t.SourceRepo (string) (string)
+	if t.SourceRepo != nil {
+
+		if len("sourceRepo") > 1000000 {
+			return xerrors.Errorf("Value in field \"sourceRepo\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("sourceRepo"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("sourceRepo")); err != nil {
+			return err
+		}
+
+		if t.SourceRepo == nil {
+			if _, err := cw.Write(cbg.CborNull); err != nil {
+				return err
+			}
+		} else {
+			if len(*t.SourceRepo) > 1000000 {
+				return xerrors.Errorf("Value in field t.SourceRepo was too long")
+			}
+
+			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(*t.SourceRepo))); err != nil {
+				return err
+			}
+			if _, err := cw.WriteString(string(*t.SourceRepo)); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
@@ -862,7 +898,7 @@ func (t *CiPipeline) UnmarshalCBOR(r io.Reader) (err error) {
 
 	n := extra
 
-	nameBuf := make([]byte, 9)
+	nameBuf := make([]byte, 10)
 	for i := uint64(0); i < n; i++ {
 		nameLen, ok, err := cbg.ReadFullStringIntoBuf(cr, nameBuf, 1000000)
 		if err != nil {
@@ -1009,6 +1045,27 @@ func (t *CiPipeline) UnmarshalCBOR(r io.Reader) (err error) {
 
 					}
 
+				}
+			}
+			// t.SourceRepo (string) (string)
+		case "sourceRepo":
+
+			{
+				b, err := cr.ReadByte()
+				if err != nil {
+					return err
+				}
+				if b != cbg.CborNull[0] {
+					if err := cr.UnreadByte(); err != nil {
+						return err
+					}
+
+					sval, err := cbg.ReadStringWithMax(cr, 1000000)
+					if err != nil {
+						return err
+					}
+
+					t.SourceRepo = (*string)(&sval)
 				}
 			}
 
@@ -2181,8 +2238,76 @@ func (t *CiTrigger_Manual) MarshalCBOR(w io.Writer) error {
 	}
 
 	cw := cbg.NewCborWriter(w)
+	fieldCount := 5
 
-	if _, err := cw.Write([]byte{161}); err != nil {
+	if t.Inputs == nil {
+		fieldCount--
+	}
+
+	if t.Ref == nil {
+		fieldCount--
+	}
+
+	if t.SourceRepo == nil {
+		fieldCount--
+	}
+
+	if _, err := cw.Write(cbg.CborEncodeMajorType(cbg.MajMap, uint64(fieldCount))); err != nil {
+		return err
+	}
+
+	// t.Ref (string) (string)
+	if t.Ref != nil {
+
+		if len("ref") > 1000000 {
+			return xerrors.Errorf("Value in field \"ref\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("ref"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("ref")); err != nil {
+			return err
+		}
+
+		if t.Ref == nil {
+			if _, err := cw.Write(cbg.CborNull); err != nil {
+				return err
+			}
+		} else {
+			if len(*t.Ref) > 1000000 {
+				return xerrors.Errorf("Value in field t.Ref was too long")
+			}
+
+			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(*t.Ref))); err != nil {
+				return err
+			}
+			if _, err := cw.WriteString(string(*t.Ref)); err != nil {
+				return err
+			}
+		}
+	}
+
+	// t.Sha (string) (string)
+	if len("sha") > 1000000 {
+		return xerrors.Errorf("Value in field \"sha\" was too long")
+	}
+
+	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("sha"))); err != nil {
+		return err
+	}
+	if _, err := cw.WriteString(string("sha")); err != nil {
+		return err
+	}
+
+	if len(t.Sha) > 1000000 {
+		return xerrors.Errorf("Value in field t.Sha was too long")
+	}
+
+	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(t.Sha))); err != nil {
+		return err
+	}
+	if _, err := cw.WriteString(string(t.Sha)); err != nil {
 		return err
 	}
 
@@ -2203,6 +2328,67 @@ func (t *CiTrigger_Manual) MarshalCBOR(w io.Writer) error {
 	}
 	if _, err := cw.WriteString(string("sh.tangled.ci.trigger#manual")); err != nil {
 		return err
+	}
+
+	// t.Inputs ([]*tangled.CiTrigger_Pair) (slice)
+	if t.Inputs != nil {
+
+		if len("inputs") > 1000000 {
+			return xerrors.Errorf("Value in field \"inputs\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("inputs"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("inputs")); err != nil {
+			return err
+		}
+
+		if len(t.Inputs) > 8192 {
+			return xerrors.Errorf("Slice value in field t.Inputs was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajArray, uint64(len(t.Inputs))); err != nil {
+			return err
+		}
+		for _, v := range t.Inputs {
+			if err := v.MarshalCBOR(cw); err != nil {
+				return err
+			}
+
+		}
+	}
+
+	// t.SourceRepo (string) (string)
+	if t.SourceRepo != nil {
+
+		if len("sourceRepo") > 1000000 {
+			return xerrors.Errorf("Value in field \"sourceRepo\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("sourceRepo"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("sourceRepo")); err != nil {
+			return err
+		}
+
+		if t.SourceRepo == nil {
+			if _, err := cw.Write(cbg.CborNull); err != nil {
+				return err
+			}
+		} else {
+			if len(*t.SourceRepo) > 1000000 {
+				return xerrors.Errorf("Value in field t.SourceRepo was too long")
+			}
+
+			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(*t.SourceRepo))); err != nil {
+				return err
+			}
+			if _, err := cw.WriteString(string(*t.SourceRepo)); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -2232,6 +2418,231 @@ func (t *CiTrigger_Manual) UnmarshalCBOR(r io.Reader) (err error) {
 
 	n := extra
 
+	nameBuf := make([]byte, 10)
+	for i := uint64(0); i < n; i++ {
+		nameLen, ok, err := cbg.ReadFullStringIntoBuf(cr, nameBuf, 1000000)
+		if err != nil {
+			return err
+		}
+
+		if !ok {
+			// Field doesn't exist on this type, so ignore it
+			if err := cbg.ScanForLinks(cr, func(cid.Cid) {}); err != nil {
+				return err
+			}
+			continue
+		}
+
+		switch string(nameBuf[:nameLen]) {
+		// t.Ref (string) (string)
+		case "ref":
+
+			{
+				b, err := cr.ReadByte()
+				if err != nil {
+					return err
+				}
+				if b != cbg.CborNull[0] {
+					if err := cr.UnreadByte(); err != nil {
+						return err
+					}
+
+					sval, err := cbg.ReadStringWithMax(cr, 1000000)
+					if err != nil {
+						return err
+					}
+
+					t.Ref = (*string)(&sval)
+				}
+			}
+			// t.Sha (string) (string)
+		case "sha":
+
+			{
+				sval, err := cbg.ReadStringWithMax(cr, 1000000)
+				if err != nil {
+					return err
+				}
+
+				t.Sha = string(sval)
+			}
+			// t.LexiconTypeID (string) (string)
+		case "$type":
+
+			{
+				sval, err := cbg.ReadStringWithMax(cr, 1000000)
+				if err != nil {
+					return err
+				}
+
+				t.LexiconTypeID = string(sval)
+			}
+			// t.Inputs ([]*tangled.CiTrigger_Pair) (slice)
+		case "inputs":
+
+			maj, extra, err = cr.ReadHeader()
+			if err != nil {
+				return err
+			}
+
+			if extra > 8192 {
+				return fmt.Errorf("t.Inputs: array too large (%d)", extra)
+			}
+
+			if maj != cbg.MajArray {
+				return fmt.Errorf("expected cbor array")
+			}
+
+			if extra > 0 {
+				t.Inputs = make([]*CiTrigger_Pair, extra)
+			}
+
+			for i := 0; i < int(extra); i++ {
+				{
+					var maj byte
+					var extra uint64
+					var err error
+					_ = maj
+					_ = extra
+					_ = err
+
+					{
+
+						b, err := cr.ReadByte()
+						if err != nil {
+							return err
+						}
+						if b != cbg.CborNull[0] {
+							if err := cr.UnreadByte(); err != nil {
+								return err
+							}
+							t.Inputs[i] = new(CiTrigger_Pair)
+							if err := t.Inputs[i].UnmarshalCBOR(cr); err != nil {
+								return xerrors.Errorf("unmarshaling t.Inputs[i] pointer: %w", err)
+							}
+						}
+
+					}
+
+				}
+			}
+			// t.SourceRepo (string) (string)
+		case "sourceRepo":
+
+			{
+				b, err := cr.ReadByte()
+				if err != nil {
+					return err
+				}
+				if b != cbg.CborNull[0] {
+					if err := cr.UnreadByte(); err != nil {
+						return err
+					}
+
+					sval, err := cbg.ReadStringWithMax(cr, 1000000)
+					if err != nil {
+						return err
+					}
+
+					t.SourceRepo = (*string)(&sval)
+				}
+			}
+
+		default:
+			// Field doesn't exist on this type, so ignore it
+			if err := cbg.ScanForLinks(r, func(cid.Cid) {}); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+func (t *CiTrigger_Pair) MarshalCBOR(w io.Writer) error {
+	if t == nil {
+		_, err := w.Write(cbg.CborNull)
+		return err
+	}
+
+	cw := cbg.NewCborWriter(w)
+
+	if _, err := cw.Write([]byte{162}); err != nil {
+		return err
+	}
+
+	// t.Key (string) (string)
+	if len("key") > 1000000 {
+		return xerrors.Errorf("Value in field \"key\" was too long")
+	}
+
+	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("key"))); err != nil {
+		return err
+	}
+	if _, err := cw.WriteString(string("key")); err != nil {
+		return err
+	}
+
+	if len(t.Key) > 1000000 {
+		return xerrors.Errorf("Value in field t.Key was too long")
+	}
+
+	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(t.Key))); err != nil {
+		return err
+	}
+	if _, err := cw.WriteString(string(t.Key)); err != nil {
+		return err
+	}
+
+	// t.Value (string) (string)
+	if len("value") > 1000000 {
+		return xerrors.Errorf("Value in field \"value\" was too long")
+	}
+
+	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("value"))); err != nil {
+		return err
+	}
+	if _, err := cw.WriteString(string("value")); err != nil {
+		return err
+	}
+
+	if len(t.Value) > 1000000 {
+		return xerrors.Errorf("Value in field t.Value was too long")
+	}
+
+	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(t.Value))); err != nil {
+		return err
+	}
+	if _, err := cw.WriteString(string(t.Value)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *CiTrigger_Pair) UnmarshalCBOR(r io.Reader) (err error) {
+	*t = CiTrigger_Pair{}
+
+	cr := cbg.NewCborReader(r)
+
+	maj, extra, err := cr.ReadHeader()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+	}()
+
+	if maj != cbg.MajMap {
+		return fmt.Errorf("cbor input should be of type map")
+	}
+
+	if extra > cbg.MaxLength {
+		return fmt.Errorf("CiTrigger_Pair: map struct too large (%d)", extra)
+	}
+
+	n := extra
+
 	nameBuf := make([]byte, 5)
 	for i := uint64(0); i < n; i++ {
 		nameLen, ok, err := cbg.ReadFullStringIntoBuf(cr, nameBuf, 1000000)
@@ -2248,8 +2659,8 @@ func (t *CiTrigger_Manual) UnmarshalCBOR(r io.Reader) (err error) {
 		}
 
 		switch string(nameBuf[:nameLen]) {
-		// t.LexiconTypeID (string) (string)
-		case "$type":
+		// t.Key (string) (string)
+		case "key":
 
 			{
 				sval, err := cbg.ReadStringWithMax(cr, 1000000)
@@ -2257,7 +2668,18 @@ func (t *CiTrigger_Manual) UnmarshalCBOR(r io.Reader) (err error) {
 					return err
 				}
 
-				t.LexiconTypeID = string(sval)
+				t.Key = string(sval)
+			}
+			// t.Value (string) (string)
+		case "value":
+
+			{
+				sval, err := cbg.ReadStringWithMax(cr, 1000000)
+				if err != nil {
+					return err
+				}
+
+				t.Value = string(sval)
 			}
 
 		default:
@@ -2277,14 +2699,54 @@ func (t *CiTrigger_PullRequest) MarshalCBOR(w io.Writer) error {
 	}
 
 	cw := cbg.NewCborWriter(w)
-	fieldCount := 5
+	fieldCount := 6
+
+	if t.Pull == nil {
+		fieldCount--
+	}
 
 	if t.SourceBranch == nil {
 		fieldCount--
 	}
 
+	if t.SourceRepo == nil {
+		fieldCount--
+	}
+
 	if _, err := cw.Write(cbg.CborEncodeMajorType(cbg.MajMap, uint64(fieldCount))); err != nil {
 		return err
+	}
+
+	// t.Pull (string) (string)
+	if t.Pull != nil {
+
+		if len("pull") > 1000000 {
+			return xerrors.Errorf("Value in field \"pull\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("pull"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("pull")); err != nil {
+			return err
+		}
+
+		if t.Pull == nil {
+			if _, err := cw.Write(cbg.CborNull); err != nil {
+				return err
+			}
+		} else {
+			if len(*t.Pull) > 1000000 {
+				return xerrors.Errorf("Value in field t.Pull was too long")
+			}
+
+			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(*t.Pull))); err != nil {
+				return err
+			}
+			if _, err := cw.WriteString(string(*t.Pull)); err != nil {
+				return err
+			}
+		}
 	}
 
 	// t.LexiconTypeID (string) (string)
@@ -2303,29 +2765,6 @@ func (t *CiTrigger_PullRequest) MarshalCBOR(w io.Writer) error {
 		return err
 	}
 	if _, err := cw.WriteString(string("sh.tangled.ci.trigger#pullRequest")); err != nil {
-		return err
-	}
-
-	// t.Action (string) (string)
-	if len("action") > 1000000 {
-		return xerrors.Errorf("Value in field \"action\" was too long")
-	}
-
-	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("action"))); err != nil {
-		return err
-	}
-	if _, err := cw.WriteString(string("action")); err != nil {
-		return err
-	}
-
-	if len(t.Action) > 1000000 {
-		return xerrors.Errorf("Value in field t.Action was too long")
-	}
-
-	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(t.Action))); err != nil {
-		return err
-	}
-	if _, err := cw.WriteString(string(t.Action)); err != nil {
 		return err
 	}
 
@@ -2350,6 +2789,38 @@ func (t *CiTrigger_PullRequest) MarshalCBOR(w io.Writer) error {
 	}
 	if _, err := cw.WriteString(string(t.SourceSha)); err != nil {
 		return err
+	}
+
+	// t.SourceRepo (string) (string)
+	if t.SourceRepo != nil {
+
+		if len("sourceRepo") > 1000000 {
+			return xerrors.Errorf("Value in field \"sourceRepo\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("sourceRepo"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("sourceRepo")); err != nil {
+			return err
+		}
+
+		if t.SourceRepo == nil {
+			if _, err := cw.Write(cbg.CborNull); err != nil {
+				return err
+			}
+		} else {
+			if len(*t.SourceRepo) > 1000000 {
+				return xerrors.Errorf("Value in field t.SourceRepo was too long")
+			}
+
+			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(*t.SourceRepo))); err != nil {
+				return err
+			}
+			if _, err := cw.WriteString(string(*t.SourceRepo)); err != nil {
+				return err
+			}
+		}
 	}
 
 	// t.SourceBranch (string) (string)
@@ -2450,7 +2921,28 @@ func (t *CiTrigger_PullRequest) UnmarshalCBOR(r io.Reader) (err error) {
 		}
 
 		switch string(nameBuf[:nameLen]) {
-		// t.LexiconTypeID (string) (string)
+		// t.Pull (string) (string)
+		case "pull":
+
+			{
+				b, err := cr.ReadByte()
+				if err != nil {
+					return err
+				}
+				if b != cbg.CborNull[0] {
+					if err := cr.UnreadByte(); err != nil {
+						return err
+					}
+
+					sval, err := cbg.ReadStringWithMax(cr, 1000000)
+					if err != nil {
+						return err
+					}
+
+					t.Pull = (*string)(&sval)
+				}
+			}
+			// t.LexiconTypeID (string) (string)
 		case "$type":
 
 			{
@@ -2460,17 +2952,6 @@ func (t *CiTrigger_PullRequest) UnmarshalCBOR(r io.Reader) (err error) {
 				}
 
 				t.LexiconTypeID = string(sval)
-			}
-			// t.Action (string) (string)
-		case "action":
-
-			{
-				sval, err := cbg.ReadStringWithMax(cr, 1000000)
-				if err != nil {
-					return err
-				}
-
-				t.Action = string(sval)
 			}
 			// t.SourceSha (string) (string)
 		case "sourceSha":
@@ -2482,6 +2963,27 @@ func (t *CiTrigger_PullRequest) UnmarshalCBOR(r io.Reader) (err error) {
 				}
 
 				t.SourceSha = string(sval)
+			}
+			// t.SourceRepo (string) (string)
+		case "sourceRepo":
+
+			{
+				b, err := cr.ReadByte()
+				if err != nil {
+					return err
+				}
+				if b != cbg.CborNull[0] {
+					if err := cr.UnreadByte(); err != nil {
+						return err
+					}
+
+					sval, err := cbg.ReadStringWithMax(cr, 1000000)
+					if err != nil {
+						return err
+					}
+
+					t.SourceRepo = (*string)(&sval)
+				}
 			}
 			// t.SourceBranch (string) (string)
 		case "sourceBranch":
@@ -7885,32 +8387,46 @@ func (t *Pipeline_PullRequestTriggerData) MarshalCBOR(w io.Writer) error {
 	}
 
 	cw := cbg.NewCborWriter(w)
+	fieldCount := 4
 
-	if _, err := cw.Write([]byte{164}); err != nil {
+	if t.Pull == nil {
+		fieldCount--
+	}
+
+	if _, err := cw.Write(cbg.CborEncodeMajorType(cbg.MajMap, uint64(fieldCount))); err != nil {
 		return err
 	}
 
-	// t.Action (string) (string)
-	if len("action") > 1000000 {
-		return xerrors.Errorf("Value in field \"action\" was too long")
-	}
+	// t.Pull (string) (string)
+	if t.Pull != nil {
 
-	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("action"))); err != nil {
-		return err
-	}
-	if _, err := cw.WriteString(string("action")); err != nil {
-		return err
-	}
+		if len("pull") > 1000000 {
+			return xerrors.Errorf("Value in field \"pull\" was too long")
+		}
 
-	if len(t.Action) > 1000000 {
-		return xerrors.Errorf("Value in field t.Action was too long")
-	}
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("pull"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("pull")); err != nil {
+			return err
+		}
 
-	if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(t.Action))); err != nil {
-		return err
-	}
-	if _, err := cw.WriteString(string(t.Action)); err != nil {
-		return err
+		if t.Pull == nil {
+			if _, err := cw.Write(cbg.CborNull); err != nil {
+				return err
+			}
+		} else {
+			if len(*t.Pull) > 1000000 {
+				return xerrors.Errorf("Value in field t.Pull was too long")
+			}
+
+			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(*t.Pull))); err != nil {
+				return err
+			}
+			if _, err := cw.WriteString(string(*t.Pull)); err != nil {
+				return err
+			}
+		}
 	}
 
 	// t.SourceSha (string) (string)
@@ -8025,16 +8541,26 @@ func (t *Pipeline_PullRequestTriggerData) UnmarshalCBOR(r io.Reader) (err error)
 		}
 
 		switch string(nameBuf[:nameLen]) {
-		// t.Action (string) (string)
-		case "action":
+		// t.Pull (string) (string)
+		case "pull":
 
 			{
-				sval, err := cbg.ReadStringWithMax(cr, 1000000)
+				b, err := cr.ReadByte()
 				if err != nil {
 					return err
 				}
+				if b != cbg.CborNull[0] {
+					if err := cr.UnreadByte(); err != nil {
+						return err
+					}
 
-				t.Action = string(sval)
+					sval, err := cbg.ReadStringWithMax(cr, 1000000)
+					if err != nil {
+						return err
+					}
+
+					t.Pull = (*string)(&sval)
+				}
 			}
 			// t.SourceSha (string) (string)
 		case "sourceSha":
@@ -8617,7 +9143,7 @@ func (t *Pipeline_TriggerMetadata) MarshalCBOR(w io.Writer) error {
 	}
 
 	cw := cbg.NewCborWriter(w)
-	fieldCount := 5
+	fieldCount := 6
 
 	if t.Manual == nil {
 		fieldCount--
@@ -8628,6 +9154,10 @@ func (t *Pipeline_TriggerMetadata) MarshalCBOR(w io.Writer) error {
 	}
 
 	if t.Push == nil {
+		fieldCount--
+	}
+
+	if t.SourceRepo == nil {
 		fieldCount--
 	}
 
@@ -8709,6 +9239,38 @@ func (t *Pipeline_TriggerMetadata) MarshalCBOR(w io.Writer) error {
 
 		if err := t.Manual.MarshalCBOR(cw); err != nil {
 			return err
+		}
+	}
+
+	// t.SourceRepo (string) (string)
+	if t.SourceRepo != nil {
+
+		if len("sourceRepo") > 1000000 {
+			return xerrors.Errorf("Value in field \"sourceRepo\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("sourceRepo"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("sourceRepo")); err != nil {
+			return err
+		}
+
+		if t.SourceRepo == nil {
+			if _, err := cw.Write(cbg.CborNull); err != nil {
+				return err
+			}
+		} else {
+			if len(*t.SourceRepo) > 1000000 {
+				return xerrors.Errorf("Value in field t.SourceRepo was too long")
+			}
+
+			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(*t.SourceRepo))); err != nil {
+				return err
+			}
+			if _, err := cw.WriteString(string(*t.SourceRepo)); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -8844,6 +9406,27 @@ func (t *Pipeline_TriggerMetadata) UnmarshalCBOR(r io.Reader) (err error) {
 					}
 				}
 
+			}
+			// t.SourceRepo (string) (string)
+		case "sourceRepo":
+
+			{
+				b, err := cr.ReadByte()
+				if err != nil {
+					return err
+				}
+				if b != cbg.CborNull[0] {
+					if err := cr.UnreadByte(); err != nil {
+						return err
+					}
+
+					sval, err := cbg.ReadStringWithMax(cr, 1000000)
+					if err != nil {
+						return err
+					}
+
+					t.SourceRepo = (*string)(&sval)
+				}
 			}
 			// t.PullRequest (tangled.Pipeline_PullRequestTriggerData) (struct)
 		case "pullRequest":

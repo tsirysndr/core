@@ -10,7 +10,20 @@ const ()
 //
 // RECORDTYPE: CiTrigger_Manual
 type CiTrigger_Manual struct {
-	LexiconTypeID string `json:"$type,const=sh.tangled.ci.trigger#manual" cborgen:"$type,const=sh.tangled.ci.trigger#manual"`
+	LexiconTypeID string            `json:"$type,const=sh.tangled.ci.trigger#manual" cborgen:"$type,const=sh.tangled.ci.trigger#manual"`
+	Inputs        []*CiTrigger_Pair `json:"inputs,omitempty" cborgen:"inputs,omitempty"`
+	// ref: optional ref the SHA was resolved from, for display and TANGLED_REF
+	Ref *string `json:"ref,omitempty" cborgen:"ref,omitempty"`
+	// sha: commit SHA the manual run targets
+	Sha string `json:"sha" cborgen:"sha"`
+	// sourceRepo: Repository DID to check out code and workflow definitions from, if different from the target repo.
+	SourceRepo *string `json:"sourceRepo,omitempty" cborgen:"sourceRepo,omitempty"`
+}
+
+// CiTrigger_Pair is a "pair" in the sh.tangled.ci.trigger schema.
+type CiTrigger_Pair struct {
+	Key   string `json:"key" cborgen:"key"`
+	Value string `json:"value" cborgen:"value"`
 }
 
 // CiTrigger_PullRequest is a "pullRequest" in the sh.tangled.ci.trigger schema.
@@ -19,11 +32,14 @@ type CiTrigger_Manual struct {
 //
 // RECORDTYPE: CiTrigger_PullRequest
 type CiTrigger_PullRequest struct {
-	LexiconTypeID string  `json:"$type,const=sh.tangled.ci.trigger#pullRequest" cborgen:"$type,const=sh.tangled.ci.trigger#pullRequest"`
-	Action        string  `json:"action" cborgen:"action"`
-	SourceBranch  *string `json:"sourceBranch,omitempty" cborgen:"sourceBranch,omitempty"`
-	SourceSha     string  `json:"sourceSha" cborgen:"sourceSha"`
-	TargetBranch  string  `json:"targetBranch" cborgen:"targetBranch"`
+	LexiconTypeID string `json:"$type,const=sh.tangled.ci.trigger#pullRequest" cborgen:"$type,const=sh.tangled.ci.trigger#pullRequest"`
+	// pull: AT-URI of the sh.tangled.repo.pull record this run belongs to
+	Pull         *string `json:"pull,omitempty" cborgen:"pull,omitempty"`
+	SourceBranch *string `json:"sourceBranch,omitempty" cborgen:"sourceBranch,omitempty"`
+	// sourceRepo: Repository DID to check out code and workflow definitions from, if different from the target repo.
+	SourceRepo   *string `json:"sourceRepo,omitempty" cborgen:"sourceRepo,omitempty"`
+	SourceSha    string  `json:"sourceSha" cborgen:"sourceSha"`
+	TargetBranch string  `json:"targetBranch" cborgen:"targetBranch"`
 }
 
 // CiTrigger_Push is a "push" in the sh.tangled.ci.trigger schema.

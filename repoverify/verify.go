@@ -13,8 +13,8 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"tangled.org/core/api/tangled"
-	"tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/idresolver"
+	"tangled.org/core/xrpc/xrpcclient"
 )
 
 type RepoDid syntax.DID
@@ -68,6 +68,9 @@ type Result struct {
 	RepoDid  RepoDid
 	OwnerDid OwnerDid
 	KnotURL  *url.URL
+	// Rkey of the sh.tangled.repo record tracked by the knot; empty when the
+	// knot does not support describeRepo.
+	Rkey string
 }
 
 type Verifier func(ctx context.Context, repoDid RepoDid) (Result, error)
@@ -129,6 +132,7 @@ func resolveAndDescribe(
 		RepoDid:  repoDid,
 		OwnerDid: ownerDid,
 		KnotURL:  knot,
+		Rkey:     out.Rkey,
 	}, nil
 }
 

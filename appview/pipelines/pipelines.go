@@ -46,7 +46,7 @@ func (p *Pipelines) Router(mw *middleware.Middleware) http.Handler {
 	r.Get("/{pipeline}/workflow/{workflow}", p.Workflow)
 	r.Get("/{pipeline}/workflow/{workflow}/logs", p.Logs)
 	r.Group(func(r chi.Router) {
-		r.Use(mw.RepoPermissionMiddleware("repo:owner"))
+		r.Use(mw.RepoPermissionMiddleware("repo:push"))
 		r.Post("/{pipeline}/workflow/{workflow}/cancel", p.CancelWorkflow)
 		r.Post("/{pipeline}/retry", p.RetryPipeline)
 		r.Post("/{pipeline}/workflow/{workflow}/retry", p.RetryWorkflow)
@@ -250,6 +250,50 @@ func (w *webLogScheduler) AddWork(ctx context.Context, _ string, val *tangled.Ci
 
 // Shutdown implements [lexutil.Scheduler].
 func (w *webLogScheduler) Shutdown() { close(w.ch) }
+
+func retryPipelineTrigger(orig *tangled.CiPipeline) *tangled.CiTriggerPipeline_Input_Trigger {
+	if orig.Trigger != nil && orig.Trigger.CiTrigger_PullRequest != nil {
+		pr := orig.Trigger.CiTrigger_PullRequest
+		sourceSha := pr.SourceSha
+		if sourceSha == "" {
+			sourceSha = orig.Commit
+		}
+		sourceRepo := pr.SourceRepo
+		if sourceRepo == nil {
+			sourceRepo = orig.SourceRepo
+		}
+
+		return &tangled.CiTriggerPipeline_Input_Trigger{
+			CiTrigger_PullRequest: &tangled.CiTrigger_PullRequest{
+				Pull:         pr.Pull,
+				SourceBranch: pr.SourceBranch,
+				SourceRepo:   sourceRepo,
+				SourceSha:    sourceSha,
+				TargetBranch: pr.TargetBranch,
+			},
+		}
+	}
+
+	manual := &tangled.CiTrigger_Manual{
+		Sha:        orig.Commit,
+		SourceRepo: orig.SourceRepo,
+	}
+	if orig.Trigger != nil && orig.Trigger.CiTrigger_Manual != nil {
+		origManual := orig.Trigger.CiTrigger_Manual
+		if origManual.Sha != "" {
+			manual.Sha = origManual.Sha
+		}
+		manual.Ref = origManual.Ref
+		manual.Inputs = origManual.Inputs
+		if origManual.SourceRepo != nil {
+			manual.SourceRepo = origManual.SourceRepo
+		}
+	}
+
+	return &tangled.CiTriggerPipeline_Input_Trigger{
+		CiTrigger_Manual: manual,
+	}
+}
 
 func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 	l := p.logger.With("handler", "logs")
@@ -466,20 +510,19 @@ func (p *Pipelines) CancelWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	l = l.With("pipeline", pipelineId, "workflow", workflowName)
 
-	spindleClient, err := p.spindleServiceClient(r, f.Spindle, tangled.CiPipelineCancelPipelineNSID)
+	spindleClient, err := p.oauth.SpindleServiceClient(r, f.Spindle, tangled.CiCancelPipelineNSID)
 	if err != nil {
 		l.Error("failed to prepare spindle client", "err", err)
 		p.pages.Notice(w, errorId, "Failed to cancel workflow")
 		return
 	}
 
-	pipelineAtUri := fmt.Sprintf("at://did:web:%s/%s/%s", f.Knot, tangled.PipelineNSID, pipelineId.String())
-	if err := tangled.CiPipelineCancelPipeline(
+	if err := tangled.CiCancelPipeline(
 		r.Context(),
 		spindleClient,
-		&tangled.CiPipelineCancelPipeline_Input{
-			Repo:      string(f.RepoAt()),
-			Pipeline:  pipelineAtUri,
+		&tangled.CiCancelPipeline_Input{
+			Repo:      f.RepoDid,
+			Pipeline:  pipelineId.String(),
 			Workflows: []string{workflowName},
 		},
 	); err != nil {
@@ -570,7 +613,7 @@ func (p *Pipelines) retry(w http.ResponseWriter, r *http.Request, only string) {
 	}
 	redirectWf := workflows[0]
 
-	spindleClient, err := p.spindleServiceClient(r, f.Spindle, tangled.CiTriggerPipelineNSID)
+	spindleClient, err := p.oauth.SpindleServiceClient(r, f.Spindle, tangled.CiTriggerPipelineNSID)
 	if err != nil {
 		fail("failed to authorize with spindle", err)
 		return
@@ -580,8 +623,8 @@ func (p *Pipelines) retry(w http.ResponseWriter, r *http.Request, only string) {
 		r.Context(),
 		spindleClient,
 		&tangled.CiTriggerPipeline_Input{
-			Repo:      string(f.RepoAt()),
-			Sha:       orig.Commit,
+			Repo:      f.RepoDid,
+			Trigger:   retryPipelineTrigger(orig),
 			Workflows: workflows,
 		},
 	)
@@ -608,19 +651,4 @@ func (p *Pipelines) retry(w http.ResponseWriter, r *http.Request, only string) {
 		return
 	}
 	http.Redirect(w, r, dest, http.StatusSeeOther)
-}
-
-// spindleServiceClient builds an authed spindle xrpc client
-func (p *Pipelines) spindleServiceClient(r *http.Request, spindle, lxm string) (*indigoxrpc.Client, error) {
-	hostname, noTLS, err := hostutil.ParseHostname(spindle)
-	if err != nil {
-		return nil, err
-	}
-	return p.oauth.ServiceClient(
-		r,
-		oauth.WithService(hostname),
-		oauth.WithLxm(lxm),
-		oauth.WithDev(noTLS),
-		oauth.WithTimeout(time.Second*30),
-	)
 }

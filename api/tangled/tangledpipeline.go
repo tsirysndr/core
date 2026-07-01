@@ -49,10 +49,11 @@ type Pipeline_Pair struct {
 
 // Pipeline_PullRequestTriggerData is a "pullRequestTriggerData" in the sh.tangled.pipeline schema.
 type Pipeline_PullRequestTriggerData struct {
-	Action       string `json:"action" cborgen:"action"`
-	SourceBranch string `json:"sourceBranch" cborgen:"sourceBranch"`
-	SourceSha    string `json:"sourceSha" cborgen:"sourceSha"`
-	TargetBranch string `json:"targetBranch" cborgen:"targetBranch"`
+	// pull: AT-URI of the sh.tangled.repo.pull record this run belongs to
+	Pull         *string `json:"pull,omitempty" cborgen:"pull,omitempty"`
+	SourceBranch string  `json:"sourceBranch" cborgen:"sourceBranch"`
+	SourceSha    string  `json:"sourceSha" cborgen:"sourceSha"`
+	TargetBranch string  `json:"targetBranch" cborgen:"targetBranch"`
 }
 
 // Pipeline_PushTriggerData is a "pushTriggerData" in the sh.tangled.pipeline schema.
@@ -69,6 +70,8 @@ type Pipeline_TriggerMetadata struct {
 	PullRequest *Pipeline_PullRequestTriggerData `json:"pullRequest,omitempty" cborgen:"pullRequest,omitempty"`
 	Push        *Pipeline_PushTriggerData        `json:"push,omitempty" cborgen:"push,omitempty"`
 	Repo        *Pipeline_TriggerRepo            `json:"repo" cborgen:"repo"`
+	// sourceRepo: Repository DID that code and workflow definitions are checked out from, when different from repo (e.g. a fork's commit for a fork-based manual trigger). If absent, source uses repo itself.
+	SourceRepo *string `json:"sourceRepo,omitempty" cborgen:"sourceRepo,omitempty"`
 }
 
 // Pipeline_TriggerRepo is a "triggerRepo" in the sh.tangled.pipeline schema.

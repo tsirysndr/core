@@ -27,12 +27,14 @@ type workflowFinalizer interface {
 func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, db *db.DB, n *notifier.Notifier, ctx context.Context, pipeline *models.Pipeline, pipelineId models.PipelineId) {
 	l.Info("starting all workflows in parallel", "pipeline", pipelineId)
 
-	// extract secrets
 	var allSecrets []secrets.UnlockedSecret
-	if pipeline.RepoDid != "" {
+	// never pass secrets to pipelines that run untrusted (e.g. fork) code
+	if pipeline.TrustedSource && pipeline.RepoDid != "" {
 		if res, err := vault.GetSecretsUnlocked(ctx, secrets.RepoIdentifier(pipeline.RepoDid.String())); err == nil {
 			allSecrets = res
 		}
+	} else if !pipeline.TrustedSource {
+		l.Info("skipping secrets for untrusted pipeline source", "pipeline", pipelineId)
 	}
 
 	secretValues := make([]string, len(allSecrets))
@@ -51,10 +53,7 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 		l.Info("using workflow timeout", "timeout", workflowTimeout)
 
 		for _, w := range wfs {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-
+			wg.Go(func() {
 				wid := models.WorkflowId{
 					PipelineId: pipelineId,
 					Name:       w.Name,
@@ -169,7 +168,7 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 				if err != nil {
 					l.Error("failed to set workflow status to success", "wid", wid, "err", err)
 				}
-			}()
+			})
 		}
 	}
 

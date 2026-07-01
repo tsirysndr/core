@@ -10,8 +10,8 @@ import (
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/reporesolver"
-	"tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/orm"
+	"tangled.org/core/xrpc/xrpcclient"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 )

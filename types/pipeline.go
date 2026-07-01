@@ -106,11 +106,11 @@ func (t Trigger) TargetRef() string {
 	}
 	if t.CiPipeline_Trigger.CiTrigger_Push != nil {
 		ref := t.CiPipeline_Trigger.CiTrigger_Push.Ref
-		if strings.HasPrefix(ref, "refs/heads/") {
-			return strings.TrimPrefix(ref, "refs/heads/")
+		if after, ok := strings.CutPrefix(ref, "refs/heads/"); ok {
+			return after
 		}
-		if strings.HasPrefix(ref, "refs/tags/") {
-			return strings.TrimPrefix(ref, "refs/tags/")
+		if after, ok := strings.CutPrefix(ref, "refs/tags/"); ok {
+			return after
 		}
 		return ref
 	}
@@ -129,6 +129,17 @@ func (t Trigger) PRSourceBranch() string {
 		return ""
 	}
 	return *sb
+}
+
+func (t Trigger) PRUri() string {
+	if t.CiPipeline_Trigger == nil || t.CiPipeline_Trigger.CiTrigger_PullRequest == nil {
+		return ""
+	}
+	pull := t.CiPipeline_Trigger.CiTrigger_PullRequest.Pull
+	if pull == nil {
+		return ""
+	}
+	return *pull
 }
 
 type Pipeline struct {
@@ -240,6 +251,14 @@ func (p Pipeline) Sha() string {
 		return ""
 	}
 	return p.CiPipeline.Commit
+}
+
+// where the pipeline commit was checked out from, nil when checked out from repo itself
+func (p Pipeline) SourceRepo() *string {
+	if p.CiPipeline == nil {
+		return nil
+	}
+	return p.CiPipeline.SourceRepo
 }
 
 func (p Pipeline) Workflows() []string {

@@ -18,8 +18,8 @@ import (
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/pages/markup"
 	"tangled.org/core/appview/reporesolver"
-	xrpcclient "tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/types"
+	xrpcclient "tangled.org/core/xrpc/xrpcclient"
 
 	"github.com/bluesky-social/indigo/util"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"

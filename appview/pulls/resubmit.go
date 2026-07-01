@@ -13,11 +13,11 @@ import (
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/reporesolver"
-	"tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/orm"
 	"tangled.org/core/patchutil"
 	"tangled.org/core/types"
 	"tangled.org/core/xrpc"
+	"tangled.org/core/xrpc/xrpcclient"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"

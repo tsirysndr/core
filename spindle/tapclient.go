@@ -383,7 +383,6 @@ func (t *Tap) processPull(ctx context.Context, evt *tapc.RecordEventData) error 
 			Trigger: tangled.Pipeline_TriggerMetadata{
 				Kind: string(workflow.TriggerKindPullRequest),
 				PullRequest: &tangled.Pipeline_PullRequestTriggerData{
-					Action:       "create",
 					SourceBranch: record.Source.Branch,
 					SourceSha:    sourceSha,
 					TargetBranch: record.Target.Branch,
@@ -433,7 +432,12 @@ func (t *Tap) processPull(ctx context.Context, evt *tapc.RecordEventData) error 
 			l.Error("failed to create pipeline event", "err", err)
 			return nil
 		}
-		err = t.spindle.processPipeline(repo.RepoDid, tpl, pipelineId)
+		sourceRepo, err := t.spindle.resolvePipelineSourceRepo(ctx, tpl.TriggerMetadata)
+		if err != nil {
+			l.Error("failed resolving pipeline source repo", "err", err)
+			return nil
+		}
+		err = t.spindle.processPipeline(repo.RepoDid, tpl, pipelineId, sourceRepo)
 		if err != nil {
 			// don't retry
 			l.Error("failed processing pipeline", "err", err)

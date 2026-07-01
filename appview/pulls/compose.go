@@ -18,9 +18,9 @@ import (
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/pages/markup/sanitizer"
-	"tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/patchutil"
 	"tangled.org/core/types"
+	"tangled.org/core/xrpc/xrpcclient"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/api/tangled"
@@ -26,36 +25,52 @@ func (x *Xrpc) CancelPipeline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var input tangled.CiPipelineCancelPipeline_Input
+	var input tangled.CiCancelPipeline_Input
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		fail(xrpcerr.GenericError(err))
 		return
 	}
 
-	aturi := syntax.ATURI(input.Pipeline)
-	pipelineId := models.PipelineId{
-		Knot: strings.TrimPrefix(aturi.Authority().String(), "did:web:"),
-		Rkey: aturi.RecordKey().String(),
+	pipelineTid, err := syntax.ParseTID(input.Pipeline)
+	if err != nil {
+		fail(xrpcerr.GenericError(fmt.Errorf("invalid pipeline TID %q: %w", input.Pipeline, err)))
+		return
 	}
 
-	var workflows []string
-	if len(input.Workflows) > 0 {
-		workflows = input.Workflows
-	} else {
-		// fetch workflows from db if none are specified
-		p, err := x.Db.GetPipeline(r.Context(), pipelineId.Rkey)
-		if err != nil {
-			fail(xrpcerr.GenericError(fmt.Errorf("failed to get pipeline: %w", err)))
-			return
-		}
+	repoDid, xerr, ok := x.resolveOwnedRepo(r.Context(), actorDid, input.Repo)
+	if !ok {
+		fail(xerr)
+		return
+	}
+	repo, err := x.Db.GetRepoByDid(repoDid)
+	if err != nil {
+		fail(xrpcerr.GenericError(fmt.Errorf("failed to get repo: %w", err)))
+		return
+	}
+
+	// the actor is only authorized against input.Repo, so make sure the
+	// pipeline actually belongs to it before cancelling anything
+	p, err := x.Db.GetPipeline(r.Context(), pipelineTid.String())
+	if err != nil {
+		fail(xrpcerr.GenericError(fmt.Errorf("failed to get pipeline: %w", err)))
+		return
+	}
+	if p.Repo == nil || *p.Repo != repoDid.String() {
+		fail(xrpcerr.AccessControlError(actorDid.String()))
+		return
+	}
+
+	pipelineId := models.PipelineId{
+		Knot: repo.Knot,
+		Rkey: pipelineTid.String(),
+	}
+
+	workflows := input.Workflows
+	if len(workflows) == 0 {
+		// cancel every workflow when none are specified
 		for _, w := range p.Workflows {
 			workflows = append(workflows, w.Name)
 		}
-	}
-
-	if _, xerr, ok := x.resolveOwnedRepo(r.Context(), actorDid, input.Repo); !ok {
-		fail(xerr)
-		return
 	}
 
 	for _, wName := range workflows {

@@ -12,8 +12,8 @@ import (
 	"tangled.org/core/appview/commitverify"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/pages"
-	xrpcclient "tangled.org/core/appview/xrpcclient"
 	"tangled.org/core/types"
+	xrpcclient "tangled.org/core/xrpc/xrpcclient"
 
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-chi/chi/v5"

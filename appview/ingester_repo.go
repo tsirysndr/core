@@ -15,8 +15,8 @@ import (
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
-	"tangled.org/core/appview/repoverify"
 	"tangled.org/core/orm"
+	"tangled.org/core/repoverify"
 )
 
 func (i *Ingester) ingestRepo(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {

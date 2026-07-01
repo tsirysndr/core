@@ -97,6 +97,8 @@
       <div class="flex items-center gap-2 flex-wrap">
         {{ $target := .Trigger.TargetRef }}
         {{ $workflows := .Workflows }}
+        {{ $pullPath := "" }}
+        {{ if .Trigger.IsPullRequest }}{{ $pullPath = pipelinePullPath . }}{{ end }}
 
         <!-- Status icon with tooltip -->
         <span class="relative z-50 mr-4">
@@ -115,13 +117,16 @@
           <span class="text-sm text-gray-600 dark:text-gray-400">Pull request</span>
           <span class="font-semibold dark:text-white">{{ $target }}</span>
           {{ i "arrow-left" "size-3 text-gray-500 dark:text-gray-400" }}
-          <span class="font-semibold dark:text-white">{{ .Trigger.PRSourceBranch }}</span>
+          <span class="font-semibold dark:text-white">{{ pipelineSourceLabel . }}</span>
         {{ else if .Trigger.IsManual }}
           {{ i "circle-play" "size-4 text-gray-500 dark:text-gray-400 shrink-0" }}
           <span class="text-sm text-gray-600 dark:text-gray-400">Manual dispatch</span>
         {{ end }}
         {{ if .IsResponding }}
           </a>
+        {{ end }}
+        {{ if $pullPath }}
+          <a href="{{ $pullPath }}" class="text-sm text-gray-500 dark:text-gray-400 no-underline hover:underline">(view PR)</a>
         {{ end }}
       </div>
 
@@ -130,7 +135,7 @@
         <!-- Commit SHA -->
         <div class="font-mono text-xs text-gray-500 dark:text-gray-400">
           {{ if .Sha }}
-          <a href="/{{ $root.RepoInfo.FullName }}/commit/{{ .Sha }}" class="text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-900 no-underline hover:underline px-2 py-1 rounded">
+          <a href="{{ pipelineCommitPath $root.RepoInfo . }}" class="text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-900 no-underline hover:underline px-2 py-1 rounded">
             {{ slice .Sha 0 8 }}
           </a>
           {{ end }}

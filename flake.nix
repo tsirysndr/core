@@ -524,7 +524,7 @@
               find api/tangled -maxdepth 1 -name '*.go' -not -name '*_ext.go' -exec \
                 sed -i.bak 's/\tutil/\/\/\tutil/' {} +
               # lexgen generates incomplete Marshaler/Unmarshaler for union types
-              find api/tangled/*.go -not -name "cbor_gen.go" -exec \
+              find api/tangled -maxdepth 1 -name '*.go' -not -name '*_ext.go' -not -name "cbor_gen.go" -exec \
                 sed -i '/^func.*\(MarshalCBOR\|UnmarshalCBOR\)/,/^}/ s/^/\/\/ /' {} +
               for f in api/tangled/*_ext.go; do [ -e "''$f" ] && mv "''$f" "''$f.bak"; done
               ${pkgs.gotools}/bin/goimports -w api/tangled/*

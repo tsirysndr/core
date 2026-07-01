@@ -12,8 +12,7 @@
     {{ block "sidebar" . }} {{ end }}
   </div>
   <div class="col-span-1 md:col-span-3">
-    <!-- TODO(boltless): explicitly check for pipeline cancel permission -->
-    {{ if $.RepoInfo.Roles.IsOwner }}
+    {{ if $.RepoInfo.Roles.IsPushAllowed }}
     {{ $status := (index .Pipeline.Statuses .Workflow).Latest.Status }}
     <div class="flex justify-between items-center mb-2">
       <button
