@@ -235,7 +235,7 @@ func (s *AgentSession) ActivateConfig(ctx context.Context, id string, req *agent
 			}
 		} else if p := msg.ActivateConfigResult; p != nil {
 			if p.Error != "" {
-				return nil, fmt.Errorf("activate config failed: %s", p.Error)
+				return nil, errors.New(p.Error)
 			}
 			if p.Toplevel == "" {
 				return nil, fmt.Errorf("activate config returned empty toplevel")

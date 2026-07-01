@@ -187,12 +187,19 @@ func (e *Engine) InitWorkflow(twf tangled.Pipeline_Workflow, tpl tangled.Pipelin
 	return swf, nil
 }
 
-func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *models.Workflow, wfLogger models.WorkflowLogger) error {
+func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *models.Workflow, wfLogger models.WorkflowLogger) (err error) {
 	l := e.l.With("workflow", wid)
 	setupStep := Step{name: "microVM setup", kind: models.StepKindSystem}
 
 	wfLogger.ControlWriter(-1, setupStep, models.StepStatusStart).Write([]byte{0})
 	defer wfLogger.ControlWriter(-1, setupStep, models.StepStatusEnd).Write([]byte{0})
+
+	category := "Failed to setup VM"
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("%s:\n%w", category, err)
+		}
+	}()
 
 	state, ok := wf.Data.(*workflowState)
 	if !ok || state == nil {
@@ -276,6 +283,8 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 	}
 	state.VM = vm
 
+	category = "Failed to connect to agent"
+
 	acceptCtx, cancelAccept := context.WithTimeout(ctx, agentAcceptTimeout)
 	defer cancelAccept()
 	conn, err := waitAgentConn(acceptCtx, connCh)
@@ -332,7 +341,7 @@ func (e *Engine) RunStep(ctx context.Context, wid models.WorkflowId, w *models.W
 	step := w.Steps[idx]
 	if s, ok := step.(Step); ok && s.action == activationStepAction {
 		err := e.activateConfig(execCtx, wid, state, s, wfLogger.DataWriter(idx, "stdout"))
-		return e.classifyStepError(ctx, wid, step, state, stderr, vmExited, err)
+		return e.classifyStepError(ctx, wid, step, state, stderr, vmExited, "Failed to activate config", err)
 	}
 	env := []string{
 		"HOME=/workspace",
@@ -366,19 +375,19 @@ func (e *Engine) RunStep(ctx context.Context, wid models.WorkflowId, w *models.W
 		Stderr: stderr,
 	})
 	if err != nil {
-		return e.classifyStepError(ctx, wid, step, state, stderr, vmExited, err)
+		return e.classifyStepError(ctx, wid, step, state, stderr, vmExited, "User step error", err)
 	}
 
 	if exitCode != 0 {
 		e.l.Debug("step exited non-zero", "workflow", wid, "step", step.Name(), "exitCode", exitCode)
-		return engine.ErrWorkflowFailed
+		return fmt.Errorf("User step error: exited with code %d", exitCode)
 	}
 	return nil
 }
 
 // reads the vm serial logs so we report the tail of that as an error instead of
 // just "guest agent connection lost: EOF"
-func (e *Engine) classifyStepError(ctx context.Context, wid models.WorkflowId, step models.Step, state *workflowState, stderr io.Writer, vmExited *atomic.Bool, err error) error {
+func (e *Engine) classifyStepError(ctx context.Context, wid models.WorkflowId, step models.Step, state *workflowState, stderr io.Writer, vmExited *atomic.Bool, category string, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -397,7 +406,7 @@ func (e *Engine) classifyStepError(ctx context.Context, wid models.WorkflowId, s
 			fmt.Fprintln(stderr, reason)
 			l.Error(reason, "oom", oom)
 		}
-		return errors.New(reason + "; see workflow logs for serial output")
+		return fmt.Errorf("%s:\n%w", category, errors.New(reason+"; see workflow logs for serial output"))
 	}
 
 	if errors.Is(err, errGuestTimedOut) || ctx.Err() != nil {
@@ -414,7 +423,7 @@ func (e *Engine) classifyStepError(ctx context.Context, wid models.WorkflowId, s
 	} else {
 		l.Error("step failed", "error", err)
 	}
-	return err
+	return fmt.Errorf("%s:\n%w", category, err)
 }
 
 func (e *Engine) activateConfig(ctx context.Context, wid models.WorkflowId, state *workflowState, step Step, out io.Writer) error {

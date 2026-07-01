@@ -195,7 +195,7 @@ func (e *Engine) AcquireWorkflowSlot(
 	return e.slotter.AcquireWorkflowSlot(ctx, wid, wf)
 }
 
-func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *models.Workflow, wfLogger models.WorkflowLogger) error {
+func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *models.Workflow, wfLogger models.WorkflowLogger) (err error) {
 	/// -------------------------INITIAL SETUP------------------------------------------
 	l := e.l.With("workflow", wid)
 	l.Info("setting up workflow")
@@ -209,8 +209,14 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 	wfLogger.ControlWriter(setupStepIdx, setupStep, models.StepStatusStart).Write([]byte{0})
 	defer wfLogger.ControlWriter(setupStepIdx, setupStep, models.StepStatusEnd).Write([]byte{0})
 
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("Failed to setup container:\n%w", err)
+		}
+	}()
+
 	/// -------------------------NETWORK CREATION---------------------------------------
-	_, err := e.docker.NetworkCreate(ctx, networkName(wid), network.CreateOptions{
+	_, err = e.docker.NetworkCreate(ctx, networkName(wid), network.CreateOptions{
 		Driver: "bridge",
 	})
 	if err != nil {
@@ -402,7 +408,7 @@ func (e *Engine) RunStep(ctx context.Context, wid models.WorkflowId, w *models.W
 		Env:          envs,
 	})
 	if err != nil {
-		return fmt.Errorf("creating exec: %w", err)
+		return fmt.Errorf("User step error:\ncreating exec: %w", err)
 	}
 
 	// start tailing logs in background
@@ -434,21 +440,21 @@ func (e *Engine) RunStep(ctx context.Context, wid models.WorkflowId, w *models.W
 
 	execInspectResp, err := e.docker.ContainerExecInspect(ctx, mkExecResp.ID)
 	if err != nil {
-		return err
+		return fmt.Errorf("User step error:\n%w", err)
 	}
 
 	if execInspectResp.ExitCode != 0 {
 		inspectResp, err := e.docker.ContainerInspect(ctx, addl.container)
 		if err != nil {
-			return err
+			return fmt.Errorf("User step error:\n%w", err)
 		}
 
 		e.l.Error("workflow failed!", "workflow_id", wid.String(), "exit_code", execInspectResp.ExitCode, "oom_killed", inspectResp.State.OOMKilled)
 
 		if inspectResp.State.OOMKilled {
-			return ErrOOMKilled
+			return fmt.Errorf("User step error:\n%w", ErrOOMKilled)
 		}
-		return engine.ErrWorkflowFailed
+		return fmt.Errorf("User step error: exited with code %d", execInspectResp.ExitCode)
 	}
 
 	return nil
