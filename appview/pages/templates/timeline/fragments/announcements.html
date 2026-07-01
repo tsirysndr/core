@@ -5,7 +5,7 @@
       Announcements
     </h3>
     <div class="flex flex-col p-0 bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-      {{ template "vouchAnnouncement" . }}
+      {{ template "microvmAnnouncement" . }}
       {{ if .RecentBlogPosts }}
         {{ template "recentBlogPosts" . }}
       {{ end }}
@@ -23,6 +23,32 @@
       </a>
     {{ end }}
   </div>
+{{ end }}
+
+{{ define "microvmAnnouncement" }}
+<div class="relative overflow-hidden bg-gradient-to-b from-orange-50 to-orange-100 dark:from-orange-800/30 dark:to-orange-900/45 p-4">
+  <div class="relative z-10 flex flex-col gap-4">
+    <div class="flex flex-col gap-2">
+    <p class="font-semibold text-orange-600 dark:text-orange-100 mb-1">MicroVM-powered CI</p>
+    <p class="text-orange-600/75 dark:text-orange-100/75 text-sm">
+      Spindles now support a new engine: <span class="font-mono">microvm</span>!
+      <br/>
+      You can now build containers, run services like Postgres, or use non-NixOS images on CI.
+    </p>
+    </div>
+    <div class="mt-3">
+      <a class="no-underline inline-flex items-center gap-1 text-sm font-medium text-orange-600 dark:text-orange-100 hover:text-orange-800 dark:hover:text-orange-100 hover:underline" href="https://docs.tangled.org/spindle/microvm">
+        Read more {{ i "arrow-right" "size-4" }}
+      </a>
+    </div>
+  </div>
+  <div class="pointer-events-none absolute -bottom-8 -right-16 size-48
+    [--ci-gradient-from:theme(colors.orange.100)] dark:[--ci-gradient-from:color-mix(in_oklab,theme(colors.orange.600)_5%,transparent)]
+    [--ci-gradient-to:theme(colors.orange.200)] dark:[--ci-gradient-to:color-mix(in_oklab,theme(colors.orange.800)_15%,transparent)]"
+       style="background: linear-gradient(to bottom, var(--ci-gradient-from), var(--ci-gradient-to));
+              -webkit-mask: url('/static/icons/cpu.svg') center/contain no-repeat;
+              mask: url('/static/icons/cpu.svg') center/contain no-repeat;"></div>
+</div>
 {{ end }}
 
 {{ define "vouchAnnouncement" }}
