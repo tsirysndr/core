@@ -407,6 +407,9 @@ schema = 3
   [mod."github.com/gogo/protobuf"]
     version = "v1.3.2"
     hash = "sha256-pogILFrrk+cAtb0ulqn9+gRZJ7sGnnLLdtqITvxvG6c="
+  [mod."github.com/gohugoio/hugo-goldmark-extensions/passthrough"]
+    version = "v0.5.0"
+    hash = "sha256-8kQnLGnNYUkm3q/cFgf+9P++91OUbMJJNNgUQ1Bl3fg="
   [mod."github.com/golang-jwt/jwt"]
     version = "v3.2.2+incompatible"
     hash = "sha256-LOkpuXhWrFayvVf1GOaOmZI5YKEsgqVSb22aF8LnCEM="
@@ -826,8 +829,8 @@ schema = 3
     version = "v0.0.0-20220910002029-abceb7e1c41e"
     hash = "sha256-GyCDxxMQhXA3Pi/TsWXpA8cX5akEoZV7CFx4RO3rARU="
   [mod."github.com/yuin/goldmark"]
-    version = "v1.7.13"
-    hash = "sha256-vBCxZrPYPc8x/nvAAv3Au59dCCyfS80Vw3/a9EXK7TE="
+    version = "v1.8.2"
+    hash = "sha256-LoWfW1Tb6mNuMR7SoA/4SJv4pTKfsVXqeXEVm4uEQ7Q="
   [mod."github.com/yuin/goldmark-emoji"]
     version = "v1.0.6"
     hash = "sha256-+d6bZzOPE+JSFsZbQNZMCWE+n3jgcQnkPETVk47mxSY="

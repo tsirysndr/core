@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"tangled.org/core/appview/pages/markup/sanitizer"
 )
 
 func TestMermaidExtension(t *testing.T) {
@@ -48,6 +50,96 @@ func TestMermaidExtension(t *testing.T) {
 				t.Errorf("expected output NOT to contain:\n%s\ngot:\n%s", tt.notContains, result)
 			}
 		})
+	}
+}
+
+func TestMathExtension(t *testing.T) {
+	tests := []struct {
+		name        string
+		markdown    string
+		contains    string
+		notContains string
+	}{
+		{
+			name:     "inline math produces span with mathjax delimiters",
+			markdown: "the famous $E = mc^2$ equation",
+			contains: `<span class="math inline">\(E = mc^2\)</span>`,
+		},
+		{
+			name:     "block math produces display span",
+			markdown: "$$\n\\frac{a}{b}\n$$",
+			contains: `<span class="math display">\[`,
+		},
+		{
+			name:        "underscores inside math are not treated as emphasis",
+			markdown:    "$a_1 + a_2$",
+			contains:    `\(a_1 + a_2\)`,
+			notContains: "<em>",
+		},
+		{
+			name:        "non-math dollar usage is left alone",
+			markdown:    "it costs $5 today",
+			notContains: `class="math`,
+		},
+		{
+			// regression: two currency amounts must not be parsed as one
+			// inline math span (the "$5 and $" .. "10" case).
+			name:        "currency pair is not math",
+			markdown:    "it costs $5 today and $10 tomorrow",
+			contains:    "it costs $5 today and $10 tomorrow",
+			notContains: `class="math`,
+		},
+		{
+			// regression: single-line $$...$$ must keep both the math and the
+			// trailing prose.
+			name:     "single-line block keeps trailing prose",
+			markdown: "$$x^2$$ and then prose",
+			contains: "and then prose",
+		},
+		{
+			// math content with < / & must be escaped so the sanitizer keeps
+			// the span and MathJax reads the literal source.
+			name:     "angle brackets in math are escaped",
+			markdown: "$a < b$",
+			contains: `\(a &lt; b\)`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			md := NewMarkdown("tangled.org")
+
+			var buf bytes.Buffer
+			if err := md.Convert([]byte(tt.markdown), &buf); err != nil {
+				t.Fatalf("failed to convert markdown: %v", err)
+			}
+
+			result := buf.String()
+			if tt.contains != "" && !strings.Contains(result, tt.contains) {
+				t.Errorf("expected output to contain:\n%s\ngot:\n%s", tt.contains, result)
+			}
+			if tt.notContains != "" && strings.Contains(result, tt.notContains) {
+				t.Errorf("expected output NOT to contain:\n%s\ngot:\n%s", tt.notContains, result)
+			}
+		})
+	}
+}
+
+// The sanitizer must preserve the carrier spans that MathJax renders client-side.
+func TestMathSurvivesSanitizer(t *testing.T) {
+	md := NewMarkdown("tangled.org")
+
+	var buf bytes.Buffer
+	if err := md.Convert([]byte("inline $x^2$ and block\n\n$$\ny^2\n$$"), &buf); err != nil {
+		t.Fatalf("failed to convert markdown: %v", err)
+	}
+
+	out := sanitizer.SanitizeDefault(buf.String())
+
+	for _, want := range []string{`class="math inline"`, `class="math display"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("sanitizer stripped math span; expected %q in:\n%s", want, out)
+		}
 	}
 }
 

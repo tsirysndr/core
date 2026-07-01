@@ -69,6 +69,7 @@ func NewMarkdown(hostname string, extra ...goldmark.Extender) goldmark.Markdown 
 			extension.WithFootnoteIDPrefix([]byte("footnote")),
 		),
 		callout.CalloutExtention,
+		textension.MathExt,
 		textension.AtExt,
 		textension.NewTangledLinkExt(hostname),
 		emoji.Emoji,

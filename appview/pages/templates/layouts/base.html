@@ -58,6 +58,42 @@
               });
             </script>
             <script>
+              document.addEventListener('DOMContentLoaded', () => {
+                const nodes = document.querySelectorAll('span.math');
+                if (!nodes.length) return;
+                window.MathJax = {
+                  tex: {
+                    inlineMath: [['\\(', '\\)']],
+                    displayMath: [['\\[', '\\]']],
+                  },
+                  options: {
+                    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+                    // v4 turns on semantic enrichment + speech by default, which
+                    // spins up a speech webworker. These are gated by the menu
+                    // settings (even when the menu itself is disabled), so turn
+                    // them off here to keep rendering self-contained.
+                    enableMenu: false,
+                    menuOptions: {
+                      settings: {
+                        enrich: false,
+                        speech: false,
+                        braille: false,
+                        assistiveMml: false,
+                        collapsible: false,
+                      },
+                    },
+                  },
+                  startup: { typeset: false },
+                };
+                const script = document.createElement('script');
+                script.src = '/static/mathjax.min.js';
+                script.onload = () => {
+                  MathJax.typesetPromise(Array.from(nodes));
+                };
+                document.head.appendChild(script);
+              });
+            </script>
+            <script>
               window.addEventListener('scroll', function() {
                 document.querySelectorAll('[data-profile-popover]:not(.hidden)').forEach(function(p) {
                   p.classList.add('hidden');

@@ -107,7 +107,14 @@ func buildDefaultPolicy() *bluemonday.Policy {
 		"margin-bottom",
 	)
 
-	// math
+	// math: the math extension emits <span class="math inline|display"> wrapping
+	// the raw LaTeX (delimited by \( \) / \[ \]). MathJax renders it client-side,
+	// so the sanitizer only needs to preserve these carrier spans.
+	policy.AllowAttrs("class").Matching(regexp.MustCompile(`^math (inline|display)$`)).OnElements("span")
+
+	// raw MathML: markdown is rendered with html.WithUnsafe(), so hand-authored
+	// <math>...</math> in source passes through to here. Browsers render
+	// presentation MathML natively, so preserve the elements and their attributes.
 	mathAttrs := []string{
 		"accent", "columnalign", "columnlines", "columnspan", "dir", "display",
 		"displaystyle", "encoding", "fence", "form", "largeop", "linebreak",

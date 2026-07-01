@@ -42,6 +42,7 @@ require (
 	github.com/go-chi/chi/v5 v5.2.0
 	github.com/go-enry/go-enry/v2 v2.9.6
 	github.com/go-git/go-git/v5 v5.19.0
+	github.com/gohugoio/hugo-goldmark-extensions/passthrough v0.5.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/feeds v1.2.0
 	github.com/gorilla/sessions v1.4.0
@@ -71,7 +72,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v3 v3.6.2
 	github.com/whyrusleeping/cbor-gen v0.3.1
-	github.com/yuin/goldmark v1.7.13
+	github.com/yuin/goldmark v1.8.2
 	github.com/yuin/goldmark-emoji v1.0.6
 	github.com/yuin/goldmark-highlighting/v2 v2.0.0-20230729083705-37449abec8cc
 	gitlab.com/staticnoise/goldmark-callout v0.0.0-20240609120641-6366b799e4ab

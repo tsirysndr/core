@@ -53,6 +53,10 @@
       url = "https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js";
       flake = false;
     };
+    mathjax-src = {
+      url = "https://cdn.jsdelivr.net/npm/mathjax@4.1.2/tex-svg.js";
+      flake = false;
+    };
     ibm-plex-mono-src = {
       url = "https://github.com/IBM/plex/releases/download/%40ibm%2Fplex-mono%401.1.0/ibm-plex-mono.zip";
       flake = false;
@@ -84,6 +88,7 @@
     hls-src,
     microvm,
     fetch-tangled,
+    mathjax-src,
     ...
   }: let
     supportedSystems = ["x86_64-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin"];
@@ -145,7 +150,7 @@
         lexgen = self.callPackage ./nix/pkgs/lexgen.nix {inherit indigo;};
         goat = self.callPackage ./nix/pkgs/goat.nix {inherit indigo;};
         appview-static-files = self.callPackage ./nix/pkgs/appview-static-files.nix {
-          inherit htmx-src htmx-ws-src lucide-src inter-fonts-src ibm-plex-mono-src actor-typeahead-src mermaid-src hls-src;
+          inherit htmx-src htmx-ws-src lucide-src inter-fonts-src ibm-plex-mono-src actor-typeahead-src mermaid-src hls-src mathjax-src;
         };
         appview = self.callPackage ./nix/pkgs/appview.nix {};
         blog = self.callPackage ./nix/pkgs/blog.nix {};

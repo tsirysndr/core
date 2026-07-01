@@ -4,6 +4,7 @@ set -euo pipefail
 HTMX_URL="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"
 HTMX_WS_URL="https://cdn.jsdelivr.net/npm/htmx-ext-ws@2.0.2"
 MERMAID_URL="https://cdn.jsdelivr.net/npm/mermaid@11.12.3/dist/mermaid.min.js"
+MATHJAX_URL="https://cdn.jsdelivr.net/npm/mathjax@4.1.2/tex-svg.js"
 LUCIDE_URL="https://github.com/lucide-icons/lucide/releases/download/0.536.0/lucide-icons-0.536.0.zip"
 INTER_URL="https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip"
 PLEX_MONO_URL="https://github.com/IBM/plex/releases/download/%40ibm%2Fplex-mono%401.1.0/ibm-plex-mono.zip"
@@ -19,6 +20,7 @@ mkdir -p "$OUT"/{fonts,icons,logos}
 curl -fsSL -o "$OUT/htmx.min.js"        "$HTMX_URL"
 curl -fsSL -o "$OUT/htmx-ext-ws.min.js" "$HTMX_WS_URL"
 curl -fsSL -o "$OUT/mermaid.min.js"     "$MERMAID_URL"
+curl -fsSL -o "$OUT/mathjax.min.js"     "$MATHJAX_URL"
 
 curl -fsSL -o "$TMP/lucide.zip" "$LUCIDE_URL"
 unzip -q "$TMP/lucide.zip" -d "$TMP/lucide"

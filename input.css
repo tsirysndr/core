@@ -1662,3 +1662,10 @@ actor-typeahead::part(menu) {
         right: calc(-1 * var(--r));
     }
 }
+
+/* Tailwind Preflight resets svg to display:block; MathJax v4 emits inline SVGs
+   (one or more per inline equation), so that forces each onto its own line.
+   Restore inline flow for MathJax output only, leaving icon svgs untouched. */
+mjx-container svg {
+    display: inline-block;
+}
