@@ -11,7 +11,7 @@ import (
 const (
 	appviewURL    = "https://tangled.org/"
 	user          = "willdot.net"
-	userDID       = "did:plc:dadhhalkfcq3gucaq25hjqon"
+	repoDID       = "did:plc:ixran6dpypl5lslliiqceshs"
 	pushedBranch  = "feature-abc"
 	defaultBranch = "main"
 )
@@ -31,12 +31,12 @@ func TestCreatePullURL(t *testing.T) {
 		"is fork": {
 			repoName:    "knot-testing-fork",
 			remote:      "https://knot1.tangled.sh/did:plc:dadhhalkfcq3gucaq25hjqon/knot-testing",
-			expectedURL: "https://tangled.org/did:plc:dadhhalkfcq3gucaq25hjqon/knot-testing/pulls/new?fork=did%3Aplc%3Adadhhalkfcq3gucaq25hjqon%2Fknot-testing-fork&source=fork&sourceBranch=feature-abc&targetBranch=main",
+			expectedURL: "https://tangled.org/did:plc:dadhhalkfcq3gucaq25hjqon/knot-testing/pulls/new?fork=did%3Aplc%3Aixran6dpypl5lslliiqceshs&source=fork&sourceBranch=feature-abc&targetBranch=main",
 		},
 		"is fork on same knot": {
 			repoName:    "knot-testing-fork",
 			remote:      "file:///home/git/repositories/did:plc:ixran6dpypl5lslliiqceshs",
-			expectedURL: "https://tangled.org/did:plc:dadhhalkfcq3gucaq25hjqon/knot-testing/pulls/new?fork=did%3Aplc%3Adadhhalkfcq3gucaq25hjqon%2Fknot-testing-fork&source=fork&sourceBranch=feature-abc&targetBranch=main",
+			expectedURL: "https://tangled.org/did:plc:dadhhalkfcq3gucaq25hjqon/knot-testing/pulls/new?fork=did%3Aplc%3Aixran6dpypl5lslliiqceshs&source=fork&sourceBranch=feature-abc&targetBranch=main",
 		},
 	}
 
@@ -50,7 +50,7 @@ func TestCreatePullURL(t *testing.T) {
 			h := InternalHandle{
 				db: database,
 			}
-			res, err := h.createPullURL(appviewURL, tc.remote, user, userDID, tc.repoName, pushedBranch, defaultBranch)
+			res, err := h.createPullURL(appviewURL, tc.remote, user, repoDID, tc.repoName, pushedBranch, defaultBranch)
 			require.NoError(t, err)
 
 			assert.Equal(t, tc.expectedURL, res)
