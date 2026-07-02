@@ -1,0 +1,219 @@
+diff --git a/bun.lock b/bun.lock
+index 12bc3ba..3d6395a 100644
+--- a/bun.lock
++++ b/bun.lock
+@@ -37,14 +37,14 @@
+         "@takumi-rs/wasm": "^1.8.7",
+         "@tanstack/solid-virtual": "^3.13.31",
+         "codemirror": "^6.0.2",
+-        "solid-js": "^1.9.13",
++        "solid-js": "^1.9.14",
+         "valibot": "^1.4.2",
+       },
+       "devDependencies": {
+         "@iconify-json/lucide": "^1.2.115",
+         "@iconify/tailwind4": "^1.2.3",
+         "@tailwindcss/vite": "^4.3.2",
+-        "@types/node": "^26.0.1",
++        "@types/node": "^26.1.0",
+         "esbuild": "^0.28.1",
+         "oxfmt": "^0.57.0",
+         "tailwindcss": "^4.3.2",
+diff --git a/src/auth/account.tsx b/src/auth/account.tsx
+index e660c1a..7ae64b1 100644
+--- a/src/auth/account.tsx
++++ b/src/auth/account.tsx
+@@ -43,6 +43,7 @@ const AccountDropdown = (props: { did: Did; onEditPermissions: (did: Did) => voi
+     } catch {
+       deleteStoredSession(did);
+     }
++    localStorage.removeItem(`pass_session:${did}`);
+     setSessions(
+       produce((accs) => {
+         delete accs[did];
+diff --git a/src/auth/session-manager.ts b/src/auth/session-manager.ts
+index 6ac8570..bca6de4 100644
+--- a/src/auth/session-manager.ts
++++ b/src/auth/session-manager.ts
+@@ -42,8 +42,80 @@ export const loadHandleForSession = async (did: Did, storedSessions: Sessions) =
+   }
+ };
+ 
++export class PasswordUserAgent {
++  sub: Did;
++  service: string;
++  accessJwt: string;
++  constructor(sub: Did, service: string, accessJwt: string) {
++    this.sub = sub;
++    this.service = service;
++    this.accessJwt = accessJwt;
++  }
++  async signOut() {}
++  async handle(pathname: string, init?: RequestInit): Promise<Response> {
++    const url = new URL(pathname, this.service);
++    const headers = new Headers(init?.headers);
++    headers.set("Authorization", `Bearer ${this.accessJwt}`);
++    return await fetch(url.href, { ...init, headers });
++  }
++}
++
++export const autoLoginLocalinfra = async (): Promise<void> => {
++  try {
++    const pdsUrl = "https://pds.tngl.boltless.dev";
++    
++    const healthRes = await fetch(`${pdsUrl}/xrpc/_health`, { signal: AbortSignal.timeout(2000) });
++    if (!healthRes.ok) return;
++    
++    const resolveAndLogin = async (username: string) => {
++      const handle = `${username}.pds.tngl.boltless.dev`;
++      const resolveRes = await fetch(`${pdsUrl}/xrpc/com.atproto.identity.resolveHandle?handle=${handle}`);
++      if (!resolveRes.ok) return null;
++      const { did } = await resolveRes.json();
++      
++      const loginRes = await fetch(`${pdsUrl}/xrpc/com.atproto.server.createSession`, {
++        method: "POST",
++        headers: { "Content-Type": "application/json" },
++        body: JSON.stringify({ identifier: handle, password: "password" }),
++      });
++      if (!loginRes.ok) return null;
++      const { accessJwt } = await loginRes.json();
++      return { did, handle, accessJwt };
++    };
++
++    const alice = await resolveAndLogin("alice");
++    const bob = await resolveAndLogin("bob");
++
++    const sessions = loadSessionsFromStorage() || {};
++    let lastSignedIn = localStorage.getItem("lastSignedIn");
++
++    if (alice) {
++      sessions[alice.did] = { signedIn: true, handle: alice.handle, grantedScopes: "atproto,create,update,delete,blob" };
++      localStorage.setItem(`pass_session:${alice.did}`, JSON.stringify({ service: pdsUrl, accessJwt: alice.accessJwt }));
++      if (!lastSignedIn) lastSignedIn = alice.did;
++    }
++    if (bob) {
++      sessions[bob.did] = { signedIn: true, handle: bob.handle, grantedScopes: "atproto,create,update,delete,blob" };
++      localStorage.setItem(`pass_session:${bob.did}`, JSON.stringify({ service: pdsUrl, accessJwt: bob.accessJwt }));
++      if (!lastSignedIn) lastSignedIn = lastSignedIn || bob.did;
++    }
++
++    if (alice || bob) {
++      saveSessionToStorage(sessions);
++      if (lastSignedIn) {
++        localStorage.setItem("lastSignedIn", lastSignedIn);
++      }
++    }
++  } catch (e) {
++    console.error("Auto login failed:", e);
++  }
++};
++
+ export const retrieveSession = async (): Promise<void> => {
+-  const init = async (): Promise<Session | undefined> => {
++  await autoLoginLocalinfra();
++
++  const init = async (): Promise<any> => {
+     const params = new URLSearchParams(decodeURIComponent(location.hash.slice(1)));
+ 
+     if (params.has("state") && (params.has("code") || params.has("error"))) {
+@@ -61,21 +133,34 @@ export const retrieveSession = async (): Promise<void> => {
+       const newSessions: Sessions = sessions || {};
+       newSessions[did] = { signedIn: true, grantedScopes };
+       saveSessionToStorage(newSessions);
+-      return auth.session;
++      return new OAuthUserAgent(auth.session);
+     } else {
+       const lastSignedIn = localStorage.getItem("lastSignedIn");
+ 
+       if (lastSignedIn) {
+         const sessions = loadSessionsFromStorage();
+         const newSessions: Sessions = sessions || {};
++
++        const passSession = localStorage.getItem(`pass_session:${lastSignedIn}`);
++        if (passSession) {
++          try {
++            const { service, accessJwt } = JSON.parse(passSession);
++            const agent = new PasswordUserAgent(lastSignedIn as Did, service, accessJwt);
++            newSessions[lastSignedIn].signedIn = true;
++            saveSessionToStorage(newSessions);
++            return agent;
++          } catch {}
++        }
++
+         try {
+           const session = await getSession(lastSignedIn as Did);
+-          const rpc = new Client({ handler: new OAuthUserAgent(session) });
++          const agent = new OAuthUserAgent(session);
++          const rpc = new Client({ handler: agent });
+           const res = await rpc.get("com.atproto.server.getSession");
+           newSessions[lastSignedIn].signedIn = true;
+           saveSessionToStorage(newSessions);
+           if (!res.ok) throw res.data.error;
+-          return session;
++          return agent;
+         } catch (err) {
+           newSessions[lastSignedIn].signedIn = false;
+           saveSessionToStorage(newSessions);
+@@ -85,9 +170,9 @@ export const retrieveSession = async (): Promise<void> => {
+     }
+   };
+ 
+-  const session = await init();
++  const agentInstance = await init();
+ 
+-  if (session) setAgent(new OAuthUserAgent(session));
++  if (agentInstance) setAgent(agentInstance);
+ };
+ 
+ export const resumeSession = async (did: Did): Promise<void> => {
+diff --git a/src/layout.tsx b/src/layout.tsx
+index 51757fa..b76e556 100644
+--- a/src/layout.tsx
++++ b/src/layout.tsx
+@@ -195,7 +195,7 @@ const Layout = (props: RouteSectionProps<unknown>) => {
+       </div>
+       <NotificationContainer />
+       <PermissionPromptContainer />
+-      <Show when={plcDirectory() !== "https://plc.directory"}>
++      <Show when={plcDirectory() !== "https://plc.tngl.boltless.dev"}>
+         <div class="dark:bg-dark-500 fixed right-0 bottom-0 left-0 z-10 flex items-center justify-center bg-neutral-100 px-3 py-1 text-xs">
+           <span>
+             PLC directory: <span class="font-medium">{plcDirectory()}</span>
+diff --git a/src/views/settings.tsx b/src/views/settings.tsx
+index 5f16783..7621cf8 100644
+--- a/src/views/settings.tsx
++++ b/src/views/settings.tsx
+@@ -5,7 +5,7 @@ import { ThemeSelection } from "../components/theme.jsx";
+ 
+ export const [hideMedia, setHideMedia] = createSignal(localStorage.hideMedia === "true");
+ export const [plcDirectory, setPlcDirectory] = createSignal(
+-  localStorage.plcDirectory || "https://plc.directory",
++  localStorage.plcDirectory || "https://plc.tngl.boltless.dev",
+ );
+ 
+ const Settings = () => {
+@@ -18,13 +18,13 @@ const Settings = () => {
+           <label for="plcDirectory" class="font-medium select-none">
+             PLC Directory
+           </label>
+-          {plcDirectory() !== "https://plc.directory" && (
++          {plcDirectory() !== "https://plc.tngl.boltless.dev" && (
+             <button
+               type="button"
+               class="rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700 active:bg-neutral-300 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200 dark:active:bg-neutral-600"
+               onClick={() => {
+                 localStorage.removeItem("plcDirectory");
+-                setPlcDirectory("https://plc.directory");
++                setPlcDirectory("https://plc.tngl.boltless.dev");
+               }}
+             >
+               Reset
+@@ -41,7 +41,7 @@ const Settings = () => {
+               setPlcDirectory(value);
+             } else {
+               localStorage.removeItem("plcDirectory");
+-              setPlcDirectory("https://plc.directory");
++              setPlcDirectory("https://plc.tngl.boltless.dev");
+             }
+           }}
+         />

@@ -357,6 +357,18 @@ services:
         condition: service_completed_successfully
     networks: [tngl]
 
+  pdsls:
+    build:
+      context: .
+      dockerfile: localinfra/pdsls.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    depends_on:
+      init-accounts:
+        condition: service_completed_successfully
+    networks: [tngl]
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -380,6 +392,7 @@ services:
           - tngl.boltless.dev
           - mirror.tngl.boltless.dev
           - zoekt.tngl.boltless.dev
+          - pdsls.tngl.boltless.dev
 
 volumes:
   caddy-data:

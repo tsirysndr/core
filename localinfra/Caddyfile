@@ -72,3 +72,9 @@ tngl.boltless.dev {
     tls internal
     reverse_proxy appview:3000
 }
+
+# pdsls
+pdsls.tngl.boltless.dev {
+    tls internal
+    reverse_proxy pdsls:80
+}

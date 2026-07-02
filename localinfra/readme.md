@@ -18,6 +18,7 @@ To make that work:
 - knotmirror (<https://knotmirror.tngl.boltless.dev>)
 - appview (<https://tngl.boltless.dev>) (live reloading)
 - [ncps](https://github.com/kalbasit/ncps) nix binary cache (internal, `http://ncps:8501`)
+- pdsls (<https://pdsls.tngl.boltless.dev>)
 - caddy reverse proxy
 
 ## Setup
