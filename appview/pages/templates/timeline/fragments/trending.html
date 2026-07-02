@@ -37,7 +37,7 @@
         {{ end }}
       </div>
       <div class="min-w-0">
-        <span class="text-sm font-medium dark:text-white truncate block">{{ $repoOwner }}/{{ .Name }}</span>
+        <span class="text-base md:text-sm font-medium dark:text-white truncate block">{{ $repoOwner }}/{{ .Name }}</span>
         {{ with .Description }}
           <span class="text-sm text-gray-500 dark:text-gray-400 truncate line-clamp-1 block">{{ . | description }}</span>
         {{ end }}
