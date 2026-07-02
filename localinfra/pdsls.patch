@@ -35,7 +35,7 @@ diff --git a/src/auth/session-manager.ts b/src/auth/session-manager.ts
 index 6ac8570..bca6de4 100644
 --- a/src/auth/session-manager.ts
 +++ b/src/auth/session-manager.ts
-@@ -42,8 +42,80 @@ export const loadHandleForSession = async (did: Did, storedSessions: Sessions) =
+@@ -42,8 +42,79 @@ export const loadHandleForSession = async (did: Did, storedSessions: Sessions) =
    }
  };
  
