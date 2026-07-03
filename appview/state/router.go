@@ -51,6 +51,13 @@ func (s *State) Router() http.Handler {
 	if err := db.ReapStaleRunningMigrations(context.Background(), s.db); err != nil {
 		s.logger.Warn("failed to reap stale running migrations", "err", err)
 	}
+	go func() {
+		if n, err := db.EnqueueEntityStateBackfill(context.Background(), s.db); err != nil {
+			s.logger.Warn("failed to enqueue entity state backfill", "err", err)
+		} else if n > 0 {
+			s.logger.Info("enqueued entity state backfill", "owners", n)
+		}
+	}()
 	m := migration.NewMigration(s.db, s.oauth, s.idResolver.Directory(), s.logger)
 	router.Use(m.BackgroundMigrationMiddleware)
 
