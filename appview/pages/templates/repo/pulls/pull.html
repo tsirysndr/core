@@ -23,7 +23,7 @@
     (function() {
       const details = document.getElementById('bottomSheet');
       const backdrop = document.getElementById('bottomSheetBackdrop');
-      const isDesktop = () => window.matchMedia('(min-width: 768px)').matches;
+      const isDesktop = () => window.matchMedia('(min-width: 1024px)').matches;
 
       // function to update backdrop
       const updateBackdrop = () => {
@@ -54,7 +54,7 @@
         updateBackdrop();
       });
 
-      const mediaQuery = window.matchMedia('(min-width: 768px)');
+      const mediaQuery = window.matchMedia('(min-width: 1024px)');
       mediaQuery.addEventListener('change', function(e) {
         if (e.matches) {
           // switched to desktop - keep open
@@ -111,20 +111,26 @@
 {{ end }}
 
 {{ define "repoContentLayout" }}
-  <div class="grid grid-cols-1 md:grid-cols-10 gap-4 w-full">
-    <div class="col-span-1 md:col-span-8 flex flex-col gap-4">
+  <div class="grid grid-cols-1 lg:grid-cols-10 gap-4 w-full">
+    <div class="col-span-1 lg:col-span-8 flex flex-col gap-4">
       <section class="bg-white dark:bg-gray-800 p-6 rounded relative w-full mx-auto dark:text-white h-full flex-shrink">
         {{ block "repoContent" . }}{{ end }}
       </section>
       {{ template "repo/pulls/fragments/pullVouchNudge" . }}
     </div>
-    <div class="flex flex-col gap-6 col-span-1 md:col-span-2">
+    <div class="flex flex-col gap-6 col-span-1 lg:col-span-2">
       {{ template "repo/fragments/labelPanel"
         (dict "RepoInfo" $.RepoInfo
               "Defs" $.LabelDefs
               "Subject" $.Pull.AtUri
               "State" $.Pull.Labels) }}
       {{ template "repo/fragments/participants" $.Pull.Participants }}
+      {{ if $.LoggedInUser }}
+        {{ template "repo/pulls/fragments/subscribeButton"
+          (dict "RepoInfo" $.RepoInfo
+                "PullId" $.Pull.PullId
+                "IsSubscribed" $.IsSubscribed) }}
+      {{ end }}
       {{ template "repo/fragments/backlinks"
         (dict "RepoInfo" $.RepoInfo
               "Backlinks" $.Backlinks) }}
@@ -158,7 +164,7 @@
     data-resizer="vertical"
     data-target="{{ $target }}"
     data-direction="{{ $direction }}"
-    class="resizer-vertical hidden md:flex w-4 sticky top-12 max-h-screen flex-col items-center justify-center group">
+    class="resizer-vertical hidden lg:flex w-4 sticky top-12 max-h-screen flex-col items-center justify-center group">
     <div class="w-1 h-16 group-hover:h-24 group-[.resizing]:h-24 transition-all rounded-full bg-gray-400 dark:bg-gray-500 group-hover:bg-gray-500 group-hover:dark:bg-gray-400"></div>
   </div>
 {{ end }}
@@ -170,7 +176,7 @@
 
   <div class="flex col-span-full">
     <!-- left panel -->
-    <div id="files" class="w-0 hidden md:block overflow-hidden sticky top-12 max-h-screen overflow-y-auto pb-12">
+    <div id="files" class="w-0 hidden lg:block overflow-hidden sticky top-12 max-h-screen overflow-y-auto pb-12">
       <section class="overflow-x-auto text-sm px-6 py-2 border-b border-x border-gray-200 dark:border-gray-700 w-full mx-auto min-h-full rounded-b rounded-t-none bg-white dark:bg-gray-800 shadow-sm">
         {{ template "repo/fragments/fileTree" $diff.FileTree }}
       </section>
@@ -204,25 +210,25 @@
   {{ end }}
 
   <!-- backdrop overlay - only visible on mobile when open -->
-  <div id="bottomSheetBackdrop" class="fixed inset-0 bg-black/50 md:hidden opacity-0 pointer-events-none transition-opacity duration-300 z-20"></div>
+  <div id="bottomSheetBackdrop" class="fixed inset-0 bg-black/50 lg:hidden opacity-0 pointer-events-none transition-opacity duration-300 z-20"></div>
   <!-- right panel - bottom sheet on mobile, side panel on desktop -->
-  <div id="subs" class="fixed bottom-0 left-0 right-0 z-30 w-full md:static md:z-auto md:max-h-screen md:sticky md:top-12 overflow-hidden">
-    <details open id="bottomSheet" class="rounded-t-2xl md:rounded-t shadow-lg md:shadow-none group/panel">
+  <div id="subs" class="fixed bottom-0 left-0 right-0 z-30 w-full lg:static lg:z-auto lg:max-h-screen lg:sticky lg:top-12 overflow-hidden">
+    <details open id="bottomSheet" class="rounded-t-2xl lg:rounded-t shadow-lg lg:shadow-none group/panel">
       <summary class="
         flex gap-4 items-center justify-between
-        rounded-t-2xl md:rounded-t cursor-pointer list-none p-4 md:h-12
-        text-white md:text-black md:dark:text-white
+        rounded-t-2xl lg:rounded-t cursor-pointer list-none p-4 lg:h-12
+        text-white lg:text-black lg:dark:text-white
         {{ $bgColor }}
-        md:bg-white md:dark:bg-gray-800
-        shadow-sm border-t md:border-x border-gray-200 dark:border-gray-700
-        md:pointer-events-none
+        lg:bg-white lg:dark:bg-gray-800
+        shadow-sm border-t lg:border-x border-gray-200 dark:border-gray-700
+        lg:pointer-events-none
         ">
         <h2 class="">History</h2>
         <span class="pointer-events-auto cursor-text">
           {{ template "subsPanelSummary" $ }}
         </span>
       </summary>
-      <div class="max-h-[85vh] md:max-h-[calc(100vh-3rem-3rem)] w-full flex flex-col-reverse gap-4 overflow-y-auto bg-slate-100 dark:bg-gray-900 md:bg-transparent">
+      <div class="max-h-[85vh] lg:max-h-[calc(100vh-3rem-3rem)] w-full flex flex-col-reverse gap-4 overflow-y-auto bg-slate-100 dark:bg-gray-900 lg:bg-transparent">
         {{ template "submissions" $root }}
       </div>
     </details>
@@ -243,7 +249,7 @@
       {{ $comments }} comment{{ if ne $comments 1 }}s{{ end }}
     </span>
 
-    <span class="md:hidden inline">
+    <span class="lg:hidden inline">
       <span class="inline group-open:hidden">{{ i "chevron-up" "size-4" }}</span>
       <span class="hidden group-open:inline">{{ i "chevron-down" "size-4" }}</span>
     </span>
@@ -264,7 +270,7 @@
     #subsToggle:checked ~ div label[for="subsToggle"] .hide-toggle { display: flex; }
     #subsToggle:not(:checked) ~ div label[for="subsToggle"] .hide-toggle { display: none; }
 
-    @media (min-width: 768px) {
+    @media (min-width: 1024px) {
       #subsToggle:checked ~ div div#subs {
         width: 25vw;
         max-width: 50vw;
@@ -279,7 +285,7 @@
       }
     }
   </style>
-    <label title="Toggle review panel" for="subsToggle" class="hidden md:flex items-center justify-end pointer-events-none">
+    <label title="Toggle review panel" for="subsToggle" class="hidden lg:flex items-center justify-end pointer-events-none">
       <span class="show-toggle hit-area hit-area-4 hit-area-x-2 pointer-events-auto cursor-pointer">{{ i "message-square-more" "size-4" }}</span>
       <span class="hide-toggle w-[25vw] justify-end"><span class="hit-area hit-area-4 hit-area-x-2 pointer-events-auto cursor-pointer">{{ i "message-square" "size-4" }}</span></span>
     </label>

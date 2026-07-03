@@ -6,20 +6,26 @@
 {{ end }}
 
 {{ define "repoContentLayout" }}
-  <div class="grid grid-cols-1 md:grid-cols-10 gap-4 w-full">
-    <div class="col-span-1 md:col-span-8">
+  <div class="grid grid-cols-1 lg:grid-cols-10 gap-4 w-full">
+    <div class="col-span-1 lg:col-span-8">
       <section class="bg-white dark:bg-gray-800 p-6 rounded relative w-full mx-auto dark:text-white">
         {{ block "repoContent" . }}{{ end }}
       </section>
       {{ block "repoAfter" . }}{{ end }}
     </div>
-    <div class="col-span-1 md:col-span-2 flex flex-col gap-6">
+    <div class="col-span-1 lg:col-span-2 flex flex-col gap-6">
       {{ template "repo/fragments/labelPanel"
         (dict "RepoInfo" $.RepoInfo
               "Defs" $.LabelDefs
               "Subject" $.Issue.AtUri
               "State" $.Issue.Labels) }}
       {{ template "repo/fragments/participants" $.Issue.Participants }}
+      {{ if $.LoggedInUser }}
+        {{ template "repo/issues/fragments/subscribeButton"
+          (dict "RepoInfo" $.RepoInfo
+                "IssueId" $.Issue.IssueId
+                "IsSubscribed" $.IsSubscribed) }}
+      {{ end }}
       {{ template "repo/fragments/backlinks"
         (dict "RepoInfo" $.RepoInfo
               "Backlinks" $.Backlinks) }}

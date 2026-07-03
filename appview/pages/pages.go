@@ -592,8 +592,9 @@ func (p *Pages) UserEmailsSettings(w io.Writer, params UserEmailsSettingsParams)
 
 type UserNotificationSettingsParams struct {
 	BaseParams
-	Preferences *models.NotificationPreferences
-	Tab         string
+	Preferences      *models.NotificationPreferences
+	HasVerifiedEmail bool
+	Tab              string
 }
 
 func (p *Pages) UserNotificationSettings(w io.Writer, params UserNotificationSettingsParams) error {
@@ -1346,11 +1347,35 @@ type RepoSingleIssueParams struct {
 	Reactions          map[syntax.ATURI]map[models.ReactionKind]models.ReactionDisplayData
 	UserReacted        map[syntax.ATURI]map[models.ReactionKind]bool
 	VouchRelationships map[syntax.DID]*models.VouchRelationship
+
+	// IsSubscribed is nil when the user is not logged in, true when subscribed,
+	// false when explicitly unsubscribed, and nil when no explicit subscription.
+	IsSubscribed *bool
 }
 
 func (p *Pages) RepoSingleIssue(w io.Writer, params RepoSingleIssueParams) error {
 	params.Active = "issues"
 	return p.executeRepo("repo/issues/issue", w, params)
+}
+
+type IssueSubscribeParams struct {
+	RepoInfo     repoinfo.RepoInfo
+	IssueId      int
+	IsSubscribed *bool
+}
+
+func (p *Pages) IssueSubscribeFragment(w io.Writer, params IssueSubscribeParams) error {
+	return p.executePlain("repo/issues/fragments/subscribeButton", w, params)
+}
+
+type PullSubscribeParams struct {
+	RepoInfo     repoinfo.RepoInfo
+	PullId       int
+	IsSubscribed *bool
+}
+
+func (p *Pages) PullSubscribeFragment(w io.Writer, params PullSubscribeParams) error {
+	return p.executePlain("repo/pulls/fragments/subscribeButton", w, params)
 }
 
 type EditIssueParams struct {
@@ -1502,6 +1527,9 @@ type RepoSinglePullParams struct {
 	LabelDefs          map[string]*models.LabelDefinition
 	VouchRelationships map[syntax.DID]*models.VouchRelationship
 	VouchSkips         map[syntax.DID]bool
+
+	// IsSubscribed is nil when not logged in, true when subscribed, false when explicitly unsubscribed.
+	IsSubscribed *bool
 }
 
 func (p *Pages) RepoSinglePull(w io.Writer, params RepoSinglePullParams) error {

@@ -1,0 +1,31 @@
+{{ define "repo/pulls/fragments/subscribeButton" }}
+  {{ $subscribed := false }}
+  {{ if .IsSubscribed }}{{ $subscribed = .IsSubscribed }}{{ end }}
+  <div id="pull-subscribe-btn">
+    {{ if $subscribed }}
+      <form
+        hx-post="/{{ .RepoInfo.FullName }}/pulls/{{ .PullId }}/subscribe"
+        hx-target="#pull-subscribe-btn"
+        hx-swap="outerHTML">
+        <input type="hidden" name="subscribe" value="false">
+        <button type="submit" class="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors group">
+          {{ i "bell" "w-4 h-4" }}
+          <span>Subscribed</span>
+          {{ i "loader-circle" "w-3 h-3 animate-spin hidden group-[.htmx-request]:inline" }}
+        </button>
+      </form>
+    {{ else }}
+      <form
+        hx-post="/{{ .RepoInfo.FullName }}/pulls/{{ .PullId }}/subscribe"
+        hx-target="#pull-subscribe-btn"
+        hx-swap="outerHTML">
+        <input type="hidden" name="subscribe" value="true">
+        <button type="submit" class="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors group">
+          {{ i "bell-off" "w-4 h-4" }}
+          <span>Subscribe</span>
+          {{ i "loader-circle" "w-3 h-3 animate-spin hidden group-[.htmx-request]:inline" }}
+        </button>
+      </form>
+    {{ end }}
+  </div>
+{{ end }}
