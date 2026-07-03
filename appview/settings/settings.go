@@ -290,9 +290,13 @@ func (s *Settings) notificationsSettings(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	primaryEmail, emailErr := db.GetPrimaryEmail(s.Db, did)
+	hasVerifiedEmail := emailErr == nil && primaryEmail.Verified
+
 	s.Pages.UserNotificationSettings(w, pages.UserNotificationSettingsParams{
-		BaseParams:  pages.BaseParamsFromContext(r.Context()),
-		Preferences: prefs,
+		BaseParams:       pages.BaseParamsFromContext(r.Context()),
+		Preferences:      prefs,
+		HasVerifiedEmail: hasVerifiedEmail,
 	})
 }
 
