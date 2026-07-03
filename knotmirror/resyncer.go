@@ -426,7 +426,7 @@ func (r *Resyncer) requestIndex(ctx context.Context, repoDid syntax.DID, branche
 		return fmt.Errorf("marshaling index request: %w", err)
 	}
 
-	endpoint := r.cfg.Search.ZoektUrl + "/indexserver/admin/enqueueIndex"
+	endpoint := r.cfg.Search.ZoektUrl + "/admin/enqueueIndex"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return err

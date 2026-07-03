@@ -84,6 +84,12 @@ in
         description = "enable SSRF protection for knots";
       };
 
+      zoektUrl = mkOption {
+        type = types.str;
+        example = "https://zoekt.tngl.boltless.dev/indexserver";
+        description = "zoekt-tnglserver url";
+      };
+
       tap = {
         port = mkOption {
           type = types.port;
@@ -158,6 +164,7 @@ in
             "MIRROR_METRICS_LISTEN=${cfg.metricsListenAddr}"
             "MIRROR_ADMIN_LISTEN=${cfg.adminListenAddr}"
             "MIRROR_SLURPER_CONCURRENCY=4"
+            "MIRROR_SEARCH_ZOEKT_URL=${cfg.zoektUrl}"
           ];
           ExecStart = "${getExe cfg.package} serve";
           Restart = "always";

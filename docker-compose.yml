@@ -264,7 +264,7 @@ services:
       MIRROR_KNOT_USE_SSL: "true"
       MIRROR_KNOT_SSRF: "true"
       MIRROR_RESYNC_PARALLELISM: "4"
-      MIRROR_SEARCH_ZOEKT_URL: https://zoekt.tngl.boltless.dev
+      MIRROR_SEARCH_ZOEKT_URL: https://zoekt.tngl.boltless.dev/indexserver
     volumes:
       - knotmirror-data:/data
       - ./localinfra/certs/root.crt:/usr/local/share/ca-certificates/caddy.crt:ro
