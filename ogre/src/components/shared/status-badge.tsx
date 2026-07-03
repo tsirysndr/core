@@ -8,6 +8,10 @@ import {
 } from "../../icons/lucide";
 import { COLORS, TYPOGRAPHY } from "./constants";
 
+function capitalize(text: string) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 const STATUS_CONFIG = {
   open: {
     Icon: CircleDot,
@@ -48,7 +52,7 @@ export function StatusBadge({ status }: StatusBadgeProps) {
         backgroundColor: config.bg,
       }}>
       <Icon size={48} color={config.text} />
-      <span style={{ ...TYPOGRAPHY.status, color: config.text }}>{status}</span>
+      <span style={{ ...TYPOGRAPHY.status, color: config.text }}>{capitalize(status)}</span>
     </Row>
   );
 }
@@ -67,7 +71,7 @@ export function IssueStatusBadge({ status }: { status: "open" | "closed" }) {
         backgroundColor: config.bg,
       }}>
       <Icon size={48} color={config.text} />
-      <span style={{ ...TYPOGRAPHY.status, color: config.text }}>{status}</span>
+      <span style={{ ...TYPOGRAPHY.status, color: config.text }}>{capitalize(status)}</span>
     </Row>
   );
 }
