@@ -557,6 +557,53 @@ func (n *databaseNotifier) notifyEvent(
 
 	recipients.Remove(actorDid)
 
+	// Apply subscription overrides for thread-activity events only.
+	// Mention and assignment events are targeted at specific users and should
+	// not be broadcast to all thread subscribers.
+	isThreadEvent := eventType != models.NotificationTypeUserMentioned &&
+		eventType != models.NotificationTypeIssueAssigned &&
+		eventType != models.NotificationTypeIssueUnassigned &&
+		eventType != models.NotificationTypePullAssigned &&
+		eventType != models.NotificationTypePullUnassigned
+
+	switch {
+	case issueId != nil && isThreadEvent:
+		if subs, err := db.GetIssueSubscribers(n.db, *issueId); err == nil {
+			for _, did := range subs {
+				recipients.Insert(syntax.DID(did))
+			}
+		}
+		if unsubs, err := db.GetIssueUnsubscribers(n.db, *issueId); err == nil {
+			for _, did := range unsubs {
+				recipients.Remove(syntax.DID(did))
+			}
+		}
+	case pullId != nil && isThreadEvent:
+		if subs, err := db.GetPullSubscribers(n.db, *pullId); err == nil {
+			for _, did := range subs {
+				recipients.Insert(syntax.DID(did))
+			}
+		}
+		if unsubs, err := db.GetPullUnsubscribers(n.db, *pullId); err == nil {
+			for _, did := range unsubs {
+				recipients.Remove(syntax.DID(did))
+			}
+		}
+	}
+
+	// Auto-subscribe the actor to this issue/pull when they interact with it.
+	// This happens outside the transaction since it’s best-effort.
+	switch {
+	case issueId != nil:
+		if err := db.UpsertIssueSubscription(n.db, actorDid.String(), *issueId, true); err != nil {
+			l.Warn("failed to auto-subscribe actor to issue", "actor", actorDid, "issueId", *issueId, "err", err)
+		}
+	case pullId != nil:
+		if err := db.UpsertPullSubscription(n.db, actorDid.String(), *pullId, true); err != nil {
+			l.Warn("failed to auto-subscribe actor to pull", "actor", actorDid, "pullId", *pullId, "err", err)
+		}
+	}
+
 	prefMap, err := db.GetNotificationPreferences(
 		n.db,
 		orm.FilterIn("user_did", slices.Collect(recipients.All())),
