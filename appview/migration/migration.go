@@ -45,8 +45,9 @@ func NewMigration(db *db.DB, oauth *oauth.OAuth, dir identity.Directory, logger 
 		onPermAuthErr: oauth.HandlePermanentAuthErr,
 	}
 	m.migrators = map[string]migrator{
-		"add-repo-did":     m.migrateAddRepoDid,
-		"use-feed-comment": m.migrateUseFeedComment,
+		"add-repo-did":          m.migrateAddRepoDid,
+		"use-feed-comment":      m.migrateUseFeedComment,
+		"backfill-entity-state": m.backfillEntityState,
 	}
 	return m
 }
