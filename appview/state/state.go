@@ -28,6 +28,7 @@ import (
 	dbnotify "tangled.org/core/appview/notify/db"
 	lognotify "tangled.org/core/appview/notify/logging"
 	phnotify "tangled.org/core/appview/notify/posthog"
+	emaildispatch "tangled.org/core/appview/notify/email"
 	whnotify "tangled.org/core/appview/notify/webhook"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
@@ -201,6 +202,11 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 
 	go ingester.SweepPendingVerifications()
 	go ingester.StartPendingStateReconciler()
+
+	if config.Resend.ApiKey != "" {
+		dispatcher := emaildispatch.NewDispatcher(d, config.Resend, config.Core.BaseUrl(), res, tlog.SubLogger(logger, "email-dispatcher"), config.Core.Dev)
+		go dispatcher.Start(ctx)
+	}
 
 	var cfClient *cloudflare.Client
 	if config.Cloudflare.ApiToken != "" {
