@@ -7,12 +7,12 @@ subtitle: A git collaboration platform, built on AT Protocol
 date: 2025-03-02
 authors:
   - name: Anirudh
-    email: anirudh@tangled.sh
+    email: anirudh@tangled.org
     handle: anirudh.fi
 ---
 
 
-[Tangled](https://tangled.sh) is a new social-enabled Git collaboration
+[Tangled](https://tangled.org) is a new social-enabled Git collaboration
 platform, built on top of the [AT Protocol](https://atproto.com). We
 envision a place where developers have complete ownership of their code,
 open source communities can freely self-govern and most importantly,
@@ -33,7 +33,7 @@ perfect for self-hosting on a Raspberry Pi at home, or larger
 "community" servers. By default, Tangled provides managed knots where
 you can host your repositories for free.
 
-The [App View][appview] at [tangled.sh](https://tangled.sh) acts as a
+The [App View][appview] at [tangled.org](https://tangled.org) acts as a
 consolidated "view" into the whole network, allowing users to access,
 clone and contribute to repositories hosted across different knots --
 completely seamlessly.
@@ -57,8 +57,8 @@ invite-only access to Tangled -- join us on IRC at `#tangled` on
 [libera.chat](https://libera.chat) and we'll get you set up.
 
 **Update**: Tangled is open to public, simply login at
-[tangled.sh/login](https://tangled.sh/login)! Have fun!
+[tangled.org/login](https://tangled.org/login)! Have fun!
 
 [pds]: https://atproto.com/guides/glossary#pds-personal-data-server
 [appview]: https://docs.bsky.app/docs/advanced-guides/federation-architecture#app-views
-[dogfood]: https://tangled.sh/@tangled.sh/core
+[dogfood]: https://tangled.org/core

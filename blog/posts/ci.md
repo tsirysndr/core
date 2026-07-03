@@ -7,10 +7,10 @@ subtitle: Tangled's new CI runner is now generally available
 date: 2025-08-06
 authors:
   - name: Anirudh
-    email: anirudh@tangled.sh
+    email: anirudh@tangled.org
     handle: anirudh.fi
   - name: Akshay
-    email: akshay@tangled.sh
+    email: akshay@tangled.org
     handle: oppi.li
 ---
 
@@ -22,7 +22,7 @@ Meet **spindle**: Tangled's new CI runner built atop Nix and
 AT Protocol. In typical Tangled fashion we've been
 dogfooding spindle for a while now; this very blog post
 you're reading was [built and published using
-spindle](https://tangled.sh/@tangled.sh/site/pipelines/452/workflow/deploy.yaml).
+spindle](https://tangled.org/tangled.org/core/pipelines).
 
 Tangled is a new social-enabled Git collaboration platform,
 [read our intro](/intro) for more about the project.
@@ -197,17 +197,17 @@ Vault.
 
 You can run your own spindle instance pretty easily: the
 [spindle self-hosting
-guide](https://tangled.sh/@tangled.sh/core/blob/master/docs/spindle/hosting.md)
+guide](https://docs.tangled.org/spindles#self-hosting-guide)
 should have you covered. Once done, head to your
 repository's settings tab and set it up! Doesn't work? Feel
-free to pop into [Discord](https://chat.tangled.sh) to get
+free to pop into [Discord](https://chat.tangled.org) to get
 help -- we have a nice little crew that's always around to
 help.
 
 All Tangled users have access to our hosted spindle
 instance, free of charge[^3]. You don't have any more
 excuses to not migrate to Tangled now -- [get
-started](https://tangled.sh/login) with your AT Protocol
+started](https://tangled.org/login) with your AT Protocol
 account today.
 
 [^3]: We can't promise we won't charge for it at some point

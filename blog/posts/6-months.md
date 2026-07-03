@@ -74,7 +74,7 @@ their owner, and any appview can verify ownership. Once we stabilize the
 [lexicon definitions](lexicons) for these XRPC calls, building clients
 for knots, or alternate implementations should become much simpler.
 
-[lexicons]: https://tangled.sh/@tangled.sh/core/tree/master/lexicons
+[lexicons]: https://tangled.org/tangled.org/core/tree/master/lexicons
 
 ## issues rework
 
@@ -94,7 +94,7 @@ detail.
 
 To address this, we spun up the tngl.sh PDS hosted right here in
 Finland. The only way to get an account on this PDS is by [signing
-up](https://tangled.sh/signup). There's a lot we can do to improve this
+up](https://tangled.org/signup). There's a lot we can do to improve this
 experience as a generic PDS host, but we're still working out details
 around that.
 

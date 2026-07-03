@@ -8,7 +8,7 @@ date: 2025-06-02
 image: https://assets.tangled.network/blog/interdiff_difference.jpeg
 authors:
   - name: Akshay
-    email: akshay@tangled.sh
+    email: akshay@tangled.org
     handle: oppi.li
 draft: false
 ---
@@ -157,7 +157,7 @@ And this is the essence of our new stacked PRs feature!
 ## interdiff code review on tangled
 
 To really explain how this works, let's start with a [new
-codebase](https://tangled.sh/@oppi.li/stacking-demo/):
+codebase](https://tangled.org/oppi.li/stacking-demo/):
 
 ```
 $ jj git init --colocate

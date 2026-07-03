@@ -6,7 +6,7 @@ url: "https://blog.tangled.org/"
 description: ""
 author:
   name: "Anirudh Oppiliappan"
-  email: "anirudh@tangled.sh"
+  email: "anirudh@tangled.org"
 defaultTemplate: text.html
 extraTemplateDirs:
   - ../appview/pages/templates
