@@ -701,6 +701,20 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			updated text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 		);
 
+		create table if not exists issue_subscriptions (
+			user_did text not null,
+			issue_id integer not null references issues(id) on delete cascade,
+			subscribed integer not null default 1,
+			primary key(user_did, issue_id)
+		);
+
+		create table if not exists pull_subscriptions (
+			user_did text not null,
+			pull_id integer not null references pulls(id) on delete cascade,
+			subscribed integer not null default 1,
+			primary key(user_did, pull_id)
+		);
+
 		create table if not exists migrations (
 			id integer primary key autoincrement,
 			name text unique
@@ -713,6 +727,8 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		create index if not exists idx_references_to_at on reference_links(to_at);
 		create index if not exists idx_webhook_deliveries_webhook_id on webhook_deliveries(webhook_id);
 		create index if not exists idx_newsletter_prefs_user_did on newsletter_preferences(user_did);
+		create index if not exists idx_issue_subscriptions_issue on issue_subscriptions(issue_id, subscribed);
+		create index if not exists idx_pull_subscriptions_pull on pull_subscriptions(pull_id, subscribed);
 	`)
 	if err != nil {
 		return nil, err
@@ -2441,6 +2457,14 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "add-emailed-to-notifications", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			ALTER TABLE notifications ADD COLUMN emailed INTEGER NOT NULL DEFAULT 0;
+			CREATE INDEX IF NOT EXISTS idx_notifications_emailed
+				ON notifications(recipient_did, emailed, created);
+		`)
+		return err
+	})
 	return &DB{
 		db,
 		logger,

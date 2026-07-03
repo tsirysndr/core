@@ -550,6 +550,202 @@ func (d *DB) UpdateNotificationPreferences(ctx context.Context, prefs *models.No
 	return nil
 }
 
+// GetPendingEmailDigestRecipients returns DIDs of users who have email
+// notifications enabled, have a verified primary email, and have unemaileD
+// notifications older than olderThan for email-eligible notification types.
+func GetPendingEmailDigestRecipients(e Execer, olderThan time.Time) ([]string, error) {
+	placeholders := make([]string, len(models.EmailNotificationTypes))
+	args := []any{olderThan.UTC().Format(time.RFC3339)}
+	for i, t := range models.EmailNotificationTypes {
+		placeholders[i] = "?"
+		args = append(args, string(t))
+	}
+	inClause := strings.Join(placeholders, ", ")
+
+	query := fmt.Sprintf(`
+		SELECT DISTINCT n.recipient_did
+		FROM notifications n
+		JOIN notification_preferences np ON np.user_did = n.recipient_did
+		JOIN emails e ON e.did = n.recipient_did AND e.is_primary = 1 AND e.verified = 1
+		WHERE n.emailed = 0
+		  AND n.created < ?
+		  AND np.email_notifications = 1
+		  AND n.type IN (%s)
+	`, inClause)
+
+	rows, err := e.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query email digest recipients: %w", err)
+	}
+	defer rows.Close()
+
+	var dids []string
+	for rows.Next() {
+		var did string
+		if err := rows.Scan(&did); err != nil {
+			return nil, err
+		}
+		dids = append(dids, did)
+	}
+	return dids, rows.Err()
+}
+
+// GetPendingNotificationsForEmailDigest returns all unemailed notifications
+// older than olderThan for email-eligible types for a specific recipient.
+func GetPendingNotificationsForEmailDigest(e Execer, recipientDid string, olderThan time.Time) ([]*models.NotificationWithEntity, error) {
+	placeholders := make([]string, len(models.EmailNotificationTypes))
+	args := []any{recipientDid, olderThan.UTC().Format(time.RFC3339)}
+	for i, t := range models.EmailNotificationTypes {
+		placeholders[i] = "?"
+		args = append(args, string(t))
+	}
+	inClause := strings.Join(placeholders, ", ")
+
+	query := fmt.Sprintf(`
+		SELECT
+			n.id, n.recipient_did, n.actor_did, n.type, n.entity_type, n.entity_id,
+			n.read, n.created, n.repo_id, n.issue_id, n.pull_id,
+			r.id as r_id, r.did as r_did, r.rkey as r_rkey, r.name as r_name, r.description as r_description, r.website as r_website, r.topics as r_topics,
+			i.id as i_id, i.did as i_did, i.issue_id as i_issue_id, i.title as i_title, i.open as i_open,
+			p.id as p_id, p.owner_did as p_owner_did, p.pull_id as p_pull_id, p.title as p_title, p.state as p_state
+		FROM notifications n
+		LEFT JOIN repos r ON n.repo_id = r.id
+		LEFT JOIN issues i ON n.issue_id = i.id
+		LEFT JOIN pulls p ON n.pull_id = p.id
+		WHERE n.recipient_did = ?
+		  AND n.emailed = 0
+		  AND n.created < ?
+		  AND n.type IN (%s)
+		ORDER BY n.created DESC
+	`, inClause)
+
+	rows, err := e.QueryContext(context.Background(), query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query pending email notifications: %w", err)
+	}
+	defer rows.Close()
+
+	var notifications []*models.NotificationWithEntity
+	for rows.Next() {
+		var n models.Notification
+		var typeStr string
+		var createdStr string
+		var repo models.Repo
+		var issue models.Issue
+		var pull models.Pull
+		var rId, iId, pId sql.NullInt64
+		var rDid, rRkey, rName, rDescription, rWebsite, rTopicStr sql.NullString
+		var iDid sql.NullString
+		var iIssueId sql.NullInt64
+		var iTitle sql.NullString
+		var iOpen sql.NullBool
+		var pOwnerDid sql.NullString
+		var pPullId sql.NullInt64
+		var pTitle sql.NullString
+		var pState sql.NullInt64
+
+		err := rows.Scan(
+			&n.ID, &n.RecipientDid, &n.ActorDid, &typeStr, &n.EntityType, &n.EntityId,
+			&n.Read, &createdStr, &n.RepoId, &n.IssueId, &n.PullId,
+			&rId, &rDid, &rRkey, &rName, &rDescription, &rWebsite, &rTopicStr,
+			&iId, &iDid, &iIssueId, &iTitle, &iOpen,
+			&pId, &pOwnerDid, &pPullId, &pTitle, &pState,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan email digest notification: %w", err)
+		}
+
+		n.Type = models.NotificationType(typeStr)
+		n.Created, err = time.Parse(time.RFC3339, createdStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse created timestamp: %w", err)
+		}
+
+		entry := &models.NotificationWithEntity{Notification: &n}
+
+		if rId.Valid {
+			repo.Id = rId.Int64
+			if rDid.Valid {
+				repo.Did = rDid.String
+			}
+			if rRkey.Valid {
+				repo.Rkey = rRkey.String
+			}
+			if rName.Valid {
+				repo.Name = rName.String
+			}
+			if rDescription.Valid {
+				repo.Description = rDescription.String
+			}
+			if rWebsite.Valid {
+				repo.Website = rWebsite.String
+			}
+			if rTopicStr.Valid {
+				repo.Topics = strings.Fields(rTopicStr.String)
+			}
+			entry.Repo = &repo
+		}
+
+		if iId.Valid {
+			issue.Id = iId.Int64
+			if iDid.Valid {
+				issue.Did = iDid.String
+			}
+			if iIssueId.Valid {
+				issue.IssueId = int(iIssueId.Int64)
+			}
+			if iTitle.Valid {
+				issue.Title = iTitle.String
+			}
+			if iOpen.Valid {
+				issue.Open = iOpen.Bool
+			}
+			entry.Issue = &issue
+		}
+
+		if pId.Valid {
+			pull.ID = int(pId.Int64)
+			if pOwnerDid.Valid {
+				pull.OwnerDid = pOwnerDid.String
+			}
+			if pPullId.Valid {
+				pull.PullId = int(pPullId.Int64)
+			}
+			if pTitle.Valid {
+				pull.Title = pTitle.String
+			}
+			if pState.Valid {
+				pull.State = models.PullState(pState.Int64)
+			}
+			entry.Pull = &pull
+		}
+
+		notifications = append(notifications, entry)
+	}
+
+	return notifications, rows.Err()
+}
+
+// MarkNotificationsEmailed marks the given notification IDs as emailed=1.
+// Uses explicit IDs (not recipient_did) to avoid racing with new notifications.
+func MarkNotificationsEmailed(e Execer, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	query := fmt.Sprintf(
+		`UPDATE notifications SET emailed = 1 WHERE id IN (%s)`,
+		strings.Join(placeholders, ", "),
+	)
+	_, err := e.Exec(query, args...)
+	return err
+}
+
 func (d *DB) ClearOldNotifications(ctx context.Context, olderThan time.Duration) error {
 	cutoff := time.Now().Add(-olderThan)
 	createdFilter := orm.FilterLte("created", cutoff)

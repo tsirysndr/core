@@ -60,12 +60,32 @@ type Notification struct {
 	EntityType   string
 	EntityId     string
 	Read         bool
+	Emailed      bool
 	Created      time.Time
 
 	// foreign key references
 	RepoId  *int64
 	IssueId *int64
 	PullId  *int64
+}
+
+// EmailNotificationTypes are the notification types that are included in email digests.
+// Social types (repo_starred, followed) are intentionally excluded.
+var EmailNotificationTypes = []NotificationType{
+	NotificationTypeIssueCreated,
+	NotificationTypeIssueCommented,
+	NotificationTypeIssueClosed,
+	NotificationTypeIssueReopen,
+	NotificationTypePullCreated,
+	NotificationTypePullCommented,
+	NotificationTypePullMerged,
+	NotificationTypePullClosed,
+	NotificationTypePullReopen,
+	NotificationTypeUserMentioned,
+	NotificationTypeIssueAssigned,
+	NotificationTypeIssueUnassigned,
+	NotificationTypePullAssigned,
+	NotificationTypePullUnassigned,
 }
 
 // lucide icon that represents this notification
