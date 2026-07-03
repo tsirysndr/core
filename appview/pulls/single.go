@@ -264,6 +264,32 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		diff = s.combinedDiff(pull, roundIdInt)
 	}
 
+	var isSubscribed *bool
+	if user != nil {
+		pullDbId := int64(pull.ID)
+		sub, found, err2 := db.GetPullSubscription(s.db, user.Did, pullDbId)
+		if err2 == nil {
+			if found {
+				isSubscribed = &sub
+			} else {
+				// Implicitly subscribed if author or participant.
+				isAuthorOrParticipant := pull.OwnerDid == user.Did
+				if !isAuthorOrParticipant {
+					for _, p := range pull.Participants() {
+						if p.String() == user.Did {
+							isAuthorOrParticipant = true
+							break
+						}
+					}
+				}
+				if isAuthorOrParticipant {
+					t := true
+					isSubscribed = &t
+				}
+			}
+		}
+	}
+
 	err = s.pages.RepoSinglePull(w, pages.RepoSinglePullParams{
 		BaseParams:         pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:           s.repoResolver.GetRepoInfo(r, user),
@@ -285,10 +311,44 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		LabelDefs:          defs,
 		VouchRelationships: vouchRelationships,
 		VouchSkips:         vouchSkips,
+		IsSubscribed:       isSubscribed,
 	})
 	if err != nil {
 		l.Error("failed to render page", "err", err)
 	}
+}
+
+// SubscribePull handles subscribe/unsubscribe for a specific pull request.
+func (s *Pulls) SubscribePull(w http.ResponseWriter, r *http.Request) {
+	l := s.logger.With("handler", "SubscribePull")
+	user := s.oauth.GetMultiAccountUser(r)
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	pull, ok := r.Context().Value("pull").(*models.Pull)
+	if !ok {
+		l.Error("failed to get pull from context")
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	subscribe := r.FormValue("subscribe") != "false"
+	pullDbId := int64(pull.ID)
+
+	if err := db.UpsertPullSubscription(s.db, user.Did, pullDbId, subscribe); err != nil {
+		l.Error("failed to update pull subscription", "err", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	repoInfo := s.repoResolver.GetRepoInfo(r, user)
+	s.pages.PullSubscribeFragment(w, pages.PullSubscribeParams{
+		RepoInfo:     repoInfo,
+		PullId:       pull.PullId,
+		IsSubscribed: &subscribe,
+	})
 }
 
 func (s *Pulls) combinedDiff(pull *models.Pull, round int) types.DiffRenderer {

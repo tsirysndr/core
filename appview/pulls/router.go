@@ -44,6 +44,7 @@ func (s *Pulls) Router(mw *middleware.Middleware) http.Handler {
 			// it is handled within the route
 			r.Post("/close", s.ClosePull)
 			r.Post("/reopen", s.ReopenPull)
+			r.Post("/subscribe", s.SubscribePull)
 			// collaborators only
 			r.Group(func(r chi.Router) {
 				r.Use(mw.RepoPermissionMiddleware("repo:push"))

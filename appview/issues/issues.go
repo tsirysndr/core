@@ -161,6 +161,31 @@ func (rp *Issues) RepoSingleIssue(w http.ResponseWriter, r *http.Request) {
 		defs[l.AtUri().String()] = &l
 	}
 
+	var isSubscribed *bool
+	if user != nil {
+		sub, found, err2 := db.GetIssueSubscription(rp.db, user.Did, issue.Id)
+		if err2 == nil {
+			if found {
+				isSubscribed = &sub
+			} else {
+				// Implicitly subscribed when you're the author or a participant.
+				isAuthorOrParticipant := issue.Did == user.Did
+				if !isAuthorOrParticipant {
+					for _, p := range issue.Participants() {
+						if p.String() == user.Did {
+							isAuthorOrParticipant = true
+							break
+						}
+					}
+				}
+				if isAuthorOrParticipant {
+					t := true
+					isSubscribed = &t
+				}
+			}
+		}
+	}
+
 	err = rp.pages.RepoSingleIssue(w, pages.RepoSingleIssueParams{
 		BaseParams:         pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:           rp.repoResolver.GetRepoInfo(r, user),
@@ -171,10 +196,44 @@ func (rp *Issues) RepoSingleIssue(w http.ResponseWriter, r *http.Request) {
 		UserReacted:        userReactions,
 		LabelDefs:          defs,
 		VouchRelationships: vouchRelationships,
+		IsSubscribed:       isSubscribed,
 	})
 	if err != nil {
 		l.Error("failed to render issue", "err", err)
 	}
+}
+
+// SubscribeIssue handles subscribe/unsubscribe for a specific issue.
+func (rp *Issues) SubscribeIssue(w http.ResponseWriter, r *http.Request) {
+	l := rp.logger.With("handler", "SubscribeIssue")
+	user := rp.oauth.GetMultiAccountUser(r)
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	issue, ok := r.Context().Value("issue").(*models.Issue)
+	if !ok {
+		l.Error("failed to get issue from context")
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	subscribe := r.FormValue("subscribe") != "false"
+
+	if err := db.UpsertIssueSubscription(rp.db, user.Did, issue.Id, subscribe); err != nil {
+		l.Error("failed to update issue subscription", "err", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Return the updated subscription button fragment.
+	repoInfo := rp.repoResolver.GetRepoInfo(r, user)
+	rp.pages.IssueSubscribeFragment(w, pages.IssueSubscribeParams{
+		RepoInfo:     repoInfo,
+		IssueId:      issue.IssueId,
+		IsSubscribed: &subscribe,
+	})
 }
 
 func (rp *Issues) EditIssue(w http.ResponseWriter, r *http.Request) {

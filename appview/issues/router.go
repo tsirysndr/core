@@ -26,6 +26,7 @@ func (i *Issues) Router(mw *middleware.Middleware) http.Handler {
 				r.Delete("/", i.DeleteIssue)
 				r.Post("/close", i.CloseIssue)
 				r.Post("/reopen", i.ReopenIssue)
+				r.Post("/subscribe", i.SubscribeIssue)
 			})
 		})
 
