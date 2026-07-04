@@ -234,6 +234,12 @@ in {
     "d /workspace/repo 0755 spindle-workflow spindle-workflow -"
   ];
 
+  # nix flake cache should go on the persisted dir, not the root (which is on tmpfs)
+  systemd.services.shuttle = {
+    environment.XDG_CACHE_HOME = "/var/cache/shuttle";
+    serviceConfig.CacheDirectory = "shuttle";
+  };
+
   # add any common packages / services here
   environment.systemPackages = with pkgs; [
     gitMinimal

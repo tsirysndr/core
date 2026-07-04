@@ -642,6 +642,19 @@ test_activation_dependencies() {
     local job='
 env_file=/run/spindle/devshell-env.sh
 [ -f "$env_file" ] && echo "env_file=present" || echo "env_file=missing"
+echo "shuttle_env=$(systemctl show shuttle -p Environment --value)"
+if [ -d /var/cache/shuttle ] && [ "$(stat -c %d /var/cache/shuttle)" = "$(stat -c %d /workspace)" ]; then
+    echo "shuttle_cache_on_persist=yes"
+else
+    echo "shuttle_cache_on_persist=no"
+fi
+if find /var/cache/shuttle/nix -mindepth 1 -print -quit 2>/dev/null | grep -q .; then
+    echo "shuttle_nix_cache_written=yes"
+else
+    echo "shuttle_nix_cache_written=no"
+fi
+
+
 
 # mirror RunStep
 . "$env_file"
@@ -670,8 +683,10 @@ echo "hello=$(hello)"
     out=$(run_vm --name "activation-dependencies" --timeout "600s" --activate "$config" --db "$db_path" --upload -- /run/current-system/sw/bin/bash -l -c "$job") || return 1
 
     check_needles "$out" \
-        "env_file=present" "pkgconfig=[0-9]" "openssl_found=yes" \
-        "openssl_version=[0-9]" "dev_headers=found" "hello=Hello, world!" || return 1
+        "env_file=present" "shuttle_env=.*XDG_CACHE_HOME=/var/cache/shuttle" \
+        "shuttle_cache_on_persist=yes" "shuttle_nix_cache_written=yes" \
+        "pkgconfig=[0-9]" "openssl_found=yes" "openssl_version=[0-9]" \
+        "dev_headers=found" "hello=Hello, world!" || return 1
     echo "success: bare (pkg-config + openssl, dev headers found via PKG_CONFIG_PATH), flakeref, and aliased deps all resolved"
 
     # second run: same config + db, no upload. the devshell .drv is absent (no
@@ -681,7 +696,8 @@ echo "hello=$(hello)"
 
     check_needles "$out" \
         "realizing cached NixOS config" \
-        "env_file=present" "pkgconfig=[0-9]" "openssl_found=yes" \
+        "env_file=present" "shuttle_env=.*XDG_CACHE_HOME=/var/cache/shuttle" \
+        "shuttle_cache_on_persist=yes" "pkgconfig=[0-9]" "openssl_found=yes" \
         "openssl_version=[0-9]" "dev_headers=found" "hello=Hello, world!" || return 1
     echo "success: cache-hit run re-read the devshell env from the cached profile (no drv) and all deps resolved"
 }
