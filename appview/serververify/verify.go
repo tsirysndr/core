@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
+	"syscall"
+	"time"
 
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"tangled.org/core/api/tangled"
@@ -17,6 +21,8 @@ var (
 	FetchError = errors.New("failed to fetch owner")
 )
 
+const verifyTimeout = 10 * time.Second
+
 // fetchOwner fetches the owner DID from a server's /owner endpoint
 func fetchOwner(ctx context.Context, domain string, dev bool) (string, error) {
 	scheme := "https"
@@ -25,13 +31,26 @@ func fetchOwner(ctx context.Context, domain string, dev bool) (string, error) {
 	}
 
 	host := fmt.Sprintf("%s://%s", scheme, domain)
+	transport := &http.Transport{
+		DialContext: safeDialer(dev).DialContext,
+	}
 	xrpcc := &indigoxrpc.Client{
 		Host: host,
+		Client: &http.Client{
+			Timeout:   verifyTimeout,
+			Transport: transport,
+		},
 	}
 
 	res, err := tangled.Owner(ctx, xrpcc)
-	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
-		return "", xrpcerr
+	if err != nil {
+		var xrpcerr *indigoxrpc.Error
+		if !errors.As(err, &xrpcerr) {
+			return "", err
+		}
+		if handled := xrpcclient.HandleXrpcErr(err); handled != nil {
+			return "", handled
+		}
 	}
 
 	return res.Owner, nil
@@ -156,4 +175,29 @@ func MarkKnotVerified(d *db.DB, e *rbac.Enforcer, domain, owner string) error {
 	committed = true
 
 	return nil
+}
+func safeDialer(dev bool) *net.Dialer {
+	d := &net.Dialer{
+		Timeout:   5 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+	if dev {
+		return d
+	}
+	d.Control = func(network, address string, _ syscall.RawConn) error {
+		host, _, err := net.SplitHostPort(address)
+		if err != nil {
+			return fmt.Errorf("invalid dial address %q: %w", address, err)
+		}
+		ip := net.ParseIP(host)
+		if ip == nil {
+			return fmt.Errorf("dial address %q did not resolve to IP", address)
+		}
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+			ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+			return fmt.Errorf("refusing to dial %s: reserved or private address", ip)
+		}
+		return nil
+	}
+	return d
 }
