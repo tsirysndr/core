@@ -2124,6 +2124,25 @@ This document is laid out in reverse-chronological order.
 Newer migration guides are listed first, and older guides
 are further down the page.
 
+## Upgrading to v1.16.0-alpha
+
+Starting with v1.16.0-alpha, spindles own CI pipeline data
+directly. The appview no longer stores pipeline runs or follows
+spindle event streams for pipeline history. Instead, it asks the
+configured spindle for pipeline lists, single pipeline details,
+workflow logs, retries, and cancellations over XRPC.
+
+This means that existing pipeline logs / runs won't appear after
+you upgrade. Existing pipeline history from the appview cannot be
+automatically migrated. If you want to migrate your data, you can
+reach out to us and we will send you an SQL file that'll add the data
+into your spindle.
+
+- Upgrade to the latest tag (v1.16.0 or above)
+- Head to the [spindle
+  dashboard](https://tangled.org/settings/spindles) and hit the
+  "retry" button to verify your spindle
+
 ## Upgrading to v1.15.0-alpha
 
 With v1.15.0-alpha, a knot itself owns its members and

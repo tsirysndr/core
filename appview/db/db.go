@@ -2426,6 +2426,13 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "spindle-pipeline-ownership-migration", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			update spindles set needs_upgrade = 1;
+		`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,
