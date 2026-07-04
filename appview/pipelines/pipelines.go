@@ -142,6 +142,11 @@ func (p *Pipelines) Index(w http.ResponseWriter, r *http.Request) {
 
 	var pipelines []types.Pipeline
 	for _, pipeline := range out.Pipelines {
+		if pipeline.Repo == nil || *pipeline.Repo != f.RepoDid {
+			l.Warn("spindle returned pipeline for unexpected repo",
+				"want", f.RepoDid, "got", pipeline.Repo, "spindle", f.Spindle)
+			continue
+		}
 		pipelines = append(pipelines, types.Pipeline{CiPipeline: pipeline})
 	}
 
@@ -205,6 +210,11 @@ func (p *Pipelines) Workflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if out.Repo == nil || *out.Repo != f.RepoDid {
+		l.Debug("spindle returned pipeline for unexpected repo", "want", f.RepoDid, "got", out.Repo)
+		p.pages.Error404(w)
+		return
+	}
 	// ensure workflow exists
 	exist := false
 	for _, workflow := range out.Workflows {
