@@ -643,6 +643,9 @@ test_activation_dependencies() {
 env_file=/run/spindle/devshell-env.sh
 [ -f "$env_file" ] && echo "env_file=present" || echo "env_file=missing"
 echo "shuttle_env=$(systemctl show shuttle -p Environment --value)"
+echo "step_xdg_cache_home=${XDG_CACHE_HOME:-unset}"
+mkdir -p "$XDG_CACHE_HOME/go-build"
+[ -w "$XDG_CACHE_HOME/go-build" ] && echo "go_build_cache_writable=yes"
 if [ -d /var/cache/shuttle ] && [ "$(stat -c %d /var/cache/shuttle)" = "$(stat -c %d /workspace)" ]; then
     echo "shuttle_cache_on_persist=yes"
 else
@@ -684,6 +687,7 @@ echo "hello=$(hello)"
 
     check_needles "$out" \
         "env_file=present" "shuttle_env=.*XDG_CACHE_HOME=/var/cache/shuttle" \
+        "step_xdg_cache_home=/workspace/.cache" "go_build_cache_writable=yes" \
         "shuttle_cache_on_persist=yes" "shuttle_nix_cache_written=yes" \
         "pkgconfig=[0-9]" "openssl_found=yes" "openssl_version=[0-9]" \
         "dev_headers=found" "hello=Hello, world!" || return 1
@@ -697,6 +701,7 @@ echo "hello=$(hello)"
     check_needles "$out" \
         "realizing cached NixOS config" \
         "env_file=present" "shuttle_env=.*XDG_CACHE_HOME=/var/cache/shuttle" \
+        "step_xdg_cache_home=/workspace/.cache" "go_build_cache_writable=yes" \
         "shuttle_cache_on_persist=yes" "pkgconfig=[0-9]" "openssl_found=yes" \
         "openssl_version=[0-9]" "dev_headers=found" "hello=Hello, world!" || return 1
     echo "success: cache-hit run re-read the devshell env from the cached profile (no drv) and all deps resolved"

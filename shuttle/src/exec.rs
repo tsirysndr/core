@@ -125,10 +125,15 @@ struct ResolvedUser {
 
 impl ResolvedUser {
     fn login_env(&self) -> Vec<(OsString, OsString)> {
+        let xdg_cache_home = PathBuf::from(&self.home).join(".cache");
         vec![
             (OsString::from("USER"), OsString::from(&self.name)),
             (OsString::from("LOGNAME"), OsString::from(&self.name)),
             (OsString::from("HOME"), self.home.clone()),
+            (
+                OsString::from("XDG_CACHE_HOME"),
+                xdg_cache_home.into_os_string(),
+            ),
             (OsString::from("SHELL"), self.shell.clone()),
         ]
     }
