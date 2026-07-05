@@ -843,6 +843,14 @@ when:
     tag: ["v*", "stable"]
 ```
 
+To skip CI for a push, pass a Git push option:
+
+```sh
+git push -o skip-ci
+```
+
+`ci-skip` is also accepted.
+
 ### Engine
 
 Next is the engine on which the workflow should run, defined

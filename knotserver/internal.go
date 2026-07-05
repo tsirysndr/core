@@ -28,6 +28,7 @@ import (
 	"tangled.org/core/notifier"
 	"tangled.org/core/rbac"
 	"tangled.org/core/tid"
+	"tangled.org/core/workflow"
 )
 
 type InternalHandle struct {
@@ -242,12 +243,19 @@ func (h *InternalHandle) PostReceiveHook(w http.ResponseWriter, r *http.Request)
 		pushOptions = pushOptions[:50]
 	}
 
+	repoPath, _, _, resolveErr := h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
+	if resolveErr != nil {
+		l.Error("failed to resolve repo on disk", "repoDid", repoDid, "err", resolveErr)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
 	resp := hook.HookResponse{
 		Messages: make([]string, 0),
 	}
 
 	for _, line := range lines {
-		err := h.insertRefUpdate(line, gitUserDid, ownerDid, repoDid, pushOptions)
+		err := h.insertRefUpdate(line, gitUserDid, ownerDid, repoDid, repoPath, pushOptions)
 		if err != nil {
 			l.Error("failed to insert op", "err", err, "line", line, "did", gitUserDid, "repo", gitRelativeDir)
 		}
@@ -255,6 +263,13 @@ func (h *InternalHandle) PostReceiveHook(w http.ResponseWriter, r *http.Request)
 		err = h.emitPullRequestLink(&resp.Messages, line, ownerDid, repoName, repoDid)
 		if err != nil {
 			l.Error("failed to reply with pull request link", "err", err, "line", line, "did", gitUserDid, "repo", gitRelativeDir)
+		}
+
+		if !git.HasSkipCIPushOption(pushOptions) {
+			verbose := hasVerboseCIPushOption(pushOptions)
+			if err := h.emitCiDiagnostics(&resp.Messages, line, ownerDid, repoName, repoDid, repoPath, verbose); err != nil {
+				l.Error("failed to emit ci diagnostics", "err", err, "line", line, "did", gitUserDid, "repo", gitRelativeDir)
+			}
 		}
 
 		// emit pipeline logs link
@@ -270,7 +285,7 @@ func (h *InternalHandle) PostReceiveHook(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, resp)
 }
 
-func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, ownerDid, repoDid string, pushOptions []string) error {
+func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, ownerDid, repoDid string, repoPath string, pushOptions []string) error {
 	refUpdate := tangled.GitRefUpdate{
 		OldSha:       line.OldSha.String(),
 		NewSha:       line.NewSha.String(),
@@ -283,10 +298,6 @@ func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, o
 	}
 
 	if !line.NewSha.IsZero() {
-		repoPath, _, _, resolveErr := h.db.ResolveRepoDIDOnDisk(h.c.Repo.ScanPath, repoDid)
-		if resolveErr != nil {
-			return fmt.Errorf("failed to resolve repo on disk: %w", resolveErr)
-		}
 
 		gr, err := git.Open(repoPath, line.Ref)
 		if err != nil {
@@ -320,6 +331,104 @@ func (h *InternalHandle) insertRefUpdate(line git.PostReceiveLine, gitUserDid, o
 	}
 
 	return h.db.InsertEvent(event, h.n)
+}
+
+func hasVerboseCIPushOption(pushOptions []string) bool {
+	for _, opt := range pushOptions {
+		switch opt {
+		case "verbose-ci", "ci-verbose":
+			return true
+		}
+	}
+	return false
+}
+
+func (h *InternalHandle) emitCiDiagnostics(
+	clientMsgs *[]string,
+	line git.PostReceiveLine,
+	ownerDid string,
+	repoName string,
+	repoDid string,
+	repoPath string,
+	verbose bool,
+) error {
+	if line.NewSha.IsZero() {
+		return nil
+	}
+
+	gr, err := git.Open(repoPath, line.Ref)
+	if err != nil {
+		return fmt.Errorf("failed to open git repo at ref %s: %w", line.Ref, err)
+	}
+
+	workflowDir, err := gr.FileTree(context.Background(), workflow.WorkflowDir)
+	if err != nil {
+		return nil
+	}
+
+	var pipeline workflow.RawPipeline
+	for _, e := range workflowDir {
+		if !e.IsFile() {
+			continue
+		}
+
+		fpath := filepath.Join(workflow.WorkflowDir, e.Name)
+		contents, err := gr.RawContent(fpath)
+		if err != nil {
+			continue
+		}
+
+		pipeline = append(pipeline, workflow.RawWorkflow{
+			Name:     e.Name,
+			Contents: contents,
+		})
+	}
+
+	defaultBranch, _ := gr.FindMainBranch()
+
+	trigger := tangled.Pipeline_PushTriggerData{
+		Ref:    line.Ref,
+		OldSha: line.OldSha.String(),
+		NewSha: line.NewSha.String(),
+	}
+
+	triggerRepo := &tangled.Pipeline_TriggerRepo{
+		Did:           ownerDid,
+		Knot:          h.c.Server.Hostname,
+		Repo:          &repoName,
+		RepoDid:       &repoDid,
+		DefaultBranch: defaultBranch,
+	}
+
+	changedFiles, err := gr.ChangedFilesBetween(line.OldSha.String(), line.NewSha.String())
+	if err != nil {
+		return fmt.Errorf("getting changed files: %w", err)
+	}
+
+	compiler := workflow.Compiler{
+		Trigger: tangled.Pipeline_TriggerMetadata{
+			Kind: string(workflow.TriggerKindPush),
+			Push: &trigger,
+			Repo: triggerRepo,
+		},
+		ChangedFiles: changedFiles,
+	}
+
+	compiler.Compile(compiler.Parse(pipeline))
+
+	for _, e := range compiler.Diagnostics.Errors {
+		*clientMsgs = append(*clientMsgs, e.String())
+	}
+	if verbose {
+		if compiler.Diagnostics.IsEmpty() {
+			*clientMsgs = append(*clientMsgs, "success: pipeline compiled with no diagnostics")
+		}
+		for _, w := range compiler.Diagnostics.Warnings {
+			*clientMsgs = append(*clientMsgs, w.String())
+		}
+	}
+
+	return nil
 }
 
 func (h *InternalHandle) emitPullRequestLink(

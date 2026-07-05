@@ -427,6 +427,11 @@ func (s *Spindle) processKnotStream(ctx context.Context, src eventconsumer.Sourc
 			return fmt.Errorf("repo knot does not match event source: %s != %s", src.Host, repo.Knot)
 		}
 
+		if kgit.HasSkipCIPushOption(event.PushOptions) {
+			l.Info("push event requested ci skip, skipping the event")
+			return nil
+		}
+
 		// NOTE: we are blindly trusting the knot that it will return only repos it own
 		repoCloneUri := s.newRepoCloneUrl(src.Host, repoDid)
 		repoPath := s.newRepoPath(repoDid)

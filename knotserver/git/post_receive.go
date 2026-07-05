@@ -171,3 +171,12 @@ func (m RefUpdateMeta) AsRecord() tangled.GitRefUpdate_Meta {
 		},
 	}
 }
+func HasSkipCIPushOption(pushOptions []string) bool {
+	for _, opt := range pushOptions {
+		switch opt {
+		case "skip-ci", "ci-skip":
+			return true
+		}
+	}
+	return false
+}
