@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"time"
@@ -94,6 +95,30 @@ func NewBackgroundIndexScheduler(l *slog.Logger, cfg *config.Config, e *sql.DB, 
 			if err := db.InsertLanguages(ctx, e, repoId, commit.Hash, langs); err != nil {
 				return fmt.Errorf("failed to insert langs into db: %w", err)
 			}
+
+			// HACK(boltless): ping appview to update language cache.
+			go func() {
+				url := fmt.Sprintf("%s/%s", cfg.AppviewUrl, repoId.String())
+				pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				defer cancel()
+				req, err := http.NewRequestWithContext(pingCtx, http.MethodGet, url, nil)
+				if err != nil {
+					l.Warn("appview ping: build request failed", "err", err)
+					return
+				}
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					l.Warn("appview ping failed", "url", url, "err", err)
+					return
+				}
+				defer resp.Body.Close()
+				// drain body to ensure the appview completes rendering
+				if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+					l.Warn("appview ping: drain response failed", "url", url, "err", err)
+					return
+				}
+				l.Info("appview pinged", "url", url, "status", resp.StatusCode)
+			}()
 
 			return nil
 		},

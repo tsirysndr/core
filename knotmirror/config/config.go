@@ -8,6 +8,7 @@ import (
 )
 
 type Config struct {
+	AppviewUrl          string        `env:"MIRROR_APPVIEW_URL, default=https://tangled.org"`
 	PlcUrl              string        `env:"MIRROR_PLC_URL, default=https://plc.directory"`
 	TapUrl              string        `env:"MIRROR_TAP_URL, default=http://localhost:2480"`
 	DbUrl               string        `env:"MIRROR_DB_URL, required"`
