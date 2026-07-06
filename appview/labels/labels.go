@@ -89,7 +89,6 @@ func (l *Labels) PerformLabelOp(w http.ResponseWriter, r *http.Request) {
 	did := user.Did
 	rkey := tid.TID()
 	performedAt := time.Now()
-	indexedAt := time.Now()
 	repoAt := r.Form.Get("repo")
 	subjectUri := r.Form.Get("subject")
 
@@ -140,7 +139,6 @@ func (l *Labels) PerformLabelOp(w http.ResponseWriter, r *http.Request) {
 				OperandKey:   key,
 				OperandValue: val,
 				PerformedAt:  performedAt,
-				IndexedAt:    indexedAt,
 			})
 		}
 	}
@@ -160,7 +158,6 @@ func (l *Labels) PerformLabelOp(w http.ResponseWriter, r *http.Request) {
 				OperandKey:   key,
 				OperandValue: val,
 				PerformedAt:  performedAt,
-				IndexedAt:    indexedAt,
 			})
 		}
 	}
@@ -263,7 +260,7 @@ func (l *Labels) PerformLabelOp(w http.ResponseWriter, r *http.Request) {
 	defer rollback()
 
 	for _, o := range validLabelOps {
-		if _, err := db.AddLabelOp(l.db, &o); err != nil {
+		if _, err := db.AddLabelOp(tx, &o); err != nil {
 			fail("Failed to update labels. Try again later.", err)
 			return
 		}

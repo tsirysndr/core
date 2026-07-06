@@ -186,7 +186,6 @@ func GetLabelDefinition(e Execer, filters ...orm.Filter) (*models.LabelDefinitio
 }
 
 func AddLabelOp(e Execer, l *models.LabelOp) (int64, error) {
-	now := time.Now()
 	result, err := e.Exec(
 		`insert into label_ops (
 			did,
@@ -195,15 +194,13 @@ func AddLabelOp(e Execer, l *models.LabelOp) (int64, error) {
 			operation,
 			operand_key,
 			operand_value,
-			performed,
-			indexed
+			performed
 		)
-		values (?, ?, ?, ?, ?, ?, ?, ?)
+		values (?, ?, ?, ?, ?, ?, ?)
 		on conflict(did, rkey, subject, operand_key, operand_value) do update set
 			operation = excluded.operation,
 			operand_value = excluded.operand_value,
-			performed = excluded.performed,
-			indexed = excluded.indexed`,
+			performed = excluded.performed`,
 		l.Did,
 		l.Rkey,
 		l.Subject.String(),
@@ -211,7 +208,6 @@ func AddLabelOp(e Execer, l *models.LabelOp) (int64, error) {
 		l.OperandKey,
 		l.OperandValue,
 		l.PerformedAt.Format(time.RFC3339),
-		now.Format(time.RFC3339),
 	)
 	if err != nil {
 		return 0, err
@@ -223,7 +219,6 @@ func AddLabelOp(e Execer, l *models.LabelOp) (int64, error) {
 	}
 
 	l.Id = id
-	l.IndexedAt = now
 
 	return id, nil
 }
@@ -253,11 +248,10 @@ func GetLabelOps(e Execer, filters ...orm.Filter) ([]models.LabelOp, error) {
 			operation,
 			operand_key,
 			operand_value,
-			performed,
-			indexed
+			performed
 		from label_ops
 		%s
-		order by indexed
+		order by id
 		`,
 		whereClause,
 	)
@@ -270,7 +264,7 @@ func GetLabelOps(e Execer, filters ...orm.Filter) ([]models.LabelOp, error) {
 
 	for rows.Next() {
 		var labelOp models.LabelOp
-		var performedAt, indexedAt string
+		var performedAt string
 
 		if err := rows.Scan(
 			&labelOp.Id,
@@ -281,19 +275,13 @@ func GetLabelOps(e Execer, filters ...orm.Filter) ([]models.LabelOp, error) {
 			&labelOp.OperandKey,
 			&labelOp.OperandValue,
 			&performedAt,
-			&indexedAt,
 		); err != nil {
 			return nil, err
 		}
 
 		labelOp.PerformedAt, err = time.Parse(time.RFC3339, performedAt)
 		if err != nil {
-			labelOp.PerformedAt = time.Now()
-		}
-
-		labelOp.IndexedAt, err = time.Parse(time.RFC3339, indexedAt)
-		if err != nil {
-			labelOp.IndexedAt = time.Now()
+			labelOp.PerformedAt = time.Time{}
 		}
 
 		labelOps = append(labelOps, labelOp)

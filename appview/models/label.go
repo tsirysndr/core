@@ -307,7 +307,7 @@ func (l LabelDefinition) GetColor() string {
 func LabelDefinitionFromRecord(did, rkey string, record tangled.LabelDefinition) (*LabelDefinition, error) {
 	created, err := time.Parse(time.RFC3339, record.CreatedAt)
 	if err != nil {
-		created = time.Now()
+		created = time.Time{}
 	}
 
 	multiple := false
@@ -342,30 +342,14 @@ type LabelOp struct {
 	OperandKey   string
 	OperandValue string
 	PerformedAt  time.Time
-	IndexedAt    time.Time
 }
 
 func (l LabelOp) SortAt() time.Time {
-	createdAt := l.PerformedAt
-	indexedAt := l.IndexedAt
-
-	// if we don't have an indexedat, fall back to now
-	if indexedAt.IsZero() {
-		indexedAt = time.Now()
-	}
-
 	// if createdat is invalid (before epoch), treat as null -> return zero time
-	if createdAt.Before(time.UnixMicro(0)) {
+	if l.PerformedAt.Before(time.UnixMicro(0)) {
 		return time.Time{}
 	}
-
-	// if createdat is <= indexedat, use createdat
-	if createdAt.Before(indexedAt) || createdAt.Equal(indexedAt) {
-		return createdAt
-	}
-
-	// otherwise, createdat is in the future relative to indexedat -> use indexedat
-	return indexedAt
+	return l.PerformedAt
 }
 
 var _ Validator = new(LabelOp)
@@ -395,7 +379,7 @@ const (
 func LabelOpsFromRecord(did, rkey string, record tangled.LabelOp) []LabelOp {
 	performed, err := time.Parse(time.RFC3339, record.PerformedAt)
 	if err != nil {
-		performed = time.Now()
+		performed = time.Time{}
 	}
 
 	mkOp := func(operand *tangled.LabelOp_Operand) LabelOp {

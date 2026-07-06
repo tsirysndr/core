@@ -2421,6 +2421,11 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "drop-label-ops-indexed", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`alter table label_ops drop column indexed`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,
