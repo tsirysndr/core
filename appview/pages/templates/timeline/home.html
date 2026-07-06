@@ -20,7 +20,6 @@
     <meta name="description" content="The next-generation social coding platform. Host repositories on your infrastructure with knots, use stacked pull requests, and run CI with spindles." />
     <link rel="canonical" href="https://tangled.org" />
 
-    <!-- hls.js: play bluesky video embeds -->
     <script>
       document.addEventListener('DOMContentLoaded', () => {
         const videos = document.querySelectorAll('video[data-hls]');
@@ -30,7 +29,6 @@
           videos.forEach((video) => {
             const src = video.dataset.hls;
             if (video.canPlayType('application/vnd.apple.mpegurl')) {
-              // safari can play HLS natively
               video.src = src;
             } else if (window.Hls && Hls.isSupported()) {
               const hls = new Hls();
@@ -40,7 +38,6 @@
           });
         };
 
-        // only fetch hls.js when a browser actually needs it
         const needsHls = Array.from(videos).some(
           (v) => !v.canPlayType('application/vnd.apple.mpegurl')
         );
@@ -53,6 +50,20 @@
         script.src = '/static/hls.min.js';
         script.onload = attach;
         document.head.appendChild(script);
+      });
+    </script>
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('[data-bsky-carousel]').forEach(el => {
+          let maxRatio = 0;
+          el.querySelectorAll('img[data-aspect]').forEach(img => {
+            const [w, h] = img.dataset.aspect.split(':').map(Number);
+            if (h > 0) maxRatio = Math.max(maxRatio, w / h);
+          });
+          if (maxRatio > 0) {
+            el.style.height = Math.min(Math.round(el.clientWidth / maxRatio), 400) + 'px';
+          }
+        });
       });
     </script>
 {{ end }}
@@ -493,32 +504,49 @@
     <p class="text-gray-900 dark:text-gray-100 text-base leading-relaxed whitespace-pre-wrap">{{ .Text }}</p>
 
     {{ if .Embed }}
-      {{ if .Embed.EmbedImages_View }}
-        <div class="grid {{ if eq (len .Embed.EmbedImages_View.Images) 1 }}grid-cols-1{{ else if eq (len .Embed.EmbedImages_View.Images) 2 }}grid-cols-2{{ else }}grid-cols-2{{ end }} gap-2">
-          {{ range .Embed.EmbedImages_View.Images }}
-            <img src="{{ .Fullsize }}" alt="{{ .Alt }}" class="rounded w-full h-auto object-cover border border-gray-200 dark:border-gray-700" loading="lazy" />
+      {{ if .Embed.Images }}
+        {{ if eq (len .Embed.Images) 1 }}
+          {{ with index .Embed.Images 0 }}
+            <img src="{{ .Fullsize }}" alt="{{ .Alt }}"
+              class="rounded w-full h-auto object-cover border border-gray-200 dark:border-gray-700"
+              loading="lazy" />
           {{ end }}
-        </div>
-      {{ else if .Embed.EmbedExternal_View }}
-        <a href="{{ .Embed.EmbedExternal_View.External.Uri }}" target="_blank" rel="noopener noreferrer" class="hover:no-underline block border border-gray-200 dark:border-gray-700 rounded overflow-hidden hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-          {{ if .Embed.EmbedExternal_View.External.Thumb }}
-            <img src="{{ .Embed.EmbedExternal_View.External.Thumb }}" alt="" class="w-full h-48 object-cover" loading="lazy" />
+        {{ else }}
+          {{ $total := len .Embed.Images }}
+          <div class="flex overflow-x-auto gap-1.5 rounded"
+               style="scrollbar-width: none; -ms-overflow-style: none;"
+               data-bsky-carousel>
+            {{ range $i, $img := .Embed.Images }}
+              <div class="relative flex-shrink-0 h-full">
+                <img src="{{ $img.Fullsize }}" alt="{{ $img.Alt }}"
+                  class="h-full w-auto rounded object-cover border border-gray-200 dark:border-gray-700"
+                  loading="lazy"
+                  {{ if $img.AspectRatio }}data-aspect="{{ $img.AspectRatio.Width }}:{{ $img.AspectRatio.Height }}"{{ end }} />
+                <span class="absolute top-2 right-2 bg-black/60 text-white text-xs font-medium px-1.5 py-0.5 rounded pointer-events-none select-none tabular-nums">{{ add $i 1 }}/{{ $total }}</span>
+              </div>
+            {{ end }}
+          </div>
+        {{ end }}
+      {{ else if .Embed.External }}
+        <a href="{{ .Embed.External.Uri }}" target="_blank" rel="noopener noreferrer" class="hover:no-underline block border border-gray-200 dark:border-gray-700 rounded overflow-hidden hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+          {{ if .Embed.External.Thumb }}
+            <img src="{{ .Embed.External.Thumb }}" alt="" class="w-full h-48 object-cover" loading="lazy" />
           {{ end }}
           <div class="p-3">
-            <div class="font-medium text-gray-900 dark:text-gray-100 text-sm mb-1">{{ .Embed.EmbedExternal_View.External.Title }}</div>
-            <div class="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">{{ .Embed.EmbedExternal_View.External.Description }}</div>
-            <div class="text-xs text-gray-500 dark:text-gray-500 mt-1">{{ .Embed.EmbedExternal_View.External.Uri }}</div>
+            <div class="font-medium text-gray-900 dark:text-gray-100 text-sm mb-1">{{ .Embed.External.Title }}</div>
+            <div class="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">{{ .Embed.External.Description }}</div>
+            <div class="text-xs text-gray-500 dark:text-gray-500 mt-1">{{ .Embed.External.Uri }}</div>
           </div>
         </a>
-      {{ else if .Embed.EmbedVideo_View }}
+      {{ else if .Embed.Video }}
         <video
           class="rounded w-full h-auto max-h-[32rem] bg-black border border-gray-200 dark:border-gray-700"
           controls
           preload="none"
           playsinline
-          {{ with .Embed.EmbedVideo_View.Thumbnail }}poster="{{ . }}"{{ end }}
-          {{ with .Embed.EmbedVideo_View.Alt }}aria-label="{{ . }}"{{ end }}
-          data-hls="{{ .Embed.EmbedVideo_View.Playlist }}"
+          {{ with .Embed.Video.Thumbnail }}poster="{{ . }}"{{ end }}
+          {{ with .Embed.Video.Alt }}aria-label="{{ . }}"{{ end }}
+          data-hls="{{ .Embed.Video.Playlist }}"
         ></video>
       {{ end }}
     {{ end }}
