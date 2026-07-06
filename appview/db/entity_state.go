@@ -124,8 +124,16 @@ func UnparkStateRecord(tx *sql.Tx, did, rkey, nsid string) error {
 	return err
 }
 
-func DistinctPendingStateSubjects(e Execer) ([]syntax.ATURI, error) {
-	rows, err := e.Query(`select distinct subject from pending_state_records order by subject asc`)
+func distinctPendingSubjects(e Execer, nsid string) ([]syntax.ATURI, error) {
+	query := `select distinct subject from pending_state_records`
+	var args []any
+	if nsid != "" {
+		query += ` where nsid = ?`
+		args = append(args, nsid)
+	}
+	query += ` order by subject asc`
+
+	rows, err := e.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -142,13 +150,19 @@ func DistinctPendingStateSubjects(e Execer) ([]syntax.ATURI, error) {
 	return subjects, rows.Err()
 }
 
+func DistinctPendingStateSubjects(e Execer) ([]syntax.ATURI, error) {
+	return distinctPendingSubjects(e, "")
+}
+
+func PendingStateSubjectsForNsid(e Execer, nsid string) ([]syntax.ATURI, error) {
+	return distinctPendingSubjects(e, nsid)
+}
+
 func EvictStalePendingStateRecords(e Execer, before string) (int64, error) {
-	res, err := e.Exec(`
-		delete from pending_state_records
-		where created < ?
-		and not exists (select 1 from issues where at_uri = pending_state_records.subject)
-		and not exists (select 1 from pulls where at_uri = pending_state_records.subject)
-	`, before)
+	res, err := e.Exec(
+		`delete from pending_state_records where created < ?`,
+		before,
+	)
 	if err != nil {
 		return 0, err
 	}

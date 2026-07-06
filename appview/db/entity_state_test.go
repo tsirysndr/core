@@ -415,15 +415,15 @@ func TestEvictStalePendingStateRecords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EvictStalePendingStateRecords: %v", err)
 	}
-	if evicted != 1 {
-		t.Fatalf("only the stale orphan must be evicted, got %d want 1", evicted)
+	if evicted != 2 {
+		t.Fatalf("both stale rows must be evicted regardless of subject presence, got %d want 2", evicted)
 	}
 
 	var remaining int
 	if err := d.QueryRow(`select count(*) from pending_state_records`).Scan(&remaining); err != nil {
 		t.Fatalf("count: %v", err)
 	}
-	if remaining != 2 {
-		t.Fatalf("the fresh orphan and the stale row with a live subject must survive, got %d want 2", remaining)
+	if remaining != 1 {
+		t.Fatalf("only the fresh row must survive the TTL sweep, got %d want 1", remaining)
 	}
 }
