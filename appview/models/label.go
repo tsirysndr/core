@@ -1,6 +1,7 @@
 package models
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
@@ -551,6 +552,10 @@ func (c *LabelApplicationCtx) ApplyLabelOp(state LabelState, op LabelOp) error {
 		return nil
 	}
 
+	if op.Subject != "" && len(def.Scope) > 0 && !slices.Contains(def.Scope, op.Subject.Collection().String()) {
+		return nil
+	}
+
 	state.names[op.OperandKey] = def.Name
 
 	switch op.Operation {
@@ -601,10 +606,24 @@ func (c *LabelApplicationCtx) ApplyLabelOp(state LabelState, op LabelOp) error {
 	return nil
 }
 
+func labelOpRank(op LabelOperation) int {
+	if op == LabelOperationDel {
+		return 0
+	}
+	return 1
+}
+
 func (c *LabelApplicationCtx) ApplyLabelOps(state LabelState, ops []LabelOp) {
 	// sort label ops in sort order first
 	slices.SortFunc(ops, func(a, b LabelOp) int {
-		return a.SortAt().Compare(b.SortAt())
+		return cmp.Or(
+			a.SortAt().Compare(b.SortAt()),
+			cmp.Compare(a.Did, b.Did),
+			cmp.Compare(a.Rkey, b.Rkey),
+			cmp.Compare(labelOpRank(a.Operation), labelOpRank(b.Operation)),
+			cmp.Compare(a.OperandKey, b.OperandKey),
+			cmp.Compare(a.OperandValue, b.OperandValue),
+		)
 	})
 
 	// apply ops in sequence
