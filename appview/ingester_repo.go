@@ -250,7 +250,11 @@ func (i *Ingester) ingestRepoUpdate(ctx context.Context, e *jmodels.Event, l *sl
 	if err := applyRepoMetadata(tx, current, desired); err != nil {
 		return fmt.Errorf("failed to apply repo metadata: %w", err)
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (i *Ingester) ingestRepoDelete(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {

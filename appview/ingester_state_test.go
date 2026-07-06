@@ -2,6 +2,7 @@ package appview
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -41,21 +42,36 @@ func (s stubAcl) HasRepoPermissionErr(ctx context.Context, repo *models.Repo, us
 	return s.allow, s.err
 }
 
-func seedRepoAndIssue(t *testing.T, d *db.DB, ownerDid, repoDid, issueRkey string) syntax.ATURI {
+func seedTx(t *testing.T, d *db.DB, fn func(tx *sql.Tx) error) {
 	t.Helper()
 	tx, err := d.Begin()
 	if err != nil {
 		t.Fatalf("Begin: %v", err)
 	}
-	if err := db.AddRepo(tx, &models.Repo{
-		Did:     ownerDid,
-		Name:    "anemone",
-		Knot:    "knot.example",
-		Rkey:    "anemone",
-		RepoDid: repoDid,
-	}); err != nil {
-		t.Fatalf("AddRepo: %v", err)
+	defer tx.Rollback()
+	if err := fn(tx); err != nil {
+		t.Fatalf("seed: %v", err)
 	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+}
+
+func seedRepo(t *testing.T, d *db.DB, ownerDid, repoDid string) {
+	t.Helper()
+	seedTx(t, d, func(tx *sql.Tx) error {
+		return db.AddRepo(tx, &models.Repo{
+			Did:     ownerDid,
+			Name:    "anemone",
+			Knot:    "knot.example",
+			Rkey:    "anemone",
+			RepoDid: repoDid,
+		})
+	})
+}
+
+func seedIssue(t *testing.T, d *db.DB, ownerDid, repoDid, issueRkey string) syntax.ATURI {
+	t.Helper()
 	issue := &models.Issue{
 		Did:     ownerDid,
 		Rkey:    issueRkey,
@@ -64,13 +80,16 @@ func seedRepoAndIssue(t *testing.T, d *db.DB, ownerDid, repoDid, issueRkey strin
 		Body:    "body",
 		Open:    true,
 	}
-	if err := db.PutIssue(tx, issue); err != nil {
-		t.Fatalf("PutIssue: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("Commit: %v", err)
-	}
+	seedTx(t, d, func(tx *sql.Tx) error {
+		return db.PutIssue(tx, issue)
+	})
 	return issue.AtUri()
+}
+
+func seedRepoAndIssue(t *testing.T, d *db.DB, ownerDid, repoDid, issueRkey string) syntax.ATURI {
+	t.Helper()
+	seedRepo(t, d, ownerDid, repoDid)
+	return seedIssue(t, d, ownerDid, repoDid, issueRkey)
 }
 
 func issueStateEvent(t *testing.T, op, did, rkey, subject, state, createdAt string) *jmodels.Event {
@@ -194,7 +213,7 @@ func TestIngestState_DeleteUnparksBeforeSubjectArrives(t *testing.T) {
 	}
 
 	at := seedRepoAndIssue(t, ing.Db, owner, "did:plc:anemone", "issue1")
-	ing.drainPendingState(ctx, at, issueStateSpec, ing.Logger)
+	ing.drainPendingState(ctx, at, ing.Logger)
 	if !ingestedIssueOpen(t, ing.Db, at) {
 		t.Fatal("a deleted parked record must not apply after the subject arrives")
 	}
@@ -216,7 +235,7 @@ func TestIngestState_ParkedUnauthorizedDroppedOnDrain(t *testing.T) {
 	}
 
 	at := seedRepoAndIssue(t, ing.Db, owner, "did:plc:anemone", "issue1")
-	ing.drainPendingState(ctx, at, issueStateSpec, ing.Logger)
+	ing.drainPendingState(ctx, at, ing.Logger)
 
 	if !ingestedIssueOpen(t, ing.Db, at) {
 		t.Fatal("a parked record that fails authorization on drain must not apply")

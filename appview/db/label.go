@@ -223,6 +223,22 @@ func AddLabelOp(e Execer, l *models.LabelOp) (int64, error) {
 	return id, nil
 }
 
+func DeleteLabelOps(e Execer, filters ...orm.Filter) error {
+	var conditions []string
+	var args []any
+	for _, filter := range filters {
+		conditions = append(conditions, filter.Condition())
+		args = append(args, filter.Arg()...)
+	}
+	whereClause := ""
+	if conditions != nil {
+		whereClause = " where " + strings.Join(conditions, " and ")
+	}
+	query := fmt.Sprintf(`delete from label_ops %s`, whereClause)
+	_, err := e.Exec(query, args...)
+	return err
+}
+
 func GetLabelOps(e Execer, filters ...orm.Filter) ([]models.LabelOp, error) {
 	var labelOps []models.LabelOp
 	var conditions []string

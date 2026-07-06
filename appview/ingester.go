@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -1409,7 +1408,7 @@ func (i *Ingester) ingestIssue(ctx context.Context, e *jmodels.Event, l *slog.Lo
 			return err
 		}
 
-		i.drainPendingState(ctx, issue.AtUri(), issueStateSpec, l)
+		i.drainPendingState(ctx, issue.AtUri(), l)
 
 		l.Info("ingested record")
 		return nil
@@ -1576,7 +1575,7 @@ func (i *Ingester) ingestPull(ctx context.Context, e *jmodels.Event, l *slog.Log
 			return err
 		}
 
-		i.drainPendingState(ctx, pull.AtUri(), pullStatusSpec, l)
+		i.drainPendingState(ctx, pull.AtUri(), l)
 
 		l.Info("ingested record")
 		return nil
@@ -1815,20 +1814,44 @@ func (i *Ingester) parkStateRecord(ctx context.Context, did, rkey, nsid string, 
 		return err
 	}
 
-	l.Info("parked state record for retry", "subject", subject)
+	l.Info("parked record for retry", "subject", subject, "nsid", nsid)
 	return nil
 }
 
-func (i *Ingester) drainPendingState(ctx context.Context, subject syntax.ATURI, spec stateIngestSpec, l *slog.Logger) {
+func (i *Ingester) drainPendingState(ctx context.Context, subject syntax.ATURI, l *slog.Logger) {
 	pending, err := db.PendingStateRecordsForSubject(i.Db, subject)
 	if err != nil {
-		l.Error("failed to load pending state records", "err", err, "subject", subject)
+		l.Error("failed to load pending records", "err", err, "subject", subject)
 		return
 	}
 	for _, p := range pending {
-		if err := i.applyStateRecord(ctx, p.Did, p.Rkey, p.Nsid, p.Record, spec, l); err != nil {
-			l.Error("failed to drain pending state record", "err", err, "did", p.Did, "rkey", p.Rkey)
+		if err := i.reapplyPendingRecord(ctx, p, l); err != nil {
+			l.Error("failed to drain pending record", "err", err, "did", p.Did, "rkey", p.Rkey, "nsid", p.Nsid)
 		}
+	}
+}
+
+func (i *Ingester) drainPendingLabelOps(l *slog.Logger) {
+	subjects, err := db.PendingStateSubjectsForNsid(i.Db, tangled.LabelOpNSID)
+	if err != nil {
+		l.Error("failed to list pending label op subjects", "err", err)
+		return
+	}
+	for _, subject := range subjects {
+		i.drainPendingState(i.Ctx, subject, l)
+	}
+}
+
+func (i *Ingester) reapplyPendingRecord(ctx context.Context, p db.PendingStateRecord, l *slog.Logger) error {
+	switch p.Nsid {
+	case tangled.RepoIssueStateNSID:
+		return i.applyStateRecord(ctx, p.Did, p.Rkey, p.Nsid, p.Record, issueStateSpec, l)
+	case tangled.RepoPullStatusNSID:
+		return i.applyStateRecord(ctx, p.Did, p.Rkey, p.Nsid, p.Record, pullStatusSpec, l)
+	case tangled.LabelOpNSID:
+		return i.applyLabelOpRecord(ctx, p.Did, p.Rkey, p.Record, l)
+	default:
+		return fmt.Errorf("no reapply handler for parked nsid: %s", p.Nsid)
 	}
 }
 
@@ -1836,17 +1859,6 @@ const (
 	pendingStateReconcileInterval = time.Hour
 	pendingStateRecordTTL         = 7 * 24 * time.Hour
 )
-
-func stateSpecForSubject(subject syntax.ATURI) (stateIngestSpec, bool) {
-	switch string(subject.Collection()) {
-	case tangled.RepoIssueNSID:
-		return issueStateSpec, true
-	case tangled.RepoPullNSID:
-		return pullStatusSpec, true
-	default:
-		return stateIngestSpec{}, false
-	}
-}
 
 func (i *Ingester) StartPendingStateReconciler() {
 	i.ReconcilePendingState()
@@ -1871,11 +1883,7 @@ func (i *Ingester) ReconcilePendingState() {
 		l.Error("failed to list pending state subjects", "err", err)
 	}
 	for _, subject := range subjects {
-		spec, ok := stateSpecForSubject(subject)
-		if !ok {
-			continue
-		}
-		i.drainPendingState(i.Ctx, subject, spec, l)
+		i.drainPendingState(i.Ctx, subject, l)
 	}
 
 	cutoff := time.Now().Add(-pendingStateRecordTTL).UTC().Format(time.RFC3339)
@@ -2081,6 +2089,10 @@ func (i *Ingester) ingestLabelDefinition(e *jmodels.Event, l *slog.Logger) error
 			return fmt.Errorf("failed to create labeldef: %w", err)
 		}
 
+		if e.Commit.Operation == jmodels.CommitOperationCreate {
+			i.drainPendingLabelOps(l)
+		}
+
 		l.Info("ingested record")
 		return nil
 
@@ -2101,92 +2113,142 @@ func (i *Ingester) ingestLabelDefinition(e *jmodels.Event, l *slog.Logger) error
 }
 
 func (i *Ingester) ingestLabelOp(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {
+	l = l.With("handler", "ingestLabelOp")
 	did := e.Did
 	rkey := e.Commit.RKey
 
-	var err error
-
-	l = l.With("handler", "ingestLabelOp")
-
 	switch e.Commit.Operation {
-	case jmodels.CommitOperationCreate:
-		raw := json.RawMessage(e.Commit.Record)
-		record := tangled.LabelOp{}
-		err = json.Unmarshal(raw, &record)
-		if err != nil {
-			return fmt.Errorf("invalid record: %w", err)
-		}
-
-		subject := syntax.ATURI(record.Subject)
-		collection := subject.Collection()
-
-		var repo *models.Repo
-		switch collection {
-		case tangled.RepoIssueNSID:
-			i, err := db.GetIssues(i.Db, orm.FilterEq("at_uri", subject))
-			if err != nil || len(i) != 1 {
-				return fmt.Errorf("failed to find subject: %w || subject count %d", err, len(i))
-			}
-			repo = i[0].Repo
-		case tangled.RepoPullNSID:
-			p, err := db.GetPulls(i.Db, orm.FilterEq("at_uri", subject))
-			if err != nil || len(p) != 1 {
-				return fmt.Errorf("failed to find subject: %w || subject count %d", err, len(p))
-			}
-			repo = p[0].Repo
-		default:
-			return fmt.Errorf("unsupported label subject: %s", collection)
-		}
-
-		actx, err := db.NewLabelApplicationCtx(i.Db, orm.FilterIn("at_uri", repo.Labels))
-		if err != nil {
-			return fmt.Errorf("failed to build label application ctx: %w", err)
-		}
-
-		ops := models.LabelOpsFromRecord(did, rkey, record)
-
-		for _, o := range ops {
-			def, ok := actx.Defs[o.OperandKey]
-			if !ok {
-				return fmt.Errorf("failed to find label def for key: %s, expected: %q", o.OperandKey, slices.Collect(maps.Keys(actx.Defs)))
-			}
-			// validate permissions: only collaborators can apply labels currently
-			//
-			// TODO: introduce a repo:triage permission
-			allowed, permErr := i.Acl.HasRepoPermissionErr(ctx, repo, o.Did, "repo:push")
-			if permErr != nil {
-				if !errors.Is(permErr, knotacl.ErrKnotUnreachable) {
-					return fmt.Errorf("enforcing permission: %w", permErr)
-				}
-				l.Warn("ingesting labelop without permission check", "did", o.Did, "err", permErr)
-			} else if !allowed {
-				return fmt.Errorf("unauthorized label operation")
-			}
-
-			if err := def.ValidateOperandValue(&o); err != nil {
-				return fmt.Errorf("failed to validate labelop: %w", err)
-			}
-		}
-
-		tx, err := i.Db.Begin()
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
-
-		for _, o := range ops {
-			_, err = db.AddLabelOp(tx, &o)
-			if err != nil {
-				return fmt.Errorf("failed to add labelop: %w", err)
-			}
-		}
-
-		if err = tx.Commit(); err != nil {
-			return err
-		}
-
-		l.Info("ingested record")
+	case jmodels.CommitOperationCreate, jmodels.CommitOperationUpdate:
+		return i.applyLabelOpRecord(ctx, did, rkey, e.Commit.Record, l)
+	case jmodels.CommitOperationDelete:
+		return i.deleteLabelOpRecord(ctx, did, rkey, l)
 	}
 
+	return nil
+}
+
+func (i *Ingester) findLabelSubjectRepo(subject syntax.ATURI) (*models.Repo, bool, error) {
+	var spec stateIngestSpec
+	switch subject.Collection() {
+	case tangled.RepoIssueNSID:
+		spec = issueStateSpec
+	case tangled.RepoPullNSID:
+		spec = pullStatusSpec
+	default:
+		return nil, false, fmt.Errorf("unsupported label subject: %s", subject.Collection())
+	}
+	repo, _, found, err := spec.findSubject(i.Db, subject)
+	return repo, found, err
+}
+
+func (i *Ingester) applyLabelOpRecord(ctx context.Context, did, rkey string, raw []byte, l *slog.Logger) error {
+	record := tangled.LabelOp{}
+	if err := json.Unmarshal(raw, &record); err != nil {
+		return fmt.Errorf("invalid record: %w", err)
+	}
+
+	subject := syntax.ATURI(record.Subject)
+	park := func() error {
+		return i.parkStateRecord(ctx, did, rkey, tangled.LabelOpNSID, subject, raw, l)
+	}
+
+	repo, found, err := i.findLabelSubjectRepo(subject)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return park()
+	}
+
+	// validate permissions: only collaborators can apply labels currently
+	//
+	// TODO: introduce a repo:triage permission
+	allowed, permErr := i.Acl.HasRepoPermissionErr(ctx, repo, did, "repo:push")
+	if permErr != nil {
+		if !errors.Is(permErr, knotacl.ErrKnotUnreachable) {
+			return park()
+		}
+		l.Warn("ingesting labelop without permission check", "did", did, "err", permErr)
+		allowed = true
+	}
+
+	if !allowed {
+		if err := i.unparkLabelOp(ctx, did, rkey); err != nil {
+			return err
+		}
+		l.Warn("dropped unauthorized label op", "did", did, "rkey", rkey, "subject", subject)
+		return nil
+	}
+
+	ops := models.LabelOpsFromRecord(did, rkey, record)
+
+	operandKeys := make([]string, 0, len(ops))
+	for idx := range ops {
+		operandKeys = append(operandKeys, ops[idx].OperandKey)
+	}
+
+	actx, err := db.NewLabelApplicationCtx(i.Db, orm.FilterIn("at_uri", operandKeys))
+	if err != nil {
+		return fmt.Errorf("failed to build label application ctx: %w", err)
+	}
+
+	for idx := range ops {
+		def, ok := actx.Defs[ops[idx].OperandKey]
+		if !ok {
+			return park()
+		}
+		if err := def.ValidateOperandValue(&ops[idx]); err != nil {
+			return fmt.Errorf("failed to validate labelop: %w", err)
+		}
+	}
+
+	if err := i.materializeLabelOps(ctx, did, rkey, ops); err != nil {
+		return err
+	}
+
+	l.Info("ingested record")
+	return nil
+}
+
+func (i *Ingester) unparkLabelOp(ctx context.Context, did, rkey string) error {
+	tx, err := i.Db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := db.UnparkStateRecord(tx, did, rkey, tangled.LabelOpNSID); err != nil {
+		return fmt.Errorf("failed to unpark label op: %w", err)
+	}
+
+	return tx.Commit()
+}
+
+func (i *Ingester) materializeLabelOps(ctx context.Context, did, rkey string, ops []models.LabelOp) error {
+	tx, err := i.Db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := db.UnparkStateRecord(tx, did, rkey, tangled.LabelOpNSID); err != nil {
+		return fmt.Errorf("failed to unpark label op: %w", err)
+	}
+	if err := db.DeleteLabelOps(tx, orm.FilterEq("did", did), orm.FilterEq("rkey", rkey)); err != nil {
+		return fmt.Errorf("failed to clear prior label ops: %w", err)
+	}
+	for idx := range ops {
+		if _, err := db.AddLabelOp(tx, &ops[idx]); err != nil {
+			return fmt.Errorf("failed to add labelop: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
+func (i *Ingester) deleteLabelOpRecord(ctx context.Context, did, rkey string, l *slog.Logger) error {
+	if err := i.materializeLabelOps(ctx, did, rkey, nil); err != nil {
+		return err
+	}
+	l.Info("ingested record")
 	return nil
 }
