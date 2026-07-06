@@ -1,10 +1,8 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
-
-	apibsky "github.com/bluesky-social/indigo/api/bsky"
-	"github.com/bluesky-social/indigo/atproto/syntax"
 )
 
 type BskyPost struct {
@@ -14,66 +12,41 @@ type BskyPost struct {
 	CreatedAt   time.Time
 	Langs       []string
 	Tags        []string
-	Embed       *apibsky.FeedDefs_PostView_Embed
-	Facets      []*apibsky.RichtextFacet
-	Labels      *apibsky.FeedPost_Labels
-	Reply       *apibsky.FeedPost_ReplyRef
+	Embed       *PostEmbed
+	Facets      json.RawMessage
 	LikeCount   int64
 	ReplyCount  int64
 	RepostCount int64
 	QuoteCount  int64
 }
 
-func NewBskyPostFromView(postView *apibsky.FeedDefs_PostView) (*BskyPost, error) {
-	atUri, err := syntax.ParseATURI(postView.Uri)
-	if err != nil {
-		return nil, err
-	}
+type PostEmbed struct {
+	Images   []PostImage   `json:"images,omitempty"`
+	External *PostExternal `json:"external,omitempty"`
+	Video    *PostVideo    `json:"video,omitempty"`
+}
 
-	// decode the record to get FeedPost
-	feedPost, ok := postView.Record.Val.(*apibsky.FeedPost)
-	if !ok {
-		return nil, err
-	}
+type AspectRatio struct {
+	Width  int64 `json:"width"`
+	Height int64 `json:"height"`
+}
 
-	createdAt, err := time.Parse(time.RFC3339, feedPost.CreatedAt)
-	if err != nil {
-		return nil, err
-	}
+type PostImage struct {
+	Fullsize    string       `json:"fullsize"`
+	Thumb       string       `json:"thumb"`
+	Alt         string       `json:"alt"`
+	AspectRatio *AspectRatio `json:"aspectRatio,omitempty"`
+}
 
-	var likeCount, replyCount, repostCount, quoteCount int64
-	if postView.LikeCount != nil {
-		likeCount = *postView.LikeCount
-	}
-	if postView.ReplyCount != nil {
-		replyCount = *postView.ReplyCount
-	}
-	if postView.RepostCount != nil {
-		repostCount = *postView.RepostCount
-	}
-	if postView.QuoteCount != nil {
-		quoteCount = *postView.QuoteCount
-	}
+type PostExternal struct {
+	Uri         string `json:"uri"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Thumb       string `json:"thumb"`
+}
 
-	post := &BskyPost{
-		Rkey:        atUri.RecordKey().String(),
-		Text:        feedPost.Text,
-		CreatedAt:   createdAt,
-		Langs:       feedPost.Langs,
-		Tags:        feedPost.Tags,
-		Embed:       postView.Embed,
-		Facets:      feedPost.Facets,
-		Labels:      feedPost.Labels,
-		Reply:       feedPost.Reply,
-		LikeCount:   likeCount,
-		ReplyCount:  replyCount,
-		RepostCount: repostCount,
-		QuoteCount:  quoteCount,
-	}
-
-	if author := postView.Author; author != nil {
-		post.AuthorDid = author.Did
-	}
-
-	return post, nil
+type PostVideo struct {
+	Playlist  string `json:"playlist"`
+	Thumbnail string `json:"thumbnail"`
+	Alt       string `json:"alt"`
 }

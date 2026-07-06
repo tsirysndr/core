@@ -29,7 +29,7 @@ func InsertBlueskyPosts(e Execer, posts []models.BskyPost) error {
 			langsJSON, _ = json.Marshal(post.Langs)
 		}
 		if len(post.Facets) > 0 {
-			facetsJSON, _ = json.Marshal(post.Facets)
+			facetsJSON = post.Facets // already raw JSON bytes
 		}
 		if post.Embed != nil {
 			embedJSON, _ = json.Marshal(post.Embed)
@@ -109,7 +109,8 @@ func GetBlueskyPosts(e Execer, limit int) ([]models.BskyPost, error) {
 			json.Unmarshal([]byte(facets.V), &post.Facets)
 		}
 		if embed.Valid && embed.V != "" {
-			json.Unmarshal([]byte(embed.V), &post.Embed)
+			post.Embed = new(models.PostEmbed)
+			json.Unmarshal([]byte(embed.V), post.Embed)
 		}
 
 		posts = append(posts, post)
