@@ -46,6 +46,25 @@ func (w WorkflowStatus) Error() string {
 	return *w.CiPipeline_Workflow.Error
 }
 
+func (w WorkflowStatus) ErrorMessage() string {
+	line, _, _ := strings.Cut(w.Error(), "\n")
+	return line
+}
+
+func (w WorkflowStatus) ErrorDetails() string {
+	_, rest, _ := strings.Cut(w.Error(), "\n")
+	if rest == "" {
+		return ""
+	}
+
+	const truncateTo = 15
+	lines := strings.Split(rest, "\n")
+	if len(lines) <= truncateTo {
+		return rest
+	}
+	return strings.Join(lines[:truncateTo], "\n") + "\n…"
+}
+
 func (w WorkflowStatus) Status() StatusKind {
 	if w.CiPipeline_Workflow == nil {
 		return ""
