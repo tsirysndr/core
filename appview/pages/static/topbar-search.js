@@ -137,6 +137,15 @@
         if (container && !container.contains(target)) clearDesktop();
     });
 
+    // desktop: keep the input focused when a result is clicked.
+    // Safari does not move focus to links/buttons on click, so mousedown would
+    // blur the input, fire focusout with a null relatedTarget, and clear the
+    // results before the click lands. Preventing the mousedown default keeps
+    // focus on the input while the click still navigates via the href.
+    document.addEventListener("mousedown", (e) => {
+        if ($("topbar-search-results")?.contains(e.target)) e.preventDefault();
+    });
+
     // desktop: defer so a click on a result fires before results are cleared
     document.addEventListener("focusout", ({ target, relatedTarget }) => {
         const container = $("topbar-search-container");
