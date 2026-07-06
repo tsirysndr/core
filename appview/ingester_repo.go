@@ -101,6 +101,9 @@ func (i *Ingester) ingestRepoCreate(ctx context.Context, e *jmodels.Event, l *sl
 		if err := db.RecordRepoRename(tx, e.Did, prev.Rkey, repoDid); err != nil {
 			return fmt.Errorf("failed to record rename history: %w", err)
 		}
+		if err := db.DeleteRepoRename(tx, e.Did, strings.ToLower(newName)); err != nil {
+			return fmt.Errorf("failed to clear colliding rename alias: %w", err)
+		}
 
 		renamed := *prev
 		renamed.Rkey = e.Commit.RKey
@@ -159,6 +162,9 @@ func (i *Ingester) ingestRepoCreate(ctx context.Context, e *jmodels.Event, l *sl
 
 	if err := db.AddRepo(tx, repo); err != nil {
 		return fmt.Errorf("failed to insert repo: %w", err)
+	}
+	if err := db.DeleteRepoRename(tx, e.Did, strings.ToLower(repo.Slug())); err != nil {
+		return fmt.Errorf("failed to clear colliding rename alias: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit insert tx: %w", err)

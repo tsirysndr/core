@@ -807,3 +807,55 @@ func TestIngestRepo_UpdateRejectsRepoDidMutation(t *testing.T) {
 		t.Errorf("metadata from repoDid-mutating update applied: %+v", akshay)
 	}
 }
+
+func renameAliasExists(t *testing.T, ing *Ingester, ownerDid, oldRkey string) bool {
+	t.Helper()
+	var n int
+	if err := ing.Db.QueryRow(
+		`select count(*) from repo_renames where owner_did = ? and old_rkey = ?`,
+		ownerDid, oldRkey,
+	).Scan(&n); err != nil {
+		t.Fatalf("count repo_renames %q: %v", oldRkey, err)
+	}
+	return n > 0
+}
+
+func TestIngestRepo_RenameClearsCollidingAlias(t *testing.T) {
+	ing, _ := newTestIngester(t)
+	seedRepoRow(t, ing, "did:plc:akshay", "knot.example", "anemone-old", "anemone-old", "did:plc:anemone")
+	if err := db.RecordRepoRename(ing.Db, "did:plc:akshay", "anemone", "did:plc:anemone"); err != nil {
+		t.Fatalf("RecordRepoRename: %v", err)
+	}
+
+	e := makeEvent(t, jmodels.CommitOperationCreate, "did:plc:akshay", "3mpxmsvicr2zn", tangled.Repo{
+		Knot: "knot.example", Name: ptr("anemone"), RepoDid: ptr("did:plc:anemone"),
+	})
+	if err := ingestAcceptingOwner(t, ing, e); err != nil {
+		t.Fatalf("ingestRepo: %v", err)
+	}
+
+	if renameAliasExists(t, ing, "did:plc:akshay", "anemone") {
+		t.Error("alias equal to the new live slug must be cleared to avoid a self-redirect loop")
+	}
+	if !renameAliasExists(t, ing, "did:plc:akshay", "anemone-old") {
+		t.Error("alias for the prior slug must be recorded and survive")
+	}
+}
+
+func TestIngestRepo_InsertClearsCollidingAlias(t *testing.T) {
+	ing, _ := newTestIngester(t)
+	if err := db.RecordRepoRename(ing.Db, "did:plc:akshay", "clam", "did:plc:clams-former-repo"); err != nil {
+		t.Fatalf("RecordRepoRename: %v", err)
+	}
+
+	e := makeEvent(t, jmodels.CommitOperationCreate, "did:plc:akshay", "3mpxmfgowwck3", tangled.Repo{
+		Knot: "knot.example", Name: ptr("clam"), RepoDid: ptr("did:plc:clam-repo"),
+	})
+	if err := ingestAcceptingOwner(t, ing, e); err != nil {
+		t.Fatalf("ingestRepo: %v", err)
+	}
+
+	if renameAliasExists(t, ing, "did:plc:akshay", "clam") {
+		t.Error("stale alias must be cleared when a live repo claims that slug")
+	}
+}

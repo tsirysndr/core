@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -287,9 +288,12 @@ func (mw Middleware) ResolveRepo() middlewareFunc {
 				if id.Handle.IsInvalidHandle() || handle == "" {
 					handle = id.DID.String()
 				}
-				target := reporesolver.CanonicalRedirectTarget(req, reporesolver.CanonicalRepoPath(handle, repo))
-				http.Redirect(w, req, target, http.StatusMovedPermanently)
-				return
+				canonical := reporesolver.CanonicalRepoPath(handle, repo)
+				if path.Join(chi.URLParam(req, "user"), repoName) != canonical {
+					target := reporesolver.CanonicalRedirectTarget(req, canonical)
+					http.Redirect(w, req, target, http.StatusMovedPermanently)
+					return
+				}
 			}
 
 			ctx := context.WithValue(req.Context(), "repo", repo)
