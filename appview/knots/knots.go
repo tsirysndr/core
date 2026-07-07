@@ -286,12 +286,13 @@ func (k *Knots) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = db.RemoveReposByKnot(tx, domain)
-	if err != nil {
-		l.Error("failed to delete repos", "err", err)
-		fail()
-		return
-	}
+	l.Error("attempt to delete repos by knot", "knot", domain)
+	// err = db.RemoveReposByKnot(tx, domain)
+	// if err != nil {
+	// 	l.Error("failed to delete repos", "err", err)
+	// 	fail()
+	// 	return
+	// }
 
 	// delete from enforcer if it was registered
 	if registration.Registered != nil {

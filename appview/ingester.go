@@ -1223,10 +1223,11 @@ func (i *Ingester) ingestKnot(ctx context.Context, e *jmodels.Event, l *slog.Log
 			return fmt.Errorf("failed to delete knot: %w", err)
 		}
 
-		err = db.RemoveReposByKnot(tx, domain)
-		if err != nil {
-			return fmt.Errorf("failed to remove repos by knot: %w", err)
-		}
+		l.Error("attempt to delete repos by knot", "knot", domain)
+		// err = db.RemoveReposByKnot(tx, domain)
+		// if err != nil {
+		// 	return fmt.Errorf("failed to remove repos by knot: %w", err)
+		// }
 
 		if registration.Registered != nil {
 			err = i.Enforcer.RemoveKnot(domain)

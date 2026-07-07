@@ -575,11 +575,6 @@ func RemoveRepo(e Execer, did, rkey string) error {
 	return err
 }
 
-func RemoveReposByKnot(e Execer, knot string) error {
-	_, err := e.Exec(`delete from repos where knot = ?`, knot)
-	return err
-}
-
 func GetRepoSource(e Execer, repoDid string) (string, error) {
 	var nullableSource sql.NullString
 	err := e.QueryRow(`select source from repos where repo_did = ?`, repoDid).Scan(&nullableSource)
