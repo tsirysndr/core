@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -554,8 +553,7 @@ func (t *Tap) fetchLatestSubmission(ctx context.Context, did, rkey string, recor
 	}
 	defer blobResp.Body.Close()
 
-	blob := io.ReadCloser(blobResp.Body)
-	latestSubmission, err := avmodels.PullSubmissionFromRecord(did, rkey, roundNumber, round, &blob)
+	latestSubmission, err := avmodels.PullSubmissionFromRecord(did, rkey, roundNumber, round, blobResp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse submission: %w", err)
 	}

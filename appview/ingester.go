@@ -1,6 +1,7 @@
 package appview
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -12,7 +13,6 @@ import (
 	"net/url"
 	"slices"
 	"strings"
-	"sync"
 
 	"time"
 
@@ -1474,8 +1474,7 @@ func (i *Ingester) ingestPull(ctx context.Context, e *jmodels.Event, l *slog.Log
 		}
 
 		// go through and fetch all blobs in parallel
-		readers := make([]*io.ReadCloser, len(record.Rounds))
-		var mu sync.Mutex
+		blobs := make([]io.Reader, len(record.Rounds))
 
 		g, gctx := errgroup.WithContext(ctx)
 
@@ -1505,33 +1504,23 @@ func (i *Ingester) ingestPull(ctx context.Context, e *jmodels.Event, l *slog.Log
 					l.Error("failed to make request")
 					return err
 				}
+				defer resp.Body.Close()
 
-				mu.Lock()
-				readers[idx] = &resp.Body
-				mu.Unlock()
+				var buf bytes.Buffer
+				if _, err := io.Copy(&buf, io.LimitReader(resp.Body, 16<<20)); err != nil {
+					return fmt.Errorf("failed to read blob in round %d: %w", idx, err)
+				}
+				blobs[idx] = &buf
 
 				return nil
 			})
 		}
 
 		if err := g.Wait(); err != nil {
-			for _, r := range readers {
-				if r != nil && *r != nil {
-					(*r).Close()
-				}
-			}
 			return err
 		}
 
-		defer func() {
-			for _, r := range readers {
-				if r != nil && *r != nil {
-					(*r).Close()
-				}
-			}
-		}()
-
-		pull, err := models.PullFromRecord(did, rkey, record, readers)
+		pull, err := models.PullFromRecord(did, rkey, record, blobs)
 		if err != nil {
 			return fmt.Errorf("failed to parse pull from record: %w", err)
 		}

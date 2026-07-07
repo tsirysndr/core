@@ -158,7 +158,7 @@ func (pull *Pull) Validate() error {
 	return nil
 }
 
-func PullFromRecord(did, rkey string, record tangled.RepoPull, blobs []*io.ReadCloser) (*Pull, error) {
+func PullFromRecord(did, rkey string, record tangled.RepoPull, blobs []io.Reader) (*Pull, error) {
 	created, err := time.Parse(time.RFC3339, record.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("invalid createdAt: %w", err)
@@ -213,7 +213,7 @@ func PullFromRecord(did, rkey string, record tangled.RepoPull, blobs []*io.ReadC
 
 	var submissions []*PullSubmission
 	for i, s := range record.Rounds {
-		var blob *io.ReadCloser
+		var blob io.Reader
 		if i < len(blobs) {
 			blob = blobs[i]
 		}
@@ -239,7 +239,7 @@ func PullFromRecord(did, rkey string, record tangled.RepoPull, blobs []*io.ReadC
 	}, nil
 }
 
-func PullSubmissionFromRecord(did, rkey string, roundNumber int, round *tangled.RepoPull_Round, blob *io.ReadCloser) (*PullSubmission, error) {
+func PullSubmissionFromRecord(did, rkey string, roundNumber int, round *tangled.RepoPull_Round, blob io.Reader) (*PullSubmission, error) {
 	created, err := time.Parse(time.RFC3339, round.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("invalid createdAt: %w", err)
@@ -247,7 +247,7 @@ func PullSubmissionFromRecord(did, rkey string, roundNumber int, round *tangled.
 
 	var patch, sourceRev string
 	if blob != nil {
-		p, err := extractGzip(*blob)
+		p, err := extractGzip(blob)
 		if err != nil {
 			return nil, fmt.Errorf("failed to extract gzip: %w", err)
 		}
