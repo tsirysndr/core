@@ -340,8 +340,11 @@ services:
       TANGLED_REDIS_ADDR: redis:6379
       TANGLED_KNOTMIRROR_URL: https://mirror.tngl.boltless.dev
       TANGLED_CODESEARCH_ZOEKT_URL: https://zoekt.tngl.boltless.dev
+      TANGLED_SSH_ENABLED: "true"
+      TANGLED_SSH_LISTEN_ADDR: "0.0.0.0:3333"
     ports:
       - "3000:3000"
+      - "3333:3333"
     volumes:
       - .:/src:cached
       - go-cache:/go/cache

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -46,6 +47,7 @@ func (p *Pipelines) Router(mw *middleware.Middleware) http.Handler {
 	r.Get("/{pipeline}/workflow/{workflow}/logs", p.Logs)
 	r.Group(func(r chi.Router) {
 		r.Use(mw.RepoPermissionMiddleware("repo:push"))
+		r.Post("/{pipeline}/cancel", p.CancelPipeline)
 		r.Post("/{pipeline}/workflow/{workflow}/cancel", p.CancelWorkflow)
 		r.Post("/{pipeline}/retry", p.RetryPipeline)
 		r.Post("/{pipeline}/workflow/{workflow}/retry", p.RetryWorkflow)
@@ -223,11 +225,23 @@ func (p *Pipelines) Workflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p.pages.Workflow(w, pages.WorkflowParams{
-		BaseParams: pages.BaseParamsFromContext(r.Context()),
-		RepoInfo:   p.repoResolver.GetRepoInfo(r, user),
-		Pipeline:   types.Pipeline{CiPipeline: out},
-		Workflow:   workflowName,
+		BaseParams:    pages.BaseParamsFromContext(r.Context()),
+		RepoInfo:      p.repoResolver.GetRepoInfo(r, user),
+		Pipeline:      types.Pipeline{CiPipeline: out},
+		Workflow:      workflowName,
+		SSHLogCommand: p.sshLogCommand(f.RepoDid, out.Commit),
 	})
+}
+
+func (p *Pipelines) sshLogCommand(repoDid, sha string) string {
+	if p.config == nil || !p.config.SSH.Enabled || sha == "" {
+		return ""
+	}
+	_, port, err := net.SplitHostPort(p.config.SSH.ListenAddr)
+	if err != nil || port == "" {
+		return ""
+	}
+	return fmt.Sprintf("ssh -t -p %s %s %s %s", port, p.config.Core.AppviewHost, repoDid, sha)
 }
 
 var upgrader = websocket.Upgrader{
@@ -479,21 +493,40 @@ func (p *Pipelines) Logs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (p *Pipelines) CancelPipeline(w http.ResponseWriter, r *http.Request) {
+	p.cancel(w, r, nil)
+}
+
 func (p *Pipelines) CancelWorkflow(w http.ResponseWriter, r *http.Request) {
-	l := p.logger.With("handler", "CancelWorkflow")
+	workflowName := chi.URLParam(r, "workflow")
+	if workflowName == "" {
+		p.logger.With("handler", "CancelWorkflow").Debug("empty workflow name")
+		p.pages.Error404(w)
+		return
+	}
+	p.cancel(w, r, []string{workflowName})
+}
+
+func (p *Pipelines) cancel(w http.ResponseWriter, r *http.Request, workflows []string) {
+	l := p.logger.With("handler", "cancel", "workflows", workflows)
 	errorId := "workflow-error"
+	target := "pipeline"
+	if len(workflows) == 1 {
+		target = "workflow"
+	}
+	fail := "Failed to cancel " + target
 
 	f, err := p.repoResolver.Resolve(r)
 	if err != nil {
 		l.Error("failed to get repo and knot", "err", err)
-		p.pages.Notice(w, errorId, "Failed to cancel workflow")
+		p.pages.Notice(w, errorId, fail)
 		return
 	}
 	l = l.With("repo", f.RepoDid)
 
 	if f.Spindle == "" {
 		l.Debug("spindle is empty")
-		p.pages.Notice(w, errorId, "Failed to cancel workflow")
+		p.pages.Notice(w, errorId, fail)
 		return
 	}
 
@@ -503,20 +536,12 @@ func (p *Pipelines) CancelWorkflow(w http.ResponseWriter, r *http.Request) {
 		p.pages.Error404(w)
 		return
 	}
-
-	workflowName := chi.URLParam(r, "workflow")
-	if workflowName == "" {
-		l.Debug("empty workflow name")
-		p.pages.Error404(w)
-		return
-	}
-
-	l = l.With("pipeline", pipelineId, "workflow", workflowName)
+	l = l.With("pipeline", pipelineId)
 
 	spindleClient, err := p.oauth.SpindleServiceClient(r, f.Spindle, tangled.CiCancelPipelineNSID)
 	if err != nil {
 		l.Error("failed to prepare spindle client", "err", err)
-		p.pages.Notice(w, errorId, "Failed to cancel workflow")
+		p.pages.Notice(w, errorId, fail)
 		return
 	}
 
@@ -526,14 +551,14 @@ func (p *Pipelines) CancelWorkflow(w http.ResponseWriter, r *http.Request) {
 		&tangled.CiCancelPipeline_Input{
 			Repo:      f.RepoDid,
 			Pipeline:  pipelineId.String(),
-			Workflows: []string{workflowName},
+			Workflows: workflows,
 		},
 	); err != nil {
-		l.Error("failed to cancel workflow", "err", err)
-		p.pages.Notice(w, errorId, "Failed to cancel workflow")
+		l.Error("failed to cancel pipeline", "err", err)
+		p.pages.Notice(w, errorId, fail)
 		return
 	}
-	l.Debug("canceled workflow")
+	l.Debug("canceled pipeline")
 }
 
 // RetryPipeline retries all workflows in a pipeline

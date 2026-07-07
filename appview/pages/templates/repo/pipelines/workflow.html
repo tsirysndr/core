@@ -6,112 +6,144 @@
     {{ template "repo/fragments/og" (dict "RepoInfo" .RepoInfo "Title" $title "Url" $url) }}
 {{ end }}
 
-{{ define "repoContent" }}
-<section class="w-full grid grid-cols-1 md:grid-cols-4 gap-2 mt-2">
-  <div class="col-span-1">
-    {{ block "sidebar" . }} {{ end }}
-  </div>
-  <div class="col-span-1 md:col-span-3">
-    {{ if $.RepoInfo.Roles.IsPushAllowed }}
-    {{ $status := (index .Pipeline.Statuses .Workflow).Latest.Status }}
-    <div class="flex justify-between items-center mb-2">
-      <button
-        class="btn group"
-        hx-post="/{{ $.RepoInfo.FullName }}/pipelines/{{ .Pipeline.Id }}/retry"
-        hx-swap="none"
-        hx-disabled-elt="this"
-        {{ if .Pipeline.InProgress -}}
-          disabled
-        {{- end }}
-      >
-        {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
-        <span class="group-[.htmx-request]:hidden">Retry pipeline</span>
-      </button>
-      <div class="flex items-center gap-2">
-        <div id="workflow-error" class="text-red-500 dark:text-red-400"></div>
-        <button
-          class="btn group"
-          hx-post="/{{ $.RepoInfo.FullName }}/pipelines/{{ .Pipeline.Id }}/workflow/{{ .Workflow }}/retry"
-          hx-swap="none"
-          hx-disabled-elt="this"
-          {{ if not $status.IsFinish -}}
-            disabled
-          {{- end }}
-        >
-          {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
-          <span class="group-[.htmx-request]:hidden">Retry workflow</span>
-        </button>
-        <button
-          class="btn group"
-          hx-post="/{{ $.RepoInfo.FullName }}/pipelines/{{ .Pipeline.Id }}/workflow/{{ .Workflow }}/cancel"
-          hx-swap="none"
-          hx-disabled-elt="this"
-          {{ if $status.IsFinish -}}
-            disabled
-          {{- end }}
-        >
-          {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
-          <span class="group-[.htmx-request]:hidden">Cancel</span>
-        </button>
-      </div>
+{{ define "repoContentLayout" }}
+<section class="w-full rounded bg-white py-4 pl-5 pr-8 dark:bg-gray-800">
+  <div class="grid grid-cols-1 gap-[14px] lg:grid-cols-[240px_minmax(0,1fr)]">
+    <div class="min-w-0">
+      {{ template "sidebar" . }}
     </div>
-    {{ end }}
-    {{ with (index .Pipeline.Statuses .Workflow).Latest }}
-      {{ if .Error }}
-      <div class="mb-2 flex items-start gap-2 p-3 rounded border border-red-200 dark:border-red-900/60 bg-red-50/60 dark:bg-red-950/20 text-red-700 dark:text-red-400 text-sm">
-        {{ i "triangle-alert" "size-4 shrink-0 mt-0.5" }}
-        <div class="flex-1 min-w-0">
-          <div class="break-words whitespace-pre-wrap">{{- .ErrorMessage -}}</div>
-          {{- with .ErrorDetails }}
-          <div class="font-mono break-words whitespace-pre-wrap">{{- . -}}</div>
-          {{- end }}
-        </div>
-      </div>
-      {{ end }}
-    {{ end }}
-    {{ block "logs" . }} {{ end }}
+    <div class="min-w-0">
+      {{ template "repoContent" . }}
+    </div>
   </div>
 </section>
 {{ template "fragments/workflow-timers" }}
 {{ end }}
 
+{{ define "repoContent" }}
+  {{ with (index .Pipeline.Statuses .Workflow).Latest }}
+    {{ if .Error }}
+    <div class="mb-4 flex items-start gap-2 rounded border border-red-200 bg-red-50/60 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-400">
+      {{ i "triangle-alert" "size-4 shrink-0 mt-0.5" }}
+      <div class="min-w-0 flex-1">
+        <div class="break-words whitespace-pre-wrap">{{- .ErrorMessage -}}</div>
+        {{- with .ErrorDetails }}
+        <div class="break-words whitespace-pre-wrap font-mono">{{- . -}}</div>
+        {{- end }}
+      </div>
+    </div>
+    {{ end }}
+  {{ end }}
+  {{ template "logs" . }}
+{{ end }}
+
 {{ define "sidebar" }}
   {{ $active := .Workflow }}
 
-  {{ $activeTab := "bg-white dark:bg-gray-700 drop-shadow-sm" }}
-  {{ $inactiveTab := "bg-gray-100 dark:bg-gray-800" }}
-
   {{ with .Pipeline }}
     {{ $id := .Id }}
-    <div class="sticky top-2 grid grid-cols-1 rounded border border-gray-200 dark:border-gray-700 divide-y divide-gray-200 dark:divide-gray-700">
-      {{ range $name, $all := .Statuses }}
-      <a href="/{{ $.RepoInfo.FullName }}/pipelines/{{ $id }}/workflow/{{ $name }}" class="no-underline hover:no-underline hover:bg-gray-100/25 hover:dark:bg-gray-700/25">
+    {{ $pipeline := . }}
+    <div class="sticky top-2 flex h-full min-h-[398px] w-full flex-col gap-2 lg:w-[240px]">
+      <div class="flex flex-col gap-2">
+        {{ range $name, $all := .Statuses }}
+        {{ $lastStatus := $all.Latest }}
+        {{ $status := $lastStatus.Status }}
+        {{ $kind := $status.String }}
         <div
-          class="flex gap-2 items-center justify-between p-2 {{ if eq $name $active }} {{ $activeTab }} {{ else }} {{ $inactiveTab }} {{ end }}">
-          {{ $lastStatus := $all.Latest }}
-          {{ $kind := $lastStatus.Status.String }}
-
-          <div id="left" class="flex items-center gap-2 flex-1 min-w-0">
-            <div id="workflow-symbol-{{ normalizeForHtmlId $name }}" class="flex-shrink-0">
-              {{ template "repo/pipelines/fragments/workflowSymbol" $all }}
+          class="flex flex-col gap-1.5 rounded px-3 py-2.5 transition-colors {{ if eq $name $active }}border border-transparent bg-gray-100 dark:bg-gray-700{{ else }}border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800{{ end }}">
+          <div class="flex h-5 items-center justify-between gap-[14px]">
+            <a href="/{{ $.RepoInfo.FullName }}/pipelines/{{ $id }}/workflow/{{ $name }}" class="flex min-w-0 items-center gap-0.5 no-underline hover:no-underline">
+              <span class="truncate text-sm font-medium leading-5 text-gray-900 dark:text-gray-100" title="{{ $name }}">{{ $name }}</span>
+              {{ i "arrow-up-right" "size-4 shrink-0 text-gray-900 dark:text-gray-100" }}
+            </a>
+            <div class="shrink-0 text-sm leading-5 text-gray-500 dark:text-gray-400">
+              {{ template "repo/fragments/shortTimeAgo" $lastStatus.Created }}
             </div>
-            <span class="truncate" title="{{ $name }}">
-              {{ $name }}
-            </span>
           </div>
-          <div id="right" class="flex items-center gap-2 flex-shrink-0">
-            <span class="font-bold">{{ $kind }}</span>
-            {{ if .TimeTaken }}
-            {{ template "repo/fragments/duration" .TimeTaken }}
-            {{ else }}
-            {{ template "repo/fragments/shortTimeAgo" $lastStatus.Created }}
-            {{ end }}
+          <div class="flex h-8 items-center justify-between gap-2">
+            <div class="flex min-w-0 items-center gap-1">
+              <div id="workflow-symbol-{{ normalizeForHtmlId $name }}" class="flex-shrink-0">
+                {{ template "repo/pipelines/fragments/workflowSymbol" $all }}
+              </div>
+              <span class="truncate text-sm font-semibold leading-5 text-gray-900 dark:text-gray-100">{{ $kind }}</span>
+            </div>
+            {{ template "workflowActions" (dict "Root" $ "Pipeline" $pipeline "Name" $name "Kind" $kind "Status" $status) }}
           </div>
         </div>
-      </a>
+        {{ end }}
+      </div>
+      {{ template "sidebarActions" $ }}
+    </div>
+  {{ end }}
+{{ end }}
+
+{{ define "workflowActions" }}
+  {{ $root := .Root }}
+  {{ $status := .Status }}
+  {{ $kind := .Kind }}
+  {{ if and $root.RepoInfo.Roles.IsPushAllowed (ne $kind "success") }}
+    <div class="flex shrink-0 items-center gap-0.5">
+      <button
+        class="group inline-flex h-8 w-[30px] min-h-8 items-center justify-center rounded px-2 py-1.5 text-gray-900 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700"
+        title="Retry workflow"
+        hx-post="/{{ $root.RepoInfo.FullName }}/pipelines/{{ .Pipeline.Id }}/workflow/{{ .Name }}/retry"
+        hx-swap="none"
+        hx-disabled-elt="this"
+      >
+        {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
+        {{ i "rotate-ccw" "size-4 group-[.htmx-request]:hidden" }}
+      </button>
+      {{ if not $status.IsFinish }}
+      <button
+        class="group inline-flex h-8 w-[30px] min-h-8 items-center justify-center rounded px-2 py-1.5 text-gray-900 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700"
+        title="Cancel workflow"
+        hx-post="/{{ $root.RepoInfo.FullName }}/pipelines/{{ .Pipeline.Id }}/workflow/{{ .Name }}/cancel"
+        hx-swap="none"
+        hx-disabled-elt="this"
+      >
+        {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
+        {{ i "x" "size-4 group-[.htmx-request]:hidden" }}
+      </button>
       {{ end }}
     </div>
   {{ end }}
+{{ end }}
+
+{{ define "sidebarActions" }}
+  <div class="mt-auto flex w-full flex-col gap-2">
+    {{ with .SSHLogCommand }}
+    <button type="button" class="btn flex h-9 min-h-9 w-full items-center justify-center gap-1.5 px-2 py-2 text-sm leading-5" onclick="navigator.clipboard.writeText({{ printf "%q" . }})" title="{{ . }}">
+      {{ i "copy" "size-4" }} Watch logs via SSH
+    </button>
+    {{ end }}
+    {{ if .RepoInfo.Roles.IsPushAllowed }}
+    <div class="flex w-full gap-2">
+      <div id="workflow-error" class="empty:hidden text-red-500 dark:text-red-400"></div>
+      <button
+        class="btn group flex h-9 min-h-9 flex-1 items-center justify-center gap-1.5 px-2 py-2 text-sm leading-5"
+        hx-post="/{{ .RepoInfo.FullName }}/pipelines/{{ .Pipeline.Id }}/retry"
+        hx-swap="none"
+        hx-disabled-elt="this"
+      >
+        {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
+        {{ i "rotate-ccw" "size-4 group-[.htmx-request]:hidden" }}
+        <span>Retry all</span>
+      </button>
+      {{ if .Pipeline.InProgress }}
+      <button
+        class="btn group flex h-9 min-h-9 flex-1 items-center justify-center gap-1.5 px-2 py-2 text-sm leading-5"
+        hx-post="/{{ .RepoInfo.FullName }}/pipelines/{{ .Pipeline.Id }}/cancel"
+        hx-swap="none"
+        hx-disabled-elt="this"
+      >
+        {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
+        {{ i "circle-stop" "size-4 group-[.htmx-request]:hidden" }}
+        <span>Cancel all</span>
+      </button>
+      {{ end }}
+    </div>
+    {{ end }}
+  </div>
 {{ end }}
 
 {{ define "logs" }}
@@ -119,8 +151,8 @@
        class="text-sm"
        hx-ext="ws"
        ws-connect="/{{ $.RepoInfo.FullName }}/pipelines/{{ .Pipeline.Id }}/workflow/{{ .Workflow }}/logs">
-    <div id="lines" class="flex flex-col gap-2">
-      <div class="text-base text-gray-500 flex items-center justify-center italic p-12 only:flex hidden border border-gray-200 dark:border-gray-700 rounded">
+    <div id="lines" class="flex flex-col gap-3">
+      <div class="hidden items-center justify-center rounded border border-gray-200 p-12 text-base italic text-gray-500 only:flex dark:border-gray-700">
         <span class="flex items-center gap-2">
           {{ i "triangle-alert" "size-4" }} No logs for this workflow
         </span>

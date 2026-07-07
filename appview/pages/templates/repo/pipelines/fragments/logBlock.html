@@ -1,16 +1,23 @@
 {{ define "repo/pipelines/fragments/logBlock" }}
 <div id="lines" hx-swap-oob="beforeend">
-  <details id="step-{{ .Id }}" {{if not .Collapsed}}open{{end}} class="group pb-2 rounded-sm border border-gray-200 dark:border-gray-700">
-    <summary class="sticky top-0 pt-2 px-2 group-open:pb-2 group-open:mb-2 list-none cursor-pointer group-open:border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:text-gray-500 hover:dark:text-gray-400">
-      <div class="group-open:hidden flex items-center gap-1">{{ i "chevron-right" "w-4 h-4" }} {{ template "stepHeader" . }}</div>
-      <div class="hidden group-open:flex items-center gap-1">{{ i "chevron-down" "w-4 h-4" }} {{ template "stepHeader" . }}</div>
+  <details id="step-{{ .Id }}" {{if not .Collapsed}}open{{end}} class="group overflow-hidden rounded border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+    <summary class="list-none cursor-pointer transition-colors hover:bg-gray-50 hover:text-gray-600 dark:hover:bg-gray-700/40 dark:hover:text-gray-300">
+      <div class="flex items-center gap-2 px-3 py-3 group-open:hidden">
+        {{ i "chevron-right" "size-4 shrink-0" }} {{ template "stepHeader" . }}
+      </div>
+      <div class="hidden items-center gap-2 px-3 py-3 group-open:flex">
+        {{ i "chevron-down" "size-4 shrink-0" }} {{ template "stepHeader" . }}
+      </div>
     </summary>
-    <div class="font-mono whitespace-pre overflow-x-auto px-2"><div class="text-blue-600 dark:text-blue-300">{{ .Command }}</div><div id="step-body-{{ .Id }}"></div></div>
+    <div class="overflow-x-auto border-t border-gray-200 bg-gray-50 px-3 py-3 font-mono text-sm leading-relaxed dark:border-gray-700 dark:bg-gray-800">
+      {{ if .Command }}<div class="text-blue-600 dark:text-blue-300">{{ .Command }}</div>{{ end }}
+      <div id="step-body-{{ .Id }}" class="text-gray-900 dark:text-gray-100"></div>
+    </div>
   </details>
 </div>
 {{ end }}
 
 {{ define "stepHeader" }}
- {{ .Name }}
- <span class="ml-auto text-sm text-gray-500 tabular-nums" data-timer="{{ .Id }}" data-start="{{ .StartTime.Unix }}"></span>
+  <span class="truncate text-base font-semibold text-gray-900 dark:text-gray-100">{{ .Name }}</span>
+  <span class="ml-auto text-sm tabular-nums text-gray-500 dark:text-gray-400" data-timer="{{ .Id }}" data-start="{{ .StartTime.Unix }}"></span>
 {{ end }}

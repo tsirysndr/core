@@ -9,11 +9,11 @@
     {{ $icon = "circle-dashed" }}
     {{ $color = "text-yellow-600 dark:text-yellow-500" }}
   {{ else if eq $kind "running" }}
-    {{ $icon = "circle-dashed" }}
-    {{ $color = "text-yellow-600 dark:text-yellow-500" }}
+    {{ $icon = "refresh-cw" }}
+    {{ $color = "text-gray-700 dark:text-gray-100" }}
   {{ else if eq $kind "success" }}
     {{ $icon = "check" }}
-    {{ $color = "text-green-600 dark:text-green-500" }}
+    {{ $color = "text-green-600 dark:text-green-400" }}
   {{ else if eq $kind "cancelled" }}
     {{ $icon = "circle-slash" }}
     {{ $color = "text-gray-600 dark:text-gray-500" }}

@@ -1720,11 +1720,11 @@ func (p *Pages) PipelineStatusesFragment(w io.Writer, params PipelineStatusesPar
 
 type WorkflowParams struct {
 	BaseParams
-	RepoInfo repoinfo.RepoInfo
-	Pipeline types.Pipeline
-	Workflow string
-	LogUrl   string
-	Active   string
+	RepoInfo      repoinfo.RepoInfo
+	Pipeline      types.Pipeline
+	Workflow      string
+	SSHLogCommand string
+	Active        string
 }
 
 func (p *Pages) Workflow(w io.Writer, params WorkflowParams) error {

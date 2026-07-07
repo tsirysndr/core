@@ -103,6 +103,8 @@ func (w WorkflowStatus) Created() time.Time {
 	return t
 }
 
+
+
 type Trigger struct {
 	*tangled.CiPipeline_Trigger
 }
