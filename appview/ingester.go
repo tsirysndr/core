@@ -134,11 +134,6 @@ func (i *Ingester) Ingest() processFunc {
 			l.Warn("failed to ingest record, skipping", "err", err)
 		}
 
-		lastTimeUs := e.TimeUS + 1
-		if saveErr := i.Db.SaveLastTimeUs(lastTimeUs); saveErr != nil {
-			l.Error("failed to save cursor", "err", saveErr)
-		}
-
 		return nil
 	}
 }

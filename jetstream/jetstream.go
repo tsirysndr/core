@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -34,6 +35,8 @@ type JetstreamClient struct {
 	db         DB
 	waitForDid bool
 	mu         sync.RWMutex
+
+	lastSeenUs atomic.Int64
 
 	cancel   context.CancelFunc
 	cancelMu sync.Mutex
@@ -71,7 +74,6 @@ func (j *JetstreamClient) withDidFilter(processFunc processor) processor {
 	// since this closure references j.WantedDids; it should auto-update
 	// existing instances of the closure when j.WantedDids is mutated
 	return func(ctx context.Context, evt *models.Event) error {
-
 		j.mu.RLock()
 		// empty filter => all dids allowed
 		matches := len(j.wantedDids) == 0
@@ -82,11 +84,13 @@ func (j *JetstreamClient) withDidFilter(processFunc processor) processor {
 		}
 		j.mu.RUnlock()
 
+		var err error
 		if matches {
-			return processFunc(ctx, evt)
-		} else {
-			return nil
+			err = processFunc(ctx, evt)
 		}
+
+		j.lastSeenUs.Store(evt.TimeUS + 1)
+		return err
 	}
 }
 
@@ -113,7 +117,7 @@ func NewJetstreamClient(endpoint, ident string, collections []string, cfg *clien
 }
 
 // StartJetstream starts the jetstream client and processes events using the provided processFunc.
-// The caller is responsible for saving the last time_us to the database (just use your db.UpdateLastTimeUs).
+// The client persists the last time_us cursor itself via the DB it was constructed with.
 func (j *JetstreamClient) StartJetstream(ctx context.Context, processFunc func(context.Context, *models.Event) error) error {
 	logger := j.l
 
@@ -151,7 +155,7 @@ func (j *JetstreamClient) StartJetstream(ctx context.Context, processFunc func(c
 func (j *JetstreamClient) connectAndRead(ctx context.Context) {
 	l := log.FromContext(ctx)
 	for {
-		cursor := j.getLastTimeUs(ctx)
+		cursor := j.resumeCursor(ctx)
 
 		connCtx, cancel := context.WithCancel(ctx)
 		j.cancelMu.Lock()
@@ -185,9 +189,20 @@ func (j *JetstreamClient) periodicLastTimeSave(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			j.db.SaveLastTimeUs(time.Now().UnixMicro())
+			if seen := j.lastSeenUs.Load(); seen != 0 {
+				if err := j.db.SaveLastTimeUs(seen); err != nil {
+					log.FromContext(ctx).Error("failed to save cursor", "error", err)
+				}
+			}
 		}
 	}
+}
+
+func (j *JetstreamClient) resumeCursor(ctx context.Context) *int64 {
+	if seen := j.lastSeenUs.Load(); seen != 0 {
+		return &seen
+	}
+	return j.getLastTimeUs(ctx)
 }
 
 func (j *JetstreamClient) getLastTimeUs(ctx context.Context) *int64 {
@@ -196,18 +211,7 @@ func (j *JetstreamClient) getLastTimeUs(ctx context.Context) *int64 {
 	if err != nil {
 		l.Warn("couldn't get last time us, starting from now", "error", err)
 		lastTimeUs = time.Now().UnixMicro()
-		err = j.db.SaveLastTimeUs(lastTimeUs)
-		if err != nil {
-			l.Error("failed to save last time us", "error", err)
-		}
-	}
-
-	// If last time is older than 2 days, start from now
-	if time.Now().UnixMicro()-lastTimeUs > 2*24*60*60*1000*1000 {
-		lastTimeUs = time.Now().UnixMicro()
-		l.Warn("last time us is older than 2 days; discarding that and starting from now")
-		err = j.db.SaveLastTimeUs(lastTimeUs)
-		if err != nil {
+		if err = j.db.SaveLastTimeUs(lastTimeUs); err != nil {
 			l.Error("failed to save last time us", "error", err)
 		}
 	}
@@ -234,11 +238,12 @@ func (j *JetstreamClient) saveIfKilled(ctx context.Context) context.Context {
 		sig := <-sigChan
 		j.l.Info("Received signal, initiating graceful shutdown", "signal", sig)
 
-		lastTimeUs := time.Now().UnixMicro()
-		if err := j.db.SaveLastTimeUs(lastTimeUs); err != nil {
-			j.l.Error("Failed to save last time during shutdown", "error", err)
+		if seen := j.lastSeenUs.Load(); seen != 0 {
+			if err := j.db.SaveLastTimeUs(seen); err != nil {
+				j.l.Error("Failed to save last time during shutdown", "error", err)
+			}
+			j.l.Info("Saved lastTimeUs before shutdown", "lastTimeUs", seen)
 		}
-		j.l.Info("Saved lastTimeUs before shutdown", "lastTimeUs", lastTimeUs)
 
 		j.cancelMu.Lock()
 		if j.cancel != nil {

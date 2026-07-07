@@ -37,11 +37,6 @@ func (s *Spindle) ingest() Ingester {
 			s.l.Warn("failed to process message, skipping", "nsid", e.Commit.Collection, "did", e.Did, "rkey", e.Commit.RKey, "err", err)
 		}
 
-		lastTimeUs := e.TimeUS + 1
-		if saveErr := s.db.SaveLastTimeUs(lastTimeUs); saveErr != nil {
-			s.l.Error("failed to save cursor", "err", saveErr)
-		}
-
 		return nil
 	}
 }

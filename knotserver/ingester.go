@@ -139,10 +139,5 @@ func (h *Knot) processMessages(ctx context.Context, event *jmodels.Event) error 
 		h.l.Warn("failed to process event, skipping", args...)
 	}
 
-	lastTimeUs := event.TimeUS + 1
-	if saveErr := h.db.SaveLastTimeUs(lastTimeUs); saveErr != nil {
-		h.l.Error("failed to save cursor", "err", saveErr)
-	}
-
 	return nil
 }
