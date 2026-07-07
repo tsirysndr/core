@@ -2,23 +2,6 @@ package repoverify
 
 import "testing"
 
-func TestNewRepoDid_RejectsInvalid(t *testing.T) {
-	if _, err := NewRepoDid(""); err == nil {
-		t.Error("NewRepoDid(\"\") err = nil, want error")
-	}
-}
-
-func TestNewRepoDid_AcceptsValid(t *testing.T) {
-	raw := "did:plc:abc123abc123abc123abc123"
-	got, err := NewRepoDid(raw)
-	if err != nil {
-		t.Fatalf("NewRepoDid(%q): %v", raw, err)
-	}
-	if got.String() != raw {
-		t.Errorf("got %q, want %q", got, raw)
-	}
-}
-
 func TestParseKnotEndpoint_RejectsHttpInProd(t *testing.T) {
 	if _, err := ParseKnotEndpoint("http://knot.example", false); err == nil {
 		t.Error("http:// knot URL accepted in prod")

@@ -30,6 +30,11 @@
               "type": "string",
               "description": "Name of the forked repository"
             },
+            "repo": {
+              "type": "string",
+              "format": "did",
+              "description": "DID of the repository"
+            },
             "branch": {
               "type": "string",
               "description": "Branch to sync"

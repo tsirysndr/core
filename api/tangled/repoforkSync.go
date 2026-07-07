@@ -22,6 +22,8 @@ type RepoForkSync_Input struct {
 	Did string `json:"did" cborgen:"did"`
 	// name: Name of the forked repository
 	Name string `json:"name" cborgen:"name"`
+	// repo: DID of the repository
+	Repo *string `json:"repo,omitempty" cborgen:"repo,omitempty"`
 	// source: AT-URI of the source repository
 	Source string `json:"source" cborgen:"source"`
 }

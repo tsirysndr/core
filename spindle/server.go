@@ -30,6 +30,7 @@ import (
 	"tangled.org/core/log"
 	"tangled.org/core/notifier"
 	"tangled.org/core/rbac"
+	"tangled.org/core/repoident"
 	"tangled.org/core/repoverify"
 	"tangled.org/core/spindle/config"
 	"tangled.org/core/spindle/db"
@@ -583,7 +584,7 @@ func (s *Spindle) resolveSourceRepoInfo(ctx context.Context, repoDid syntax.DID)
 	}
 
 	// verify repo, we don't want git sync to point to arbitrary endpoints
-	res, err := s.verify(ctx, repoverify.RepoDid(repoDid))
+	res, err := s.verify(ctx, repoident.RepoDid(repoDid))
 	if err != nil {
 		return nil, fmt.Errorf("verify sourceRepo %s: %w", repoDid, err)
 	}

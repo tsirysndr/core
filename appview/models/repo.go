@@ -51,11 +51,6 @@ func (r *Repo) AsRecord() tangled.Repo {
 		website = &r.Website
 	}
 
-	var repoDid *string
-	if r.RepoDid != "" {
-		repoDid = &r.RepoDid
-	}
-
 	return tangled.Repo{
 		Knot:        r.Knot,
 		Name:        r.cosmeticName(),
@@ -66,7 +61,7 @@ func (r *Repo) AsRecord() tangled.Repo {
 		Source:      source,
 		Spindle:     spindle,
 		Labels:      r.Labels,
-		RepoDid:     repoDid,
+		RepoDid:     r.RepoDidPtr(),
 	}
 }
 
@@ -101,6 +96,13 @@ func (r Repo) PinIdentifier() string {
 		return r.RepoDid
 	}
 	return string(r.RepoAt())
+}
+
+func (r Repo) RepoDidPtr() *string {
+	if r.RepoDid == "" {
+		return nil
+	}
+	return &r.RepoDid
 }
 
 func (r Repo) TopicStr() string {

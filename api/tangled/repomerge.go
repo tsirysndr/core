@@ -32,6 +32,8 @@ type RepoMerge_Input struct {
 	Name string `json:"name" cborgen:"name"`
 	// patch: Patch content to merge
 	Patch string `json:"patch" cborgen:"patch"`
+	// repo: DID of the repository
+	Repo *string `json:"repo,omitempty" cborgen:"repo,omitempty"`
 }
 
 // RepoMerge calls the XRPC method "sh.tangled.repo.merge".

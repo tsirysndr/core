@@ -344,6 +344,7 @@ func (s *Pulls) mergeCheck(r *http.Request, f *models.Repo, pull *models.Pull, s
 		&tangled.RepoMergeCheck_Input{
 			Did:    f.Did,
 			Name:   f.Name,
+			Repo:   f.RepoDidPtr(),
 			Branch: pull.TargetBranch,
 			Patch:  patch,
 		},

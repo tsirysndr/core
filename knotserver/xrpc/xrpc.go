@@ -19,6 +19,7 @@ import (
 	"tangled.org/core/knotserver/sandbox"
 	"tangled.org/core/notifier"
 	"tangled.org/core/rbac"
+	"tangled.org/core/repoident"
 	xrpcerr "tangled.org/core/xrpc/errors"
 	"tangled.org/core/xrpc/serviceauth"
 )
@@ -131,6 +132,31 @@ func (x *Xrpc) parseRepoParam(repo string) (string, error) {
 		return "", xrpcerr.RepoNotFoundError
 	}
 	return repoPath, nil
+}
+
+func (x *Xrpc) resolveRepoDID(repo *string, ownerDid, name string) (repoident.RepoDid, string, error) {
+	raw, err := x.selectRepoDID(repo, ownerDid, name)
+	if err != nil {
+		return "", "", err
+	}
+
+	repoDid, err := repoident.NewRepoDid(raw)
+	if err != nil {
+		return "", "", err
+	}
+
+	repoPath, _, _, err := x.Db.ResolveRepoDIDOnDisk(x.Config.Repo.ScanPath, repoDid.String())
+	if err != nil {
+		return "", "", err
+	}
+	return repoDid, repoPath, nil
+}
+
+func (x *Xrpc) selectRepoDID(repo *string, ownerDid, name string) (string, error) {
+	if repo != nil && *repo != "" {
+		return *repo, nil
+	}
+	return x.Db.GetRepoDid(ownerDid, name)
 }
 
 func writeError(w http.ResponseWriter, e xrpcerr.XrpcError, status int) {

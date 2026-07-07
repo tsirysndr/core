@@ -16,7 +16,7 @@ import (
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/orm"
-	"tangled.org/core/repoverify"
+	"tangled.org/core/repoident"
 )
 
 func (i *Ingester) ingestRepo(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {
@@ -422,7 +422,7 @@ func (i *Ingester) verifyOwnership(ctx context.Context, l *slog.Logger, repoDid,
 	if i.Verifier == nil {
 		return false, fmt.Errorf("ingester has no repo ownership verifier configured")
 	}
-	rd, err := repoverify.NewRepoDid(repoDid)
+	rd, err := repoident.NewRepoDid(repoDid)
 	if err != nil {
 		l.Warn("rejecting repo event: invalid repoDid on record", "repoDid", repoDid, "err", err)
 		return false, nil

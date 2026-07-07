@@ -18,6 +18,7 @@ import (
 	"tangled.org/core/appview/notify"
 	"tangled.org/core/orm"
 	"tangled.org/core/rbac"
+	"tangled.org/core/repoident"
 	"tangled.org/core/repoverify"
 )
 
@@ -33,17 +34,17 @@ func mustKnotURL(t *testing.T, raw string) *url.URL {
 func acceptOwner(t *testing.T, e *jmodels.Event) repoverify.Verifier {
 	t.Helper()
 	knot := mustKnotURL(t, "https://knot.example")
-	return func(_ context.Context, repoDid repoverify.RepoDid) (repoverify.Result, error) {
+	return func(_ context.Context, repoDid repoident.RepoDid) (repoverify.Result, error) {
 		return repoverify.Result{
 			RepoDid:  repoDid,
-			OwnerDid: repoverify.OwnerDid(e.Did),
+			OwnerDid: repoident.OwnerDid(e.Did),
 			KnotURL:  knot,
 		}, nil
 	}
 }
 
 func stubVerifier(result repoverify.Result, err error) repoverify.Verifier {
-	return func(_ context.Context, _ repoverify.RepoDid) (repoverify.Result, error) {
+	return func(_ context.Context, _ repoident.RepoDid) (repoverify.Result, error) {
 		return result, err
 	}
 }
@@ -691,7 +692,7 @@ func TestIngestRepo_CreateInvalidRepoDidRejected(t *testing.T) {
 	})
 
 	verifierCalled := false
-	withVerifier(ing, func(_ context.Context, _ repoverify.RepoDid) (repoverify.Result, error) {
+	withVerifier(ing, func(_ context.Context, _ repoident.RepoDid) (repoverify.Result, error) {
 		verifierCalled = true
 		return repoverify.Result{}, nil
 	})

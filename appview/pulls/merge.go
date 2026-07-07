@@ -74,6 +74,7 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 	mergeInput := &tangled.RepoMerge_Input{
 		Did:           f.Did,
 		Name:          f.Name,
+		Repo:          f.RepoDidPtr(),
 		Branch:        pull.TargetBranch,
 		Patch:         patch,
 		CommitMessage: &pull.Title,

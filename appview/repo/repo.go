@@ -1383,6 +1383,7 @@ func (rp *Repo) SyncRepoFork(w http.ResponseWriter, r *http.Request) {
 			&tangled.RepoForkSync_Input{
 				Did:    user.Did,
 				Name:   f.Name,
+				Repo:   f.RepoDidPtr(),
 				Source: f.Source,
 				Branch: ref,
 			},

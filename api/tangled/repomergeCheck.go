@@ -32,6 +32,8 @@ type RepoMergeCheck_Input struct {
 	Name string `json:"name" cborgen:"name"`
 	// patch: Patch or pull request to check for merge conflicts
 	Patch string `json:"patch" cborgen:"patch"`
+	// repo: DID of the repository
+	Repo *string `json:"repo,omitempty" cborgen:"repo,omitempty"`
 }
 
 // RepoMergeCheck_Output is the output of a sh.tangled.repo.mergeCheck call.

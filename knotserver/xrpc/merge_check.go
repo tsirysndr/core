@@ -33,13 +33,9 @@ func (x *Xrpc) MergeCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	repoDid, err := x.Db.GetRepoDid(did, name)
+	_, repoPath, err := x.resolveRepoDID(data.Repo, did, name)
 	if err != nil {
-		fail(xrpcerr.RepoNotFoundError)
-		return
-	}
-	repoPath, _, _, err := x.Db.ResolveRepoDIDOnDisk(x.Config.Repo.ScanPath, repoDid)
-	if err != nil {
+		l.Error("failed to resolve repo", "err", err)
 		fail(xrpcerr.RepoNotFoundError)
 		return
 	}

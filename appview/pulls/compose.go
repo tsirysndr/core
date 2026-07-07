@@ -467,6 +467,7 @@ func (s *Pulls) composeMergeCheck(ctx context.Context, repo *models.Repo, target
 	resp, err := tangled.RepoMergeCheck(ctx, xrpcc, &tangled.RepoMergeCheck_Input{
 		Did:    repo.Did,
 		Name:   repo.Name,
+		Repo:   repo.RepoDidPtr(),
 		Branch: targetBranch,
 		Patch:  patch,
 	})

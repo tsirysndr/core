@@ -42,19 +42,15 @@ func (x *Xrpc) Merge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	repoDid, err := x.Db.GetRepoDid(did, name)
+	repoDid, repoPath, err := x.resolveRepoDID(data.Repo, did, name)
 	if err != nil {
-		fail(xrpcerr.RepoNotFoundError)
-		return
-	}
-	repoPath, _, _, err := x.Db.ResolveRepoDIDOnDisk(x.Config.Repo.ScanPath, repoDid)
-	if err != nil {
+		l.Error("failed to resolve repo", "err", err)
 		fail(xrpcerr.RepoNotFoundError)
 		return
 	}
 
-	if ok, err := x.Enforcer.IsPushAllowed(actorDid.String(), rbac.ThisServer, repoDid); !ok || err != nil {
-		l.Error("insufficient permissions", "did", actorDid.String(), "repo", repoDid)
+	if ok, err := x.Enforcer.IsPushAllowed(actorDid.String(), rbac.ThisServer, repoDid.String()); !ok || err != nil {
+		l.Error("insufficient permissions", "did", actorDid.String(), "repo", repoDid.String())
 		writeError(w, xrpcerr.AccessControlError(actorDid.String()), http.StatusUnauthorized)
 		return
 	}

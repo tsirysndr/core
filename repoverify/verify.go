@@ -10,36 +10,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bluesky-social/indigo/atproto/syntax"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/idresolver"
+	"tangled.org/core/repoident"
 	"tangled.org/core/xrpc/xrpcclient"
 )
-
-type RepoDid syntax.DID
-
-func (r RepoDid) String() string { return string(r) }
-
-func NewRepoDid(s string) (RepoDid, error) {
-	did, err := syntax.ParseDID(s)
-	if err != nil {
-		return "", fmt.Errorf("invalid repoDid %q: %w", s, err)
-	}
-	return RepoDid(did), nil
-}
-
-type OwnerDid syntax.DID
-
-func (o OwnerDid) String() string { return string(o) }
-
-func NewOwnerDid(s string) (OwnerDid, error) {
-	did, err := syntax.ParseDID(s)
-	if err != nil {
-		return "", fmt.Errorf("invalid ownerDid %q: %w", s, err)
-	}
-	return OwnerDid(did), nil
-}
 
 func ParseKnotEndpoint(raw string, dev bool) (*url.URL, error) {
 	if raw == "" {
@@ -65,15 +41,15 @@ func ParseKnotEndpoint(raw string, dev bool) (*url.URL, error) {
 }
 
 type Result struct {
-	RepoDid  RepoDid
-	OwnerDid OwnerDid
+	RepoDid  repoident.RepoDid
+	OwnerDid repoident.OwnerDid
 	KnotURL  *url.URL
 	// Rkey of the sh.tangled.repo record tracked by the knot; empty when the
 	// knot does not support describeRepo.
 	Rkey string
 }
 
-type Verifier func(ctx context.Context, repoDid RepoDid) (Result, error)
+type Verifier func(ctx context.Context, repoDid repoident.RepoDid) (Result, error)
 
 const verifyTimeout = 10 * time.Second
 
@@ -86,7 +62,7 @@ func New(resolver *idresolver.Resolver, dev bool) Verifier {
 		Transport: transport,
 	}
 
-	return func(ctx context.Context, repoDid RepoDid) (Result, error) {
+	return func(ctx context.Context, repoDid repoident.RepoDid) (Result, error) {
 		ctx, cancel := context.WithTimeout(ctx, verifyTimeout)
 		defer cancel()
 		return resolveAndDescribe(ctx, resolver, httpClient, repoDid, dev)
@@ -97,7 +73,7 @@ func resolveAndDescribe(
 	ctx context.Context,
 	resolver *idresolver.Resolver,
 	httpClient *http.Client,
-	repoDid RepoDid,
+	repoDid repoident.RepoDid,
 	dev bool,
 ) (Result, error) {
 	ident, err := resolver.ResolveIdent(ctx, repoDid.String())
@@ -123,7 +99,7 @@ func resolveAndDescribe(
 		return Result{}, fmt.Errorf("knot %s returned mismatched repoDid: got %q, want %q", knot, out.RepoDid, repoDid)
 	}
 
-	ownerDid, err := NewOwnerDid(out.OwnerDid)
+	ownerDid, err := repoident.NewOwnerDid(out.OwnerDid)
 	if err != nil {
 		return Result{}, fmt.Errorf("describeRepo on %s returned invalid ownerDid: %w", knot, err)
 	}
