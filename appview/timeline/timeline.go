@@ -16,7 +16,30 @@ import (
 func (t *Timeline) Timeline(w http.ResponseWriter, r *http.Request) {
 	user := t.oauth.GetMultiAccountUser(r)
 
-	followingOnly := r.URL.Query().Get("following") == "true" && user != nil
+	const timelineTabCookie = "timeline-tab"
+	var followingOnly bool
+	if _, hasParam := r.URL.Query()["following"]; hasParam {
+		followingOnly = r.URL.Query().Get("following") == "true" && user != nil
+	} else if user != nil {
+		if c, err := r.Cookie(timelineTabCookie); err == nil {
+			followingOnly = c.Value == "following"
+		}
+	}
+
+	if user != nil {
+		val := "global"
+		if followingOnly {
+			val = "following"
+		}
+		http.SetCookie(w, &http.Cookie{
+			Name:     timelineTabCookie,
+			Value:    val,
+			Path:     "/",
+			MaxAge:   365 * 24 * 60 * 60,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
 
 	var userDid string
 	if user != nil {
