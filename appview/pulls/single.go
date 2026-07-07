@@ -178,13 +178,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 			return m
 		}
 
-		for _, pipeline := range out.Pipelines {
-			if pipeline == nil {
-				continue
-			}
-			m[pipeline.Commit] = types.Pipeline{CiPipeline: pipeline}
-		}
-		return m
+		return types.PipelinesByCommit(out.Pipelines)
 	}(r.Context())
 
 	var workflowsChanged bool

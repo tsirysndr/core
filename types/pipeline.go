@@ -189,6 +189,21 @@ func (p Pipeline) Statuses() map[string]WorkflowStatus {
 	return m
 }
 
+// PipelinesByCommit keeps the first run per commit from newest-first input.
+func PipelinesByCommit(pipelines []*tangled.CiPipeline) map[string]Pipeline {
+	m := make(map[string]Pipeline, len(pipelines))
+	for _, pipeline := range pipelines {
+		if pipeline == nil {
+			continue
+		}
+		if _, ok := m[pipeline.Commit]; ok {
+			continue
+		}
+		m[pipeline.Commit] = Pipeline{CiPipeline: pipeline}
+	}
+	return m
+}
+
 func (p Pipeline) Counts() map[string]int {
 	m := make(map[string]int)
 	if p.CiPipeline != nil {

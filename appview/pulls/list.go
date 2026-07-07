@@ -282,13 +282,7 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 			return m
 		}
 
-		for _, pipeline := range out.Pipelines {
-			if pipeline == nil {
-				continue
-			}
-			m[pipeline.Commit] = types.Pipeline{CiPipeline: pipeline}
-		}
-		return m
+		return types.PipelinesByCommit(out.Pipelines)
 	}(r.Context(), shas)
 
 	labelDefs, err := db.GetLabelDefinitions(

@@ -115,9 +115,5 @@ func getPipelineStatuses(
 		return nil, err
 	}
 
-	for _, p := range out.Pipelines {
-		m[p.Commit] = types.Pipeline{CiPipeline: p}
-	}
-
-	return m, nil
+	return types.PipelinesByCommit(out.Pipelines), nil
 }
