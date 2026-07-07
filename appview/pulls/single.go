@@ -63,6 +63,27 @@ func (s *Pulls) PullActions(w http.ResponseWriter, r *http.Request) {
 		// only the last round's buttons and banners use merge/resubmit checks
 		isLastRound := roundNumber == pull.LastRoundNumber()
 		branchDeleteStatus := s.branchDeleteStatus(r, f, pull)
+
+		var workflowsChanged bool
+		var changedWorkflows []string
+		hasPipeline := false
+		if isLastRound && f.Spindle != "" {
+			pipelines, err := s.fetchPipelines(r.Context(), f.Spindle, f.RepoDid, []string{pull.LatestSha()})
+			if err != nil {
+				l.Error("failed to fetch latest pipeline", "err", err)
+			} else if pipelines != nil {
+				_, hasPipeline = pipelines[pull.LatestSha()]
+			}
+
+			if pull.IsForkBased() && !hasPipeline {
+				changedWorkflows, err = changedWorkflowFiles(pull.LatestSubmission().CombinedPatch())
+				if err != nil {
+					l.Error("failed to inspect latest round's patch for workflow changes", "err", err)
+				}
+				workflowsChanged = len(changedWorkflows) > 0
+			}
+		}
+
 		mergeCheckResponse := types.MergeCheckResponse{}
 		resubmitResult := pages.Unknown
 		if isLastRound {
@@ -73,14 +94,17 @@ func (s *Pulls) PullActions(w http.ResponseWriter, r *http.Request) {
 		}
 
 		s.pages.PullActionsFragment(w, pages.PullActionsParams{
-			BaseParams:         pages.BaseParamsFromContext(r.Context()),
-			RepoInfo:           s.repoResolver.GetRepoInfo(r, user),
-			Pull:               pull,
-			RoundNumber:        roundNumber,
-			MergeCheck:         mergeCheckResponse,
-			ResubmitCheck:      resubmitResult,
-			BranchDeleteStatus: branchDeleteStatus,
-			Stack:              stack,
+			BaseParams:           pages.BaseParamsFromContext(r.Context()),
+			RepoInfo:             s.repoResolver.GetRepoInfo(r, user),
+			Pull:                 pull,
+			RoundNumber:          roundNumber,
+			MergeCheck:           mergeCheckResponse,
+			ResubmitCheck:        resubmitResult,
+			BranchDeleteStatus:   branchDeleteStatus,
+			Stack:                stack,
+			WorkflowsChanged:     workflowsChanged,
+			ChangedWorkflowFiles: changedWorkflows,
+			HasPipeline:          hasPipeline,
 		})
 		return
 	}
@@ -160,35 +184,12 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		shas = append(shas, p.LatestSha())
 	}
 
-	// commitId -> latest pipeline
-	pipelines := func(ctx context.Context) map[string]types.Pipeline {
-		m := make(map[string]types.Pipeline)
-		if f.Spindle == "" {
-			return m
-		}
-		spindleUrl, err := hostutil.EnsureHttpScheme(f.Spindle)
-		if err != nil {
-			l.Error("invalid spindle host", "host", f.Spindle, "err", err)
-			return m
-		}
-		xrpcc := &indigoxrpc.Client{Host: spindleUrl}
-		out, err := tangled.CiQueryPipelines(ctx, xrpcc, shas, "", nil, 0, f.RepoDid)
-		if err != nil {
-			l.Error("failed to fetch pipelines", "err", err)
-			return m
-		}
-
-		return types.PipelinesByCommit(out.Pipelines)
-	}(r.Context())
-
-	var workflowsChanged bool
-	var changedWorkflows []string
-	if _, hasPipeline := pipelines[pull.LatestSha()]; pull.IsForkBased() && !hasPipeline {
-		changedWorkflows, err = changedWorkflowFiles(pull.LatestSubmission().CombinedPatch())
-		if err != nil {
-			l.Error("failed to inspect latest round's patch for workflow changes", "err", err)
-		}
-		workflowsChanged = len(changedWorkflows) > 0
+	pipelines, err := s.fetchPipelines(r.Context(), f.Spindle, f.RepoDid, shas)
+	if err != nil {
+		l.Error("failed to fetch pipelines", "err", err)
+	}
+	if pipelines == nil {
+		pipelines = make(map[string]types.Pipeline)
 	}
 
 	entities := []syntax.ATURI{pull.AtUri()}
@@ -278,9 +279,6 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 		ActiveRound:        roundIdInt,
 		IsInterdiff:        interdiff,
 
-		WorkflowsChanged:     workflowsChanged,
-		ChangedWorkflowFiles: changedWorkflows,
-
 		Reactions:   reactions,
 		UserReacted: userReactions,
 
@@ -303,6 +301,22 @@ func (s *Pulls) combinedDiff(pull *models.Pull, round int) types.DiffRenderer {
 	diff := patchutil.AsNiceDiff(submission.CombinedPatch(), pull.TargetBranch)
 	s.diffCache.Add(key, diff)
 	return diff
+}
+
+func (s *Pulls) fetchPipelines(ctx context.Context, spindle string, repoDid string, shas []string) (map[string]types.Pipeline, error) {
+	if spindle == "" {
+		return nil, nil
+	}
+	spindleUrl, err := hostutil.EnsureHttpScheme(spindle)
+	if err != nil {
+		return nil, err
+	}
+	xrpcc := &indigoxrpc.Client{Host: spindleUrl}
+	out, err := tangled.CiQueryPipelines(ctx, xrpcc, shas, "", nil, 0, repoDid)
+	if err != nil {
+		return nil, err
+	}
+	return types.PipelinesByCommit(out.Pipelines), nil
 }
 
 func (s *Pulls) RepoSinglePull(w http.ResponseWriter, r *http.Request) {

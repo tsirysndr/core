@@ -23,110 +23,217 @@
   {{ $isLastRound := eq $roundNumber $lastIdx }}
   {{ $isSameRepoBranch := .Pull.IsBranchBased }}
   {{ $isUpToDate := .ResubmitCheck.No }}
-  <div id="actions-{{$roundNumber}}" hx-target="this" class="{{ if .LoggedInUser }}flex flex-wrap gap-2 relative p-2{{ else }}hidden{{ end }}"
+  {{ $isForkBased := .Pull.IsForkBased }}
+  {{ $showRunCI := and (not $loading) $isPushAllowed $isOpen $isLastRound $isForkBased (not .HasPipeline) (ne .RepoInfo.Spindle "") }}
+
+  <div id="action-card-{{$roundNumber}}" class="{{ if .LoggedInUser }}relative p-2 flex flex-col gap-2{{ else }}hidden{{ end }}"
     {{ if $loading }}
       hx-get="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/round/{{ $roundNumber }}/actions"
       hx-trigger="load"
       hx-swap="outerHTML"
+      hx-target="this"
     {{ end }}
   >
-    {{ if .LoggedInUser }}
-    <button
-      hx-get="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/round/{{ $roundNumber }}/comment"
-      class="btn-flat p-2 flex items-center gap-2 no-underline hover:no-underline group">
-        {{ i "message-square-plus" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
-        {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-        Comment
-    </button>
+    {{ if and (not $loading) $isLastRound }}
+      {{ if and $isOpen $isForkBased (not .HasPipeline) (ne .RepoInfo.Spindle "") }}
+        {{ template "workflowWarning" . }}
+      {{ end }}
+      {{ template "mergeCheck" . }}
+      {{ template "resubmitStatus" . }}
     {{ end }}
-    {{ if and (not $loading) .BranchDeleteStatus }}
+    <div id="actions-{{$roundNumber}}" hx-target="this" class="flex flex-wrap gap-2 relative"
+      {{ if $loading }}
+        hx-swap="outerHTML"
+      {{ end }}
+    >
+      {{ if .LoggedInUser }}
       <button
-        hx-delete="/{{ resolve .BranchDeleteStatus.Repo.Did }}/{{ .BranchDeleteStatus.Repo.Slug }}/branches"
-        hx-vals='{"branch": "{{ .BranchDeleteStatus.Branch }}" }'
-        hx-swap="none"
-        class="btn-flat p-2 flex items-center gap-2 no-underline hover:no-underline group text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
-          {{ i "git-branch" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
+        hx-get="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/round/{{ $roundNumber }}/comment"
+        class="btn-flat p-2 flex items-center gap-2 no-underline hover:no-underline group">
+          {{ i "message-square-plus" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
           {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-          Delete branch
+          Comment
       </button>
-    {{ end }}
-    {{ if and $isPushAllowed $isOpen $isLastRound }}
-      <button
-        hx-post="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/merge"
-        hx-swap="none"
-        hx-confirm="Are you sure you want to merge pull #{{ .Pull.PullId }} into the `{{ .Pull.TargetBranch }}` branch?"
-        class="btn-flat p-2 flex items-center gap-2 group"
-        {{ if or $loading $isConflicted }}disabled{{ end }}
-      >
-        {{ if $loading }}
-          {{ i "loader-circle" "w-4 h-4 animate-spin" }}
-        {{ else }}
-          {{ i "git-merge" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
-          {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-        {{ end }}
-        Merge{{if $stackCount}} {{$stackCount}}{{end}}
-      </button>
-    {{ end }}
-
-    {{ if and $isPullAuthor $isOpen $isLastRound }}
-      <button id="resubmitBtn"
-          {{ if not .Pull.IsPatchBased }}
-            hx-post="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/resubmit"
-            hx-swap="none"
-          {{ else }}
-            hx-get="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/resubmit"
-          {{ end }}
-
-          hx-disabled-elt="#resubmitBtn"
-          class="btn-flat p-2 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed group"
-
-          {{ if $loading }}
-          title="Checking for updates…"
-          disabled
-          {{ else if $isUpToDate }}
-          title="Update this branch to resubmit this pull request"
-          disabled
-          {{ else }}
-          title="Resubmit this pull request"
-          {{ end }}
-          >
+      {{ end }}
+      {{ if and (not $loading) .BranchDeleteStatus }}
+        <button
+          hx-delete="/{{ resolve .BranchDeleteStatus.Repo.Did }}/{{ .BranchDeleteStatus.Repo.Slug }}/branches"
+          hx-vals='{"branch": "{{ .BranchDeleteStatus.Branch }}" }'
+          hx-swap="none"
+          class="btn-flat p-2 flex items-center gap-2 no-underline hover:no-underline group text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+            {{ i "git-branch" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
+            {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+            Delete branch
+        </button>
+      {{ end }}
+      {{ if $showRunCI }}
+        {{ template "runCiModal" . }}
+      {{ end }}
+      {{ if and $isPushAllowed $isOpen $isLastRound }}
+        <button
+          hx-post="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/merge"
+          hx-swap="none"
+          hx-confirm="Are you sure you want to merge pull #{{ .Pull.PullId }} into the `{{ .Pull.TargetBranch }}` branch?"
+          class="btn-flat p-2 flex items-center gap-2 group"
+          {{ if or $loading $isConflicted }}disabled{{ end }}
+        >
           {{ if $loading }}
             {{ i "loader-circle" "w-4 h-4 animate-spin" }}
           {{ else }}
-            {{ i "rotate-ccw" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
+            {{ i "git-merge" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
             {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
           {{ end }}
-          Resubmit
+          Merge{{if $stackCount}} {{$stackCount}}{{end}}
+        </button>
+      {{ end }}
+
+      {{ if and $isPullAuthor $isOpen $isLastRound }}
+        <button id="resubmitBtn"
+            {{ if not .Pull.IsPatchBased }}
+              hx-post="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/resubmit"
+              hx-swap="none"
+            {{ else }}
+              hx-get="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/resubmit"
+            {{ end }}
+
+            hx-disabled-elt="#resubmitBtn"
+            class="btn-flat p-2 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed group"
+
+            {{ if $loading }}
+            title="Checking for updates…"
+            disabled
+            {{ else if $isUpToDate }}
+            title="Update this branch to resubmit this pull request"
+            disabled
+            {{ else }}
+            title="Resubmit this pull request"
+            {{ end }}
+            >
+            {{ if $loading }}
+              {{ i "loader-circle" "w-4 h-4 animate-spin" }}
+            {{ else }}
+              {{ i "rotate-ccw" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
+              {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+            {{ end }}
+            Resubmit
+        </button>
+      {{ end }}
+
+      {{ if and (or $isPullAuthor $isPushAllowed) $isOpen $isLastRound }}
+      <button
+        hx-post="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/close"
+        hx-swap="none"
+        class="btn-flat p-2 flex items-center gap-2 group">
+          {{ i "ban" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
+          {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+          Close
       </button>
-    {{ end }}
+      {{ end }}
 
-    {{ if and (or $isPullAuthor $isPushAllowed) $isOpen $isLastRound }}
-    <button
-      hx-post="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/close"
-      hx-swap="none"
-      class="btn-flat p-2 flex items-center gap-2 group">
-        {{ i "ban" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
-        {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-        Close
-    </button>
-    {{ end }}
-
-    {{ if and (or $isPullAuthor $isPushAllowed) $isClosed $isLastRound }}
-    <button
-      hx-post="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/reopen"
-      hx-swap="none"
-      class="btn-flat p-2 flex items-center gap-2 group">
-        {{ i "refresh-ccw-dot" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
-        {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-        Reopen
-    </button>
-    {{ end }}
+      {{ if and (or $isPullAuthor $isPushAllowed) $isClosed $isLastRound }}
+      <button
+        hx-post="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/reopen"
+        hx-swap="none"
+        class="btn-flat p-2 flex items-center gap-2 group">
+          {{ i "refresh-ccw-dot" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
+          {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+          Reopen
+      </button>
+      {{ end }}
+    </div>
   </div>
+{{ end }}
 
-  {{ if and (not $loading) $isLastRound }}
-    <div id="mergecheck-banner" hx-swap-oob="innerHTML">{{ template "mergeCheck" . }}</div>
-    <div id="resubmit-banner" hx-swap-oob="innerHTML">{{ template "resubmitStatus" . }}</div>
+{{ define "workflowWarning" }}
+  {{ if .WorkflowsChanged }}
+    <details class="group/ci">
+      <summary class="flex items-center gap-2 cursor-pointer list-none">
+        {{ i "triangle-alert" "w-4 h-4 text-amber-600 dark:text-amber-500" }}
+        <span class="font-medium text-amber-600 dark:text-amber-500">Workflow files changed in this round</span>
+        <div class="text-sm text-gray-500 dark:text-gray-400">
+          <span class="group-open/ci:hidden inline">Expand</span>
+          <span class="hidden group-open/ci:inline">Collapse</span>
+        </div>
+      </summary>
+      <ul class="space-y-1 mt-2 overflow-x-auto">
+        {{ range .ChangedWorkflowFiles }}
+          <li class="flex items-center whitespace-nowrap">
+            {{ i "file-warning" "inline-flex w-4 h-4 mr-1.5 text-amber-600 dark:text-amber-500 flex-shrink-0" }}
+            <span class="font-mono">{{ . }}</span>
+          </li>
+        {{ end }}
+      </ul>
+    </details>
+  {{ else }}
+    <div class="flex items-center gap-2 text-amber-600 dark:text-amber-500">
+      {{ i "triangle-alert" "w-4 h-4" }}
+      <span class="font-medium">Workflow needs approval</span>
+    </div>
   {{ end }}
+{{ end }}
+
+{{ define "runCiModal" }}
+  <button
+    class="btn-flat p-2 flex items-center gap-2 flex-shrink-0 group"
+    popovertarget="run-ci-{{ .Pull.PullId }}"
+    popovertargetaction="toggle"
+  >
+    {{ i "circle-play" "w-4 h-4 inline" }}
+    Run CI
+  </button>
+
+  <div
+    id="run-ci-{{ .Pull.PullId }}"
+    popover
+    class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 dark:text-white backdrop:bg-gray-400/50 dark:backdrop:bg-gray-800/50 w-full md:w-96 p-4 rounded drop-shadow overflow-visible"
+  >
+    <form
+      hx-post="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/trigger-ci?confirm=1"
+      hx-swap="none"
+      hx-indicator="#run-ci-spinner-{{ .Pull.PullId }}"
+      class="flex flex-col gap-2"
+    >
+      <label class="text-lg font-medium p-0">Run CI</label>
+      {{ if .WorkflowsChanged }}
+        <div class="flex items-center gap-2 text-amber-600 dark:text-amber-500">
+          {{ i "triangle-alert" "size-4" }}
+          <span class="font-medium">Workflow files changed in this round</span>
+        </div>
+        <ul class="space-y-1 overflow-x-auto pl-6">
+          {{ range .ChangedWorkflowFiles }}
+            <li class="flex items-center whitespace-nowrap">
+              {{ i "file-warning" "size-4 mr-1.5 text-amber-600 dark:text-amber-500 flex-shrink-0" }}
+              <span class="font-mono text-sm">{{ . }}</span>
+            </li>
+          {{ end }}
+        </ul>
+        <p class="text-sm text-gray-500 dark:text-gray-400">Workflow files changed in this round. Are you sure you want to run CI?</p>
+      {{ else }}
+        <div class="flex items-center gap-2 text-amber-600 dark:text-amber-500">
+          {{ i "triangle-alert" "size-4" }}
+          <span class="font-medium">Workflow needs approval</span>
+        </div>
+        <p class="text-sm text-gray-500 dark:text-gray-400">This fork-based pull request needs approval to run CI. Are you sure?</p>
+      {{ end }}
+      <div class="flex gap-2 pt-2">
+        <button
+          type="button"
+          popovertarget="run-ci-{{ .Pull.PullId }}"
+          popovertargetaction="hide"
+          class="btn w-1/2 flex items-center gap-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+        >
+          {{ i "x" "size-4" }} Cancel
+        </button>
+        <button type="submit" class="btn w-1/2 flex items-center">
+          <span class="inline-flex gap-2 items-center">{{ i "shield-check" "size-4" }} Approve</span>
+          <span id="run-ci-spinner-{{ .Pull.PullId }}" class="group">
+            {{ i "loader-circle" "ml-2 w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+          </span>
+        </button>
+      </div>
+      <div id="pull-error" class="text-red-500 dark:text-red-400"></div>
+    </form>
+  </div>
 {{ end }}
 
 {{ define "mergeCheck" }}

@@ -342,16 +342,6 @@
       {{ template "submissionInfo" $ }}
       {{ template "submissionCommits" $ }}
       {{ template "submissionPipeline" $ }}
-      {{ if eq $lastIdx $round }}
-        <div id="mergecheck-banner">
-          {{ if $root.Pull.State.IsOpen }}
-            <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-              {{ i "loader-circle" "w-4 h-4 animate-spin" }}
-              <span>Checking mergeability…</span>
-            </div>
-          {{ end }}
-        </div>
-      {{ end }}
     </div>
   </div>
 {{ end }}
@@ -549,8 +539,6 @@
             {{ end }}
           </div>
       </details>
-  {{ else if and $root.Pull.IsForkBased (eq $item.RoundNumber $root.Pull.LastRoundNumber) $root.RepoInfo.Roles.IsOwner }}
-    {{ template "repo/pulls/fragments/triggerCi" $root }}
   {{ end }}
 {{ end }}
 
@@ -594,7 +582,6 @@
     <div class="relative -ml-10">
       {{ if eq $lastIdx $item.RoundNumber }}
         {{ block "mergeStatus" $root }} {{ end }}
-        <div id="resubmit-banner"></div>
         <div id="pull-action-error" class="error empty:hidden"></div>
       {{ end }}
     </div>

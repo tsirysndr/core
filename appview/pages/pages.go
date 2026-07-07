@@ -1486,12 +1486,6 @@ type RepoSinglePullParams struct {
 	ActiveRound        int
 	IsInterdiff        bool
 
-	// WorkflowsChanged and ChangedWorkflowFiles describe whether the latest
-	// round's patch touches .tangled/workflows/, for warning maintainers
-	// before they manually trigger CI on a fork-based pull request.
-	WorkflowsChanged     bool
-	ChangedWorkflowFiles []string
-
 	Reactions   map[syntax.ATURI]map[models.ReactionKind]models.ReactionDisplayData
 	UserReacted map[syntax.ATURI]map[models.ReactionKind]bool
 
@@ -1525,6 +1519,13 @@ type PullActionsParams struct {
 	ResubmitCheck      ResubmitResult
 	BranchDeleteStatus *models.BranchDeleteStatus
 	Stack              models.Stack
+
+	// Workflow warning state for fork-based pulls without a pipeline on the
+	// latest commit. WorkflowsChanged and ChangedWorkflowFiles are computed
+	// from the latest round's patch.
+	WorkflowsChanged     bool
+	ChangedWorkflowFiles []string
+	HasPipeline          bool
 
 	// renders buttons in a pre-check state and attaches the hx-trigger="load"
 	// that fetches the real, checked fragment
