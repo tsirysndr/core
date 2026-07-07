@@ -26,30 +26,29 @@
   {{ range $k, $d := $defs }}
     {{ if $d.ValueType.IsNull }}{{ $hasNullDefs = true }}{{ end }}
   {{ end }}
-  {{ if or $hasNullDefs (not $defs) }}
-    <div>
-      {{ template "repo/fragments/labelSectionHeaderText" "Labels" }}
+  <div>
+    {{ template "repo/fragments/labelSectionHeaderText" "Labels" }}
 
-      <div class="flex flex-col gap-1 items-start">
-        {{ range $k, $d := $defs }}
+    <div class="flex flex-col gap-1 items-start">
+      {{ range $k, $d := $defs }}
+        {{ if $d.ValueType.IsNull }}
           {{ $isChecked := $state.ContainsLabel $k }}
-          {{ if $d.ValueType.IsNull }}
-            {{ $fieldName := $d.AtUri.String }}
-            {{ if $prefix }}{{ $fieldName = printf "%s[%s]" $prefix $d.AtUri }}{{ end }}
-            <label class="{{$labelStyle}}">
-              <input type="checkbox" name="{{ $fieldName }}" value="null" {{if $isChecked}}checked{{end}}>
-              {{ template "labels/fragments/labelDef" $d }}
-            </label>
-          {{ end }}
-        {{ else }}
-          <p class="text-gray-500 dark:text-gray-400 text-sm py-1">
-            No labels defined yet. You can choose default labels or define custom
-            labels in <a class="underline" href="/{{ $.RepoInfo.FullName }}/settings">settings</a>.
-          </p>
+          {{ $fieldName := $d.AtUri.String }}
+          {{ if $prefix }}{{ $fieldName = printf "%s[%s]" $prefix $d.AtUri }}{{ end }}
+          <label class="{{$labelStyle}}">
+            <input type="checkbox" name="{{ $fieldName }}" value="null" {{if $isChecked}}checked{{end}}>
+            {{ template "labels/fragments/labelDef" $d }}
+          </label>
         {{ end }}
-      </div>
+      {{ end }}
+      {{ if not $hasNullDefs }}
+        <p class="text-gray-500 dark:text-gray-400 text-sm py-1">
+          No labels defined. You can choose default labels or define custom
+          labels in <a class="underline" href="/{{ $.RepoInfo.FullName }}/settings">settings</a>.
+        </p>
+      {{ end }}
     </div>
-  {{ end }}
+  </div>
 {{ end }}
 
 {{ define "editKvLabels" }}
