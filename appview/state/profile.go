@@ -1337,3 +1337,27 @@ func (s *State) UpdateProfilePunchcardSetting(w http.ResponseWriter, r *http.Req
 
 	s.pages.HxRefresh(w)
 }
+
+func (s *State) UpdateProfileThemeSetting(w http.ResponseWriter, r *http.Request) {
+	l := s.logger.With("handler", "UpdateProfileThemeSetting")
+	err := r.ParseForm()
+	if err != nil {
+		l.Error("invalid profile update form", "err", err)
+		return
+	}
+	user := s.oauth.GetMultiAccountUser(r)
+
+	theme := r.Form.Get("theme")
+	if theme != "auto" && theme != "light" && theme != "dark" {
+		l.Error("invalid theme value", "theme", theme)
+		return
+	}
+
+	err = db.UpsertThemePreference(s.db, user.Did, models.ThemePreference(theme))
+	if err != nil {
+		l.Error("failed to update theme preferences", "err", err)
+		return
+	}
+
+	s.pages.HxRefresh(w)
+}

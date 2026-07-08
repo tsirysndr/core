@@ -11,6 +11,7 @@
       </div>
       <div class="col-span-1 md:col-span-3 flex flex-col gap-6">
         {{ template "profile" . }}
+        {{ template "theme" . }}
         {{ if .IsTnglSh }}
           {{ template "accountActions" . }}
         {{ end }}
@@ -128,6 +129,22 @@
         document.getElementById('change-handle-modal').showPopover();
       </script>
     {{ end }}
+  </div>
+{{ end }}
+
+{{ define "theme" }}
+  <div>
+    <h2 class="text-lg font-medium">Theme</h2>
+    <p class="text-gray-500 dark:text-gray-400 pb-2">
+      Customize how the site looks.
+    </p>
+    <form hx-post="/profile/theme" hx-trigger="change" hx-swap="none" class="flex flex-col gap-3">
+      <select name="theme" id="theme-select">
+        <option value="auto" {{ if eq $.ThemePreference "auto" }}selected{{ end }}>Auto (System)</option>
+        <option value="light" {{ if eq $.ThemePreference "light" }}selected{{ end }}>Light</option>
+        <option value="dark" {{ if eq $.ThemePreference "dark" }}selected{{ end }}>Dark</option>
+      </select>
+    </form>
   </div>
 {{ end }}
 

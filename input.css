@@ -142,16 +142,14 @@
         input[type="checkbox"]:disabled:indeterminate {
             background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M2.5 6h7' stroke='rgb(156,163,175)' stroke-width='1.5' stroke-linecap='round'/></svg>");
         }
-        @media (prefers-color-scheme: dark) {
-            input[type="checkbox"]:checked {
-                background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M10 3 4.5 8.5 2 6' stroke='rgb(17,24,39)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-            }
-            input[type="checkbox"]:indeterminate {
-                background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M2.5 6h7' stroke='rgb(17,24,39)' stroke-width='1.5' stroke-linecap='round'/></svg>");
-            }
-            input[type="checkbox"]:disabled:indeterminate {
-                background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M2.5 6h7' stroke='rgb(107,114,128)' stroke-width='1.5' stroke-linecap='round'/></svg>");
-            }
+        [data-theme="dark"] input[type="checkbox"]:checked {
+            background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M10 3 4.5 8.5 2 6' stroke='rgb(17,24,39)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+        }
+        [data-theme="dark"] input[type="checkbox"]:indeterminate {
+            background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M2.5 6h7' stroke='rgb(17,24,39)' stroke-width='1.5' stroke-linecap='round'/></svg>");
+        }
+        [data-theme="dark"] input[type="checkbox"]:disabled:indeterminate {
+            background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'><path d='M2.5 6h7' stroke='rgb(107,114,128)' stroke-width='1.5' stroke-linecap='round'/></svg>");
         }
 
         input[type="radio"] {
@@ -187,13 +185,11 @@
         input[type="radio"]:disabled:checked {
             background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><circle cx='6' cy='6' r='4.5' fill='rgb(209,213,219)'/></svg>");
         }
-        @media (prefers-color-scheme: dark) {
-            input[type="radio"]:checked {
-                background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><circle cx='6' cy='6' r='4.5' fill='rgb(243,244,246)'/></svg>");
-            }
-            input[type="radio"]:disabled:checked {
-                background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><circle cx='6' cy='6' r='4.5' fill='rgb(107,114,128)'/></svg>");
-            }
+        [data-theme="dark"] input[type="radio"]:checked {
+            background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><circle cx='6' cy='6' r='4.5' fill='rgb(243,244,246)'/></svg>");
+        }
+        [data-theme="dark"] input[type="radio"]:disabled:checked {
+            background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><circle cx='6' cy='6' r='4.5' fill='rgb(107,114,128)'/></svg>");
         }
 
         select {
@@ -902,7 +898,7 @@
     text-decoration: underline;
 }
 
-@media (prefers-color-scheme: dark) {
+[data-theme="dark"] {
     /* Background */
     .bg {
         color: #cad3f5;
@@ -1260,7 +1256,7 @@ actor-typeahead::part(menu) {
         0 2px 4px -2px rgb(0 0 0 / 0.1);
 }
 
-@media (prefers-color-scheme: dark) {
+[data-theme="dark"] {
     actor-typeahead {
         --color-background: #1f2937;
         --color-border: #4b5563;
@@ -1588,7 +1584,7 @@ actor-typeahead::part(menu) {
         @apply line-through;
     }
 
-    @media (prefers-color-scheme: dark) {
+    [data-theme="dark"] {
         .term-fg30 {
             color: #a5adcb;
         } /* black */

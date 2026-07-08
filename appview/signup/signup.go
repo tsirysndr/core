@@ -120,6 +120,7 @@ func (s *Signup) signup(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		emailId := r.URL.Query().Get("id")
 		s.pages.Signup(w, pages.SignupParams{
+			BaseParams:        pages.BaseParamsFromContext(r.Context()),
 			CloudflareSiteKey: s.config.Cloudflare.Turnstile.SiteKey,
 			EmailId:           emailId,
 		})

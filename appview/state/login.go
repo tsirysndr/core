@@ -24,6 +24,7 @@ func (s *State) Login(w http.ResponseWriter, r *http.Request) {
 
 		registry := s.oauth.GetAccounts(r)
 		s.pages.Login(w, pages.LoginParams{
+			BaseParams: pages.BaseParamsFromContext(r.Context()),
 			ReturnUrl:  returnURL,
 			ErrorCode:  errorCode,
 			AddAccount: addAccount,

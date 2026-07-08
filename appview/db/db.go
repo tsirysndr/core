@@ -2445,6 +2445,20 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	orm.RunMigration(conn, logger, "add-theme-preferences", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			create table if not exists theme_preferences (
+				id integer primary key autoincrement,
+				user_did text not null unique,
+				theme text not null check (theme in ('auto', 'light', 'dark')),
+				created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+				updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+			);
+			create index if not exists idx_theme_preferences_user_did on theme_preferences(user_did);
+		`)
+		return err
+	})
+
 	orm.RunMigration(conn, logger, "drop-label-ops-indexed", func(tx *sql.Tx) error {
 		_, err := tx.Exec(`alter table label_ops drop column indexed`)
 		return err

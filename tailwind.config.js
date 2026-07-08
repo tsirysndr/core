@@ -12,7 +12,7 @@ module.exports = {
     "./blog/templates/**/*.html",
     "./blog/posts/**/*.md",
   ],
-  darkMode: "media",
+  darkMode: ['selector', '[data-theme="dark"]'],
   theme: {
     container: {
       padding: "2rem",

@@ -103,6 +103,12 @@ func (m *Middleware) InjectBaseParams(next http.Handler) http.Handler {
 			LoggedInUser: user,
 		}
 		if user != nil {
+			theme, err := db.GetThemePreference(m.db, user.Did)
+			if err != nil {
+				slog.Default().Warn("failed to get theme preference", "err", err)
+			} else {
+				bp.ThemePreference = theme
+			}
 			if focusing, _ := db.GetFocusStatus(m.db, user.Did); focusing {
 				if item, _ := db.GetNextFocusItem(m.db, user.Did); item != nil {
 					count, _ := db.CountFocusNotifs(m.db, user.Did)

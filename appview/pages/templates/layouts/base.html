@@ -1,6 +1,6 @@
 {{ define "layouts/base" }}
     <!doctype html>
-    <html lang="en" class="dark:bg-gray-900">
+    <html lang="en"{{ if or (eq .ThemePreference "dark") (eq .ThemePreference "light") }} data-theme="{{ .ThemePreference }}"{{ end }}>
         <head>
             <meta charset="UTF-8" />
             <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
@@ -40,6 +40,10 @@
             <!-- preload main font -->
             <link rel="preload" href="/static/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin />
 
+            <script>
+              if (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches)
+                document.documentElement.dataset.theme = 'dark';
+            </script>
             <link rel="stylesheet" href="/static/tw.css?{{ cssContentHash }}" type="text/css" />
 
             <script>

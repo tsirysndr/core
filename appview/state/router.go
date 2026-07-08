@@ -271,6 +271,7 @@ func (s *State) StandardRouter(mw *middleware.Middleware) http.Handler {
 		r.Post("/avatar", s.UploadProfileAvatar)
 		r.Delete("/avatar", s.RemoveProfileAvatar)
 		r.Post("/punchcard", s.UpdateProfilePunchcardSetting)
+		r.Post("/theme", s.UpdateProfileThemeSetting)
 	})
 
 	r.With(middleware.AuthMiddleware(s.oauth)).Route("/welcome", func(r chi.Router) {

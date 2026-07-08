@@ -43,8 +43,9 @@ var Files embed.FS
 type baseParamsCtxKey struct{}
 
 type BaseParams struct {
-	LoggedInUser *oauth.MultiAccountUser
-	FocusParams  FocusParams
+	LoggedInUser    *oauth.MultiAccountUser
+	FocusParams     FocusParams
+	ThemePreference models.ThemePreference
 }
 
 type FocusParams struct {
@@ -351,6 +352,7 @@ func (p *Pages) Login(w io.Writer, params LoginParams) error {
 }
 
 type SignupParams struct {
+	BaseParams
 	CloudflareSiteKey string
 	EmailId           string
 }
@@ -360,7 +362,7 @@ func (p *Pages) Signup(w io.Writer, params SignupParams) error {
 }
 
 func (p *Pages) CompleteSignup(w io.Writer) error {
-	return p.executeLogin("user/completeSignup", w, nil)
+	return p.executeLogin("user/completeSignup", w, BaseParams{})
 }
 
 type SignupSuccessParams struct {
@@ -2105,17 +2107,17 @@ func (p *Pages) DangerDeleteTokenStep(w io.Writer) error {
 }
 
 func (p *Pages) Error500(w io.Writer) error {
-	return p.execute("errors/500", w, nil)
+	return p.execute("errors/500", w, BaseParams{})
 }
 
 func (p *Pages) Error404(w io.Writer) error {
-	return p.execute("errors/404", w, nil)
+	return p.execute("errors/404", w, BaseParams{})
 }
 
 func (p *Pages) ErrorKnot404(w io.Writer) error {
-	return p.execute("errors/knot404", w, nil)
+	return p.execute("errors/knot404", w, BaseParams{})
 }
 
 func (p *Pages) Error503(w io.Writer) error {
-	return p.execute("errors/503", w, nil)
+	return p.execute("errors/503", w, BaseParams{})
 }
