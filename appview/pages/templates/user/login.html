@@ -18,7 +18,7 @@
       </div>
       <div class="divide-y divide-gray-200 dark:divide-gray-700">
           {{ range .Accounts }}
-          <div class="flex items-center justify-between px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">
+          <div class="flex items-center justify-between px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 group">
               <button
                   type="button"
                   hx-post="/account/switch"
@@ -39,11 +39,14 @@
                   type="button"
                   hx-delete="/account/{{ .Did }}"
                   hx-swap="none"
-                  class="p-1 text-gray-400 hover:text-red-500 dark:hover:text-red-400 flex-shrink-0"
+                  class="p-1 text-gray-400 hover:text-red-500 dark:hover:text-red-400 flex-shrink-0 group-has-[.htmx-request]:hidden"
                   title="Remove account"
               >
                   {{ i "x" "w-4 h-4" }}
               </button>
+              <span class="hidden group-has-[.htmx-request]:inline p-1 text-gray-400">
+                  {{ i "loader-circle" "size-4 animate-spin" }}
+              </span>
           </div>
           {{ end }}
       </div>
