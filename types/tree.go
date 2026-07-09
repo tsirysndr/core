@@ -101,6 +101,16 @@ func (t *NiceTree) IsSubmodule() bool {
 	return m == filemode.Submodule
 }
 
+func (t *NiceTree) IsSymlink() bool {
+	m, err := t.FileMode()
+
+	if err != nil {
+		return false
+	}
+
+	return m == filemode.Symlink
+}
+
 type LastCommitInfo struct {
 	Hash    plumbing.Hash
 	Message string

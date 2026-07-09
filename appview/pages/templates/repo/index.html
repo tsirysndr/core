@@ -151,7 +151,7 @@
 
           {{ if .IsFile }}
             {{ $link = printf "/%s/%s/%s/%s" $.RepoInfo.FullName "blob" (urlquery $.Ref) .Name }}
-            {{ $icon = "file" }}
+            {{ $icon = cond .IsSymlink "file-symlink" "file" }}
             {{ $iconStyle = "size-4" }}
           {{ end }}
 
