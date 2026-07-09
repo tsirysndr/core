@@ -280,10 +280,18 @@ func (i *Ingester) ingestFollow(e *jmodels.Event, l *slog.Logger) error {
 			return err
 		}
 
+		followedAt, err := time.Parse(time.RFC3339, record.CreatedAt)
+		if err != nil {
+			err = fmt.Errorf("createdAt is invalid datetime: %w", err)
+			l.Error("invalid record", "err", err)
+			return err
+		}
+
 		err = db.UpsertFollow(i.Db, models.Follow{
 			UserDid:    did,
 			SubjectDid: record.Subject,
 			Rkey:       e.Commit.RKey,
+			FollowedAt: followedAt,
 		})
 	case jmodels.CommitOperationDelete:
 		err = db.DeleteFollowByRkey(i.Db, did, e.Commit.RKey)
