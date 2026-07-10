@@ -345,6 +345,8 @@ func (h *InternalHandle) compileCiPipeline(
 	repoDid string,
 	repoPath string,
 ) (workflow.Compiler, tangled.Pipeline, error) {
+	l := h.l.With("func", "compileCiPipeline", "ref", line.Ref, "repo", repoDid)
+
 	if line.NewSha.IsZero() {
 		return workflow.Compiler{}, tangled.Pipeline{}, nil
 	}
@@ -356,6 +358,7 @@ func (h *InternalHandle) compileCiPipeline(
 
 	workflowDir, err := gr.FileTree(context.Background(), workflow.WorkflowDir)
 	if err != nil {
+		l.Info("no workflow dir found, skipping ci compilation", "err", err)
 		return workflow.Compiler{}, tangled.Pipeline{}, nil
 	}
 
@@ -367,6 +370,7 @@ func (h *InternalHandle) compileCiPipeline(
 		fpath := filepath.Join(workflow.WorkflowDir, e.Name)
 		contents, err := gr.RawContent(fpath)
 		if err != nil {
+			l.Warn("failed to read workflow file", "file", fpath, "err", err)
 			continue
 		}
 		rawPipeline = append(rawPipeline, workflow.RawWorkflow{
@@ -374,6 +378,8 @@ func (h *InternalHandle) compileCiPipeline(
 			Contents: contents,
 		})
 	}
+
+	l.Info("loaded workflow files", "count", len(rawPipeline))
 
 	defaultBranch, _ := gr.FindMainBranch()
 
@@ -406,6 +412,19 @@ func (h *InternalHandle) compileCiPipeline(
 	}
 
 	compiled := compiler.Compile(compiler.Parse(rawPipeline))
+
+	l.Info("compiled ci pipeline",
+		"workflows", len(compiled.Workflows),
+		"errors", len(compiler.Diagnostics.Errors),
+		"warnings", len(compiler.Diagnostics.Warnings),
+	)
+	for _, e := range compiler.Diagnostics.Errors {
+		l.Error("ci compilation error", "path", e.Path, "err", e.Error)
+	}
+	for _, w := range compiler.Diagnostics.Warnings {
+		l.Warn("ci compilation warning", "path", w.Path, "kind", w.Type, "reason", w.Reason)
+	}
+
 	return compiler, compiled, nil
 }
 
