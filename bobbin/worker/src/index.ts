@@ -2,6 +2,7 @@ import { Container } from "@cloudflare/containers";
 
 export interface Env {
   BOBBIN: DurableObjectNamespace<BobbinContainer>;
+  RATE_LIMITER: RateLimit;
   BOBBIN_HYDRANT_URL: string;
   BOBBIN_SLINGSHOT_URL: string;
   BOBBIN_LOG: string;
@@ -33,6 +34,25 @@ export default {
     if (url.pathname === "/" || url.pathname === "") {
       return new Response(INDEX, { headers: { "Content-Type": "text/plain" } });
     }
+
+    const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
+    const { success } = await env.RATE_LIMITER.limit({ key: ip });
+    if (!success) {
+      return new Response(
+        JSON.stringify({
+          error: "RateLimitExceeded",
+          message: "too many requests, slow down",
+        }),
+        {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After": "60",
+          },
+        },
+      );
+    }
+
     const container = env.BOBBIN.getByName("primary");
     await container.startAndWaitForPorts({
       startOptions: {
