@@ -267,17 +267,12 @@ func (h *InternalHandle) PostReceiveHook(w http.ResponseWriter, r *http.Request)
 
 		if !git.HasSkipCIPushOption(pushOptions) {
 			verbose := hasVerboseCIPushOption(pushOptions)
-			if err := h.emitCiDiagnostics(&resp.Messages, line, ownerDid, repoName, repoDid, repoPath, verbose); err != nil {
-				l.Error("failed to emit ci diagnostics", "err", err, "line", line, "did", gitUserDid, "repo", gitRelativeDir)
-			}
-		}
-
-		// emit pipeline logs link
-		if h.c.LogsAddr != "" {
-			host, port, err := net.SplitHostPort(h.c.LogsAddr)
-			if err == nil {
-				resp.Messages = append(resp.Messages, "→  Browse CI logs in your terminal:")
-				resp.Messages = append(resp.Messages, fmt.Sprintf("   ssh -t -p %s %s %s %s", port, host, repoDid, line.NewSha))
+			compiler, compiled, err := h.compileCiPipeline(line, ownerDid, repoName, repoDid, repoPath)
+			if err != nil {
+				l.Error("failed to compile ci pipeline", "err", err, "line", line, "did", gitUserDid, "repo", gitRelativeDir)
+			} else {
+				h.emitCiDiagnostics(&resp.Messages, compiler, compiled, verbose)
+				h.emitCiSshCommand(&resp.Messages, compiled, repoDid, line)
 			}
 		}
 	}
@@ -343,42 +338,38 @@ func hasVerboseCIPushOption(pushOptions []string) bool {
 	return false
 }
 
-func (h *InternalHandle) emitCiDiagnostics(
-	clientMsgs *[]string,
+func (h *InternalHandle) compileCiPipeline(
 	line git.PostReceiveLine,
 	ownerDid string,
 	repoName string,
 	repoDid string,
 	repoPath string,
-	verbose bool,
-) error {
+) (workflow.Compiler, tangled.Pipeline, error) {
 	if line.NewSha.IsZero() {
-		return nil
+		return workflow.Compiler{}, tangled.Pipeline{}, nil
 	}
 
 	gr, err := git.Open(repoPath, line.Ref)
 	if err != nil {
-		return fmt.Errorf("failed to open git repo at ref %s: %w", line.Ref, err)
+		return workflow.Compiler{}, tangled.Pipeline{}, fmt.Errorf("failed to open git repo at ref %s: %w", line.Ref, err)
 	}
 
 	workflowDir, err := gr.FileTree(context.Background(), workflow.WorkflowDir)
 	if err != nil {
-		return nil
+		return workflow.Compiler{}, tangled.Pipeline{}, nil
 	}
 
-	var pipeline workflow.RawPipeline
+	var rawPipeline workflow.RawPipeline
 	for _, e := range workflowDir {
 		if !e.IsFile() {
 			continue
 		}
-
 		fpath := filepath.Join(workflow.WorkflowDir, e.Name)
 		contents, err := gr.RawContent(fpath)
 		if err != nil {
 			continue
 		}
-
-		pipeline = append(pipeline, workflow.RawWorkflow{
+		rawPipeline = append(rawPipeline, workflow.RawWorkflow{
 			Name:     e.Name,
 			Contents: contents,
 		})
@@ -402,7 +393,7 @@ func (h *InternalHandle) emitCiDiagnostics(
 
 	changedFiles, err := gr.ChangedFilesBetween(line.OldSha.String(), line.NewSha.String())
 	if err != nil {
-		return fmt.Errorf("getting changed files: %w", err)
+		return workflow.Compiler{}, tangled.Pipeline{}, fmt.Errorf("getting changed files: %w", err)
 	}
 
 	compiler := workflow.Compiler{
@@ -414,21 +405,39 @@ func (h *InternalHandle) emitCiDiagnostics(
 		ChangedFiles: changedFiles,
 	}
 
-	compiler.Compile(compiler.Parse(pipeline))
+	compiled := compiler.Compile(compiler.Parse(rawPipeline))
+	return compiler, compiled, nil
+}
 
+func (h *InternalHandle) emitCiDiagnostics(clientMsgs *[]string, compiler workflow.Compiler, compiled tangled.Pipeline, verbose bool) {
 	for _, e := range compiler.Diagnostics.Errors {
 		*clientMsgs = append(*clientMsgs, e.String())
 	}
 	if verbose {
+		if len(compiled.Workflows) == 0 {
+			*clientMsgs = append(*clientMsgs, "info: no pipelines to compile")
+			return
+		}
 		if compiler.Diagnostics.IsEmpty() {
 			*clientMsgs = append(*clientMsgs, "success: pipeline compiled with no diagnostics")
+			return
 		}
 		for _, w := range compiler.Diagnostics.Warnings {
 			*clientMsgs = append(*clientMsgs, w.String())
 		}
 	}
+}
 
-	return nil
+func (h *InternalHandle) emitCiSshCommand(clientMsgs *[]string, compiled tangled.Pipeline, repoDid string, line git.PostReceiveLine) {
+	if len(compiled.Workflows) == 0 || h.c.LogsAddr == "" {
+		return
+	}
+	host, port, err := net.SplitHostPort(h.c.LogsAddr)
+	if err != nil {
+		return
+	}
+	*clientMsgs = append(*clientMsgs, "→  Browse CI logs in your terminal:")
+	*clientMsgs = append(*clientMsgs, fmt.Sprintf("   ssh -t -p %s %s %s %s", port, host, repoDid, line.NewSha))
 }
 
 func (h *InternalHandle) emitPullRequestLink(
