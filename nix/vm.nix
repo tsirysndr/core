@@ -78,7 +78,7 @@ in
             # knotmirror
             {
               from = "host";
-              host.port = 7007; # 7000 is deserved in macos for Airplay
+              host.port = 7007; # 7000 is reserved in macos for Airplay
               guest.port = 7000;
             }
             # knotmirror-tap
