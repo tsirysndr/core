@@ -439,11 +439,13 @@ async fn upgrade_collaborator(
 
 fn upgrade_ref_update(l: LegacyRefUpdate<DefaultStr>) -> RefUpdate<DefaultStr> {
     RefUpdate {
+        changed_files: None,
         committer_did: l.committer_did,
         meta: l.meta,
         new_sha: l.new_sha,
         old_sha: l.old_sha,
         owner_did: l.owner_did,
+        push_options: None,
         r#ref: l.r#ref,
         repo: l.repo_did,
         extra_data: l.extra_data,
@@ -979,7 +981,11 @@ mod tests {
             LegacyRecord::from_json_bytes(&nsid("sh.tangled.git.refUpdate"), json).expect("decode");
         let canon = upgrade(legacy, &resolver).await.expect("upgrade");
         match canon {
-            Record::RefUpdate(r) => assert_eq!(r.repo, did("did:plc:scallop")),
+            Record::RefUpdate(r) => {
+                assert_eq!(r.repo, did("did:plc:scallop"));
+                assert!(r.changed_files.is_none());
+                assert!(r.push_options.is_none());
+            }
             other => panic!("expected canon ref update, got {other:?}"),
         }
     }
