@@ -22,7 +22,7 @@ let's get into it!
 ## Code search
 
 ![Code Search feature
-card](https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:wshs7t2adsemcrrd4snkeqli/bafkreiba3x4mrqegrtost4vlddfbhbbza7jxeof6q3odflpxf77hdfu2fa@jpeg)
+card](https://assets.tangled.network/blog/newsletter/03/CodeSearch.png)
 
 Full-text code search is here. You can now search for code across the
 *entire* Tangled network, and yes, regex is supported. :)
@@ -32,7 +32,7 @@ Try it here [in our monorepo](https://tangled.org/tangled.org/core/search)!
 ## Focus mode
 
 ![Focus Mode feature
-card](https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:wshs7t2adsemcrrd4snkeqli/bafkreifvd4pjapk2mce4jf3xt2anfgatlkhmduenkkfxato6iylvcw2bjm@jpeg)
+card](https://assets.tangled.network/blog/newsletter/03/Focus.png)
 
 Focus Mode is a new way to clear notifications: lock in and knock out your list
 one item at a time, with a task bar that nudges you to stay on track until the
@@ -41,14 +41,14 @@ queue is empty.
 ## Experimental XRPC API
 
 ![Experimental API feature
-card](https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:wshs7t2adsemcrrd4snkeqli/bafkreignzcbexjtq6zwwxsnvmsytbbqgsfie2qka7c6jqqvf6spzpj5y5a@jpeg)
+card](https://assets.tangled.network/blog/newsletter/03/API.png)
 
 The Tangled XRPC API is live. An experimental API (using the [AT Protocol XRPC
 format](https://atproto.com/specs/xrpc)) to query Tangled is now available at
 [api.tangled.org](https://api.tangled.org). Give it a spin:
 
 ```
-λ curl https://api.tangled.org/xrpc/sh.tangled.repo.listRepos?subject=did:plc:wshs7t2adsemcrrd4snkeqli | jq
+curl https://api.tangled.org/xrpc/sh.tangled.repo.listRepos?subject=did:plc:wshs7t2adsemcrrd4snkeqli | jq
 ```
 
 You can browse the available lexicons in the monorepo, more docs to follow.
@@ -56,17 +56,17 @@ You can browse the available lexicons in the monorepo, more docs to follow.
 ## A new home
 
 ![New Home feature
-card](https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:wshs7t2adsemcrrd4snkeqli/bafkreife4l2m4gpwb33sngzxcmybqnnhqguuxaeuy56qf4lo2py5tndsza@jpeg)
+card](https://assets.tangled.network/blog/newsletter/03/Home.png)
 
-The homepage now uses a brand-new three-column layout: Notifications and
-Recents on the left, your Timeline (Global / Following) in the middle, and
-Trending, Announcements, and more on the right. We hope you like the improved
-information density just as much as we do!
+ The homepage now uses a brand-new three-column layout: Notifications and
+ Recents on the left, your Timeline (Global / Following) in the middle, and
+ Trending, Announcements, and more on the right. We hope you like the improved
+ information density just as much as we do!
 
 ## MicroVM-powered CI
 
 ![MicroVM CI feature
-card](https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:wshs7t2adsemcrrd4snkeqli/bafkreidwylh22aw2ctoij324ag2pjm2qfg4oep6jaok6wejghxebcfmscy@jpeg)
+card](https://assets.tangled.network/blog/newsletter/03/MicroVM.png)
 
 Spindles can now run jobs inside NixOS/Alpine QEMU microVMs. That means you can
 build Docker containers or run services like Postgres directly in your CI
@@ -79,4 +79,4 @@ workflows, each job isolated by default.
 That's it for this issue! As always, you can reply to this email, or
 find us on [Discord](https://chat.tangled.org).
 
--- Anirudh
+— Anirudh
