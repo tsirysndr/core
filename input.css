@@ -191,11 +191,23 @@
 
         select {
             @apply flex items-center rounded p-2 h-[32px]
-            border border-gray-200 
+            border border-gray-200
             bg-white
-            dark:text-white 
-            dark:bg-gray-800 dark:border-gray-700 
+            dark:text-white
+            dark:bg-gray-800 dark:border-gray-700
             ;
+        }
+
+        /* iOS Safari zooms the viewport when focusing a form control
+           whose font-size is under 16px; with the 14px root font size
+           even text-lg (1.125rem) falls short. !important so this also
+           wins over text-* utilities applied in templates. */
+        @media (max-width: 639px) {
+            input:not([type="checkbox"]):not([type="radio"]),
+            textarea,
+            select {
+                font-size: 16px !important;
+            }
         }
 
         details summary::-webkit-details-marker {
