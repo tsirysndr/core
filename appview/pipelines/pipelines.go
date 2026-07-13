@@ -19,7 +19,6 @@ import (
 	"tangled.org/core/hostutil"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/lexutil"
-	"tangled.org/core/orm"
 	"tangled.org/core/rbac"
 	"tangled.org/core/types"
 
@@ -88,16 +87,11 @@ func (p *Pipelines) Index(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filterKind := r.URL.Query().Get("trigger")
-	filters := []orm.Filter{
-		orm.FilterEq("p.repo_did", f.RepoDid),
-	}
+	var kinds []string
 	switch filterKind {
-	case "push":
-		filters = append(filters, orm.FilterEq("t.kind", "push"))
-	case "pull_request":
-		filters = append(filters, orm.FilterEq("t.kind", "pull_request"))
+	case "push", "pull_request":
+		kinds = []string{filterKind}
 	default:
-		// no filters otherwise, default to "all"
 		filterKind = "all"
 	}
 
@@ -125,9 +119,8 @@ func (p *Pipelines) Index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// sh.tangled.ci.queryPipelines(repo, kind, limit=30)
 	xrpcc := indigoxrpc.Client{Host: spindleUrl}
-	out, err := tangled.CiQueryPipelines(r.Context(), &xrpcc, nil, "", 30, f.RepoDid)
+	out, err := tangled.CiQueryPipelines(r.Context(), &xrpcc, nil, "", kinds, 30, f.RepoDid)
 	if err != nil {
 		l.Error("failed to fetch pipelines", "err", err)
 		p.pages.Pipelines(w, pages.PipelinesParams{

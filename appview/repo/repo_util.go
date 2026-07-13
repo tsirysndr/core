@@ -110,7 +110,7 @@ func getPipelineStatuses(
 	}
 
 	xrpcc := &indigoxrpc.Client{Host: spindleUrl}
-	out, err := tangled.CiQueryPipelines(ctx, xrpcc, shas, "", 0, repo.RepoDid)
+	out, err := tangled.CiQueryPipelines(ctx, xrpcc, shas, "", nil, 0, repo.RepoDid)
 	if err != nil {
 		return nil, err
 	}

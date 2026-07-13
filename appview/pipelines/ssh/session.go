@@ -53,7 +53,7 @@ func (s *Server) teaHandler(sess ssh.Session) (tea.Model, []tea.ProgramOption) {
 	}
 
 	xrpcc := extlexutil.Client{Client: indigoxrpc.Client{Host: host}}
-	out, err := tangled.CiQueryPipelines(sess.Context(), &xrpcc, []string{sha}, "", 1, repoDID)
+	out, err := tangled.CiQueryPipelines(sess.Context(), &xrpcc, []string{sha}, "", nil, 1, repoDID)
 	if err != nil || len(out.Pipelines) == 0 {
 		l.Warn("pipeline not found", "err", err)
 		return newErrorModel(renderer, fmt.Sprintf("pipeline not found for repo %s @ %s", repoDID, sha)), wishtea.MakeOptions(sess)

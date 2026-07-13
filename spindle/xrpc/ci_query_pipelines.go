@@ -24,6 +24,7 @@ func (x *Xrpc) HandleCiQueryPipelines(w http.ResponseWriter, r *http.Request) {
 
 	commits := r.URL.Query()["commits"]
 	cursor := r.URL.Query().Get("cursor")
+	kinds := r.URL.Query()["kinds"]
 	limitStr := r.URL.Query().Get("limit")
 
 	limit := 30
@@ -33,7 +34,7 @@ func (x *Xrpc) HandleCiQueryPipelines(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	pipelines, nextCursor, total, err := x.Db.QueryPipelines(r.Context(), repo, commits, cursor, limit)
+	pipelines, nextCursor, total, err := x.Db.QueryPipelines(r.Context(), repo, commits, cursor, kinds, limit)
 	if err != nil {
 		fail(xrpcerr.GenericError(err), http.StatusInternalServerError)
 		return

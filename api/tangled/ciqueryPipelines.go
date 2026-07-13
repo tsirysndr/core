@@ -26,9 +26,10 @@ type CiQueryPipelines_Output struct {
 //
 // commits: Filter pipelines by commits. When provided, maximum one pipeline per commit id will be returned.
 // cursor: Pagination cursor
+// kinds: Filter pipelines by trigger kind. When provided, pipelines matching any listed kind are returned; when omitted, every kind is returned.
 // limit: Maximum number of pipelines to return
 // repo: DID of the repository
-func CiQueryPipelines(ctx context.Context, c util.LexClient, commits []string, cursor string, limit int64, repo string) (*CiQueryPipelines_Output, error) {
+func CiQueryPipelines(ctx context.Context, c util.LexClient, commits []string, cursor string, kinds []string, limit int64, repo string) (*CiQueryPipelines_Output, error) {
 	var out CiQueryPipelines_Output
 
 	params := map[string]interface{}{}
@@ -37,6 +38,9 @@ func CiQueryPipelines(ctx context.Context, c util.LexClient, commits []string, c
 	}
 	if cursor != "" {
 		params["cursor"] = cursor
+	}
+	if len(kinds) != 0 {
+		params["kinds"] = kinds
 	}
 	if limit != 0 {
 		params["limit"] = limit

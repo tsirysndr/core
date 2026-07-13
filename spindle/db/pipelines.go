@@ -12,7 +12,7 @@ import (
 	"tangled.org/core/workflow"
 )
 
-func (d *DB) QueryPipelines(ctx context.Context, repoDid string, commits []string, cursor string, limit int) ([]*tangled.CiPipeline, string, int64, error) {
+func (d *DB) QueryPipelines(ctx context.Context, repoDid string, commits []string, cursor string, kinds []string, limit int) ([]*tangled.CiPipeline, string, int64, error) {
 	if limit <= 0 {
 		limit = 30
 	}
@@ -39,6 +39,15 @@ func (d *DB) QueryPipelines(ctx context.Context, repoDid string, commits []strin
 			json_extract(event, '$.triggerMetadata.pullRequest.sourceSha'),
 			json_extract(event, '$.triggerMetadata.manual.sha')
 		) in (` + strings.Join(placeholders, ",") + ")"
+	}
+
+	if len(kinds) > 0 {
+		placeholders := make([]string, len(kinds))
+		for i := range kinds {
+			placeholders[i] = "?"
+			args = append(args, kinds[i])
+		}
+		query += " and json_extract(event, '$.triggerMetadata.kind') in (" + strings.Join(placeholders, ",") + ")"
 	}
 
 	if cursor != "" {

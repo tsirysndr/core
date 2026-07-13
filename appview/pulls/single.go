@@ -172,7 +172,7 @@ func (s *Pulls) repoPullHelper(w http.ResponseWriter, r *http.Request, interdiff
 			return m
 		}
 		xrpcc := &indigoxrpc.Client{Host: spindleUrl}
-		out, err := tangled.CiQueryPipelines(ctx, xrpcc, shas, "", 0, f.RepoDid)
+		out, err := tangled.CiQueryPipelines(ctx, xrpcc, shas, "", nil, 0, f.RepoDid)
 		if err != nil {
 			l.Error("failed to fetch pipelines", "err", err)
 			return m
