@@ -187,22 +187,13 @@ func (g *GitRepo) applyPatch(patchData, patchFile string, opts MergeOptions) err
 	}
 
 	// else, apply using 'git apply' and commit it manually
-	applyCmd, err := wrapCmd(exec.Command("git", "-C", g.path, "apply", patchFile))
+	applyCmd, err := wrapCmd(exec.Command("git", "-C", g.path, "apply", "--index", patchFile))
 	if err != nil {
 		return fmt.Errorf("sandbox wrap for git apply: %w", err)
 	}
 	applyCmd.Stderr = &stderr
 	if err := applyCmd.Run(); err != nil {
 		return fmt.Errorf("patch application failed: %s", stderr.String())
-	}
-
-	stderr.Reset()
-	stageCmd, err := wrapCmd(exec.Command("git", "-C", g.path, "add", "."))
-	if err != nil {
-		return fmt.Errorf("sandbox wrap for git add: %w", err)
-	}
-	if err := stageCmd.Run(); err != nil {
-		return fmt.Errorf("failed to stage changes: %w", err)
 	}
 
 	commitArgs := []string{"-C", g.path, "commit", "--allow-empty"}

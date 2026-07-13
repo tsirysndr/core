@@ -197,6 +197,54 @@ index 0000000..ce01362
 	assert.Equal(t, "hello\n", content)
 }
 
+func TestApplyPatch_DoesNotCommitPatchFile(t *testing.T) {
+	h := helper(t)
+	defer h.cleanup()
+
+	repo := h.initRepo()
+
+	patch := `diff --git a/scallop.txt b/scallop.txt
+new file mode 100644
+index 0000000..ce01362
+--- /dev/null
++++ b/scallop.txt
+@@ -0,0 +1 @@
++hello
+`
+
+	patchFile, err := createTempIn(repo.path, patch)
+	require.NoError(t, err)
+	defer os.Remove(patchFile)
+
+	opts := MergeOptions{
+		CommitMessage:  "Add scallop.txt",
+		CommitterName:  "nel",
+		CommitterEmail: "nel@nel.pet",
+		FormatPatch:    false,
+	}
+
+	err = repo.applyPatch(patch, patchFile, opts)
+	require.NoError(t, err)
+
+	refreshed, err := PlainOpen(repo.path)
+	require.NoError(t, err)
+
+	head, err := refreshed.r.Head()
+	require.NoError(t, err)
+
+	commit, err := refreshed.r.CommitObject(head.Hash())
+	require.NoError(t, err)
+
+	tree, err := commit.Tree()
+	require.NoError(t, err)
+
+	_, err = tree.File("scallop.txt")
+	assert.NoError(t, err, "patched file should be committed")
+
+	_, err = tree.File(filepath.Base(patchFile))
+	assert.ErrorIs(t, err, object.ErrFileNotFound, "temporary patch file must not be committed")
+}
+
 func TestApplyPatch_DeleteFile(t *testing.T) {
 	h := helper(t)
 	defer h.cleanup()
