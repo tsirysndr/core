@@ -60,6 +60,8 @@ module.exports = {
             },
             blockquote: {
               quotes: "none",
+              fontWeight: "400",
+              "@apply text-gray-500 dark:text-gray-400": {},
             },
             "h1, h2, h3, h4": {
               "@apply mt-4 mb-2": {},
