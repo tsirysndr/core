@@ -4,6 +4,7 @@ template:
 slug: bobbin
 title: Introducing Bobbin
 subtitle: A diskless, API-only AppView for Tangled
+image: https://assets.tangled.network/blog/bobbin.png
 date: 2026-07-13
 authors:
   - name: Lewis
@@ -174,7 +175,7 @@ off compared to the "true" dataset, et cetera. Any time we want to
 change/add functionality, all we have to do is simply restart
 Bobbin and the operation is done. Another benefit is that Bobbin lends
 itself to "cloud-native deployments" as the corpos say. Tangled's own
-flagship instance runs on a CloudFlare worker.
+flagship instance runs on Cloudflare Containers.
 
 All this being said, I'm not necessarily married to the idea that Bobbin
 never touches disk, I think that one cute improvement could be to simply
