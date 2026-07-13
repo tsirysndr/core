@@ -46,7 +46,7 @@ that the journey of discovery that led me to Bobbin makes sense:
 3. Its architecture from the ground up is inherently built for the kind
 of web program that assumes *it* is the source of truth of data.
 4. Because of all of the above, and the fact that there *is* some
-private data such as email->user [DID](https://atproto.com/specs/did)
+private data such as email -> user [DID](https://atproto.com/specs/did)
 ties, there ought to only be one AppView for Tangled. This means that
 latency to Tangled is vaguely a function of distance from the server
 in Stockholm.
@@ -195,6 +195,6 @@ sub-90-second backfill, that serves API requests as a little engine
 that could. With it, anyone can build programs using the Tangled dataset
 more easily.
 
-There is an instance of Bobbin on
-[api.tangled.org](https://api.tangled.org), and hopefully you'd find it
-easy to host your own.
+There is an instance of Bobbin on [api.tangled.org](https://api.tangled.org),
+and hopefully you'd find it easy to host your own. Bobbin's source lives in
+[our monorepo](https://tangled.org/tangled.org/core/tree/master/bobbin).
