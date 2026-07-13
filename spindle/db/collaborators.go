@@ -26,6 +26,16 @@ func (d *DB) AddRepoCollaborator(c RepoCollaborator) error {
 	return err
 }
 
+func (d *DB) AddKnotCollaborator(repoDid, subject syntax.DID) error {
+	_, err := d.Exec(
+		`insert into repo_collaborators (owner_did, rkey, subject, repo_did)
+		 values (?, ?, ?, ?)
+		 on conflict(owner_did, rkey) do nothing`,
+		repoDid.String(), subject.String(), subject.String(), repoDid.String(),
+	)
+	return err
+}
+
 func scanCollab(row interface{ Scan(...any) error }) (*RepoCollaborator, error) {
 	var owner, rkey, subject, repoDid string
 	if err := row.Scan(&owner, &rkey, &subject, &repoDid); err != nil {
@@ -57,6 +67,17 @@ func (d *DB) DeleteRepoCollaborator(ownerDid syntax.DID, rkey syntax.RecordKey) 
 	}
 	if n == 0 {
 		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (d *DB) DeleteRepoCollaboratorBySubjectRepo(subject, repoDid syntax.DID) error {
+	_, err := d.Exec(
+		`delete from repo_collaborators where repo_did = ? and subject = ?`,
+		repoDid.String(), subject.String(),
+	)
+	if err != nil {
+		return fmt.Errorf("delete collaborator %s on %s: %w", subject, repoDid, err)
 	}
 	return nil
 }

@@ -2,6 +2,7 @@ package spindle
 
 import (
 	"context"
+	"database/sql"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -24,6 +25,7 @@ import (
 	"tangled.org/core/eventstream"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/jetstream"
+	knotdb "tangled.org/core/knotserver/db"
 	kgit "tangled.org/core/knotserver/git"
 	"tangled.org/core/log"
 	"tangled.org/core/notifier"
@@ -408,6 +410,9 @@ func (s *Spindle) XrpcRouter() http.Handler {
 func (s *Spindle) processKnotStream(ctx context.Context, src eventconsumer.Source, msg eventstream.Event) error {
 	l := log.FromContext(ctx).With("handler", "processKnotStream")
 	l = l.With("src", src.Key(), "msg.Nsid", msg.Nsid, "msg.Rkey", msg.Rkey)
+	if msg.Nsid == knotdb.RepoCollaboratorUpdateNSID {
+		return s.ingestKnotCollaborator(ctx, l, src, msg)
+	}
 	if msg.Nsid == tangled.GitRefUpdateNSID {
 		event := tangled.GitRefUpdate{}
 		if err := json.Unmarshal(msg.EventJson, &event); err != nil {
@@ -466,6 +471,60 @@ func (s *Spindle) processKnotStream(ctx context.Context, src eventconsumer.Sourc
 		l.Info("pipeline triggered", "pipeline", pipelineId.AtUri())
 	}
 
+	return nil
+}
+
+func (s *Spindle) ingestKnotCollaborator(ctx context.Context, l *slog.Logger, src eventconsumer.Source, msg eventstream.Event) error {
+	var rec knotdb.RepoCollaboratorUpdate
+	if err := json.Unmarshal(msg.EventJson, &rec); err != nil {
+		l.Error("error unmarshalling collaboratorUpdate", "err", err)
+		return err
+	}
+
+	subject, err := syntax.ParseDID(rec.Subject)
+	if err != nil {
+		l.Info("skipping collaboratorUpdate with malformed subject", "subject", rec.Subject, "err", err)
+		return nil
+	}
+	repoDid, err := syntax.ParseDID(rec.Repo)
+	if err != nil {
+		l.Info("skipping collaboratorUpdate with malformed repo", "repo", rec.Repo, "err", err)
+		return nil
+	}
+
+	repo, err := s.db.GetRepoByDid(repoDid)
+	if errors.Is(err, sql.ErrNoRows) {
+		l.Info("skipping collaboratorUpdate for unknown repo", "repo", repoDid)
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("lookup repo %s: %w", repoDid, err)
+	}
+	if src.Host != repo.Knot {
+		l.Warn("dropping collaboratorUpdate from non-owning knot", "src", src.Host, "repoKnot", repo.Knot)
+		return nil
+	}
+
+	switch rec.Op {
+	case knotdb.AclOpAdd:
+		if err := s.e.AddCollaborator(subject.String(), rbac.ThisServer, repoDid.String()); err != nil {
+			return fmt.Errorf("add collaborator policy: %w", err)
+		}
+		if err := s.db.AddKnotCollaborator(repoDid, subject); err != nil {
+			return fmt.Errorf("track collaborator: %w", err)
+		}
+		l.Info("added knot-managed collaborator", "subject", subject, "repo", repoDid)
+	case knotdb.AclOpRemove:
+		if err := s.e.RemoveCollaborator(subject.String(), rbac.ThisServer, repoDid.String()); err != nil {
+			return fmt.Errorf("remove collaborator policy: %w", err)
+		}
+		if err := s.db.DeleteRepoCollaboratorBySubjectRepo(subject, repoDid); err != nil {
+			return fmt.Errorf("delete collaborator row: %w", err)
+		}
+		l.Info("removed knot-managed collaborator", "subject", subject, "repo", repoDid)
+	default:
+		return fmt.Errorf("collaboratorUpdate unknown op %q", rec.Op)
+	}
 	return nil
 }
 
