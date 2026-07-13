@@ -10,7 +10,6 @@ authors:
   - name: Lewis
     email: lewis@tangled.org
     handle: oyster.cafe
-draft: true
 ---
 
 Hello! It is I, Lewis, with my first Tangled post.
