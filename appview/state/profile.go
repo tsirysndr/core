@@ -55,6 +55,15 @@ func (s *State) Profile(w http.ResponseWriter, r *http.Request) {
 
 var profileScripts = map[string]string{
 	"did:plc:3fwecdnvtcscjnrx2p4n7alz": "/static/profile-fx/orrery.js",
+	"did:plc:qfpnj4og54vl56wngdriaxug": "/static/profile-fx/oppili.js",
+	"did:plc:oxdlsmnvpk2riyyuvq5jtdkd": "/static/profile-fx/wilb.me.js",
+	"did:plc:lrphxvv25aibthe7xoc2eeyy": "/static/profile-fx/kandake.js",
+	"did:plc:vzl336yxfrftoc23ygcqklzr": "/static/profile-fx/gdorsi.bsky.social.js",
+	"did:plc:laqygfbyvnkyuhsuaxmp6ez3": "/static/profile-fx/punchcard-td.js",
+	"did:plc:dfkjiu36xs6ogt7pux7i7o2b": "/static/profile-fx/willow.sh.js",
+	"did:plc:doe7nkqeodssh6uc5jcq5iyw": "/static/profile-fx/luisstd.js",
+	"did:plc:f2ablw5m3ashhpydt6u7h2rx": "/static/profile-fx/chancey.dev.js",
+	"did:plc:4aah6pidgmlp36cvtispnwhu": "/static/profile-fx/matthewlipski.tngl.sh.js",
 }
 
 func (s *State) profile(r *http.Request) (*pages.ProfileCard, error) {
