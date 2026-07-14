@@ -279,6 +279,11 @@ func (i *Ingester) ingestFollow(e *jmodels.Event, l *slog.Logger) error {
 			l.Error("invalid record", "err", err)
 			return err
 		}
+		_, err := syntax.ParseDID(record.Subject)
+		if err != nil {
+			l.Error("invalid record. subject is invalid DID", "err", err)
+			return err
+		}
 
 		followedAt, err := time.Parse(time.RFC3339, record.CreatedAt)
 		if err != nil {
