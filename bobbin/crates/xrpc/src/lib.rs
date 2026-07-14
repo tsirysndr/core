@@ -729,6 +729,19 @@ impl From<Coverage> for CoverageEnvelope {
     }
 }
 
+struct Deduped<T>(T);
+
+impl<T: Serialize> Serialize for Deduped<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serde_json::to_value(&self.0)
+            .map_err(serde::ser::Error::custom)?
+            .serialize(serializer)
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RecordView<V> {
@@ -1316,19 +1329,19 @@ where
 async fn get_repo(
     State(state): State<AppState>,
     XrpcQuery(q): XrpcQuery<GetRepoQuery>,
-) -> Result<Json<RepoGetRecordOutput<DefaultStr>>, XrpcError> {
+) -> Result<Json<Deduped<RepoGetRecordOutput<DefaultStr>>>, XrpcError> {
     let (body, value) = fetch::<RepoRecord, Repo<DefaultStr>>(&state, &q.repo).await?;
-    Ok(Json(RepoGetRecordOutput {
+    Ok(Json(Deduped(RepoGetRecordOutput {
         cid: Some(body.cid.clone()),
         uri: body.uri.clone(),
         value,
-    }))
+    })))
 }
 
 async fn get_repo_by_repo_did(
     State(state): State<AppState>,
     XrpcQuery(q): XrpcQuery<GetRepoByRepoDidQuery>,
-) -> Result<Json<RepoGetRecordOutput<DefaultStr>>, XrpcError> {
+) -> Result<Json<Deduped<RepoGetRecordOutput<DefaultStr>>>, XrpcError> {
     let ident = state
         .resolver
         .lookup_by_repo_did(&q.repo_did)
@@ -1341,47 +1354,47 @@ async fn get_repo_by_repo_did(
     )
     .expect("Did and Rkey newtypes already validated, at-uri assembly cannot fail");
     let (body, value) = fetch_from_uri::<RepoRecord, Repo<DefaultStr>>(&state, uri).await?;
-    Ok(Json(RepoGetRecordOutput {
+    Ok(Json(Deduped(RepoGetRecordOutput {
         cid: Some(body.cid.clone()),
         uri: body.uri.clone(),
         value,
-    }))
+    })))
 }
 
 async fn get_profile(
     State(state): State<AppState>,
     XrpcQuery(q): XrpcQuery<GetProfileQuery>,
-) -> Result<Json<ProfileGetRecordOutput<DefaultStr>>, XrpcError> {
+) -> Result<Json<Deduped<ProfileGetRecordOutput<DefaultStr>>>, XrpcError> {
     let (body, value) = fetch::<ProfileRecord, Profile<DefaultStr>>(&state, &q.actor).await?;
-    Ok(Json(ProfileGetRecordOutput {
+    Ok(Json(Deduped(ProfileGetRecordOutput {
         cid: Some(body.cid.clone()),
         uri: body.uri.clone(),
         value,
-    }))
+    })))
 }
 
 async fn get_issue(
     State(state): State<AppState>,
     XrpcQuery(q): XrpcQuery<GetIssueQuery>,
-) -> Result<Json<IssueGetRecordOutput<DefaultStr>>, XrpcError> {
+) -> Result<Json<Deduped<IssueGetRecordOutput<DefaultStr>>>, XrpcError> {
     let (body, value) = fetch::<IssueRecord, Issue<DefaultStr>>(&state, &q.issue).await?;
-    Ok(Json(IssueGetRecordOutput {
+    Ok(Json(Deduped(IssueGetRecordOutput {
         cid: Some(body.cid.clone()),
         uri: body.uri.clone(),
         value,
-    }))
+    })))
 }
 
 async fn get_pull(
     State(state): State<AppState>,
     XrpcQuery(q): XrpcQuery<GetPullQuery>,
-) -> Result<Json<PullGetRecordOutput<DefaultStr>>, XrpcError> {
+) -> Result<Json<Deduped<PullGetRecordOutput<DefaultStr>>>, XrpcError> {
     let (body, value) = fetch::<PullRecord, Pull<DefaultStr>>(&state, &q.pull).await?;
-    Ok(Json(PullGetRecordOutput {
+    Ok(Json(Deduped(PullGetRecordOutput {
         cid: Some(body.cid.clone()),
         uri: body.uri.clone(),
         value,
-    }))
+    })))
 }
 
 async fn get_repos(
@@ -1657,7 +1670,7 @@ where
                 Some((Ok::<Vec<u8>, Infallible>(head), st))
             }
             PagePhase::Body { first } => match st.items.next().await {
-                Some(Ok(view)) => match serde_json::to_vec(&view) {
+                Some(Ok(view)) => match serde_json::to_vec(&Deduped(&view)) {
                     Ok(encoded) => {
                         let mut chunk = Vec::with_capacity(encoded.len() + 1);
                         if !first {

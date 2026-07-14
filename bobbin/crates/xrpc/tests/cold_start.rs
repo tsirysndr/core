@@ -697,3 +697,37 @@ async fn get_repo_by_repo_did_400_on_invalid_did() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn record_values_serialize_a_single_type_key() {
+    let server = MockServer::start().await;
+
+    mount_record(
+        &server,
+        &did("did:plc:teq"),
+        &nsid("sh.tangled.repo"),
+        &rkey("r1"),
+        json!({
+            "$type": "sh.tangled.repo",
+            "name": "clam",
+            "knot": "oyster.cafe",
+            "createdAt": "2026-05-01T00:00:00Z"
+        }),
+    )
+    .await;
+
+    let app = router(fresh_app(&Url::parse(&server.uri()).unwrap()).await);
+    let resp = app
+        .oneshot(xrpc_request(
+            "sh.tangled.repo.getRepo",
+            "repo",
+            "at://did:plc:teq/sh.tangled.repo/r1",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = to_bytes(resp.into_body(), 1 << 20).await.unwrap();
+    let raw = String::from_utf8(bytes.to_vec()).unwrap();
+    assert_eq!(raw.matches("\"$type\"").count(), 1, "body: {raw}");
+    assert!(raw.contains("\"$type\":\"sh.tangled.repo\""), "body: {raw}");
+}

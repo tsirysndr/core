@@ -521,3 +521,28 @@ async fn malformed_uri_in_list_returns_400() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn bulk_items_serialize_a_single_type_key() {
+    let h = Harness::new().await;
+    h.mount(
+        &did("did:plc:teq"),
+        &nsid("sh.tangled.repo"),
+        &rkey("abalone"),
+        repo_body("abalone"),
+    )
+    .await;
+    let app = router(h.state.clone());
+    let resp = app
+        .oneshot(bulk_request(
+            "sh.tangled.repo.getRepos",
+            "repos",
+            &["at://did:plc:teq/sh.tangled.repo/abalone"],
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = to_bytes(resp.into_body(), 1 << 20).await.unwrap();
+    let raw = String::from_utf8(bytes.to_vec()).unwrap();
+    assert_eq!(raw.matches("\"$type\"").count(), 1, "body: {raw}");
+}
