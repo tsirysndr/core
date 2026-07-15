@@ -64,6 +64,8 @@ var profileScripts = map[string]string{
 	"did:plc:doe7nkqeodssh6uc5jcq5iyw": "/static/profile-fx/luisstd.js",
 	"did:plc:f2ablw5m3ashhpydt6u7h2rx": "/static/profile-fx/chancey.dev.js",
 	"did:plc:4aah6pidgmlp36cvtispnwhu": "/static/profile-fx/matthewlipski.tngl.sh.js",
+	"did:plc:7qubw2z53qzfturlblaozz4a": "/static/profile-fx/mihaizaurus.at.js",
+	"did:plc:xmyx5qvyzd4fm77oehni7pvh": "/static/profile-fx/danschmidt.js",
 }
 
 func (s *State) profile(r *http.Request) (*pages.ProfileCard, error) {
