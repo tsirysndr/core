@@ -72,10 +72,17 @@
     }
 
     @layer base {
-        html {
+        :root {
             font-size: 14px;
             scrollbar-gutter: stable;
+
+            color-scheme: light;
+
+            @media (prefers-color-scheme: dark) {
+                color-scheme: dark;
+            }
         }
+
         @supports (font-variation-settings: normal) {
             html {
                 font-feature-settings:
