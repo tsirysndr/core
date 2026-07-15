@@ -11,5 +11,12 @@
     "outdir": "api/tangled",
     "import": "tangled.org/core/api/tangled",
     "gen-server": true
+  },
+  {
+    "package": "tangled",
+    "prefix": "org.tangled",
+    "outdir": "api/tangled",
+    "import": "tangled.org/core/api/tangled",
+    "gen-server": true
   }
 ]

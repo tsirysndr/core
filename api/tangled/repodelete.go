@@ -18,6 +18,8 @@ const (
 type RepoDelete_Input struct {
 	// did: DID of the repository owner
 	Did string `json:"did" cborgen:"did"`
+	// force: Admin-only. Delete even though the repository record still exists on the owner's PDS.
+	Force *bool `json:"force,omitempty" cborgen:"force,omitempty"`
 	// name: Name of the repository to delete
 	Name string `json:"name" cborgen:"name"`
 	// rkey: Rkey of the repository record

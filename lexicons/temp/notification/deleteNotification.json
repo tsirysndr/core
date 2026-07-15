@@ -1,0 +1,23 @@
+{
+  "lexicon": 1,
+  "id": "org.tangled.temp.notification.deleteNotification",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Delete a notification.",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["id"],
+          "properties": {
+            "id": {
+              "type": "integer",
+              "description": "ID of the notification to delete."
+            }
+          }
+        }
+      }
+    }
+  }
+}

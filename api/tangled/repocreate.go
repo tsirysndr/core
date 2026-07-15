@@ -30,6 +30,8 @@ type RepoCreate_Input struct {
 
 // RepoCreate_Output is the output of a sh.tangled.repo.create call.
 type RepoCreate_Output struct {
+	// key: Multibase-encoded public signing key the knot holds for this repository
+	Key     *string `json:"key,omitempty" cborgen:"key,omitempty"`
 	RepoDid *string `json:"repoDid,omitempty" cborgen:"repoDid,omitempty"`
 }
 
