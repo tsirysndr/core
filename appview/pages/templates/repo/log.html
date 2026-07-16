@@ -72,12 +72,7 @@
 
                 <!-- ci status -->
                 <span class="text-xs">
-                  {{ $pipeline := index $.Pipelines .Hash.String }}
-                  {{ if $pipeline }}
-                    {{ if gt (len $pipeline.Statuses) 0 }}
-                      {{ template "repo/pipelines/fragments/pipelineSymbolLong" (dict "Pipeline" $pipeline "RepoInfo" $.RepoInfo) }}
-                    {{ end }}
-                  {{ end }}
+                  <span id="commit-pipeline-{{ $commit.Hash.String }}"></span>
                 </span>
             </div>
 
@@ -136,7 +131,7 @@
                     </div>
                 </div>
 
-                <div class="text-xs mt-2 text-gray-500 dark:text-gray-400 flex items-center">
+                <div class="text-xs mt-2 text-gray-500 dark:text-gray-400 flex items-center [&>:not(:empty)~:not(:empty)]:before:content-['·'] [&>:not(:empty)~:not(:empty)]:before:mx-1 [&>:not(:empty)~:not(:empty)]:before:select-none">
                     {{ $verified := $.VerifiedCommits.IsVerified $commit.Hash.String }}
                     {{ $hashStyle := "text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-900" }}
                     {{ if $verified }}
@@ -152,25 +147,24 @@
                            {{ end }}
                         </a>
                     </span>
-                    <span class="mx-2 before:content-['·'] before:select-none"></span>
                     {{ template "attribution" (list $commit $.EmailToDid) }}
-                    <div class="inline-block px-1 select-none after:content-['·']"></div>
                     <span>{{ template "repo/fragments/shortTime" $commit.Committer.When }}</span>
 
                     <!-- ci status -->
-                    {{ $pipeline := index $.Pipelines .Hash.String }}
-                    {{ if $pipeline }}
-                      {{ if gt (len $pipeline.Statuses) 0 }}
-                        <div class="inline-block px-1 select-none after:content-['·']"></div>
-                        <span class="text-sm">
-                          {{ template "repo/pipelines/fragments/pipelineSymbolLong" (dict "Pipeline" $pipeline "RepoInfo" $.RepoInfo) }}
-                        </span>
-                      {{ end }}
-                    {{ end }}
+                    <span id="commit-pipeline-{{ $commit.Hash.String }}"></span>
                 </div>
             </div>
         {{ end }}
     </div>
+
+    {{ if and .Commits .RepoInfo.Spindle }}
+    <div
+      class="hidden"
+      hx-get="/{{ .RepoInfo.FullName }}/commit-statuses?{{ range .Commits }}sha={{ .Hash.String }}&{{ end }}"
+      hx-trigger="load"
+      hx-swap="none"
+    ></div>
+    {{ end }}
 </section>
 
 {{ end }}
