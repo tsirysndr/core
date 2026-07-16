@@ -64,6 +64,7 @@ func (x *Xrpc) CancelPipeline(w http.ResponseWriter, r *http.Request) {
 		Knot: repo.Knot,
 		Rkey: pipelineTid.String(),
 	}
+	l = l.With("input.pipeline", pipelineTid, "input.workflows", input.Workflows)
 
 	workflows := input.Workflows
 	if len(workflows) == 0 {
@@ -72,6 +73,11 @@ func (x *Xrpc) CancelPipeline(w http.ResponseWriter, r *http.Request) {
 			workflows = append(workflows, w.Name)
 		}
 	}
+
+	canceled := false
+	defer func() {
+		l.Debug("canceled pipeline", "canceled", canceled)
+	}()
 
 	for _, wName := range workflows {
 		wid := models.WorkflowId{
@@ -94,6 +100,8 @@ func (x *Xrpc) CancelPipeline(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	canceled = true
 
 	w.WriteHeader(http.StatusOK)
 }
