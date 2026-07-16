@@ -194,7 +194,7 @@ func runMigrations(_ context.Context, conn *sql.Conn, logger *slog.Logger) error
 		return err
 	}
 
-	return orm.RunMigration(conn, logger, "spindle-members-unique-on-rkey", func(tx *sql.Tx) error {
+	if err := orm.RunMigration(conn, logger, "spindle-members-unique-on-rkey", func(tx *sql.Tx) error {
 		hasTarget, err := hasUniqueIndex(tx, "spindle_members", []string{"did", "rkey"})
 		if err != nil {
 			return err
@@ -237,7 +237,31 @@ func runMigrations(_ context.Context, conn *sql.Conn, logger *slog.Logger) error
 			alter table spindle_members_new rename to spindle_members;
 		`)
 		return err
-	})
+	}); err != nil {
+		return err
+	}
+
+	if err := orm.RunMigration(conn, logger, "events-pipeline-index", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			create index if not exists idx_events_pipeline_lookup on events(
+				coalesce(json_extract(event, '$.triggerMetadata.repo.repoDid'),
+				         json_extract(event, '$.triggerMetadata.repo.did')),
+				coalesce(json_extract(event, '$.triggerMetadata.push.newSha'),
+				         json_extract(event, '$.triggerMetadata.pullRequest.sourceSha'),
+				         json_extract(event, '$.triggerMetadata.manual.sha'))
+			) where nsid = 'sh.tangled.pipeline';
+
+			create index if not exists idx_events_pipeline_status on events(
+				json_extract(event, '$.pipeline'),
+				json_extract(event, '$.workflow')
+			) where nsid = 'sh.tangled.pipeline.status';
+		`)
+		return err
+	}); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func hasUniqueIndex(tx *sql.Tx, table string, cols []string) (bool, error) {
