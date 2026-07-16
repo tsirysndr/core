@@ -113,6 +113,20 @@ func (rp *Repo) Index(w http.ResponseWriter, r *http.Request) {
 	tagsTrunc := result.Tags[:min(tagCount, len(result.Tags))]
 	branchesTrunc := result.Branches[:min(branchCount, len(result.Branches))]
 
+	var shas []string
+	for _, c := range commitsTrunc {
+		shas = append(shas, c.Hash.String())
+	}
+	type pipelineResult struct {
+		pipelines map[string]types.Pipeline
+		err       error
+	}
+	pipelineCh := make(chan pipelineResult, 1)
+	go func() {
+		p, err := getPipelineStatuses(r.Context(), f, shas)
+		pipelineCh <- pipelineResult{p, err}
+	}()
+
 	emails := uniqueEmails(commitsTrunc)
 	emailToDidMap, err := db.GetEmailToDid(rp.db, emails, true)
 	if err != nil {
@@ -173,15 +187,12 @@ func (rp *Repo) Index(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var shas []string
-	for _, c := range commitsTrunc {
-		shas = append(shas, c.Hash.String())
-	}
-	pipelines, err := getPipelineStatuses(r.Context(), f, shas)
-	if err != nil {
-		l.Error("failed to fetch pipeline statuses", "err", err)
+	pr := <-pipelineCh
+	if pr.err != nil {
+		l.Error("failed to fetch pipeline statuses", "err", pr.err)
 		// non-fatal
 	}
+	pipelines := pr.pipelines
 
 	rp.pages.RepoIndexPage(w, pages.RepoIndexParams{
 		BaseParams:        pages.BaseParamsFromContext(r.Context()),
