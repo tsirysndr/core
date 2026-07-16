@@ -30,12 +30,12 @@ type JetstreamClient struct {
 	ident  string
 	l      *slog.Logger
 
-	logDids           bool
-	wantedDids        Set[string]
-	unfilteredNsids   Set[string]
-	db         DB
-	waitForDid bool
-	mu         sync.RWMutex
+	logDids         bool
+	wantedDids      Set[string]
+	unfilteredNsids Set[string]
+	db              DB
+	waitForDid      bool
+	mu              sync.RWMutex
 
 	lastSeenUs atomic.Int64
 
@@ -114,10 +114,10 @@ func NewJetstreamClient(endpoint, ident string, collections []string, cfg *clien
 	}
 
 	return &JetstreamClient{
-		cfg:        cfg,
-		ident:      ident,
-		db:         db,
-		l:          logger,
+		cfg:             cfg,
+		ident:           ident,
+		db:              db,
+		l:               logger,
 		wantedDids:      make(map[string]struct{}),
 		unfilteredNsids: make(map[string]struct{}),
 
