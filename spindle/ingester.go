@@ -27,7 +27,7 @@ func (s *Spindle) ingest() Ingester {
 		switch e.Commit.Collection {
 		case tangled.SpindleMemberNSID:
 			err = s.ingestMember(ctx, e)
-		case tangled.RepoNSID, tangled.RepoCollaboratorNSID:
+		case tangled.RepoNSID, tangled.RepoCollaboratorNSID, tangled.RepoPullNSID:
 			if evt, ok := jetstreamToTapEvent(e); ok {
 				err = s.tap.processEvent(ctx, evt)
 			}
@@ -68,6 +68,8 @@ func jetstreamToTapEvent(e *models.Event) (tapc.Event, bool) {
 			Collection: syntax.NSID(e.Commit.Collection),
 			Action:     action,
 			Record:     e.Commit.Record,
+			// jetstream is only used for live
+			Live: true,
 		},
 	}, true
 }

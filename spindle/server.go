@@ -123,12 +123,15 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB, engines map[string]m
 		tangled.SpindleMemberNSID,
 		tangled.RepoNSID,
 		tangled.RepoCollaboratorNSID,
+		tangled.RepoPullNSID,
 	}
 	jc, err := jetstream.NewJetstreamClient(cfg.Server.JetstreamEndpoint, "spindle", collections, nil, log.SubLogger(logger, "jetstream"), d, true, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup jetstream client: %w", err)
 	}
 	jc.AddDid(cfg.Server.Owner)
+	// pull records are created by arbitrary users too, same hack as in tap
+	jc.ExemptCollection(tangled.RepoPullNSID)
 
 	// Check if the spindle knows about any Dids;
 	dids, err := d.GetAllDids()

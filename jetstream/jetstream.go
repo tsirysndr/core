@@ -30,8 +30,9 @@ type JetstreamClient struct {
 	ident  string
 	l      *slog.Logger
 
-	logDids    bool
-	wantedDids Set[string]
+	logDids           bool
+	wantedDids        Set[string]
+	unfilteredNsids   Set[string]
 	db         DB
 	waitForDid bool
 	mu         sync.RWMutex
@@ -52,6 +53,12 @@ func (j *JetstreamClient) AddDid(did string) {
 	}
 	j.mu.Lock()
 	j.wantedDids[did] = struct{}{}
+	j.mu.Unlock()
+}
+
+func (j *JetstreamClient) ExemptCollection(nsid string) {
+	j.mu.Lock()
+	j.unfilteredNsids[nsid] = struct{}{}
 	j.mu.Unlock()
 }
 
@@ -82,6 +89,11 @@ func (j *JetstreamClient) withDidFilter(processFunc processor) processor {
 				matches = true
 			}
 		}
+		if !matches && evt.Commit != nil {
+			if _, ok := j.unfilteredNsids[evt.Commit.Collection]; ok {
+				matches = true
+			}
+		}
 		j.mu.RUnlock()
 
 		var err error
@@ -106,7 +118,8 @@ func NewJetstreamClient(endpoint, ident string, collections []string, cfg *clien
 		ident:      ident,
 		db:         db,
 		l:          logger,
-		wantedDids: make(map[string]struct{}),
+		wantedDids:      make(map[string]struct{}),
+		unfilteredNsids: make(map[string]struct{}),
 
 		logDids: logDids,
 
