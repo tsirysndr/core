@@ -957,7 +957,6 @@ type RepoIndexParams struct {
 	EmailToDid       map[string]string
 	VerifiedCommits  commitverify.VerifiedCommits
 	Languages        []types.RepoLanguageDetails
-	Pipelines        map[string]types.Pipeline
 	NeedsKnotUpgrade bool
 	KnotUnreachable  bool
 	types.RepoIndexResponse
@@ -1026,7 +1025,6 @@ type RepoLogParams struct {
 	Active          string
 	EmailToDid      map[string]string
 	VerifiedCommits commitverify.VerifiedCommits
-	Pipelines       map[string]types.Pipeline
 
 	types.RepoLogResponse
 }
@@ -1709,6 +1707,15 @@ type WorkflowSymbolOOBParams struct {
 
 func (p *Pages) WorkflowSymbolOOB(w io.Writer, params WorkflowSymbolOOBParams) error {
 	return p.executePlain("repo/pipelines/fragments/workflowSymbolOOB", w, params)
+}
+
+type PipelineStatusesParams struct {
+	RepoInfo  repoinfo.RepoInfo
+	Pipelines map[string]types.Pipeline
+}
+
+func (p *Pages) PipelineStatusesFragment(w io.Writer, params PipelineStatusesParams) error {
+	return p.executePlain("repo/fragments/commitPipelineStatuses", w, params)
 }
 
 type WorkflowParams struct {

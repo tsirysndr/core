@@ -173,16 +173,6 @@ func (rp *Repo) Log(w http.ResponseWriter, r *http.Request) {
 		l.Error("failed to GetVerifiedObjectCommits", "err", err)
 	}
 
-	var shas []string
-	for _, c := range xrpcResp.Commits {
-		shas = append(shas, c.Hash.String())
-	}
-	pipelines, err := getPipelineStatuses(r.Context(), f, shas)
-	if err != nil {
-		l.Error("failed to getPipelineStatuses", "err", err)
-		// non-fatal
-	}
-
 	rp.pages.RepoLog(w, pages.RepoLogParams{
 		BaseParams:      pages.BaseParamsFromContext(r.Context()),
 		TagMap:          tagMap,
@@ -190,7 +180,6 @@ func (rp *Repo) Log(w http.ResponseWriter, r *http.Request) {
 		RepoLogResponse: xrpcResp,
 		EmailToDid:      emailToDidMap,
 		VerifiedCommits: vc,
-		Pipelines:       pipelines,
 	})
 }
 

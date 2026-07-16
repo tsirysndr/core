@@ -187,13 +187,6 @@ func (rp *Repo) Index(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	pr := <-pipelineCh
-	if pr.err != nil {
-		l.Error("failed to fetch pipeline statuses", "err", pr.err)
-		// non-fatal
-	}
-	pipelines := pr.pipelines
-
 	rp.pages.RepoIndexPage(w, pages.RepoIndexParams{
 		BaseParams:        pages.BaseParamsFromContext(r.Context()),
 		RepoInfo:          rp.repoResolver.GetRepoInfo(r, user),
@@ -206,7 +199,30 @@ func (rp *Repo) Index(w http.ResponseWriter, r *http.Request) {
 		EmailToDid:      emailToDidMap,
 		VerifiedCommits: vc,
 		Languages:       languageInfo,
-		Pipelines:       pipelines,
+	})
+}
+
+func (rp *Repo) PipelineStatuses(w http.ResponseWriter, r *http.Request) {
+	l := rp.logger.With("handler", "PipelineStatuses")
+
+	f, err := rp.repoResolver.Resolve(r)
+	if err != nil {
+		l.Error("failed to resolve repo", "err", err)
+		return
+	}
+
+	user := rp.oauth.GetMultiAccountUser(r)
+	shas := r.URL.Query()["sha"]
+
+	pipelines, err := getPipelineStatuses(r.Context(), f, shas)
+	if err != nil {
+		l.Error("failed to fetch pipeline statuses", "err", err)
+		return
+	}
+
+	rp.pages.PipelineStatusesFragment(w, pages.PipelineStatusesParams{
+		RepoInfo:  rp.repoResolver.GetRepoInfo(r, user),
+		Pipelines: pipelines,
 	})
 }
 

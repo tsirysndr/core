@@ -10,6 +10,7 @@ import (
 func (rp *Repo) Router(mw *middleware.Middleware) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", rp.Index)
+	r.Get("/commit-statuses", rp.PipelineStatuses)
 	r.Get("/opengraph", rp.Opengraph)
 	r.Get("/feed.atom", rp.AtomFeed)
 	r.Get("/commits/{ref}", rp.Log)
