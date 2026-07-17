@@ -4,7 +4,7 @@
   sqlite-lib,
   src,
 }: let
-  version = "1.14.0-alpha";
+  version = "1.16.0-alpha";
 in
   buildGoApplication {
     pname = "knot";

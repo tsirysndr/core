@@ -6,7 +6,7 @@
 }:
 buildGoApplication {
   pname = "spindle";
-  version = "0.1.0";
+  version = "1.16.0-alpha";
   inherit src modules;
 
   doCheck = false;
