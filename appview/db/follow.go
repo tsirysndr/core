@@ -60,7 +60,7 @@ func DeleteFollowByRkey(e Execer, userDid, rkey string) error {
 // GetMostFollowed returns the DIDs with the most followers, most-followed first.
 func GetMostFollowed(e Execer, limit int) ([]string, error) {
 	query := `
-		select subject_did, count(*) as followers
+		select subject_did, count(distinct did) as followers
 		from follows
 		group by subject_did
 		order by followers desc
@@ -88,8 +88,8 @@ func GetFollowerFollowingCount(e Execer, did string) (models.FollowStats, error)
 	var followers, following int64
 	err := e.QueryRow(
 		`SELECT
-		COUNT(CASE WHEN subject_did = ? THEN 1 END) AS followers,
-		COUNT(CASE WHEN did = ? THEN 1 END) AS following
+		COUNT(DISTINCT CASE WHEN subject_did = ? THEN did END) AS followers,
+		COUNT(DISTINCT CASE WHEN did = ? THEN subject_did END) AS following
 		FROM follows;`, did, did).Scan(&followers, &following)
 	if err != nil {
 		return models.FollowStats{}, err
@@ -123,13 +123,13 @@ func GetFollowerFollowingCounts(e Execer, dids []string) (map[string]models.Foll
 			coalesce(f.followers, 0) as followers,
 			coalesce(g.following, 0) as following
 		from (
-			select subject_did as did, count(*) as followers
+			select subject_did as did, count(distinct did) as followers
 			from follows
 			where subject_did in (%s)
 			group by subject_did
 		) f
 		full outer join (
-			select did as did, count(*) as following
+			select did as did, count(distinct subject_did) as following
 			from follows
 			where did in (%s)
 			group by did
