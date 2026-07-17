@@ -35,9 +35,10 @@ const (
 type cleanupFunc func(context.Context) error
 
 type Engine struct {
-	docker client.APIClient
-	l      *slog.Logger
-	cfg    *config.Config
+	dockerMu sync.Mutex
+	docker   client.APIClient
+	l        *slog.Logger
+	cfg      *config.Config
 
 	slotter engine.WorkflowSlotter
 
@@ -164,15 +165,9 @@ func workflowImage(deps map[string][]string, nixery string) string {
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Engine, error) {
-	dcli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		return nil, err
-	}
-
 	l := log.FromContext(ctx).With("component", "spindle")
 
 	e := &Engine{
-		docker:  dcli,
 		l:       l,
 		cfg:     cfg,
 		slotter: engine.NewSemaphoreSlotter(cfg.NixeryPipelines.MaxConcurrentWorkflows),
@@ -181,6 +176,22 @@ func New(ctx context.Context, cfg *config.Config) (*Engine, error) {
 	e.cleanup = make(map[string][]cleanupFunc)
 
 	return e, nil
+}
+
+func (e *Engine) ensureDocker() (client.APIClient, error) {
+	e.dockerMu.Lock()
+	defer e.dockerMu.Unlock()
+
+	if e.docker != nil {
+		return e.docker, nil
+	}
+
+	dcli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return nil, err
+	}
+	e.docker = dcli
+	return dcli, nil
 }
 
 func (e *Engine) AcquireWorkflowSlot(
@@ -214,6 +225,10 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 			err = fmt.Errorf("Failed to setup container:\n%w", err)
 		}
 	}()
+
+	if _, err := e.ensureDocker(); err != nil {
+		return err
+	}
 
 	/// -------------------------NETWORK CREATION---------------------------------------
 	_, err = e.docker.NetworkCreate(ctx, networkName(wid), network.CreateOptions{
