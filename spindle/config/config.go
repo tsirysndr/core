@@ -62,7 +62,7 @@ type S3 struct {
 }
 
 type MicroVMPipelines struct {
-	ImageDir        string `env:"IMAGE_DIR, required"`
+	ImageDir        string `env:"IMAGE_DIR"`
 	OverlayDir      string `env:"OVERLAY_DIR, default="` // where microVM temporary disks will live
 	DefaultImage    string `env:"DEFAULT_IMAGE, default=nixos-x86_64"`
 	AgentPort       uint32 `env:"AGENT_PORT, default=10240"`

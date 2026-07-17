@@ -77,6 +77,14 @@ func TestResolveImageDirectoryMissingSpec(t *testing.T) {
 	}
 }
 
+func TestResolveImageRequiresImageDirOnlyWhenUsed(t *testing.T) {
+	e := testEngine(t, "")
+	_, _, _, err := e.resolveImage("nixos")
+	if err == nil || !strings.Contains(err.Error(), "SPINDLE_MICROVM_PIPELINES_IMAGE_DIR") {
+		t.Fatalf("missing image directory should error when resolving an image, got: %v", err)
+	}
+}
+
 func TestResolveImageRejectsPaths(t *testing.T) {
 	e := testEngine(t, t.TempDir())
 	for _, name := range []string{"/etc/passwd", "../evil", "sub/evil", "..", "."} {

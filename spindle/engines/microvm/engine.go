@@ -46,6 +46,7 @@ type Engine struct {
 	l            *slog.Logger
 	cfg          *config.Config
 	db           *db.DB
+	agentMu      sync.Mutex
 	agent        *agentHub
 	scheduler    *engine.ResourceScheduler[Resources]
 	cgroupParent *CgroupParent
@@ -70,18 +71,11 @@ func (s Step) Kind() models.StepKind { return s.kind }
 
 func New(ctx context.Context, cfg *config.Config, d *db.DB) (*Engine, error) {
 	l := log.FromContext(ctx).With("component", "engine.microvm")
-	port := cfg.MicroVMPipelines.AgentPort
-	if port == 0 {
-		port = agentproto.DefaultPort
-	}
-	agent, err := newAgentHub(port, l)
-	if err != nil {
-		return nil, err
-	}
 	budget, max, agingThreshold := newVMBudgetConfig(cfg.MicroVMPipelines)
 	l.Info("initialized microVM workflow budget", "budget", budget.String(), "maxWorkflow", max.String(), "agingThreshold", agingThreshold)
 
 	var cgroupParent *CgroupParent
+	var err error
 	if cfg.MicroVMPipelines.EnableCgroups {
 		cgroupParent, err = initCgroupParent(cfg.MicroVMPipelines.CgroupParent, cfg.MicroVMPipelines.CgroupSupervisorMemoryMinMiB, l)
 		if err != nil {
@@ -93,11 +87,30 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB) (*Engine, error) {
 		l:            l,
 		cfg:          cfg,
 		db:           d,
-		agent:        agent,
 		scheduler:    engine.NewResourceScheduler(budget, max, agingThreshold),
 		cgroupParent: cgroupParent,
 		cleanup:      make(map[string][]cleanupFunc),
 	}, nil
+}
+
+func (e *Engine) ensureAgentHub() (*agentHub, error) {
+	e.agentMu.Lock()
+	defer e.agentMu.Unlock()
+
+	if e.agent != nil {
+		return e.agent, nil
+	}
+
+	port := e.cfg.MicroVMPipelines.AgentPort
+	if port == 0 {
+		port = agentproto.DefaultPort
+	}
+	agent, err := newAgentHub(port, e.l)
+	if err != nil {
+		return nil, err
+	}
+	e.agent = agent
+	return agent, nil
 }
 
 func (e *Engine) InitWorkflow(twf tangled.Pipeline_Workflow, tpl tangled.Pipeline) (*models.Workflow, error) {
@@ -210,7 +223,11 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 	if err != nil {
 		return err
 	}
-	connCh, unregister, err := e.agent.expect(cid)
+	agent, err := e.ensureAgentHub()
+	if err != nil {
+		return err
+	}
+	connCh, unregister, err := agent.expect(cid)
 	if err != nil {
 		return err
 	}

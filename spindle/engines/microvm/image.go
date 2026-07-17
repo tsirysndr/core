@@ -181,7 +181,12 @@ func (e *Engine) resolveImage(name string) (ImageSpec, string, string, error) {
 		return ImageSpec{}, "", "", fmt.Errorf("invalid microVM image name %q: must be a plain name, not a path", name)
 	}
 
-	candidates := imageCandidates(e.cfg.MicroVMPipelines.ImageDir, name)
+	imageDir := strings.TrimSpace(e.cfg.MicroVMPipelines.ImageDir)
+	if imageDir == "" {
+		return ImageSpec{}, "", "", fmt.Errorf("microVM workflows require SPINDLE_MICROVM_PIPELINES_IMAGE_DIR")
+	}
+
+	candidates := imageCandidates(imageDir, name)
 	for _, candidate := range candidates {
 		path, ok, err := imageSpecPath(candidate)
 		if err != nil {

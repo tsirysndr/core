@@ -1,6 +1,7 @@
 package microvm
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"os"
@@ -33,6 +34,16 @@ func testEngine(t *testing.T, imageDir string) *Engine {
 				DefaultImage: "alpine",
 			},
 		},
+	}
+}
+
+func TestNewDefersAgentHubUntilWorkflowSetup(t *testing.T) {
+	e, err := New(context.Background(), &config.Config{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.agent != nil {
+		t.Fatal("agent hub started during engine initialization")
 	}
 }
 
