@@ -855,6 +855,7 @@ type FollowFragmentParams struct {
 	UserDid        string
 	FollowStatus   models.FollowStatus
 	FollowersCount int64
+	HxSwapOob      struct{} // empty struct so always truthy
 }
 
 func (p *Pages) FollowFragment(w io.Writer, params FollowFragmentParams) error {

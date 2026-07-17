@@ -2,6 +2,9 @@
   <button id="{{ normalizeForHtmlId .UserDid }}"
     class="btn w-full flex gap-2 items-center group"
 
+    data-follow-subject="{{ .UserDid }}"
+    {{ if .HxSwapOob }}hx-swap-oob='outerHTML:[data-follow-subject="{{ .UserDid }}"]'{{ end }}
+
     {{ if eq .FollowStatus.String "IsNotFollowing" }}
     hx-post="/follow?subject={{.UserDid}}"
     {{ else }}
@@ -10,7 +13,8 @@
 
     hx-trigger="click"
     hx-target="#{{ normalizeForHtmlId .UserDid }}"
-    hx-swap="outerHTML"
+    hx-swap="none"
+    hx-disabled-elt="this"
     >
     {{ if eq .FollowStatus.String "IsNotFollowing" }}
       {{ i "user-round-plus" "size-4 inline group-[.htmx-request]:hidden" }} 
