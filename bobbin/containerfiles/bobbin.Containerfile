@@ -8,6 +8,7 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY lexicons ./lexicons
 COPY bobbin ./bobbin
+COPY shuttle ./shuttle
 RUN cargo build --profile ${BOBBIN_PROFILE} --bin bobbin --package bobbin
 RUN if [ "${BOBBIN_PROFILE}" = "release" ]; then strip target/${BOBBIN_PROFILE}/bobbin; fi
 

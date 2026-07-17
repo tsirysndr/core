@@ -22,11 +22,9 @@ fn main() -> Result<()> {
     let lexicons_dir = std::env::var("BOBBIN_LEXICONS_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| workspace_root.join(DEFAULT_LEXICONS_SUBDIR));
-    let additions_dir = manifest_dir.join(DEFAULT_LEXICONS_SUBDIR);
 
     println!("cargo:rerun-if-env-changed=BOBBIN_LEXICONS_DIR");
     println!("cargo:rerun-if-changed={}", lexicons_dir.display());
-    println!("cargo:rerun-if-changed={}", additions_dir.display());
     println!("cargo:rerun-if-changed=build.rs");
 
     let out_dir = PathBuf::from(std::env::var("OUT_DIR")?);
@@ -36,7 +34,6 @@ fn main() -> Result<()> {
         std::fs::remove_dir_all(&staged).context("clean staged lexicons")?;
     }
     stage_lexicons(&lexicons_dir, &staged)?;
-    stage_lexicons(&additions_dir, &staged)?;
 
     let corpus = LexiconCorpus::load_from_dir(&staged)
         .map_err(|e| anyhow::anyhow!("load lexicon corpus: {e:?}"))?;
