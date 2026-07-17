@@ -390,6 +390,8 @@ services:
           - pds.tngl.boltless.dev
           - alice.pds.tngl.boltless.dev
           - bob.pds.tngl.boltless.dev
+          - charlie.pds.tngl.boltless.dev
+          - david.pds.tngl.boltless.dev
           - jetstream.tngl.boltless.dev
           - knot.tngl.boltless.dev
           - spindle.tngl.boltless.dev

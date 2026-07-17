@@ -8,7 +8,7 @@ set -eu
 : "${PDS_URL:?PDS_URL must be set}"
 PASSWORD="password"
 
-USERS="alice bob"
+USERS="alice bob charlie david"
 OWNER_USER="${OWNER_USER:-alice}"
 SYSTEM_USER="${SYSTEM_USER:-alice}"
 SHARED_DIR="${SHARED_DIR:-/shared}"
