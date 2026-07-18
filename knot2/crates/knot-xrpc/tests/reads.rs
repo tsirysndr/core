@@ -413,6 +413,51 @@ async fn compare_format_patch_keeps_a_non_ascii_author_raw() {
 }
 
 #[tokio::test]
+async fn compare_reports_the_merge_base_of_diverged_branches() {
+    let world = World::new();
+    let (did, work) = seeded(&world, "woofie");
+    let work = work.path();
+    let bare = world.layout.repo_path(&did).unwrap();
+    let merge_base = sh_git(work, &["rev-parse", "HEAD"]);
+
+    sh_git(work, &["checkout", "-q", "-b", "feature"]);
+    commit_file(
+        work,
+        "feature.txt",
+        b"feature\n",
+        "feature moved",
+        "2026-08-11T12:40:00+02:00",
+    );
+    sh_git(
+        work,
+        &[
+            "push",
+            "-q",
+            bare.to_str().unwrap(),
+            "HEAD:refs/heads/feature",
+        ],
+    );
+
+    sh_git(work, &["checkout", "-q", "main"]);
+    commit_file(
+        work,
+        "main.txt",
+        b"main\n",
+        "main moved",
+        "2026-08-11T12:41:00+02:00",
+    );
+    sh_git(work, &["push", "-q", bare.to_str().unwrap(), "main"]);
+
+    let value = get_json(
+        &world,
+        &format!("/xrpc/sh.tangled.repo.compare?repo={did}&rev1=feature&rev2=main"),
+    )
+    .await;
+
+    assert_eq!(value["merge_base"], merge_base.as_str());
+}
+
+#[tokio::test]
 async fn diff_reports_structured_fragments_and_stats() {
     let world = World::new();
     let (did, work) = seeded(&world, "whelk");

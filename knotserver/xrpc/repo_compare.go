@@ -74,12 +74,13 @@ func (x *Xrpc) RepoCompare(w http.ResponseWriter, r *http.Request) {
 
 	var combinedPatch []*gitdiff.File
 	var combinedPatchRaw string
-	// we need the combined patch
-	if len(formatPatch) >= 2 {
-		mergeBaseCommit, err := gr.MergeBase(commit1, commit2)
-		if err != nil {
-			x.Logger.Error("error comparing revisions", "msg", err.Error())
-		} else {
+	var mergeBase string
+	if mergeBaseCommit, err := gr.MergeBase(commit1, commit2); err != nil {
+		x.Logger.Error("error finding merge base", "msg", err.Error())
+	} else {
+		mergeBase = mergeBaseCommit.Hash.String()
+		// nothing to combine with fewer than two patches
+		if len(formatPatch) >= 2 {
 			diffTree, err := gr.DiffTree(mergeBaseCommit, commit2)
 			if err != nil {
 				x.Logger.Error("error comparing revisions", "msg", err.Error())
@@ -93,6 +94,7 @@ func (x *Xrpc) RepoCompare(w http.ResponseWriter, r *http.Request) {
 	response := types.RepoFormatPatchResponse{
 		Rev1:             commit1.Hash.String(),
 		Rev2:             commit2.Hash.String(),
+		MergeBase:        mergeBase,
 		FormatPatch:      formatPatch,
 		FormatPatchRaw:   rawPatch,
 		CombinedPatch:    combinedPatch,

@@ -929,6 +929,8 @@ pub(crate) struct CompareParams {
 struct CompareOut {
     rev1: String,
     rev2: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    merge_base: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     format_patch: Vec<FormatPatchWire>,
     #[serde(rename = "patch", skip_serializing_if = "String::is_empty")]
@@ -1079,31 +1081,28 @@ pub(crate) async fn repo_compare<H: HttpTransport, C: Clock>(
             .collect::<Result<Vec<_>, _>>()
             .map_err(compare_error)?;
         let patch_raw: String = entries.iter().map(|(_, raw)| format!("{raw}\n")).collect();
-        let (combined_patch, combined_patch_raw) = match entries.len() >= 2 {
-            true => repo
-                .merge_base(base, head)
+        let merge_base = repo.merge_base(base, head).ok().flatten();
+        let (combined_patch, combined_patch_raw) = match (entries.len() >= 2, merge_base) {
+            (true, Some(merge_base)) => repo
+                .commit_patches(knot_git::PatchRange {
+                    base: Some(merge_base),
+                    head,
+                })
                 .ok()
-                .flatten()
-                .and_then(|merge_base| {
-                    repo.commit_patches(knot_git::PatchRange {
-                        base: Some(merge_base),
-                        head,
-                    })
-                    .ok()
-                    .map(|patches| {
-                        (
-                            Some(patches.iter().map(FileWire::of).collect::<Vec<_>>()),
-                            Some(render_patches(&patches)),
-                        )
-                    })
+                .map(|patches| {
+                    (
+                        Some(patches.iter().map(FileWire::of).collect::<Vec<_>>()),
+                        Some(render_patches(&patches)),
+                    )
                 })
                 .unwrap_or((None, None)),
-            false => (None, None),
+            _ => (None, None),
         };
         json(
             CompareOut {
                 rev1: base.to_hex(),
                 rev2: head.to_hex(),
+                merge_base: merge_base.map(|oid| oid.to_hex()),
                 format_patch: entries.into_iter().map(|(entry, _)| entry).collect(),
                 patch_raw,
                 combined_patch,

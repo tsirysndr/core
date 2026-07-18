@@ -34,6 +34,7 @@ type RepoCommitResponse struct {
 type RepoFormatPatchResponse struct {
 	Rev1             string          `json:"rev1,omitempty"`
 	Rev2             string          `json:"rev2,omitempty"`
+	MergeBase        string          `json:"merge_base,omitempty"`
 	FormatPatch      []FormatPatch   `json:"format_patch,omitempty"`
 	FormatPatchRaw   string          `json:"patch,omitempty"`
 	CombinedPatch    []*gitdiff.File `json:"combined_patch,omitempty"`
