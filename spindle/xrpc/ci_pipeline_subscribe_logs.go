@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -12,8 +11,8 @@ import (
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/gorilla/websocket"
-	"github.com/hpcloud/tail"
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/spindle/logview"
 	"tangled.org/core/spindle/models"
 )
 
@@ -166,26 +165,14 @@ func (x *Xrpc) handleSubscribeLogs(w http.ResponseWriter, r *http.Request, pipel
 				isFinished = models.StatusKind(status.Status).IsFinish()
 			}
 
-			filePath := models.LogFilePath(x.Config.Server.LogDir, wid)
-
-			tailConfig := tail.Config{
-				Follow:    !isFinished,
-				ReOpen:    !isFinished,
-				MustExist: false,
-				Location: &tail.SeekInfo{
-					Offset: 0,
-					Whence: io.SeekStart,
-				},
-			}
-
-			t, err := tail.TailFile(filePath, tailConfig)
+			lines, stop, err := logview.Follow(ctx, x.Db, x.ArtifactReader, x.Config.Server.LogDir, wid, isFinished)
 			if err != nil {
-				l.Error("failed to tail log file", "workflow", wfName, "err", err)
+				l.Error("failed to follow workflow log", "workflow", wfName, "err", err)
 				return
 			}
-			defer t.Stop()
+			defer stop()
 
-			// if we are following, poll status in database to stop tailing when finished
+			// if we are following, poll status in database to stop when finished
 			if !isFinished {
 				go func() {
 					ticker := time.NewTicker(2 * time.Second)
@@ -197,7 +184,7 @@ func (x *Xrpc) handleSubscribeLogs(w http.ResponseWriter, r *http.Request, pipel
 						case <-ticker.C:
 							status, err := x.Db.GetStatus(wid)
 							if err == nil && models.StatusKind(status.Status).IsFinish() {
-								t.Stop()
+								stop()
 								return
 							}
 						}
@@ -209,7 +196,7 @@ func (x *Xrpc) handleSubscribeLogs(w http.ResponseWriter, r *http.Request, pipel
 				select {
 				case <-ctx.Done():
 					return
-				case line, ok := <-t.Lines:
+				case line, ok := <-lines:
 					if !ok || line == nil {
 						return
 					}

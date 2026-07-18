@@ -4,17 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 
 	"tangled.org/core/eventstream"
 	"tangled.org/core/log"
+	"tangled.org/core/spindle/logview"
 	"tangled.org/core/spindle/models"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
-	"github.com/hpcloud/tail"
 )
 
 var upgrader = websocket.Upgrader{
@@ -89,40 +88,27 @@ func (s *Spindle) streamLogsFromDisk(ctx context.Context, conn *websocket.Conn, 
 	}
 	isFinished := models.StatusKind(status.Status).IsFinish()
 
-	filePath := models.LogFilePath(s.cfg.Server.LogDir, wid)
-
-	config := tail.Config{
-		Follow:    !isFinished,
-		ReOpen:    !isFinished,
-		MustExist: false,
-		Location: &tail.SeekInfo{
-			Offset: 0,
-			Whence: io.SeekStart,
-		},
-		// Logger: tail.DiscardingLogger,
-	}
-
-	t, err := tail.TailFile(filePath, config)
+	lines, stop, err := logview.Follow(ctx, s.db, s.reader, s.cfg.Server.LogDir, wid, isFinished)
 	if err != nil {
-		return fmt.Errorf("failed to tail log file: %w", err)
+		return fmt.Errorf("failed to follow workflow log: %w", err)
 	}
-	defer t.Stop()
-
+	defer stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case line := <-t.Lines:
-			if line == nil && isFinished {
-				return fmt.Errorf("tail completed")
+		case line, ok := <-lines:
+			if !ok && isFinished {
+				return fmt.Errorf("log completed")
 			}
-
+			if !ok {
+				return fmt.Errorf("log channel closed unexpectedly")
+			}
 			if line == nil {
-				return fmt.Errorf("tail channel closed unexpectedly")
+				continue
 			}
-
 			if line.Err != nil {
-				return fmt.Errorf("error tailing log file: %w", line.Err)
+				return fmt.Errorf("error following workflow log: %w", line.Err)
 			}
 
 			if err := conn.WriteMessage(websocket.TextMessage, []byte(line.Text)); err != nil {

@@ -136,12 +136,27 @@ in
           };
         };
 
-        pipelines = {
-          logBucket = mkOption {
+        artifactStores = {
+          disk.dir = mkOption {
+            type = types.path;
+            default = "/var/log/spindle";
+            description = "Root directory for disk artifacts";
+          };
+
+          s3.bucket = mkOption {
             type = types.str;
             default = "tangled-logs";
-            description = "S3 bucket for workflow logs";
+            description = "S3 bucket for artifacts";
           };
+
+          s3.region = mkOption {
+            type = types.str;
+            default = "us-east-1";
+            description = "AWS region for the artifact bucket";
+          };
+        };
+
+        pipelines = {
           workflowTimeout = mkOption {
             type = types.str;
             default = "5m";
@@ -388,7 +403,9 @@ in
               "SPINDLE_NIX_CACHE_READ_URLS=${concatStringsSep "," cfg.pipelines.nixCache.readUrls}"
               "SPINDLE_NIX_CACHE_TRUSTED_PUBLIC_KEYS=${concatStringsSep "," cfg.pipelines.nixCache.trustedPublicKeys}"
               "SPINDLE_NIX_CACHE_UPLOAD_URL=${cfg.pipelines.nixCache.uploadUrl}"
-              "SPINDLE_S3_LOG_BUCKET=${cfg.pipelines.logBucket}"
+              "SPINDLE_ARTIFACT_STORES_DISK_DIR=${cfg.artifactStores.disk.dir}"
+              "SPINDLE_ARTIFACT_STORES_S3_BUCKET=${cfg.artifactStores.s3.bucket}"
+              "SPINDLE_ARTIFACT_STORES_S3_REGION=${cfg.artifactStores.s3.region}"
             ];
             ExecStart = "${cfg.package}/bin/spindle";
             Restart = "always";

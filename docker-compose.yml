@@ -181,7 +181,6 @@ services:
       SPINDLE_MICROVM_PIPELINES_IMAGE_DIR: /var/lib/spindle/images
       SPINDLE_MICROVM_PIPELINES_OVERLAY_DIR: /var/lib/spindle/overlays
       SPINDLE_MICROVM_PIPELINES_AGENT_PORT: "11240"
-      SPINDLE_S3_LOG_BUCKET: ""
       SPINDLE_MICROVM_PIPELINES_ENABLE_CGROUPS: "false"
       # route guest nix substitution + uploads through the local ncps cache.
       # ncps re-signs on serve with cache.local's key, so the guest trusts the

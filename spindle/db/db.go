@@ -132,6 +132,14 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			foreign key (pipeline_id) references pipelines(id) on delete cascade
 		);
 
+		create table if not exists mill_artifacts (
+			id           integer primary key autoincrement,
+			lease_id     text not null,
+			workflow     text not null,
+			ref          text not null,
+			hash         text not null
+		);
+
 		create table if not exists migrations (
 			id integer primary key autoincrement,
 			name text unique

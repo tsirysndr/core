@@ -2,13 +2,18 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
-	"path/filepath"
+	"os"
 	"sync"
+	"time"
 
 	"tangled.org/core/notifier"
+	"tangled.org/core/spindle/artifactstore"
 	"tangled.org/core/spindle/config"
 	"tangled.org/core/spindle/db"
 	"tangled.org/core/spindle/models"
@@ -66,7 +71,7 @@ type workflowFinalizer interface {
 	FinalizeWorkflow(ctx context.Context, wid models.WorkflowId, wf *models.Workflow, wfLogger models.WorkflowLogger) error
 }
 
-func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, db *db.DB, n *notifier.Notifier, ctx context.Context, pipeline *models.Pipeline, pipelineId models.PipelineId) {
+func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, stores *artifactstore.Stores, db *db.DB, n *notifier.Notifier, ctx context.Context, pipeline *models.Pipeline, pipelineId models.PipelineId) {
 	l.Info("starting all workflows in parallel", "pipeline", pipelineId)
 
 	var allSecrets []secrets.UnlockedSecret
@@ -82,11 +87,6 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 	secretValues := make([]string, len(allSecrets))
 	for i, s := range allSecrets {
 		secretValues[i] = s.Value
-	}
-
-	s3, err := NewS3(cfg.S3.LogBucket)
-	if err != nil {
-		l.Error("error creating s3 client", "err", err)
 	}
 
 	// wid.String() is lossy so two different names can map to the same key
@@ -128,21 +128,13 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 					l.Info("skipping finished workflow", "wid", wid, "status", st.Status)
 					return
 				}
-				defer func() {
-					if s3 != nil {
-						logFile := filepath.Join(cfg.Server.LogDir, fmt.Sprintf("%s.log", wid.String()))
-						if err := s3.WriteFile(ctx, logFile); err != nil {
-							l.Error("error uploading logs", "err", err)
-						}
-					}
-				}()
-
 				wfLogger, err := models.NewFileWorkflowLogger(cfg.Server.LogDir, wid, secretValues)
 				if err != nil {
 					l.Warn("failed to setup step logger; logs will not be persisted", "error", err)
 					wfLogger = models.NullLogger{}
 				} else {
 					l.Info("setup step logger; logs will be persisted", "logDir", cfg.Server.LogDir, "wid", wid)
+					defer archiveWorkflowLog(l, stores, db, cfg.Server.LogDir, wid)
 					defer wfLogger.Close()
 				}
 
@@ -234,4 +226,38 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 
 	wg.Wait()
 	l.Info("all workflows completed")
+}
+
+func archiveWorkflowLog(l *slog.Logger, stores *artifactstore.Stores, database *db.DB, logDir string, wid models.WorkflowId) {
+	if stores == nil {
+		return
+	}
+	logPath := models.LogFilePath(logDir, wid)
+	file, err := os.Open(logPath)
+	if err != nil {
+		l.Error("open workflow log for archival", "wid", wid, "err", err)
+		return
+	}
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		_ = file.Close()
+		l.Error("hash workflow log", "wid", wid, "err", err)
+		return
+	}
+	_ = file.Close()
+
+	ref := wid.String() + ".log"
+	uploadCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	errs := stores.PutFile(uploadCtx, ref, logPath)
+	for _, err := range errs {
+		l.Error("archive workflow log", "wid", wid, "err", err)
+	}
+	if len(errs) == len(stores.Names()) {
+		return
+	}
+	digest := "sha256:" + hex.EncodeToString(hash.Sum(nil))
+	if err := database.SaveArtifactRef(wid.String(), wid.Name, ref, digest); err != nil {
+		l.Error("save workflow log artifact", "wid", wid, "err", err)
+	}
 }

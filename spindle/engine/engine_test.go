@@ -114,7 +114,7 @@ func TestStartWorkflows_CollisionRejection(t *testing.T) {
 	}
 
 	cfg := &config.Config{Server: config.Server{LogDir: t.TempDir()}}
-	StartWorkflows(logger, nil, cfg, testDB, nil, context.Background(), pipeline, pipelineId)
+	StartWorkflows(logger, nil, cfg, nil, testDB, nil, context.Background(), pipeline, pipelineId)
 
 	eng.mu.Lock()
 	setupCalls := append([]models.WorkflowId(nil), eng.setupCalls...)
@@ -195,7 +195,7 @@ func TestCancelWorkflow_NotOverwritten(t *testing.T) {
 	cfg := &config.Config{Server: config.Server{LogDir: t.TempDir()}}
 	doneChan := make(chan struct{})
 	go func() {
-		StartWorkflows(logger, nil, cfg, testDB, nil, context.Background(), pipeline, pipelineId)
+		StartWorkflows(logger, nil, cfg, nil, testDB, nil, context.Background(), pipeline, pipelineId)
 		close(doneChan)
 	}()
 
@@ -250,7 +250,7 @@ func TestSetupTimeout_ReportsTimeout(t *testing.T) {
 	}
 
 	cfg := &config.Config{Server: config.Server{LogDir: t.TempDir()}}
-	StartWorkflows(logger, nil, cfg, testDB, nil, context.Background(), pipeline, pipelineId)
+	StartWorkflows(logger, nil, cfg, nil, testDB, nil, context.Background(), pipeline, pipelineId)
 
 	st, err := testDB.GetStatus(wid)
 	if err != nil {

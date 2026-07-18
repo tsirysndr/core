@@ -16,6 +16,7 @@ import (
 	"tangled.org/core/idresolver"
 	"tangled.org/core/notifier"
 	"tangled.org/core/rbac"
+	"tangled.org/core/spindle/artifactstore"
 	"tangled.org/core/spindle/config"
 	"tangled.org/core/spindle/db"
 	"tangled.org/core/spindle/models"
@@ -50,16 +51,17 @@ type PullContext struct {
 }
 
 type Xrpc struct {
-	Logger      *slog.Logger
-	Db          *db.DB
-	Enforcer    *rbac.Enforcer
-	Engines     map[string]models.Engine
-	Config      *config.Config
-	Resolver    *idresolver.Resolver
-	Vault       secrets.Manager
-	Notifier    *notifier.Notifier
-	ServiceAuth *serviceauth.ServiceAuth
-	Trigger     PipelineTrigger
+	Logger         *slog.Logger
+	Db             *db.DB
+	Enforcer       *rbac.Enforcer
+	Engines        map[string]models.Engine
+	Config         *config.Config
+	ArtifactReader artifactstore.Reader
+	Resolver       *idresolver.Resolver
+	Vault          secrets.Manager
+	Notifier       *notifier.Notifier
+	ServiceAuth    *serviceauth.ServiceAuth
+	Trigger        PipelineTrigger
 }
 
 func (x *Xrpc) Router() http.Handler {

@@ -162,8 +162,9 @@ in
             };
           };
 
+          artifactStores.s3.bucket = envVarOr "SPINDLE_ARTIFACT_STORES_S3_BUCKET" "tangled-logs";
+
           pipelines = {
-            logBucket = envVarOr "SPINDLE_S3_LOG_BUCKET" "";
             microvm.enableKVM = nestedVirt;
             nixCache = {
               readUrls = ["http://127.0.0.1:8501"];

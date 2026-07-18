@@ -35,6 +35,7 @@ import (
 	"tangled.org/core/rbac"
 	"tangled.org/core/repoident"
 	"tangled.org/core/repoverify"
+	"tangled.org/core/spindle/artifactstore"
 	"tangled.org/core/spindle/config"
 	"tangled.org/core/spindle/db"
 	"tangled.org/core/spindle/engine"
@@ -74,6 +75,8 @@ type Spindle struct {
 	motdMu   sync.RWMutex
 	rootCtx  context.Context
 	jobWake  chan struct{}
+	stores   *artifactstore.Stores
+	reader   artifactstore.Reader
 }
 
 // New creates a new Spindle server with the provided configuration and engines.
@@ -168,6 +171,19 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB, engines map[string]m
 		motd:    defaultMotd,
 		rootCtx: ctx,
 		jobWake: make(chan struct{}, 1),
+	}
+	diskFallback := cfg.Server.LogDir
+	if cfg.ArtifactStores.Disk.Dir == "" {
+		logger.Warn("using SPINDLE_SERVER_LOG_DIR as the implicit disk artifact store; configure SPINDLE_ARTIFACT_STORES_DISK_DIR explicitly")
+	}
+	stores, err := artifactstore.NewStores(cfg.ArtifactStores, diskFallback, cfg.LegacyS3.LogBucket)
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup artifact stores: %w", err)
+	}
+	spindle.stores = stores
+	spindle.reader = stores
+	if cfg.LegacyS3.LogBucket != "" {
+		logger.Warn("SPINDLE_S3_LOG_BUCKET is deprecated; use SPINDLE_ARTIFACT_STORES_S3_BUCKET")
 	}
 
 	err = e.AddSpindle(rbacDomain)
@@ -392,16 +408,17 @@ func (s *Spindle) XrpcRouter() http.Handler {
 	l := log.SubLogger(s.l, "xrpc")
 
 	x := xrpc.Xrpc{
-		Logger:      l,
-		Db:          s.db,
-		Enforcer:    s.e,
-		Engines:     s.engs,
-		Config:      s.cfg,
-		Resolver:    s.res,
-		Vault:       s.vault,
-		Notifier:    s.Notifier(),
-		ServiceAuth: serviceAuth,
-		Trigger:     s,
+		Logger:         l,
+		Db:             s.db,
+		Enforcer:       s.e,
+		Engines:        s.engs,
+		Config:         s.cfg,
+		ArtifactReader: s.reader,
+		Resolver:       s.res,
+		Vault:          s.vault,
+		Notifier:       s.Notifier(),
+		ServiceAuth:    serviceAuth,
+		Trigger:        s,
 	}
 
 	return x.Router()
@@ -890,7 +907,7 @@ func (s *Spindle) runJob(ctx context.Context, job *db.JobRow) {
 		workflows[eng] = append(workflows[eng], *ewf)
 	}
 
-	engine.StartWorkflows(log.SubLogger(s.l, "engine"), s.vault, s.cfg, s.db, s.n, s.rootCtx, &models.Pipeline{
+	engine.StartWorkflows(log.SubLogger(s.l, "engine"), s.vault, s.cfg, s.stores, s.db, s.n, s.rootCtx, &models.Pipeline{
 		RepoDid:       syntax.DID(job.RepoDid),
 		Workflows:     workflows,
 		TrustedSource: trustedSource,

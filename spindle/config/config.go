@@ -57,7 +57,21 @@ type NixeryPipelines struct {
 	MaxConcurrentWorkflows int    `env:"MAX_CONCURRENT_WORKFLOWS, default=8"` // max number of workflow containers running at once (memory cap)
 }
 
-type S3 struct {
+type ArtifactStoreDisk struct {
+	Dir string `env:"DIR"`
+}
+
+type ArtifactStoreS3 struct {
+	Bucket string `env:"BUCKET"`
+	Region string `env:"REGION, default=us-east-1"`
+}
+
+type ArtifactStores struct {
+	Disk ArtifactStoreDisk `env:",prefix=DISK_"`
+	S3   ArtifactStoreS3   `env:",prefix=S3_"`
+}
+
+type LegacyS3 struct {
 	LogBucket string `env:"LOG_BUCKET"`
 }
 
@@ -104,7 +118,8 @@ type Config struct {
 	NixeryPipelines  NixeryPipelines  `env:",prefix=SPINDLE_NIXERY_PIPELINES_"`
 	MicroVMPipelines MicroVMPipelines `env:",prefix=SPINDLE_MICROVM_PIPELINES_"`
 	NixCache         NixCache         `env:",prefix=SPINDLE_NIX_CACHE_"`
-	S3               S3               `env:",prefix=SPINDLE_S3_"`
+	ArtifactStores   ArtifactStores   `env:",prefix=SPINDLE_ARTIFACT_STORES_"`
+	LegacyS3         LegacyS3         `env:",prefix=SPINDLE_S3_"`
 }
 
 func Load(ctx context.Context) (*Config, error) {
