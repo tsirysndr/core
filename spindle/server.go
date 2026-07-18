@@ -42,6 +42,8 @@ import (
 	"tangled.org/core/spindle/engines/dummy"
 	"tangled.org/core/spindle/engines/nixery"
 	"tangled.org/core/spindle/git"
+	"tangled.org/core/spindle/mill"
+	"tangled.org/core/spindle/mill/executor"
 	"tangled.org/core/spindle/models"
 	"tangled.org/core/spindle/secrets"
 	"tangled.org/core/spindle/xrpc"
@@ -66,6 +68,7 @@ type Spindle struct {
 	l        *slog.Logger
 	n        *notifier.Notifier
 	engs     map[string]models.Engine
+	jobWake  chan struct{}
 	cfg      *config.Config
 	ks       *eventconsumer.Consumer
 	res      *idresolver.Resolver
@@ -74,30 +77,88 @@ type Spindle struct {
 	motd     []byte
 	motdMu   sync.RWMutex
 	rootCtx  context.Context
-	jobWake  chan struct{}
+	store    artifactstore.Store
 	stores   *artifactstore.Stores
 	reader   artifactstore.Reader
+	// set only when this spindle hosts the mill or joins one as an executor
+	mill *mill.Mill
+	exec *executor.Executor
 }
 
 // New creates a new Spindle server with the provided configuration and engines.
 func New(ctx context.Context, cfg *config.Config, d *db.DB, engines map[string]models.Engine) (*Spindle, error) {
 	logger := log.FromContext(ctx)
+	n := notifier.New()
+
+	if cfg.Role == config.RoleExecutor {
+		if err := cleanupOrphanRepos(ctx, d, logger); err != nil {
+			return nil, fmt.Errorf("failed to run startup cleanup: %w", err)
+		}
+	} else if err := runStartupMigrations(ctx, d, cfg.Server.Tap.Embed, cfg.Server.Tap.DBPath, logger); err != nil {
+		return nil, fmt.Errorf("failed to run startup migrations: %w", err)
+	}
+
+	spindle := &Spindle{
+		db:      d,
+		l:       logger,
+		n:       &n,
+		engs:    engines,
+		cfg:     cfg,
+		motd:    defaultMotd,
+		rootCtx: ctx,
+		jobWake: make(chan struct{}, 1),
+	}
+	diskFallback := ""
+	if cfg.Role == config.RoleStandalone {
+		diskFallback = cfg.Server.LogDir
+		if cfg.ArtifactStores.Disk.Dir == "" {
+			logger.Warn("using SPINDLE_SERVER_LOG_DIR as the implicit disk artifact store; configure SPINDLE_ARTIFACT_STORES_DISK_DIR explicitly")
+		}
+	}
+	stores, err := artifactstore.NewStores(cfg.ArtifactStores, diskFallback, cfg.LegacyS3.LogBucket)
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup artifact stores: %w", err)
+	}
+	spindle.stores = stores
+	if cfg.LegacyS3.LogBucket != "" {
+		logger.Warn("SPINDLE_S3_LOG_BUCKET is deprecated; use SPINDLE_ARTIFACT_STORES_S3_BUCKET")
+	}
+	if cfg.Role == config.RoleStandalone {
+		spindle.reader = stores
+	} else {
+		name := cfg.Mill.ArtifactStore
+		if name == "" {
+			names := stores.Names()
+			if len(names) != 1 {
+				return nil, fmt.Errorf("%s requires SPINDLE_MILL_ARTIFACT_STORE when %d artifact stores are configured", cfg.Role, len(names))
+			}
+			name = names[0]
+			logger.Warn("SPINDLE_MILL_ARTIFACT_STORE is not set; inferred the only configured store", "store", name)
+		}
+		store, ok := stores.Store(name)
+		if !ok {
+			return nil, fmt.Errorf("SPINDLE_MILL_ARTIFACT_STORE=%q is not configured", name)
+		}
+		spindle.store = store
+		spindle.reader = store
+	}
+	if cfg.Role == config.RoleExecutor {
+		return spindle, nil
+	}
 
 	e, err := rbac.NewEnforcer(cfg.Server.DBPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup rbac enforcer: %w", err)
 	}
 	e.E.EnableAutoSave(true)
+	spindle.e = e
 
-	n := notifier.New()
-
-	var vault secrets.Manager
 	switch cfg.Server.Secrets.Provider {
 	case "openbao":
 		if cfg.Server.Secrets.OpenBao.ProxyAddr == "" {
 			return nil, fmt.Errorf("openbao proxy address is required when using openbao secrets provider")
 		}
-		vault, err = secrets.NewOpenBaoManager(
+		spindle.vault, err = secrets.NewOpenBaoManager(
 			cfg.Server.Secrets.OpenBao.ProxyAddr,
 			logger,
 			secrets.WithMountPath(cfg.Server.Secrets.OpenBao.Mount),
@@ -107,17 +168,13 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB, engines map[string]m
 		}
 		logger.Info("using openbao secrets provider", "proxy_address", cfg.Server.Secrets.OpenBao.ProxyAddr, "mount", cfg.Server.Secrets.OpenBao.Mount)
 	case "sqlite", "":
-		vault, err = secrets.NewSQLiteManager(cfg.Server.DBPath, secrets.WithTableName("secrets"))
+		spindle.vault, err = secrets.NewSQLiteManager(cfg.Server.DBPath, secrets.WithTableName("secrets"))
 		if err != nil {
 			return nil, fmt.Errorf("failed to setup sqlite secrets provider: %w", err)
 		}
 		logger.Info("using sqlite secrets provider", "path", cfg.Server.DBPath)
 	default:
 		return nil, fmt.Errorf("unknown secrets provider: %s", cfg.Server.Secrets.Provider)
-	}
-
-	if err := runStartupMigrations(ctx, d, cfg.Server.Tap.Embed, cfg.Server.Tap.DBPath, logger); err != nil {
-		return nil, fmt.Errorf("failed to run startup migrations: %w", err)
 	}
 
 	collections := []string{
@@ -131,6 +188,7 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB, engines map[string]m
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup jetstream client: %w", err)
 	}
+	spindle.jc = jc
 	jc.AddDid(cfg.Server.Owner)
 	// pull (status) records are created by arbitrary users too, same hack as in tap
 	jc.ExemptCollection(tangled.RepoPullNSID)
@@ -155,36 +213,8 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB, engines map[string]m
 		}
 	}
 
-	resolver := idresolver.DefaultResolver(cfg.Server.PlcUrl)
-
-	spindle := &Spindle{
-		jc:      jc,
-		e:       e,
-		db:      d,
-		l:       logger,
-		n:       &n,
-		engs:    engines,
-		cfg:     cfg,
-		res:     resolver,
-		verify:  repoverify.New(resolver, cfg.Server.Dev),
-		vault:   vault,
-		motd:    defaultMotd,
-		rootCtx: ctx,
-		jobWake: make(chan struct{}, 1),
-	}
-	diskFallback := cfg.Server.LogDir
-	if cfg.ArtifactStores.Disk.Dir == "" {
-		logger.Warn("using SPINDLE_SERVER_LOG_DIR as the implicit disk artifact store; configure SPINDLE_ARTIFACT_STORES_DISK_DIR explicitly")
-	}
-	stores, err := artifactstore.NewStores(cfg.ArtifactStores, diskFallback, cfg.LegacyS3.LogBucket)
-	if err != nil {
-		return nil, fmt.Errorf("failed to setup artifact stores: %w", err)
-	}
-	spindle.stores = stores
-	spindle.reader = stores
-	if cfg.LegacyS3.LogBucket != "" {
-		logger.Warn("SPINDLE_S3_LOG_BUCKET is deprecated; use SPINDLE_ARTIFACT_STORES_S3_BUCKET")
-	}
+	spindle.res = idresolver.DefaultResolver(cfg.Server.PlcUrl)
+	spindle.verify = repoverify.New(spindle.res, cfg.Server.Dev)
 
 	err = e.AddSpindle(rbacDomain)
 	if err != nil {
@@ -213,8 +243,6 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB, engines map[string]m
 	ccfg.Logger = log.SubLogger(logger, "eventconsumer")
 	ccfg.ProcessFunc = spindle.processKnotStream
 	ccfg.CursorStore = cursorStore
-	ccfg.WorkerCount = 16
-	ccfg.QueueSize = 200
 	if cfg.Server.Dev {
 		ccfg.RetryInterval = 5 * time.Second
 		ccfg.MaxRetryInterval = 10 * time.Second
@@ -233,7 +261,6 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB, engines map[string]m
 		ccfg.Sources[src] = struct{}{}
 	}
 	spindle.ks = eventconsumer.NewConsumer(*ccfg)
-
 	if cfg.Server.Tap.Embed {
 		pw, err := randomAdminPassword()
 		if err != nil {
@@ -246,8 +273,6 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB, engines map[string]m
 
 	return spindle, nil
 }
-
-// DB returns the database instance.
 func (s *Spindle) DB() *db.DB {
 	return s.db
 }
@@ -286,42 +311,49 @@ func (s *Spindle) GetMotdContent() []byte {
 	return s.motd
 }
 
-// Start starts the Spindle server (blocking).
+// runs the server. blocks
 func (s *Spindle) Start(ctx context.Context) error {
-	// starts a job queue runner in the background
+	// only standalone runs the local queue. mill hosts place directly onto
+	// executors, and executors only run jobs explicitly assigned by a mill
 	s.StartJobWorkers(ctx)
 
-	// Stop vault token renewal if it implements Stopper
+	// an executor dials out to its mill and takes work from it
+	if s.exec != nil {
+		go s.exec.Connect(ctx)
+	}
+
 	if stopper, ok := s.vault.(secrets.Stopper); ok {
 		defer stopper.Stop()
 	}
 
-	tapCtx, tapCancel := context.WithCancel(ctx)
+	if s.cfg.Role != config.RoleExecutor {
+		tapCtx, tapCancel := context.WithCancel(ctx)
 
-	if s.cfg.Server.Tap.Embed {
-		emb, err := startEmbeddedTap(tapCtx, s.cfg, log.SubLogger(s.l, "embedtap"))
-		if err != nil {
-			tapCancel()
-			return fmt.Errorf("starting embedded tap: %w", err)
+		if s.cfg.Server.Tap.Embed {
+			emb, err := startEmbeddedTap(tapCtx, s.cfg, log.SubLogger(s.l, "embedtap"))
+			if err != nil {
+				tapCancel()
+				return fmt.Errorf("starting embedded tap: %w", err)
+			}
+			s.embedTap = emb
+			defer func() {
+				tapCancel()
+				s.embedTap.Shutdown()
+			}()
+
+			go s.watchTapDrain(tapCtx, tapCancel)
+		} else {
+			defer tapCancel()
 		}
-		s.embedTap = emb
-		defer func() {
-			tapCancel()
-			s.embedTap.Shutdown()
+
+		go func() {
+			s.l.Info("starting knot event consumer")
+			s.ks.Start(ctx)
 		}()
 
-		go s.watchTapDrain(tapCtx, tapCancel)
-	} else {
-		defer tapCancel()
+		s.l.Info("starting tap client", "url", s.cfg.Server.Tap.Url)
+		s.tap.Start(tapCtx)
 	}
-
-	go func() {
-		s.l.Info("starting knot event consumer")
-		s.ks.Start(ctx)
-	}()
-
-	s.l.Info("starting tap client", "url", s.cfg.Server.Tap.Url)
-	s.tap.Start(tapCtx)
 
 	s.l.Info("starting spindle server", "address", s.cfg.Server.ListenAddr)
 	return http.ListenAndServe(s.cfg.Server.ListenAddr, s.Router())
@@ -367,23 +399,60 @@ func Run(ctx context.Context) error {
 		return fmt.Errorf("failed to setup db: %w", err)
 	}
 
-	nixeryEng, err := nixery.New(ctx, cfg)
+	logger := log.FromContext(ctx)
+
+	var engines map[string]models.Engine
+	var m *mill.Mill
+
+	if cfg.Role == config.RoleMill {
+		// on a mill host, engines place jobs on executors instead of running
+		// them. all names share one Mill
+		m = mill.New(log.SubLogger(logger, "mill"), mill.Config{
+			LogDir:         cfg.Server.LogDir,
+			MaxPending:     cfg.Mill.MaxPending,
+			ReconnectGrace: cfg.Mill.ReconnectGrace,
+		})
+		engines = map[string]models.Engine{
+			"nixery":  mill.NewEngine("nixery", m),
+			"microvm": mill.NewEngine("microvm", m),
+			"dummy":   mill.NewEngine("dummy", m),
+		}
+	} else {
+		// standalone and executor both run real engines locally
+		nixeryEng, err := nixery.New(ctx, cfg)
+		if err != nil {
+			return err
+		}
+		microvmEng, err := newMicrovmEngine(ctx, cfg, d)
+		if err != nil {
+			return err
+		}
+		engines = map[string]models.Engine{
+			"nixery":  nixeryEng,
+			"microvm": microvmEng,
+			"dummy":   dummy.New(logger),
+		}
+	}
+
+	s, err := New(ctx, cfg, d, engines)
 	if err != nil {
 		return err
 	}
 
-	microvmEng, err := newMicrovmEngine(ctx, cfg, d)
-	if err != nil {
-		return err
+	if m != nil {
+		// the engines built above hold the mill, but the mill's db and
+		// notifier only exist after New, so attach them here
+		m.Attach(s.DB(), s.Notifier())
+		s.mill = m
+		if err := m.RestoreState(); err != nil {
+			return fmt.Errorf("restoring mill state: %w", err)
+		}
 	}
-
-	s, err := New(ctx, cfg, d, map[string]models.Engine{
-		"nixery":  nixeryEng,
-		"microvm": microvmEng,
-		"dummy":   dummy.New(log.FromContext(ctx)),
-	})
-	if err != nil {
-		return err
+	if cfg.Role == config.RoleExecutor {
+		s.exec, err = executor.New(cfg, engines, s.DB(), s.Notifier(), log.SubLogger(logger, "executor"), s.store)
+		if err != nil {
+			return err
+		}
 	}
 
 	return s.Start(ctx)
@@ -395,8 +464,17 @@ func (s *Spindle) Router() http.Handler {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write(s.GetMotdContent())
 	})
+	if s.cfg.Role == config.RoleExecutor {
+		return mux
+	}
+
 	mux.HandleFunc("/events", s.Events)
 	mux.HandleFunc("/logs/{knot}/{rkey}/{name}", s.Logs)
+
+	// on a mill host, executors dial in here (plain ws, shared-secret auth)
+	if s.mill != nil {
+		mux.HandleFunc("/mill", s.mill.HandleExecutorConn)
+	}
 
 	mux.Mount("/xrpc", s.XrpcRouter())
 	return mux
@@ -457,6 +535,10 @@ func (s *Spindle) processKnotStream(ctx context.Context, src eventconsumer.Sourc
 		// NOTE: we are blindly trusting the knot that it will return only repos it own
 		repoCloneUri := s.newRepoCloneUrl(src.Host, repoDid)
 		repoPath := s.newRepoPath(repoDid)
+		if err := git.SparseSyncGitRepo(ctx, repoCloneUri, repoPath, event.NewSha); err != nil {
+			return fmt.Errorf("sync git repo: %w", err)
+		}
+		l.Info("synced git repo")
 
 		triggerRepo, err := s.buildTriggerRepo(ctx, repo)
 		if err != nil {
@@ -834,6 +916,65 @@ func (s *Spindle) loadPipeline(ctx context.Context, repoUri, repoPath, rev strin
 	return rawPipeline, nil
 }
 
+// newRepoPath creates a path to store repository by its did and rkey.
+// The path format would be: `/data/repos/did:plc:foo/sh.tangled.repo/repo-rkey
+func (s *Spindle) newRepoPath(repo syntax.DID) string {
+	return filepath.Join(s.cfg.Server.RepoDir, repo.String())
+}
+
+func (s *Spindle) newRepoCloneUrl(knot string, did syntax.DID) string {
+	scheme := "https://"
+	if s.cfg.Server.Dev {
+		scheme = "http://"
+	}
+	return fmt.Sprintf("%s%s/%s", scheme, knot, did)
+}
+
+const RequiredVersion = "2.49.0"
+
+func ensureGitVersion() error {
+	v, err := git.Version()
+	if err != nil {
+		return fmt.Errorf("fetching git version: %w", err)
+	}
+	if v.LessThan(version.Must(version.NewVersion(RequiredVersion))) {
+		return fmt.Errorf("installed git version %q is not supported, Spindle requires git version >= %q", v, RequiredVersion)
+	}
+	return nil
+}
+
+func (s *Spindle) configureOwner() error {
+	cfgOwner := s.cfg.Server.Owner
+
+	existing, err := s.e.GetSpindleUsersByRole("server:owner", rbacDomain)
+	if err != nil {
+		return err
+	}
+
+	switch len(existing) {
+	case 0:
+		// no owner configured, continue
+	case 1:
+		// find existing owner
+		existingOwner := existing[0]
+
+		// no ownership change, this is okay
+		if existingOwner == s.cfg.Server.Owner {
+			break
+		}
+
+		// remove existing owner
+		err = s.e.RemoveSpindleOwner(rbacDomain, existingOwner)
+		if err != nil {
+			return nil
+		}
+	default:
+		return fmt.Errorf("more than one owner in DB, try deleting %q and starting over", s.cfg.Server.DBPath)
+	}
+
+	return s.e.AddSpindleOwner(rbacDomain, cfgOwner)
+}
+
 func (s *Spindle) StartJobWorkers(ctx context.Context) {
 	for range s.cfg.Server.MaxJobCount {
 		go func() {
@@ -941,77 +1082,4 @@ func (s *Spindle) processPipeline(repoDid syntax.DID, tpl tangled.Pipeline, pipe
 		}
 	}
 	return nil
-}
-
-// newRepoPath creates a path to store repository by its did and rkey.
-// The path format would be: `/data/repos/did:plc:foo/sh.tangled.repo/repo-rkey
-func (s *Spindle) newRepoPath(repo syntax.DID) string {
-	return filepath.Join(s.cfg.Server.RepoDir, repo.String())
-}
-
-func (s *Spindle) newRepoCloneUrl(knot string, did syntax.DID) string {
-	scheme := "https://"
-	if s.cfg.Server.Dev {
-		scheme = "http://"
-	}
-	return fmt.Sprintf("%s%s/%s", scheme, knot, did)
-}
-
-const RequiredVersion = "2.49.0"
-
-func ensureGitVersion() error {
-	v, err := git.Version()
-	if err != nil {
-		return fmt.Errorf("fetching git version: %w", err)
-	}
-	if v.LessThan(version.Must(version.NewVersion(RequiredVersion))) {
-		return fmt.Errorf("installed git version %q is not supported, Spindle requires git version >= %q", v, RequiredVersion)
-	}
-	return nil
-}
-
-func (s *Spindle) resolvePipelineRepoDid(repo *tangled.Pipeline_TriggerRepo) (syntax.DID, error) {
-	if repo.RepoDid == nil || *repo.RepoDid == "" {
-		return "", fmt.Errorf("pipeline trigger missing repoDid")
-	}
-	repoDid, err := syntax.ParseDID(*repo.RepoDid)
-	if err != nil {
-		return "", fmt.Errorf("parse repoDid %s: %w", *repo.RepoDid, err)
-	}
-	if _, err := s.db.GetRepoByDid(repoDid); err != nil {
-		return "", fmt.Errorf("unknown repoDid %s: %w", repoDid, err)
-	}
-	return repoDid, nil
-}
-
-func (s *Spindle) configureOwner() error {
-	cfgOwner := s.cfg.Server.Owner
-
-	existing, err := s.e.GetSpindleUsersByRole("server:owner", rbacDomain)
-	if err != nil {
-		return err
-	}
-
-	switch len(existing) {
-	case 0:
-		// no owner configured, continue
-	case 1:
-		// find existing owner
-		existingOwner := existing[0]
-
-		// no ownership change, this is okay
-		if existingOwner == s.cfg.Server.Owner {
-			break
-		}
-
-		// remove existing owner
-		err = s.e.RemoveSpindleOwner(rbacDomain, existingOwner)
-		if err != nil {
-			return nil
-		}
-	default:
-		return fmt.Errorf("more than one owner in DB, try deleting %q and starting over", s.cfg.Server.DBPath)
-	}
-
-	return s.e.AddSpindleOwner(rbacDomain, cfgOwner)
 }

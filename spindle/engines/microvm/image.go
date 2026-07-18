@@ -257,22 +257,23 @@ func imageSpecPath(candidate string) (string, bool, error) {
 		}
 		return "", false, err
 	}
-	if !info.IsDir() {
-		return candidate, true, nil
+	if info.IsDir() {
+		candidate = filepath.Join(candidate, imageSpecFileName)
+		info, err = os.Stat(candidate)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return "", false, fmt.Errorf("microVM image directory %q does not contain %s", filepath.Dir(candidate), imageSpecFileName)
+			}
+			return "", false, err
+		}
+		if info.IsDir() {
+			return "", false, fmt.Errorf("microVM image spec %q is a directory", candidate)
+		}
 	}
 
-	spec := filepath.Join(candidate, imageSpecFileName)
-	info, err = os.Stat(spec)
+	path, err := filepath.EvalSymlinks(candidate)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return "", false, fmt.Errorf("microVM image directory %q does not contain %s", candidate, imageSpecFileName)
-		}
 		return "", false, err
 	}
-	// this only happens if there is a directory named `spec.json` which would be very silly.
-	// but better output an error for it anyway :p
-	if info.IsDir() {
-		return "", false, fmt.Errorf("microVM image spec %q is a directory", spec)
-	}
-	return spec, true, nil
+	return path, true, nil
 }

@@ -23,6 +23,19 @@ when:
 	assert.False(t, wf.CloneOpts.Skip, "Skip should default to false")
 }
 
+func TestUnmarshalWorkflowWithRunsOnLabels(t *testing.T) {
+	yamlData := `
+engine: microvm
+runs_on: [linux/arm64, kvm]
+when:
+  - event: push`
+
+	wf, err := FromFile("test.yml", []byte(yamlData))
+	assert.NoError(t, err)
+
+	assert.Equal(t, []string{"linux/arm64", "kvm"}, wf.RunsOn)
+}
+
 func TestUnmarshalCloneFalse(t *testing.T) {
 	yamlData := `
 when:

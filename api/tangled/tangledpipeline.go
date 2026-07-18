@@ -92,4 +92,5 @@ type Pipeline_Workflow struct {
 	Engine string              `json:"engine" cborgen:"engine"`
 	Name   string              `json:"name" cborgen:"name"`
 	Raw    string              `json:"raw" cborgen:"raw"`
+	RunsOn []string            `json:"runsOn,omitempty" cborgen:"runsOn,omitempty"`
 }

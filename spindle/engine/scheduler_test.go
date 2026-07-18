@@ -36,7 +36,7 @@ func TestResourceSchedulerZeroLimitsDoNotApply(t *testing.T) {
 
 	scheduler := NewResourceScheduler(ru{}, ru{}, 0)
 
-	slot, err := scheduler.Acquire(context.Background(), ru{a: 1 << 20, b: 1 << 20})
+	slot, err := scheduler.Acquire(context.Background(), ru{a: 1 << 20, b: 1 << 20}, Wait)
 	if err != nil {
 		t.Fatalf("Acquire() error = %v", err)
 	}
@@ -48,12 +48,12 @@ func TestResourceSchedulerRejectsRequestsThatCanNeverFit(t *testing.T) {
 
 	scheduler := NewResourceScheduler(ru{a: 1024, b: 10_000}, ru{a: 512, b: 5_000}, 0)
 
-	_, err := scheduler.Acquire(context.Background(), ru{a: 768, b: 100})
+	_, err := scheduler.Acquire(context.Background(), ru{a: 768, b: 100}, Wait)
 	if !errors.Is(err, ErrNoWorkflowSlots) {
 		t.Fatalf("Acquire() error = %v, want ErrNoWorkflowSlots", err)
 	}
 
-	_, err = scheduler.Acquire(context.Background(), ru{a: 128, b: 12_000})
+	_, err = scheduler.Acquire(context.Background(), ru{a: 128, b: 12_000}, Wait)
 	if !errors.Is(err, ErrNoWorkflowSlots) {
 		t.Fatalf("Acquire() error = %v, want ErrNoWorkflowSlots", err)
 	}
@@ -64,7 +64,7 @@ func TestResourceSchedulerWaitsUntilResourcesAreReleased(t *testing.T) {
 
 	scheduler := NewResourceScheduler(ru{a: 1024}, ru{}, 0)
 
-	first, err := scheduler.Acquire(context.Background(), ru{a: 1024})
+	first, err := scheduler.Acquire(context.Background(), ru{a: 1024}, Wait)
 	if err != nil {
 		t.Fatalf("first Acquire() error = %v", err)
 	}
@@ -85,7 +85,7 @@ func TestResourceSchedulerReleaseIsIdempotent(t *testing.T) {
 
 	scheduler := NewResourceScheduler(ru{a: 1}, ru{}, 0)
 
-	slot, err := scheduler.Acquire(context.Background(), ru{a: 1})
+	slot, err := scheduler.Acquire(context.Background(), ru{a: 1}, Wait)
 	if err != nil {
 		t.Fatalf("Acquire() error = %v", err)
 	}
@@ -93,7 +93,7 @@ func TestResourceSchedulerReleaseIsIdempotent(t *testing.T) {
 	slot.Release()
 	slot.Release()
 
-	second, err := scheduler.Acquire(context.Background(), ru{a: 1})
+	second, err := scheduler.Acquire(context.Background(), ru{a: 1}, Wait)
 	if err != nil {
 		t.Fatalf("Acquire() after double release error = %v", err)
 	}
@@ -105,7 +105,7 @@ func TestResourceSchedulerBackfillsPastBlockedHead(t *testing.T) {
 
 	scheduler := NewResourceScheduler(ru{a: 1024}, ru{}, time.Hour) // disable aging so we test pure backfill
 
-	hold, err := scheduler.Acquire(context.Background(), ru{a: 512})
+	hold, err := scheduler.Acquire(context.Background(), ru{a: 512}, Wait)
 	if err != nil {
 		t.Fatalf("hold Acquire() error = %v", err)
 	}
@@ -128,7 +128,7 @@ func TestResourceSchedulerAgingReservesCapacityForBlockedHead(t *testing.T) {
 	fakeNow := time.Now()
 	scheduler.now = func() time.Time { return fakeNow }
 
-	hold, err := scheduler.Acquire(context.Background(), ru{a: 512})
+	hold, err := scheduler.Acquire(context.Background(), ru{a: 512}, Wait)
 	if err != nil {
 		t.Fatalf("hold Acquire() error = %v", err)
 	}
@@ -151,10 +151,76 @@ func TestResourceSchedulerAgingReservesCapacityForBlockedHead(t *testing.T) {
 	big.Release()
 }
 
+func TestResourceSchedulerTryRejectsWhenNoRoomNow(t *testing.T) {
+	t.Parallel()
+
+	scheduler := NewResourceScheduler(ru{a: 1024}, ru{}, 0)
+
+	first, err := scheduler.Acquire(context.Background(), ru{a: 1024}, NoWait)
+	if err != nil {
+		t.Fatalf("first Acquire(NoWait) error = %v", err)
+	}
+
+	if _, err := scheduler.Acquire(context.Background(), ru{a: 1}, NoWait); !errors.Is(err, ErrNoWorkflowSlots) {
+		t.Fatalf("Acquire(NoWait) error = %v, want ErrNoWorkflowSlots", err)
+	}
+
+	first.Release()
+
+	second, err := scheduler.Acquire(context.Background(), ru{a: 1}, NoWait)
+	if err != nil {
+		t.Fatalf("Acquire(NoWait) after release error = %v", err)
+	}
+	second.Release()
+}
+
+func TestResourceSchedulerTryRejectsRequestsThatCanNeverFit(t *testing.T) {
+	t.Parallel()
+
+	scheduler := NewResourceScheduler(ru{a: 1024, b: 10_000}, ru{a: 512, b: 5_000}, 0)
+
+	if _, err := scheduler.Acquire(context.Background(), ru{a: 768, b: 100}, NoWait); !errors.Is(err, ErrNoWorkflowSlots) {
+		t.Fatalf("Acquire(NoWait) error = %v, want ErrNoWorkflowSlots", err)
+	}
+}
+
+func TestResourceSchedulerTryIgnoresQueuedWaiters(t *testing.T) {
+	t.Parallel()
+
+	scheduler := NewResourceScheduler(ru{a: 1024}, ru{}, time.Hour)
+
+	hold, err := scheduler.Acquire(context.Background(), ru{a: 512}, Wait)
+	if err != nil {
+		t.Fatalf("hold Acquire() error = %v", err)
+	}
+	defer hold.Release()
+
+	bigCh := acquireAsync(context.Background(), scheduler, ru{a: 768})
+	assertAcquireBlocked(t, bigCh)
+
+	slot, err := scheduler.Acquire(context.Background(), ru{a: 256}, NoWait)
+	if err != nil {
+		t.Fatalf("Acquire(NoWait) error = %v, want success past queued waiter", err)
+	}
+	slot.Release()
+}
+
+func TestResourceSchedulerZeroLimitsTryDoesNotReject(t *testing.T) {
+	t.Parallel()
+
+	scheduler := NewResourceScheduler(ru{}, ru{}, 0)
+
+	slot, err := scheduler.Acquire(context.Background(), ru{a: 1 << 20, b: 1 << 20}, NoWait)
+	if err != nil {
+		t.Fatalf("Acquire(NoWait) error = %v", err)
+	}
+	slot.Release()
+}
+
 func acquireAsync(ctx context.Context, scheduler *ResourceScheduler[ru], req ru) <-chan acquireResult {
 	ch := make(chan acquireResult, 1)
 	go func() {
-		slot, err := scheduler.Acquire(ctx, req)
+		slot, err := scheduler.Acquire(ctx, req, Wait)
 		ch <- acquireResult{slot: slot, err: err}
 	}()
 	return ch

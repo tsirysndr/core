@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
@@ -77,7 +78,7 @@ type LegacyS3 struct {
 
 type MicroVMPipelines struct {
 	ImageDir        string `env:"IMAGE_DIR"`
-	OverlayDir      string `env:"OVERLAY_DIR, default="` // where microVM temporary disks will live
+	OverlayDir      string `env:"OVERLAY_DIR"` // where microVM temporary disks will live
 	DefaultImage    string `env:"DEFAULT_IMAGE, default=nixos-x86_64"`
 	AgentPort       uint32 `env:"AGENT_PORT, default=10240"`
 	EnableKVM       bool   `env:"ENABLE_KVM, default=true"`
@@ -113,19 +114,63 @@ type NixCache struct {
 	UploadURL         string   `env:"UPLOAD_URL"`
 }
 
+// governs how spindle places and runs jobs
+type Role string
+
+const (
+	RoleStandalone Role = "standalone"
+	RoleMill       Role = "mill"
+	RoleExecutor   Role = "executor"
+)
+
+// fields are selectively active depending on the role
+type Mill struct {
+	URL            string        `env:"URL"`                          // mill websocket endpoint dialled by the executor
+	SharedSecret   string        `env:"SHARED_SECRET"`                // the executor's token for dialing the mill
+	MaxPending     int           `env:"MAX_PENDING, default=100"`     // mill pending job queue limit
+	ReconnectGrace time.Duration `env:"RECONNECT_GRACE, default=45s"` // reconnect window before leases are failed
+	Seats          int           `env:"SEATS, default=4"`             // executor seats advertised to the mill
+	Labels         []string      `env:"LABELS"`                       // executor capability labels
+	ArtifactStore  string        `env:"ARTIFACT_STORE"`               // store shared by mill and its executors
+}
+
 type Config struct {
+	Role             Role             `env:"SPINDLE_ROLE, default=standalone"`
 	Server           Server           `env:",prefix=SPINDLE_SERVER_"`
 	NixeryPipelines  NixeryPipelines  `env:",prefix=SPINDLE_NIXERY_PIPELINES_"`
 	MicroVMPipelines MicroVMPipelines `env:",prefix=SPINDLE_MICROVM_PIPELINES_"`
 	NixCache         NixCache         `env:",prefix=SPINDLE_NIX_CACHE_"`
 	ArtifactStores   ArtifactStores   `env:",prefix=SPINDLE_ARTIFACT_STORES_"`
 	LegacyS3         LegacyS3         `env:",prefix=SPINDLE_S3_"`
+	Mill             Mill             `env:",prefix=SPINDLE_MILL_"`
+}
+
+func (c *Config) validate() error {
+	switch c.Role {
+	case RoleStandalone, RoleMill:
+		if c.Mill.URL != "" {
+			return fmt.Errorf("SPINDLE_MILL_URL is set but SPINDLE_ROLE=%s; only an executor dials a mill", c.Role)
+		}
+	case RoleExecutor:
+		if c.Mill.URL == "" {
+			return fmt.Errorf("SPINDLE_ROLE=executor requires SPINDLE_MILL_URL (the mill to dial)")
+		}
+		if c.Mill.SharedSecret == "" {
+			return fmt.Errorf("SPINDLE_ROLE=executor requires SPINDLE_MILL_SHARED_SECRET (its executor token)")
+		}
+	default:
+		return fmt.Errorf("unknown SPINDLE_ROLE %q (want standalone, mill, or executor)", c.Role)
+	}
+	return nil
 }
 
 func Load(ctx context.Context) (*Config, error) {
 	var cfg Config
 	err := envconfig.Process(ctx, &cfg)
 	if err != nil {
+		return nil, err
+	}
+	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
 

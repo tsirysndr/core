@@ -15,7 +15,7 @@ func TestSemaphoreSlotterDisabledDoesNotBlock(t *testing.T) {
 	slotter := NewSemaphoreSlotter(0)
 
 	for range 10 {
-		slot, err := slotter.AcquireWorkflowSlot(context.Background(), zeroWorkflowID(), nil)
+		slot, err := slotter.AcquireWorkflowSlot(context.Background(), zeroWorkflowID(), nil, Wait)
 		if err != nil {
 			t.Fatalf("AcquireWorkflowSlot() error = %v", err)
 		}
@@ -28,7 +28,7 @@ func TestSemaphoreSlotterBlocksUntilRelease(t *testing.T) {
 
 	slotter := NewSemaphoreSlotter(1)
 
-	first, err := slotter.AcquireWorkflowSlot(context.Background(), zeroWorkflowID(), nil)
+	first, err := slotter.AcquireWorkflowSlot(context.Background(), zeroWorkflowID(), nil, Wait)
 	if err != nil {
 		t.Fatalf("first AcquireWorkflowSlot() error = %v", err)
 	}
@@ -42,7 +42,7 @@ func TestSemaphoreSlotterBlocksUntilRelease(t *testing.T) {
 	acquired := make(chan WorkflowSlot, 1)
 	errs := make(chan error, 1)
 	go func() {
-		slot, err := slotter.AcquireWorkflowSlot(context.Background(), zeroWorkflowID(), nil)
+		slot, err := slotter.AcquireWorkflowSlot(context.Background(), zeroWorkflowID(), nil, Wait)
 		if err != nil {
 			errs <- err
 			return
@@ -64,7 +64,7 @@ func TestSemaphoreSlotterHonorsContextCancellation(t *testing.T) {
 
 	slotter := NewSemaphoreSlotter(1)
 
-	first, err := slotter.AcquireWorkflowSlot(context.Background(), zeroWorkflowID(), nil)
+	first, err := slotter.AcquireWorkflowSlot(context.Background(), zeroWorkflowID(), nil, Wait)
 	if err != nil {
 		t.Fatalf("first AcquireWorkflowSlot() error = %v", err)
 	}
@@ -73,10 +73,47 @@ func TestSemaphoreSlotterHonorsContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err = slotter.AcquireWorkflowSlot(ctx, zeroWorkflowID(), nil)
+	_, err = slotter.AcquireWorkflowSlot(ctx, zeroWorkflowID(), nil, Wait)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("AcquireWorkflowSlot() error = %v, want context.Canceled", err)
 	}
+}
+
+func TestSemaphoreSlotterTryDisabledDoesNotReject(t *testing.T) {
+	t.Parallel()
+
+	slotter := NewSemaphoreSlotter(0)
+
+	for range 10 {
+		slot, err := slotter.AcquireWorkflowSlot(context.Background(), zeroWorkflowID(), nil, NoWait)
+		if err != nil {
+			t.Fatalf("AcquireWorkflowSlot(NoWait) error = %v", err)
+		}
+		slot.Release()
+	}
+}
+
+func TestSemaphoreSlotterTryRejectsWhenFull(t *testing.T) {
+	t.Parallel()
+
+	slotter := NewSemaphoreSlotter(1)
+
+	first, err := slotter.AcquireWorkflowSlot(context.Background(), zeroWorkflowID(), nil, NoWait)
+	if err != nil {
+		t.Fatalf("first AcquireWorkflowSlot(NoWait) error = %v", err)
+	}
+
+	if _, err := slotter.AcquireWorkflowSlot(context.Background(), zeroWorkflowID(), nil, NoWait); !errors.Is(err, ErrNoWorkflowSlots) {
+		t.Fatalf("AcquireWorkflowSlot(NoWait) error = %v, want ErrNoWorkflowSlots", err)
+	}
+
+	first.Release()
+
+	second, err := slotter.AcquireWorkflowSlot(context.Background(), zeroWorkflowID(), nil, NoWait)
+	if err != nil {
+		t.Fatalf("AcquireWorkflowSlot(NoWait) after release error = %v", err)
+	}
+	second.Release()
 }
 
 func assertNotAcquired(t *testing.T, acquired <-chan WorkflowSlot, errs <-chan error) {

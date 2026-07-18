@@ -406,6 +406,7 @@ in
               "SPINDLE_ARTIFACT_STORES_DISK_DIR=${cfg.artifactStores.disk.dir}"
               "SPINDLE_ARTIFACT_STORES_S3_BUCKET=${cfg.artifactStores.s3.bucket}"
               "SPINDLE_ARTIFACT_STORES_S3_REGION=${cfg.artifactStores.s3.region}"
+              "SPINDLE_MILL_ARTIFACT_STORE=s3"
             ];
             ExecStart = "${cfg.package}/bin/spindle";
             Restart = "always";

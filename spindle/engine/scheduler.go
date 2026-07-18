@@ -50,7 +50,8 @@ func NewResourceScheduler[R Resources[R]](budget, max R, agingThreshold time.Dur
 	}
 }
 
-func (s *ResourceScheduler[R]) Acquire(ctx context.Context, req R) (WorkflowSlot, error) {
+// the mill owns the backlog so a NoWait caller must have room immediately or fail
+func (s *ResourceScheduler[R]) Acquire(ctx context.Context, req R, mode AcquireMode) (WorkflowSlot, error) {
 	if s == nil {
 		return NoopSlot{}, nil
 	}
@@ -60,10 +61,17 @@ func (s *ResourceScheduler[R]) Acquire(ctx context.Context, req R) (WorkflowSlot
 		s.mu.Unlock()
 		return nil, fmt.Errorf("%w: request=%v budget=%v max=%v", ErrNoWorkflowSlots, req, s.budget, s.max)
 	}
-	if len(s.queue) == 0 && s.used.Add(req).Fits(s.budget) {
+	// ignores the queue because it never blocks
+	// only bypasses empty queues to prevent starvation
+	if s.used.Add(req).Fits(s.budget) && (mode == NoWait || len(s.queue) == 0) {
 		s.used = s.used.Add(req)
 		s.mu.Unlock()
 		return &resourceLease[R]{scheduler: s, req: req}, nil
+	}
+	if mode == NoWait {
+		used := s.used
+		s.mu.Unlock()
+		return nil, fmt.Errorf("%w: request=%v used=%v budget=%v", ErrNoWorkflowSlots, req, used, s.budget)
 	}
 
 	waiter := &resourceWaiter[R]{req: req, ready: make(chan struct{}), enqueuedAt: s.now()}
@@ -108,7 +116,7 @@ func (s *ResourceScheduler[R]) release(req R) {
 
 // start every waiter whose request fits. once a waiter is older than
 // agingThreshold, count its request as already used so younger waiters
-// stop being scheduled ahead of it.
+// stop being scheduled ahead of it
 func (s *ResourceScheduler[R]) schedule() {
 	var reserved R
 	now := s.now()
@@ -129,11 +137,7 @@ func (s *ResourceScheduler[R]) schedule() {
 }
 
 func (s *ResourceScheduler[R]) remove(waiter *resourceWaiter[R]) {
-	for i, candidate := range s.queue {
-		if candidate != waiter {
-			continue
-		}
+	if i := slices.Index(s.queue, waiter); i >= 0 {
 		s.queue = slices.Delete(s.queue, i, i+1)
-		return
 	}
 }

@@ -1,0 +1,187 @@
+syntax = "proto3";
+
+package spindle.mill.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "tangled.org/core/spindle/mill/proto/gen;millv1";
+
+// executor identity, sent on connect
+message Hello {
+  uint32 protocol_version = 1;
+  // GOARCH of the node, informational only
+  string arch = 2;
+  // operator-defined labels, matched against runs_on
+  repeated string labels = 3;
+  string epoch = 4 [(buf.validate.field).string.min_len = 1];
+}
+
+// reconnect state for an existing epoch
+message Resume {
+  string epoch = 1 [(buf.validate.field).string.min_len = 1];
+  uint64 ack_seqno = 2;
+}
+
+// per-engine state of a node
+message EngineAvailability {
+  bool available = 1;
+  // opaque engine-defined load metrics, higher means more loaded
+  map<string, double> load = 2;
+}
+
+// full node state
+message NodeSnapshot {
+  uint64 seqno = 1 [(buf.validate.field).uint64.gt = 0];
+  map<string, EngineAvailability> engines = 2;
+  // every lease the executor currently holds, reserved or running
+  repeated string active_lease_ids = 3;
+}
+
+// a seat reservation, carries no secrets
+message ReserveSeat {
+  string lease_id = 1 [(buf.validate.field).string.min_len = 1];
+  string target_engine = 2 [(buf.validate.field).string.min_len = 1];
+  string raw_pipeline_json = 3;
+  string raw_workflow_json = 4;
+  // pipeline id, the executor reconstructs the exact WorkflowId from it
+  string knot = 5;
+  string rkey = 6;
+  uint32 ttl_seconds = 7;
+}
+
+enum RejectClass {
+  REJECT_CLASS_UNSPECIFIED = 0;
+  REJECT_CLASS_TRANSIENT = 1;
+  REJECT_CLASS_INCOMPATIBLE = 2;
+}
+
+message ReserveResult {
+  string lease_id = 1 [(buf.validate.field).string.min_len = 1];
+  bool accepted = 2;
+  string reject_reason = 3;
+  RejectClass reject_class = 4 [(buf.validate.field).enum.defined_only = true];
+}
+
+// a single unlocked secret
+message Secret {
+  string key = 1;
+  string value = 2;
+}
+
+// promotes a reservation to a running job and hands over the secrets
+message CommitLease {
+  string lease_id = 1 [(buf.validate.field).string.min_len = 1];
+  repeated Secret secrets = 2;
+}
+
+message Committed {
+  string lease_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// drops a reservation that was never committed
+message ReleaseLease {
+  string lease_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// cancels a running attempt
+message CancelAttempt {
+  string lease_id = 1 [(buf.validate.field).string.min_len = 1];
+  string reason = 2;
+}
+
+message CancelAck {
+  string lease_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+enum NonterminalStatus {
+  NONTERMINAL_STATUS_UNSPECIFIED = 0;
+  RUNNING = 1;
+}
+
+enum TerminalStatus {
+  TERMINAL_STATUS_UNSPECIFIED = 0;
+  SUCCESS = 1;
+  FAILED = 2;
+  TIMEOUT = 3;
+  CANCELLED = 4;
+}
+
+message StatusEvent {
+  NonterminalStatus status = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: 0
+  }];
+  string error = 2 [(buf.validate.field).string.max_bytes = 65536];
+  int64 exit_code = 3;
+}
+
+message LogArtifact {
+  string ref = 1 [(buf.validate.field).string.min_len = 1];
+  string hash = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+// terminal outcome of an attempt
+message AttemptResult {
+  TerminalStatus status = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: 0
+  }];
+  string error = 2 [(buf.validate.field).string.max_bytes = 65536];
+  int64 exit_code = 3;
+  LogArtifact log_artifact = 4;
+}
+
+// live non-replay log frame
+message LiveLog {
+  string lease_id = 1 [(buf.validate.field).string.min_len = 1];
+  bytes raw_json = 2 [(buf.validate.field).bytes.min_len = 1];
+}
+
+// one event in the executor's stream back to the mill
+message Event {
+  uint64 seqno = 1 [(buf.validate.field).uint64.gt = 0];
+  string lease_id = 2 [(buf.validate.field).string.min_len = 1];
+
+  oneof payload {
+    option (buf.validate.oneof).required = true;
+    StatusEvent status_event = 3;
+    AttemptResult attempt_result = 4;
+  }
+}
+
+// a flushed bundle of events
+message EventBatch {
+  string epoch = 1 [(buf.validate.field).string.min_len = 1];
+  repeated Event events = 2 [(buf.validate.field).repeated.min_items = 1];
+}
+
+// all events up to and including up_to_seqno are durably processed
+message Ack {
+  string epoch = 1 [(buf.validate.field).string.min_len = 1];
+  uint64 up_to_seqno = 2;
+}
+
+message Message {
+  option (buf.validate.message).oneof = {
+    fields: [
+      "hello", "resume", "node_snapshot", "reserve_seat", "reserve_result",
+      "commit_lease", "committed", "release_lease", "cancel_attempt",
+      "cancel_ack", "event_batch", "ack", "live_log"
+    ],
+    required: true
+  };
+
+  Hello hello = 1;
+  Resume resume = 2;
+  NodeSnapshot node_snapshot = 3;
+  ReserveSeat reserve_seat = 4;
+  ReserveResult reserve_result = 5;
+  CommitLease commit_lease = 6;
+  Committed committed = 7;
+  ReleaseLease release_lease = 8;
+  CancelAttempt cancel_attempt = 9;
+  CancelAck cancel_ack = 10;
+  EventBatch event_batch = 11;
+  Ack ack = 12;
+  LiveLog live_log = 13;
+}

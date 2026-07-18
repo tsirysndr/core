@@ -74,6 +74,10 @@ type QEMUVMHandle struct {
 type qemuRunner struct{}
 
 func (qemuRunner) Validate(spec ImageSpec, enableKVM bool) error {
+	b := newArgBuilder(len(spec.NetworkInterfaces) * 4)
+	if err := addQEMUNetworkArgs(&b, spec); err != nil {
+		return err
+	}
 	if _, err := exec.LookPath(spec.RunnerCmd()); err != nil {
 		return fmt.Errorf("required host command %q not found in PATH: %w", spec.RunnerCmd(), err)
 	}
@@ -640,7 +644,7 @@ func qemuArgs(cfg qemuArgsConfig) ([]string, error) {
 		return nil, err
 	}
 
-	if err := addQEMUNetworkArgs(&b, cfg); err != nil {
+	if err := addQEMUNetworkArgs(&b, cfg.Image); err != nil {
 		return nil, err
 	}
 
@@ -737,8 +741,8 @@ func addQEMUVolumeArgs(b *argBuilder, cfg qemuArgsConfig) error {
 	return nil
 }
 
-func addQEMUNetworkArgs(b *argBuilder, cfg qemuArgsConfig) error {
-	for _, networkInterface := range cfg.Image.NetworkInterfaces {
+func addQEMUNetworkArgs(b *argBuilder, image ImageSpec) error {
+	for _, networkInterface := range image.NetworkInterfaces {
 		if networkInterface.Type != "slirp4netns" {
 			return fmt.Errorf("unsupported microvm network interface type %q", networkInterface.Type)
 		}
@@ -754,7 +758,7 @@ func addQEMUNetworkArgs(b *argBuilder, cfg qemuArgsConfig) error {
 		b.Opt("-netdev", netdevOpts.String())
 		b.Optf(
 			"-device", "virtio-net-%s,netdev=%s,mac=%s",
-			cfg.Image.RunnerConfig.VirtioTransport, networkInterface.ID, networkInterface.MAC,
+			image.RunnerConfig.VirtioTransport, networkInterface.ID, networkInterface.MAC,
 		)
 	}
 

@@ -1,5 +1,6 @@
 version: v2
 modules:
   - path: spindle/agentproto
+  - path: spindle/mill/proto
 deps:
   - buf.build/bufbuild/protovalidate

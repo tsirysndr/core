@@ -79,6 +79,14 @@ func TestDescribeManifestError(t *testing.T) {
 	}
 }
 
+func TestDescribeManifestErrorAcceptsRunsOnGenericWorkflowKey(t *testing.T) {
+	raw := "engine: microvm\nruns_on: [linux/arm64, kvm]\nimage: nixos\n"
+
+	if err := DescribeManifestError(raw, testManifest{}); err != nil {
+		t.Fatalf("DescribeManifestError(%q) = %v, want nil", raw, err)
+	}
+}
+
 func TestDescribeManifestErrorNoFalsePositives(t *testing.T) {
 	cases := []string{
 		// well-formed manifest

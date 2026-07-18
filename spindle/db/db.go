@@ -79,26 +79,20 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		);
 
 		create table if not exists spindle_members (
-			-- identifiers for the record
 			id integer primary key autoincrement,
 			did text not null,
 			rkey text not null,
-
-			-- data
 			instance text not null,
 			subject text not null,
 			created text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-
-			-- constraints
 			unique (did, rkey)
 		);
 
-		-- status event for a single workflow
 		create table if not exists events (
 			rkey text not null,
 			nsid text not null,
-			event text not null, -- json
-			created integer not null -- unix nanos
+			event text not null,
+			created integer not null
 		);
 
 		create table if not exists nixos_toplevel_cache (
@@ -132,6 +126,50 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			foreign key (pipeline_id) references pipelines(id) on delete cascade
 		);
 
+		create table if not exists mill_executors (
+			name       text primary key,
+			token_hash text not null unique,
+			created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+			expires_at        text,
+			labels            text,
+			quarantine_reason text,
+			quarantined_at    text
+		);
+
+		create table if not exists mill_leases (
+			lease_id        text primary key,
+			node_id         text not null,
+			epoch     text not null,
+			engine          text not null,
+			knot            text not null,
+			rkey            text not null,
+			workflow        text not null,
+			state           text not null
+		);
+
+		create table if not exists mill_executor_cursors (
+			node_id      text not null,
+			epoch  text not null,
+			acked_seqno integer not null,
+			primary key (node_id, epoch)
+		);
+
+		create table if not exists mill_outbox_state (
+			epoch text not null,
+			next_seqno integer not null,
+			primary key (epoch)
+		);
+
+		create table if not exists mill_outbox_rows (
+			epoch text not null,
+			seqno      integer not null,
+			payload     blob not null,
+			byte_size   integer not null,
+			control     integer not null,
+			primary key (epoch, seqno),
+			foreign key (epoch) references mill_outbox_state(epoch) on delete cascade
+		);
+
 		create table if not exists mill_artifacts (
 			id           integer primary key autoincrement,
 			lease_id     text not null,
@@ -140,15 +178,21 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			hash         text not null
 		);
 
+		create table if not exists executor_pending_artifacts (
+			lease_id      text primary key,
+			workflow      text not null,
+			status        text not null,
+			error         text not null default '',
+			exit_code     integer not null default 0,
+			ref           text not null,
+			hash          text not null
+		);
+
 		create table if not exists migrations (
 			id integer primary key autoincrement,
 			name text unique
 		);
 	`)
-	if err != nil {
-		return nil, err
-	}
-
 	if err := runMigrations(ctx, conn, logger); err != nil {
 		return nil, err
 	}

@@ -68,7 +68,7 @@ func newVMBudgetConfig(cfg config.MicroVMPipelines) (Resources, Resources, time.
 	return budget, maxReq, cfg.AgingThreshold
 }
 
-func (e *Engine) AcquireWorkflowSlot(ctx context.Context, wid models.WorkflowId, wf *models.Workflow) (engine.WorkflowSlot, error) {
+func (e *Engine) AcquireWorkflowSlot(ctx context.Context, wid models.WorkflowId, wf *models.Workflow, mode engine.AcquireMode) (engine.WorkflowSlot, error) {
 	state, ok := wf.Data.(*workflowState)
 	if !ok || state == nil {
 		return nil, fmt.Errorf("microVM workflow state is not initialized")
@@ -77,10 +77,7 @@ func (e *Engine) AcquireWorkflowSlot(ctx context.Context, wid models.WorkflowId,
 		return engine.NoopSlot{}, nil
 	}
 	req := resourcesForImage(state.ImageSpec)
-	if req.MemoryMiB < 0 || req.VCPUs < 0 || req.DiskMiB < 0 {
-		return nil, fmt.Errorf("microVM resource request must not be negative: %s", req)
-	}
-	return e.scheduler.Acquire(ctx, req)
+	return e.scheduler.Acquire(ctx, req, mode)
 }
 
 func resourcesForImage(spec ImageSpec) Resources {

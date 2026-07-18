@@ -19,6 +19,10 @@ func (d *DB) GetEvents(cursor int64, limit int) ([]eventstream.Event, error) {
 	return eventstream.List(d, cursor, limit)
 }
 
+func (d *DB) EventHighWater() (int64, error) {
+	return eventstream.HighWater(d)
+}
+
 func (d *DB) CreatePipelineEvent(rkey string, pipeline tangled.Pipeline, n *notifier.Notifier) error {
 	eventJson, err := json.Marshal(pipeline)
 	if err != nil {
@@ -32,6 +36,29 @@ func (d *DB) CreatePipelineEvent(rkey string, pipeline tangled.Pipeline, n *noti
 	return d.insertEvent(event, n)
 }
 
+// the envelope Created stays zero so insertEvent stamps the local clock, the record's CreatedAt is separate
+func statusEvent(pipelineAtUri, workflow, status string, workflowError *string, exitCode *int64) (eventstream.Event, error) {
+	s := tangled.PipelineStatus{
+		CreatedAt: time.Now().Format(time.RFC3339),
+		Error:     workflowError,
+		ExitCode:  exitCode,
+		Pipeline:  pipelineAtUri,
+		Workflow:  workflow,
+		Status:    status,
+	}
+
+	eventJson, err := json.Marshal(s)
+	if err != nil {
+		return eventstream.Event{}, err
+	}
+
+	return eventstream.Event{
+		Rkey:      tid.TID(),
+		Nsid:      tangled.PipelineStatusNSID,
+		EventJson: eventJson,
+	}, nil
+}
+
 func (d *DB) createStatusEvent(
 	workflowId models.WorkflowId,
 	statusKind models.StatusKind,
@@ -39,29 +66,46 @@ func (d *DB) createStatusEvent(
 	exitCode *int64,
 	n *notifier.Notifier,
 ) error {
-	now := time.Now()
-	pipelineAtUri := workflowId.PipelineId.AtUri()
-	s := tangled.PipelineStatus{
-		CreatedAt: now.Format(time.RFC3339),
-		Error:     workflowError,
-		ExitCode:  exitCode,
-		Pipeline:  string(pipelineAtUri),
-		Workflow:  workflowId.Name,
-		Status:    string(statusKind),
-	}
-
-	eventJson, err := json.Marshal(s)
+	event, err := statusEvent(string(workflowId.PipelineId.AtUri()), workflowId.Name, string(statusKind), workflowError, exitCode)
 	if err != nil {
 		return err
 	}
-
-	event := eventstream.Event{
-		Rkey:      tid.TID(),
-		Nsid:      tangled.PipelineStatusNSID,
-		EventJson: eventJson,
-	}
-
 	return d.insertEvent(event, n)
+}
+
+// stamps the mill's own clock so it orders against the cursor like a local write
+func (d *DB) InsertEventStatus(
+	pipelineAtUri string,
+	workflow string,
+	status string,
+	workflowError *string,
+	exitCode *int64,
+	n *notifier.Notifier,
+) error {
+	event, err := statusEvent(pipelineAtUri, workflow, status, workflowError, exitCode)
+	if err != nil {
+		return err
+	}
+	return d.insertEvent(event, n)
+}
+
+// deleting the lease in the same transaction prevents the terminal event
+// from replaying
+func (d *DB) CompleteMillLease(
+	leaseID string,
+	pipelineAtUri string,
+	workflow string,
+	status string,
+	workflowError *string,
+	exitCode *int64,
+	n *notifier.Notifier,
+) error {
+	return d.ApplyEventBatch(n, func(tx *EventBatchTx) error {
+		if err := tx.InsertStatusEvent(pipelineAtUri, workflow, status, workflowError, exitCode); err != nil {
+			return err
+		}
+		return tx.DeleteLease(leaseID)
+	})
 }
 
 func (d *DB) GetStatus(workflowId models.WorkflowId) (*tangled.PipelineStatus, error) {

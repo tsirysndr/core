@@ -27,6 +27,7 @@ type (
 	Workflow struct {
 		Name      string       `yaml:"-"` // name of the workflow file
 		Engine    string       `yaml:"engine"`
+		RunsOn    []string     `yaml:"runs_on"`
 		When      []Constraint `yaml:"when"`
 		CloneOpts CloneOpts    `yaml:"clone"`
 		Raw       string       `yaml:"-"`
@@ -140,15 +141,15 @@ func (w *Workflow) Match(trigger tangled.Pipeline_TriggerMetadata, changedFiles 
 }
 
 func (c *Constraint) Match(trigger tangled.Pipeline_TriggerMetadata, changedFiles []string) (bool, error) {
-	match := true
-
 	// manual triggers always pass this constraint
 	if trigger.Manual != nil {
 		return true, nil
 	}
 
 	// apply event constraints
-	match = match && c.MatchEvent(trigger.Kind)
+	if !c.MatchEvent(trigger.Kind) {
+		return false, nil
+	}
 
 	// apply branch and action constraints for PRs
 	if trigger.PullRequest != nil {
@@ -156,11 +157,16 @@ func (c *Constraint) Match(trigger tangled.Pipeline_TriggerMetadata, changedFile
 		if err != nil {
 			return false, err
 		}
+		if !matched {
+			return false, nil
+		}
 		action := ""
 		if trigger.PullRequest.Action != nil {
 			action = *trigger.PullRequest.Action
 		}
-		match = match && matched && c.MatchTypes(action)
+		if !c.MatchTypes(action) {
+			return false, nil
+		}
 	}
 
 	// apply ref constraints for pushes
@@ -169,7 +175,9 @@ func (c *Constraint) Match(trigger tangled.Pipeline_TriggerMetadata, changedFile
 		if err != nil {
 			return false, err
 		}
-		match = match && matched
+		if !matched {
+			return false, nil
+		}
 	}
 
 	// apply paths filter: if specified, at least one changed file must match
@@ -178,10 +186,12 @@ func (c *Constraint) Match(trigger tangled.Pipeline_TriggerMetadata, changedFile
 		if err != nil {
 			return false, err
 		}
-		match = match && matched
+		if !matched {
+			return false, nil
+		}
 	}
 
-	return match, nil
+	return true, nil
 }
 
 // matchesAnyFile returns true if any file in files matches any of the glob patterns.

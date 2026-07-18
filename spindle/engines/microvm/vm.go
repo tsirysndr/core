@@ -48,6 +48,17 @@ func prepareWorkDir(workDir string) error {
 	return nil
 }
 
+func mkfsExt4ForVolumes(volumes []Volume, configured string) (string, error) {
+	if len(volumes) == 0 || configured != "" {
+		return configured, nil
+	}
+	path, err := exec.LookPath("mkfs.ext4")
+	if err != nil {
+		return "", fmt.Errorf("mkfs.ext4 command not found in PATH: %w", err)
+	}
+	return path, nil
+}
+
 func prepareVolumes(ctx context.Context, workDir string, volumes []Volume, mkfsExt4 string) (map[string]string, error) {
 	paths := make(map[string]string, len(volumes))
 	for _, volume := range volumes {
@@ -377,12 +388,9 @@ func StartVM(ctx context.Context, cfg VMConfig, logger *slog.Logger) (VMHandle, 
 		return nil, err
 	}
 
-	mkfsExt4 := cfg.MkfsExt4
-	if mkfsExt4 == "" {
-		mkfsExt4, err = exec.LookPath("mkfs.ext4")
-		if err != nil {
-			return nil, fmt.Errorf("mkfs.ext4 command not found in PATH: %w", err)
-		}
+	mkfsExt4, err := mkfsExt4ForVolumes(cfg.Image.Volumes, cfg.MkfsExt4)
+	if err != nil {
+		return nil, err
 	}
 	volumePaths, err := prepareVolumes(ctx, cfg.WorkDir, cfg.Image.Volumes, mkfsExt4)
 	if err != nil {

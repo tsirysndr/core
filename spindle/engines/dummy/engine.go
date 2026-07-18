@@ -8,6 +8,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/spindle/engine"
 	"tangled.org/core/spindle/models"
 	"tangled.org/core/spindle/secrets"
 )
@@ -16,7 +17,8 @@ import (
 // step output to the workflow logger. Useful for testing pipeline plumbing
 // without a real execution backend.
 type DummyEngine struct {
-	l *slog.Logger
+	l         *slog.Logger
+	StepDelay time.Duration
 }
 
 func New(l *slog.Logger) *DummyEngine {
@@ -79,14 +81,26 @@ func (e *DummyEngine) WorkflowTimeout() time.Duration {
 	return 5 * time.Minute
 }
 
+// no capacity limit, so always a no-op slot regardless of mode
+func (e *DummyEngine) AcquireWorkflowSlot(_ context.Context, _ models.WorkflowId, _ *models.Workflow, _ engine.AcquireMode) (engine.WorkflowSlot, error) {
+	return engine.NoopSlot{}, nil
+}
+
 func (e *DummyEngine) DestroyWorkflow(_ context.Context, wid models.WorkflowId) error {
 	e.l.Info("destroying workflow", "wid", wid)
 	return nil
 }
 
-func (e *DummyEngine) RunStep(_ context.Context, wid models.WorkflowId, w *models.Workflow, idx int, _ []secrets.UnlockedSecret, wfLogger models.WorkflowLogger) error {
+func (e *DummyEngine) RunStep(ctx context.Context, wid models.WorkflowId, w *models.Workflow, idx int, _ []secrets.UnlockedSecret, wfLogger models.WorkflowLogger) error {
 	step := w.Steps[idx]
 	e.l.Info("running step", "wid", wid, "step", step.Name(), "command", step.Command())
 	fmt.Fprintf(wfLogger.DataWriter(idx, "stdout"), "$ %s", step.Command())
+	if e.StepDelay > 0 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(e.StepDelay):
+		}
+	}
 	return nil
 }

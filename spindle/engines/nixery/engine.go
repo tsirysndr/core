@@ -198,12 +198,13 @@ func (e *Engine) AcquireWorkflowSlot(
 	ctx context.Context,
 	wid models.WorkflowId,
 	wf *models.Workflow,
+	mode engine.AcquireMode,
 ) (engine.WorkflowSlot, error) {
 	if e.slotter == nil {
 		return engine.NoopSlot{}, nil
 	}
 
-	return e.slotter.AcquireWorkflowSlot(ctx, wid, wf)
+	return e.slotter.AcquireWorkflowSlot(ctx, wid, wf, mode)
 }
 
 func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *models.Workflow, wfLogger models.WorkflowLogger) (err error) {

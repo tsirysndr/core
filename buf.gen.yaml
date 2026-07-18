@@ -9,3 +9,6 @@ plugins:
     out: shuttle/src/gen
     opt:
       - bytes=.
+    # we dont need fleet types in rust code since nothing uses it
+    exclude_types:
+      - spindle.mill.v1

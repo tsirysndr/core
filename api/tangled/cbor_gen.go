@@ -9863,8 +9863,13 @@ func (t *Pipeline_Workflow) MarshalCBOR(w io.Writer) error {
 	}
 
 	cw := cbg.NewCborWriter(w)
+	fieldCount := 5
 
-	if _, err := cw.Write([]byte{164}); err != nil {
+	if t.RunsOn == nil {
+		fieldCount--
+	}
+
+	if _, err := cw.Write(cbg.CborEncodeMajorType(cbg.MajMap, uint64(fieldCount))); err != nil {
 		return err
 	}
 
@@ -9951,6 +9956,42 @@ func (t *Pipeline_Workflow) MarshalCBOR(w io.Writer) error {
 	}
 	if _, err := cw.WriteString(string(t.Engine)); err != nil {
 		return err
+	}
+
+	// t.RunsOn ([]string) (slice)
+	if t.RunsOn != nil {
+
+		if len("runsOn") > 1000000 {
+			return xerrors.Errorf("Value in field \"runsOn\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("runsOn"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("runsOn")); err != nil {
+			return err
+		}
+
+		if len(t.RunsOn) > 8192 {
+			return xerrors.Errorf("Slice value in field t.RunsOn was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajArray, uint64(len(t.RunsOn))); err != nil {
+			return err
+		}
+		for _, v := range t.RunsOn {
+			if len(v) > 1000000 {
+				return xerrors.Errorf("Value in field v was too long")
+			}
+
+			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(v))); err != nil {
+				return err
+			}
+			if _, err := cw.WriteString(string(v)); err != nil {
+				return err
+			}
+
+		}
 	}
 	return nil
 }
@@ -10048,6 +10089,46 @@ func (t *Pipeline_Workflow) UnmarshalCBOR(r io.Reader) (err error) {
 				}
 
 				t.Engine = string(sval)
+			}
+			// t.RunsOn ([]string) (slice)
+		case "runsOn":
+
+			maj, extra, err = cr.ReadHeader()
+			if err != nil {
+				return err
+			}
+
+			if extra > 8192 {
+				return fmt.Errorf("t.RunsOn: array too large (%d)", extra)
+			}
+
+			if maj != cbg.MajArray {
+				return fmt.Errorf("expected cbor array")
+			}
+
+			if extra > 0 {
+				t.RunsOn = make([]string, extra)
+			}
+
+			for i := 0; i < int(extra); i++ {
+				{
+					var maj byte
+					var extra uint64
+					var err error
+					_ = maj
+					_ = extra
+					_ = err
+
+					{
+						sval, err := cbg.ReadStringWithMax(cr, 1000000)
+						if err != nil {
+							return err
+						}
+
+						t.RunsOn[i] = string(sval)
+					}
+
+				}
 			}
 
 		default:

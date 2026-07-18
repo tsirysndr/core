@@ -195,6 +195,12 @@
         "engine": {
           "type": "string"
         },
+        "runsOn": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "clone": {
           "type": "ref",
           "ref": "#cloneOpts"

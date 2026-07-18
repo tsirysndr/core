@@ -293,6 +293,55 @@ func TestInsert_MonotonicCreatedUnderConcurrency(t *testing.T) {
 	}
 }
 
+func TestHighWaterSeedsClockFromStoredEvents(t *testing.T) {
+	db, err := sql.Open("sqlite3", t.TempDir()+"/events.db")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if _, err := db.Exec(`create table events (
+		rkey text not null,
+		nsid text not null,
+		event text not null,
+		created integer not null,
+		primary key (rkey, nsid)
+	)`); err != nil {
+		t.Fatalf("schema: %v", err)
+	}
+
+	stored := time.Now().Add(time.Hour).UnixNano()
+	if _, err := db.Exec(
+		`insert into events (rkey, nsid, event, created) values (?, ?, ?, ?)`,
+		"stored", "sh.tangled.test", "{}", stored,
+	); err != nil {
+		t.Fatalf("seed event: %v", err)
+	}
+
+	cut, err := HighWater(db)
+	if err != nil {
+		t.Fatalf("HighWater() error = %v", err)
+	}
+	if cut < stored {
+		t.Fatalf("HighWater() = %d, want at least stored cursor %d", cut, stored)
+	}
+
+	n := notifier.New()
+	if err := Insert(db, Event{
+		Rkey:      "new",
+		Nsid:      "sh.tangled.test",
+		EventJson: json.RawMessage("{}"),
+	}, &n); err != nil {
+		t.Fatalf("Insert() error = %v", err)
+	}
+	events, err := List(db, cut, 10)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(events) != 1 || events[0].Rkey != "new" || events[0].Created <= cut {
+		t.Fatalf("events after cut = %+v, want only new event above %d", events, cut)
+	}
+}
+
 func isCloseErr(err error) bool {
 	if err == nil {
 		return false

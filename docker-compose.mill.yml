@@ -1,0 +1,157 @@
+# turns primary spindle into a mill and also adds three executors with differing
+# labels for testing and with different images.
+#
+#   executor    labels          images        can run
+#   ---------   -------------   -----------   ------------------------
+#   executor-a  linux, fast     full          image/alpine, image/nixos
+#   executor-b  linux, slow     full          image/alpine, image/nixos
+#   executor-c  linux, gpu      alpine only    image/alpine
+
+x-mill-executor: &mill-executor
+  profiles: ["linux"]
+  build:
+    context: .
+    dockerfile: localinfra/spindle.Dockerfile
+  restart: unless-stopped
+  environment: &mill-executor-env
+    SPINDLE_ROLE: executor
+    SPINDLE_SERVER_LISTEN_ADDR: 0.0.0.0:6555
+    SPINDLE_SERVER_DB_PATH: /var/lib/spindle/spindle.db
+    SPINDLE_SERVER_PLC_URL: https://plc.tngl.boltless.dev
+    SPINDLE_SERVER_JETSTREAM_ENDPOINT: wss://jetstream.tngl.boltless.dev/subscribe
+    SPINDLE_SERVER_DEV: "true"
+    SPINDLE_SERVER_DEV_EXTRA_HOSTS: knot.tngl.boltless.dev,mirror.tngl.boltless.dev
+    SPINDLE_SERVER_TAP_DB_PATH: /var/lib/spindle/tap.db
+    SPINDLE_SERVER_TAP_RELAY_URL: https://pds.tngl.boltless.dev
+    SPINDLE_MICROVM_PIPELINES_IMAGE_DIR: /var/lib/spindle/images
+    SPINDLE_MICROVM_PIPELINES_OVERLAY_DIR: /var/lib/spindle/overlays
+    SPINDLE_ARTIFACT_STORES_DISK_DIR: /var/lib/spindle/artifacts
+    SPINDLE_MILL_ARTIFACT_STORE: disk
+    SPINDLE_MICROVM_PIPELINES_ENABLE_CGROUPS: "false"
+    SPINDLE_NIX_CACHE_READ_URLS: http://ncps:8501
+    SPINDLE_NIX_CACHE_TRUSTED_PUBLIC_KEYS: cache.local:F7YqpMzuBdILYd/v+wMZN2YKxCzliXQyFmeezOxw7rU=
+    SPINDLE_NIX_CACHE_UPLOAD_URL: http://ncps:8501/upload
+    # dials the mill container directly using ws
+    SPINDLE_MILL_URL: ws://spindle:6555/mill
+  devices:
+    - /dev/vsock:/dev/vsock
+    - /dev/kvm:/dev/kvm
+    - /dev/vhost-vsock:/dev/vhost-vsock
+    - /dev/net/tun:/dev/net/tun
+  cap_add:
+    - NET_ADMIN
+    - SYS_ADMIN
+  security_opt:
+    - label=disable
+    - seccomp=unconfined
+  healthcheck:
+    test: ["CMD", "wget", "-qO-", "http://localhost:6555/"]
+    interval: 2s
+    timeout: 2s
+    retries: 30
+    start_period: 5s
+  depends_on: &mill-executor-deps
+    plc:
+      condition: service_started
+    jetstream:
+      condition: service_started
+    init-accounts:
+      condition: service_completed_successfully
+    ncps:
+      condition: service_started
+    spindle:
+      condition: service_healthy
+    mill-tokens:
+      condition: service_completed_successfully
+  networks: [tngl]
+
+services:
+  # configures the primary spindle container as a mill host
+  spindle:
+    environment:
+      SPINDLE_ROLE: mill
+      SPINDLE_ARTIFACT_STORES_DISK_DIR: /var/lib/spindle/artifacts
+      SPINDLE_MILL_ARTIFACT_STORE: disk
+    volumes:
+      - spindle-artifacts:/var/lib/spindle/artifacts
+
+  mill-tokens:
+    profiles: ["linux"]
+    build:
+      context: .
+      dockerfile: localinfra/spindle.Dockerfile
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    environment:
+      SPINDLE_SERVER_DB_PATH: /var/lib/spindle/spindle.db
+    command:
+      - |
+        set -eu
+        seed() {
+          spindle mill executor revoke "$$1" >/dev/null 2>&1 || true
+          args=""
+          for l in $$(echo "$$2" | tr ',' ' '); do args="$$args --label $$l"; done
+          spindle mill executor add "$$1" $$args > "/shared/$$1.mill-token"
+        }
+        seed executor-a linux,fast
+        seed executor-b linux,slow
+        seed executor-c linux,gpu
+        echo "seeded executor tokens"
+    volumes:
+      - spindle-data:/var/lib/spindle
+      - init-state:/shared
+    depends_on:
+      spindle:
+        condition: service_healthy
+    networks: [tngl]
+
+  spindle-executor-a:
+    <<: *mill-executor
+    environment:
+      <<: *mill-executor-env
+      SPINDLE_SERVER_HOSTNAME: executor-a.tngl.boltless.dev
+      SPINDLE_MILL_LABELS: linux,fast
+      SPINDLE_MILL_TOKEN_FILE: /shared/executor-a.mill-token
+      SPINDLE_MICROVM_PIPELINES_AGENT_PORT: "11241"
+    volumes:
+      - spindle-executor-a-data:/var/lib/spindle
+      - spindle-artifacts:/var/lib/spindle/artifacts
+      - ./out/localinfra-spindle-images:/var/lib/spindle/images:ro
+      - init-state:/shared:ro
+      - ./localinfra/certs/root.crt:/usr/local/share/ca-certificates/caddy.crt:ro
+
+  spindle-executor-b:
+    <<: *mill-executor
+    environment:
+      <<: *mill-executor-env
+      SPINDLE_SERVER_HOSTNAME: executor-b.tngl.boltless.dev
+      SPINDLE_MILL_LABELS: linux,slow
+      SPINDLE_MILL_TOKEN_FILE: /shared/executor-b.mill-token
+      SPINDLE_MICROVM_PIPELINES_AGENT_PORT: "11242"
+    volumes:
+      - spindle-executor-b-data:/var/lib/spindle
+      - spindle-artifacts:/var/lib/spindle/artifacts
+      - ./out/localinfra-spindle-images:/var/lib/spindle/images:ro
+      - init-state:/shared:ro
+      - ./localinfra/certs/root.crt:/usr/local/share/ca-certificates/caddy.crt:ro
+
+  spindle-executor-c:
+    <<: *mill-executor
+    environment:
+      <<: *mill-executor-env
+      SPINDLE_SERVER_HOSTNAME: executor-c.tngl.boltless.dev
+      SPINDLE_MILL_LABELS: linux,gpu
+      SPINDLE_MILL_TOKEN_FILE: /shared/executor-c.mill-token
+      SPINDLE_MICROVM_PIPELINES_AGENT_PORT: "11243"
+    volumes:
+      - spindle-executor-c-data:/var/lib/spindle
+      - spindle-artifacts:/var/lib/spindle/artifacts
+      - ./out/localinfra-spindle-images-alpine:/var/lib/spindle/images:ro
+      - init-state:/shared:ro
+      - ./localinfra/certs/root.crt:/usr/local/share/ca-certificates/caddy.crt:ro
+
+volumes:
+  spindle-executor-a-data:
+  spindle-executor-b-data:
+  spindle-executor-c-data:
+  spindle-artifacts:

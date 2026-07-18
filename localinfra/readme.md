@@ -51,5 +51,25 @@ To make that work:
     This writes the image directory under `out/localinfra-spindle-images`.
 5. `docker compose up`
 6. AppView will be running on `127.0.0.1:3000` with two test users: `alice.pds.tngl.boltless.dev` and `bob.pds.tngl.boltless.dev`. Both with password `password`.
-
 `TANGLED_APPVIEW_HOST` must be a loopback IP with the mapped port (`127.0.0.1:3000`), not `localhost`: atproto's dev OAuth client requires a loopback IP for the redirect URI. If you remap the published appview port, update `TANGLED_APPVIEW_HOST` in `docker-compose.yml` to match.
+
+
+## Mill mode
+
+The default stack runs one standalone spindle. `docker-compose.mill.yml` is an overlay that splits that into the distributed arch: the primary spindle becomes the mill host (`role=mill`, it only places jobs) and a three-executor fleet (`role=executor`) runs the engines.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.mill.yml --profile linux up
+```
+
+The executors differ on the two axes placement cares about, so you can watch candidates get filtered and ranked:
+
+| executor   | labels        | images      | runs                        |
+|------------|---------------|-------------|-----------------------------|
+| executor-a | `linux, fast` | full        | `image/alpine, image/nixos` |
+| executor-b | `linux, slow` | full        | `image/alpine, image/nixos` |
+| executor-c | `linux, gpu`  | alpine only | `image/alpine`              |
+
+So `image: nixos` has two candidates, `image: alpine` has three, and `runs_on: [gpu]` pins to executor-c. The alpine-only image set is staged by `prepare-spindle-images.sh` (step 4) alongside the full one, no extra step.
+
+Each executor needs its own identity (one live session per token), so the `mill-tokens` service registers a token per executor in the mill db and drops it into the shared volume for the executor to read.

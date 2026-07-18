@@ -49,6 +49,11 @@ set -eu
     export SPINDLE_SERVER_OWNER="$(cat /shared/owner-did)"
 : "${SPINDLE_SERVER_OWNER:?set via env or /shared/owner-did}"
 
+# executors read their mill token from a file seeded by the mill-tokens
+# service (command substitution strips the trailing newline)
+[ -z "${SPINDLE_MILL_SHARED_SECRET:-}" ] && [ -n "${SPINDLE_MILL_TOKEN_FILE:-}" ] && [ -r "${SPINDLE_MILL_TOKEN_FILE}" ] && \
+    export SPINDLE_MILL_SHARED_SECRET="$(cat "${SPINDLE_MILL_TOKEN_FILE}")"
+
 mkdir -p /var/lib/spindle /var/lib/spindle/overlays /var/log/spindle
 
 if [ -f /usr/local/share/ca-certificates/caddy.crt ]; then

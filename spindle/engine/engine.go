@@ -67,8 +67,34 @@ func writeWfError(db *db.DB, n *notifier.Notifier, l *slog.Logger, wfCtx context
 	}
 }
 
-type workflowFinalizer interface {
-	FinalizeWorkflow(ctx context.Context, wid models.WorkflowId, wf *models.Workflow, wfLogger models.WorkflowLogger) error
+// the mill streams the executor's real log file into place itself
+// a local logger here would only write competing lines
+type workflowLoggerProvider interface {
+	WorkflowLogger(wid models.WorkflowId) models.WorkflowLogger
+}
+
+// for engines that manage status updates outside StartWorkflows
+type RemoteStatusEngine interface {
+	AuthorsRemoteStatus()
+}
+
+func reportWorkflowStatusError(l *slog.Logger, database *db.DB, n *notifier.Notifier, wid models.WorkflowId, err error) {
+	if errors.Is(err, ErrTimedOut) {
+		dbErr := database.StatusTimeout(wid, n)
+		if dbErr != nil {
+			l.Error("failed to set workflow status to timeout", "wid", wid, "err", dbErr)
+		}
+	} else if errors.Is(err, ErrWorkflowCanceled) {
+		dbErr := database.StatusCancelled(wid, err.Error(), -1, n)
+		if dbErr != nil {
+			l.Error("failed to set workflow status to cancelled", "wid", wid, "err", dbErr)
+		}
+	} else {
+		dbErr := database.StatusFailed(wid, err.Error(), -1, n)
+		if dbErr != nil {
+			l.Error("failed to set workflow status to failed", "wid", wid, "err", dbErr)
+		}
+	}
 }
 
 func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, stores *artifactstore.Stores, db *db.DB, n *notifier.Notifier, ctx context.Context, pipeline *models.Pipeline, pipelineId models.PipelineId) {
@@ -101,7 +127,6 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, s
 			wfCounts[wid.String()]++
 		}
 	}
-
 	var wg sync.WaitGroup
 	for eng, wfs := range pipeline.Workflows {
 		workflowTimeout := eng.WorkflowTimeout()
@@ -128,14 +153,18 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, s
 					l.Info("skipping finished workflow", "wid", wid, "status", st.Status)
 					return
 				}
-				wfLogger, err := models.NewFileWorkflowLogger(cfg.Server.LogDir, wid, secretValues)
-				if err != nil {
+				var err error
+				var wfLogger models.WorkflowLogger
+				if p, ok := eng.(workflowLoggerProvider); ok {
+					wfLogger = p.WorkflowLogger(wid)
+				} else if fileLogger, err := models.NewFileWorkflowLogger(cfg.Server.LogDir, wid, secretValues); err != nil {
 					l.Warn("failed to setup step logger; logs will not be persisted", "error", err)
 					wfLogger = models.NullLogger{}
 				} else {
 					l.Info("setup step logger; logs will be persisted", "logDir", cfg.Server.LogDir, "wid", wid)
+					wfLogger = fileLogger
 					defer archiveWorkflowLog(l, stores, db, cfg.Server.LogDir, wid)
-					defer wfLogger.Close()
+					defer fileLogger.Close()
 				}
 
 				timeoutCtx, timeoutCancel := context.WithTimeout(ctx, workflowTimeout)
@@ -156,8 +185,10 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, s
 
 				l.Info("waiting for slot", "wid", wid)
 				slot := WorkflowSlot(NoopSlot{})
+				_, remoteStatus := eng.(RemoteStatusEngine)
+
 				if s, ok := eng.(WorkflowSlotter); ok {
-					slot, err = s.AcquireWorkflowSlot(wfCtx, wid, &w)
+					slot, err = s.AcquireWorkflowSlot(wfCtx, wid, &w, Wait)
 					if err != nil {
 						writeWfError(db, n, l, wfCtx, wid, "waiting for slot", err)
 						return
@@ -165,10 +196,12 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, s
 				}
 				defer slot.Release()
 
-				err = db.StatusRunning(wid, n)
-				if err != nil {
-					l.Error("failed to set workflow status to running", "wid", wid, "err", err)
-					return
+				if !remoteStatus {
+					err := db.StatusRunning(wid, n)
+					if err != nil {
+						l.Error("failed to set workflow status to running", "wid", wid, "err", err)
+						return
+					}
 				}
 
 				err = eng.SetupWorkflow(wfCtx, wid, &w, wfLogger)
@@ -178,7 +211,9 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, s
 							l.Error("failed to destroy workflow after setup failure", "error", destroyErr)
 						}
 					}
-					writeWfError(db, n, l, wfCtx, wid, "setting up workflow", err)
+					if !remoteStatus {
+						writeWfError(db, n, l, wfCtx, wid, "setting up workflow", err)
+					}
 					return
 				}
 				defer eng.DestroyWorkflow(ctx, wid)
@@ -199,26 +234,25 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, s
 					}
 
 					if err != nil {
-						writeWfError(db, n, l, wfCtx, wid, "running step", err)
-						return
-					}
-				}
-
-				if finalizer, ok := eng.(workflowFinalizer); ok {
-					if err := finalizer.FinalizeWorkflow(wfCtx, wid, &w, wfLogger); err != nil {
-						writeWfError(db, n, l, wfCtx, wid, "finalizing", err)
+						if !remoteStatus {
+							writeWfError(db, n, l, wfCtx, wid, "running step", err)
+						}
 						return
 					}
 				}
 
 				if isCanceled(wfCtx) {
-					writeWfError(db, n, l, wfCtx, wid, "before success", nil)
+					if !remoteStatus {
+						writeWfError(db, n, l, wfCtx, wid, "before success", nil)
+					}
 					return
 				}
 
-				err = db.StatusSuccess(wid, n)
-				if err != nil {
-					l.Error("failed to set workflow status to success", "wid", wid, "err", err)
+				if !remoteStatus {
+					err = db.StatusSuccess(wid, n)
+					if err != nil {
+						l.Error("failed to set workflow status to success", "wid", wid, "err", err)
+					}
 				}
 			})
 		}

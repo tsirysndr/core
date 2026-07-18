@@ -19,6 +19,35 @@ var (
 	lastNanos int64
 )
 
+func HighWater(s Store) (int64, error) {
+	clockMu.Lock()
+	defer clockMu.Unlock()
+
+	rows, err := s.Query(`select coalesce(max(created), 0) from events`)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	var created int64
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return 0, err
+		}
+		return 0, sql.ErrNoRows
+	}
+	if err := rows.Scan(&created); err != nil {
+		return 0, err
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	if created > lastNanos {
+		lastNanos = created
+	}
+	return lastNanos, nil
+}
+
 func Insert(s Store, ev Event, n *notifier.Notifier) error {
 	clockMu.Lock()
 	defer clockMu.Unlock()

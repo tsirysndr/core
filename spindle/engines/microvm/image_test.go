@@ -65,6 +65,36 @@ func TestResolveImageConventionalLayouts(t *testing.T) {
 		})
 	}
 }
+func TestImageSpecPathPinsSymlinkTarget(t *testing.T) {
+	dir := t.TempDir()
+	imageA := filepath.Join(dir, "image-a")
+	imageB := filepath.Join(dir, "image-b")
+	writeSpecFile(t, filepath.Join(imageA, imageSpecFileName))
+	writeSpecFile(t, filepath.Join(imageB, imageSpecFileName))
+
+	alias := filepath.Join(dir, "default")
+	if err := os.Symlink(imageA, alias); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := imageSpecPath(alias)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("imageSpecPath() did not resolve symlinked image")
+	}
+
+	if err := os.Remove(alias); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(imageB, alias); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(imageA, imageSpecFileName)
+	if got != want {
+		t.Fatalf("imageSpecPath() = %q after alias resolution, want pinned target %q", got, want)
+	}
+}
 
 func TestResolveImageDirectoryMissingSpec(t *testing.T) {
 	dir := t.TempDir()
@@ -133,5 +163,33 @@ func TestImageSpecRequiresShell(t *testing.T) {
 	err := spec.Validate()
 	if err == nil || !strings.Contains(err.Error(), "shell") {
 		t.Fatalf("spec without shell should fail validation, got: %v", err)
+	}
+}
+func TestMkfsExt4ForVolumesSkipsLookupWithoutVolumes(t *testing.T) {
+	t.Setenv("PATH", "")
+	path, err := mkfsExt4ForVolumes(nil, "")
+	if err != nil {
+		t.Fatalf("mkfsExt4ForVolumes() with no volumes returned error: %v", err)
+	}
+	if path != "" {
+		t.Fatalf("mkfsExt4ForVolumes() = %q with no volumes, want empty path", path)
+	}
+
+	_, err = mkfsExt4ForVolumes([]Volume{{Image: "workspace"}}, "")
+	if err == nil || !strings.Contains(err.Error(), "mkfs.ext4") {
+		t.Fatalf("mkfsExt4ForVolumes() with a volume and no formatter returned %v", err)
+	}
+}
+
+func TestQEMURunnerValidateRejectsUnsupportedNetworkTypeBeforeHostChecks(t *testing.T) {
+	spec := validImageSpec()
+	spec.NetworkInterfaces = []NetworkInterface{{
+		Type: "tap",
+		ID:   "net0",
+		MAC:  "02:00:00:00:00:01",
+	}}
+	err := (qemuRunner{}).Validate(spec, false)
+	if err == nil || !strings.Contains(err.Error(), `unsupported microvm network interface type "tap"`) {
+		t.Fatalf("Validate() error = %v, want unsupported network type", err)
 	}
 }

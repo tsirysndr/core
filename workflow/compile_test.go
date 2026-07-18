@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -39,6 +40,50 @@ func TestCompileWorkflow_MatchingWorkflowWithSteps(t *testing.T) {
 	assert.Equal(t, wf.Name, cp.Workflows[0].Name)
 	assert.False(t, cp.Workflows[0].Clone.Skip)
 	assert.False(t, c.Diagnostics.IsErr())
+}
+
+func TestCompileWorkflow_RunsOnLabelsPersistWithoutFanout(t *testing.T) {
+	wf := Workflow{
+		Name:   ".tangled/workflows/arm64.yml",
+		Engine: "microvm",
+		When:   when,
+		RunsOn: []string{"linux/arm64", "kvm"},
+	}
+
+	c := Compiler{Trigger: trigger}
+	cp := c.Compile([]Workflow{wf})
+
+	assert.Len(t, cp.Workflows, 1)
+	assert.Equal(t, []string{"linux/arm64", "kvm"}, cp.Workflows[0].RunsOn)
+
+	raw, err := json.Marshal(cp.Workflows[0])
+	assert.NoError(t, err)
+
+	var persisted map[string]any
+	assert.NoError(t, json.Unmarshal(raw, &persisted))
+	assert.Equal(t, []any{"linux/arm64", "kvm"}, persisted["runsOn"])
+}
+
+func TestCompileWorkflow_LegacyWorkflowOmitsRunsOn(t *testing.T) {
+	wf := Workflow{
+		Name:   ".tangled/workflows/legacy.yml",
+		Engine: "microvm",
+		When:   when,
+	}
+
+	c := Compiler{Trigger: trigger}
+	cp := c.Compile([]Workflow{wf})
+
+	assert.Len(t, cp.Workflows, 1)
+	assert.Empty(t, cp.Workflows[0].RunsOn)
+
+	raw, err := json.Marshal(cp.Workflows[0])
+	assert.NoError(t, err)
+
+	var persisted map[string]any
+	assert.NoError(t, json.Unmarshal(raw, &persisted))
+	_, ok := persisted["runsOn"]
+	assert.False(t, ok, "legacy workflow JSON should not gain runsOn")
 }
 
 func TestCompileWorkflow_TriggerMismatch(t *testing.T) {

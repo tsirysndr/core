@@ -53,6 +53,8 @@ type Engine struct {
 	agent        *agentHub
 	scheduler    *engine.ResourceScheduler[Resources]
 	cgroupParent *CgroupParent
+	budget       Resources
+	maxWorkflow  Resources
 
 	cleanupMu sync.Mutex
 	cleanup   map[string][]cleanupFunc
@@ -92,6 +94,8 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB) (*Engine, error) {
 		db:           d,
 		scheduler:    engine.NewResourceScheduler(budget, max, agingThreshold),
 		cgroupParent: cgroupParent,
+		budget:       budget,
+		maxWorkflow:  max,
 		cleanup:      make(map[string][]cleanupFunc),
 	}, nil
 }
@@ -578,10 +582,6 @@ func (e *Engine) DestroyWorkflow(ctx context.Context, wid models.WorkflowId) err
 		}
 	}
 	return cleanupErr
-}
-
-func (e *Engine) FinalizeWorkflow(ctx context.Context, wid models.WorkflowId, w *models.Workflow, wfLogger models.WorkflowLogger) error {
-	return nil
 }
 
 func (e *Engine) WorkflowTimeout() time.Duration {

@@ -112,8 +112,6 @@ func (compiler *Compiler) Compile(p Pipeline) tangled.Pipeline {
 }
 
 func (compiler *Compiler) compileWorkflow(w Workflow) *tangled.Pipeline_Workflow {
-	cw := &tangled.Pipeline_Workflow{}
-
 	matched, err := w.Match(compiler.Trigger, compiler.ChangedFiles)
 	if err != nil {
 		compiler.Diagnostics.AddError(
@@ -134,18 +132,19 @@ func (compiler *Compiler) compileWorkflow(w Workflow) *tangled.Pipeline_Workflow
 	// validate clone options
 	compiler.analyzeCloneOptions(w)
 
-	cw.Name = w.Name
-
 	if w.Engine == "" {
 		compiler.Diagnostics.AddError(w.Name, MissingEngine)
 		return nil
 	}
 
-	cw.Engine = w.Engine
-	cw.Raw = w.Raw
-
 	o := w.CloneOpts.AsRecord()
-	cw.Clone = &o
+	cw := &tangled.Pipeline_Workflow{
+		Clone:  &o,
+		Engine: w.Engine,
+		Name:   w.Name,
+		Raw:    w.Raw,
+		RunsOn: w.RunsOn,
+	}
 
 	return cw
 }
