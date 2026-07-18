@@ -39,7 +39,6 @@ import (
 	"tangled.org/core/spindle/db"
 	"tangled.org/core/spindle/engine"
 	"tangled.org/core/spindle/engines/dummy"
-	"tangled.org/core/spindle/engines/microvm"
 	"tangled.org/core/spindle/engines/nixery"
 	"tangled.org/core/spindle/git"
 	"tangled.org/core/spindle/models"
@@ -357,7 +356,7 @@ func Run(ctx context.Context) error {
 		return err
 	}
 
-	microvmEng, err := microvm.New(ctx, cfg, d)
+	microvmEng, err := newMicrovmEngine(ctx, cfg, d)
 	if err != nil {
 		return err
 	}
