@@ -10,7 +10,6 @@ type Follow struct {
 	UserDid    string
 	SubjectDid string
 	FollowedAt time.Time
-	Rkey       string
 }
 
 func (f *Follow) AsRecord() tangled.GraphFollow {

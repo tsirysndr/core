@@ -11,7 +11,7 @@ import (
 	"tangled.org/core/orm"
 )
 
-func UpsertFollow(e Execer, follow models.Follow) error {
+func UpsertFollow(e Execer, rkey string, follow models.Follow) error {
 	_, err := e.Exec(
 		`insert into follows (did, rkey, subject_did, created)
 		values (?, ?, ?, ?)
@@ -19,7 +19,7 @@ func UpsertFollow(e Execer, follow models.Follow) error {
 			subject_did = excluded.subject_did,
 			created     = excluded.created`,
 		follow.UserDid,
-		follow.Rkey,
+		rkey,
 		follow.SubjectDid,
 		follow.FollowedAt.Format(time.RFC3339),
 	)
@@ -189,9 +189,10 @@ func GetFollows(e Execer, limit int, filters ...orm.Filter) ([]models.Follow, er
 	}
 
 	query := fmt.Sprintf(
-		`select did, subject_did, created, rkey
+		`select did, subject_did, max(created)
 		from follows
 		%s
+		group by did, subject_did
 		order by created desc
 		%s
 	`, whereClause, limitClause)
@@ -209,7 +210,6 @@ func GetFollows(e Execer, limit int, filters ...orm.Filter) ([]models.Follow, er
 			&follow.UserDid,
 			&follow.SubjectDid,
 			&followedAt,
-			&follow.Rkey,
 		)
 		if err != nil {
 			return nil, err

@@ -287,10 +287,9 @@ func (i *Ingester) ingestFollow(e *jmodels.Event, l *slog.Logger) error {
 			return err
 		}
 
-		err = db.UpsertFollow(i.Db, models.Follow{
+		err = db.UpsertFollow(i.Db, e.Commit.RKey, models.Follow{
 			UserDid:    did,
 			SubjectDid: record.Subject,
-			Rkey:       e.Commit.RKey,
 			FollowedAt: followedAt,
 		})
 	case jmodels.CommitOperationDelete:

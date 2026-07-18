@@ -46,9 +46,9 @@ func (s *State) Follow(w http.ResponseWriter, r *http.Request) {
 		follow := models.Follow{
 			UserDid:    currentUser.Did,
 			SubjectDid: subjectIdent.DID.String(),
-			Rkey:       tid.TID(),
 			FollowedAt: time.Now(),
 		}
+		rkey := tid.TID()
 
 		tx, err := s.db.BeginTx(r.Context(), nil)
 		if err != nil {
@@ -57,7 +57,7 @@ func (s *State) Follow(w http.ResponseWriter, r *http.Request) {
 		}
 		defer tx.Rollback()
 
-		if err := db.UpsertFollow(tx, follow); err != nil {
+		if err := db.UpsertFollow(tx, rkey, follow); err != nil {
 			s.logger.Error("failed to follow", "err", err)
 			return
 		}
@@ -66,7 +66,7 @@ func (s *State) Follow(w http.ResponseWriter, r *http.Request) {
 		resp, err := comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 			Collection: tangled.GraphFollowNSID,
 			Repo:       currentUser.Did,
-			Rkey:       follow.Rkey,
+			Rkey:       rkey,
 			Record: &lexutil.LexiconTypeDecoder{
 				Val: &record,
 			},
