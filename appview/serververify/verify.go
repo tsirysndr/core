@@ -4,14 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
-	"syscall"
 	"time"
 
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/db"
+	"tangled.org/core/netutil"
 	"tangled.org/core/orm"
 	"tangled.org/core/rbac"
 	"tangled.org/core/xrpc/xrpcclient"
@@ -31,8 +30,12 @@ func fetchOwner(ctx context.Context, domain string, dev bool) (string, error) {
 	}
 
 	host := fmt.Sprintf("%s://%s", scheme, domain)
+	dialer := netutil.SSRFDialer(dev)
+	dialer.Timeout = 5 * time.Second
+	dialer.KeepAlive = 30 * time.Second
+
 	transport := &http.Transport{
-		DialContext: safeDialer(dev).DialContext,
+		DialContext: dialer.DialContext,
 	}
 	xrpcc := &indigoxrpc.Client{
 		Host: host,
@@ -175,29 +178,4 @@ func MarkKnotVerified(d *db.DB, e *rbac.Enforcer, domain, owner string) error {
 	committed = true
 
 	return nil
-}
-func safeDialer(dev bool) *net.Dialer {
-	d := &net.Dialer{
-		Timeout:   5 * time.Second,
-		KeepAlive: 30 * time.Second,
-	}
-	if dev {
-		return d
-	}
-	d.Control = func(network, address string, _ syscall.RawConn) error {
-		host, _, err := net.SplitHostPort(address)
-		if err != nil {
-			return fmt.Errorf("invalid dial address %q: %w", address, err)
-		}
-		ip := net.ParseIP(host)
-		if ip == nil {
-			return fmt.Errorf("dial address %q did not resolve to IP", address)
-		}
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
-			ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
-			return fmt.Errorf("refusing to dial %s: reserved or private address", ip)
-		}
-		return nil
-	}
-	return d
 }
