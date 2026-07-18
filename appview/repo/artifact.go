@@ -22,7 +22,6 @@ import (
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
-	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/dustin/go-humanize"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -308,7 +307,7 @@ func (rp *Repo) resolveTag(ctx context.Context, f *models.Repo, tagParam string)
 		return nil, err
 	}
 
-	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+	xrpcc := rp.knotMirrorXRPCClient()
 
 	xrpcBytes, err := tangled.GitTempListTags(ctx, xrpcc, "", 0, f.RepoDid)
 	if err != nil {

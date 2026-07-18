@@ -18,7 +18,6 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/gorilla/feeds"
 )
 
@@ -207,7 +206,7 @@ func (rp *Repo) createIssueItem(ctx context.Context, issue models.Issue, ownerSl
 }
 
 func (rp *Repo) createCommitItems(ctx context.Context, repo *models.Repo, ownerSlashRepo string) ([]*feeds.Item, error) {
-	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+	xrpcc := rp.knotMirrorXRPCClient()
 
 	xrpcBytes, err := tangled.GitTempListCommits(ctx, xrpcc, "", 100, "", repo.RepoDid)
 	if err != nil {
@@ -246,7 +245,7 @@ func (rp *Repo) createCommitItems(ctx context.Context, repo *models.Repo, ownerS
 }
 
 func (rp *Repo) createTagItems(ctx context.Context, repo *models.Repo, ownerSlashRepo string) ([]*feeds.Item, error) {
-	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+	xrpcc := rp.knotMirrorXRPCClient()
 
 	tagBytes, err := tangled.GitTempListTags(ctx, xrpcc, "", 100, repo.RepoDid)
 	if err != nil {

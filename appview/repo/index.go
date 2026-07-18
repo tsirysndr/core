@@ -16,7 +16,6 @@ import (
 	"encoding/json"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-git/go-git/v5/plumbing"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/commitverify"
@@ -232,10 +231,7 @@ func (rp *Repo) getLanguageInfo(
 	ref string,
 ) ([]*tangled.GitTempListLanguages_Language, error) {
 	// non-fatal, fetch langs from knotmirror via XRPC
-	xrpcc := &indigoxrpc.Client{
-		Host:   rp.config.KnotMirror.Url,
-		Client: http.DefaultClient,
-	}
+	xrpcc := rp.knotMirrorXRPCClient()
 	out, err := tangled.GitTempListLanguages(ctx, xrpcc, ref, repoId.String())
 	if err != nil {
 		return nil, fmt.Errorf("calling knotmirror git.listLanguages: %w", err)
@@ -283,7 +279,7 @@ func makeLanguageStats(langs []*tangled.GitTempListLanguages_Language) []types.R
 
 // buildIndexResponse creates a RepoIndexResponse by combining multiple xrpc calls in parallel
 func (rp *Repo) buildIndexResponse(ctx context.Context, repo *models.Repo, ref string) (*types.RepoIndexResponse, error) {
-	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+	xrpcc := rp.knotMirrorXRPCClient()
 
 	branchesBytes, err := tangled.GitTempListBranches(ctx, xrpcc, "", 0, repo.RepoDid)
 	if err != nil {

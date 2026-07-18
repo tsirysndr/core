@@ -40,7 +40,7 @@ import (
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
-
+	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -59,6 +59,8 @@ type Repo struct {
 	cfClient     *cloudflare.Client
 	ogreClient   *ogre.Client
 	codesearch   *codesearch.CodeSearch
+
+	knotMirrorXRPC *indigoxrpc.Client
 }
 
 func New(
@@ -89,6 +91,8 @@ func New(
 		cfClient:     cfClient,
 		ogreClient:   ogre.NewClient(config.Ogre.Host),
 		codesearch:   codesearch,
+
+		knotMirrorXRPC: newKnotMirrorXRPCClient(config.KnotMirror.Url),
 	}
 }
 

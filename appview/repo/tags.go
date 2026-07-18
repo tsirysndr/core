@@ -15,7 +15,6 @@ import (
 	"tangled.org/core/types"
 	xrpcclient "tangled.org/core/xrpc/xrpcclient"
 
-	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 )
@@ -27,7 +26,7 @@ func (rp *Repo) Tags(w http.ResponseWriter, r *http.Request) {
 		l.Error("failed to get repo and knot", "err", err)
 		return
 	}
-	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+	xrpcc := rp.knotMirrorXRPCClient()
 	xrpcBytes, err := tangled.GitTempListTags(r.Context(), xrpcc, "", 0, f.RepoDid)
 	if err != nil {
 		l.Error("failed to call XRPC repo.tags", "err", err)
@@ -89,7 +88,7 @@ func (rp *Repo) Tag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+	xrpcc := rp.knotMirrorXRPCClient()
 
 	xrpcBytes, err := tangled.GitTempGetTag(r.Context(), xrpcc, f.RepoDid, tag)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {

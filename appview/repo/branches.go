@@ -10,8 +10,6 @@ import (
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/types"
 	xrpcclient "tangled.org/core/xrpc/xrpcclient"
-
-	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 )
 
 func (rp *Repo) Branches(w http.ResponseWriter, r *http.Request) {
@@ -21,7 +19,7 @@ func (rp *Repo) Branches(w http.ResponseWriter, r *http.Request) {
 		l.Error("failed to get repo and knot", "err", err)
 		return
 	}
-	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+	xrpcc := rp.knotMirrorXRPCClient()
 
 	xrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoDid)
 	if err != nil {

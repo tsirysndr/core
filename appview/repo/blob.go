@@ -21,8 +21,6 @@ import (
 	"tangled.org/core/types"
 	xrpcclient "tangled.org/core/xrpc/xrpcclient"
 
-	"github.com/bluesky-social/indigo/util"
-	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-chi/chi/v5"
 	enry "github.com/go-enry/go-enry/v2"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -60,7 +58,7 @@ func (rp *Repo) Blob(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+	xrpcc := rp.knotMirrorXRPCClient()
 	resp, err := tangled.GitTempGetEntry(ctx, xrpcc, filePath, ref, f.RepoDid)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		l.Error("failed to call XRPC git.getEntry", "xrpcerr", xrpcerr, "err", err)
@@ -97,7 +95,7 @@ func (rp *Repo) Blob(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return models.BlobView{}, err
 		}
-		blobResp, err := util.RobustHTTPClient().Do(blobReq)
+		blobResp, err := rp.knotMirrorXRPCClient().Client.Do(blobReq)
 		if err != nil {
 			return models.BlobView{}, err
 		}
@@ -253,7 +251,7 @@ func (rp *Repo) RepoBlobRaw(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		resp, err := util.RobustHTTPClient().Do(req)
+		resp, err := rp.knotMirrorXRPCClient().Client.Do(req)
 		if err != nil || resp.StatusCode != http.StatusOK {
 			w.WriteHeader(http.StatusBadGateway)
 			return

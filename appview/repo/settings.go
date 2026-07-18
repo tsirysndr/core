@@ -383,7 +383,7 @@ func (rp *Repo) generalSettings(w http.ResponseWriter, r *http.Request) {
 	f, err := rp.repoResolver.Resolve(r)
 	user := rp.oauth.GetMultiAccountUser(r)
 
-	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+	xrpcc := rp.knotMirrorXRPCClient()
 
 	xrpcBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoDid)
 	var result types.RepoBranchesResponse

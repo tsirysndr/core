@@ -16,7 +16,6 @@ import (
 	"tangled.org/core/types"
 	xrpcclient "tangled.org/core/xrpc/xrpcclient"
 
-	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 )
@@ -36,7 +35,7 @@ func (rp *Repo) Tree(w http.ResponseWriter, r *http.Request) {
 	treePath, _ = url.PathUnescape(treePath)
 	treePath = strings.TrimSuffix(treePath, "/")
 
-	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+	xrpcc := rp.knotMirrorXRPCClient()
 	xrpcResp, err := tangled.GitTempGetTree(r.Context(), xrpcc, treePath, ref, f.RepoDid)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
 		l.Error("failed to call XRPC repo.tree", "xrpcerr", xrpcerr, "err", err)

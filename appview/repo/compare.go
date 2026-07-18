@@ -30,7 +30,7 @@ func (rp *Repo) CompareNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+	xrpcc := rp.knotMirrorXRPCClient()
 
 	branchBytes, err := tangled.GitTempListBranches(r.Context(), xrpcc, "", 0, f.RepoDid)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {

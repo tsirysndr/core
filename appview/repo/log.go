@@ -100,7 +100,7 @@ func (rp *Repo) Log(w http.ResponseWriter, r *http.Request) {
 	ref := chi.URLParam(r, "ref")
 	ref, _ = url.PathUnescape(ref)
 
-	xrpcc := &indigoxrpc.Client{Host: rp.config.KnotMirror.Url}
+	xrpcc := rp.knotMirrorXRPCClient()
 
 	limit := int64(60)
 	cursor := ""
