@@ -89,7 +89,7 @@
 
       <div class="flex my-2 items-center gap-2">
         {{ if ne .FollowStatus.String "IsSelf" }}
-          {{ template "user/fragments/follow" . }}
+          {{ template "user/fragments/follow" (dict "UserDid" .UserDid "FollowStatus" .FollowStatus) }}
         {{ else }}
         <button id="editBtn"
           class="btn w-full flex items-center gap-2 group"

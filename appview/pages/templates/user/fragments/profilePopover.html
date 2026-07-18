@@ -38,7 +38,7 @@
 
     {{ if and .LoggedInUser (ne .FollowStatus.String "IsSelf") }}
       <div class="flex items-center gap-2">
-        {{ template "user/fragments/follow" . }}
+        {{ template "user/fragments/follow" (dict "UserDid" .UserDid "FollowStatus" .FollowStatus) }}
         {{ template "user/fragments/vouchButton" (dict "VouchRelationship" .VouchRelationship) }}
       </div>
 
