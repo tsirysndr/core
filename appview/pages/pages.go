@@ -338,6 +338,7 @@ func (p *Pages) Favicon(w io.Writer) error {
 }
 
 type LoginParams struct {
+	BaseParams
 	ReturnUrl  string
 	ErrorCode  string
 	AddAccount bool
