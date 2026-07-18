@@ -16,7 +16,6 @@ type Star struct {
 	SubjectType StarSubjectType
 	Subject     string
 	Created     time.Time
-	Rkey        string
 }
 
 // RepoStar is used for reverse mapping to repos

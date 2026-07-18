@@ -79,11 +79,11 @@ func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		star := models.Star{
 			Did:         currentUser.Did,
-			Rkey:        tid.TID(),
 			SubjectType: subjectType,
 			Subject:     subjectKey,
 			Created:     time.Now(),
 		}
+		rkey := tid.TID()
 
 		tx, err := s.db.BeginTx(r.Context(), nil)
 		if err != nil {
@@ -92,7 +92,7 @@ func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 		}
 		defer tx.Rollback()
 
-		if err := db.UpsertStar(tx, star); err != nil {
+		if err := db.UpsertStar(tx, rkey, star); err != nil {
 			l.Error("failed to star", "err", err)
 			return
 		}
@@ -100,7 +100,7 @@ func (s *State) Star(w http.ResponseWriter, r *http.Request) {
 		resp, err := comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 			Collection: tangled.FeedStarNSID,
 			Repo:       currentUser.Did,
-			Rkey:       star.Rkey,
+			Rkey:       rkey,
 			Record: &lexutil.LexiconTypeDecoder{
 				Val: &tangled.FeedStar{
 					CreatedAt: star.Created.Format(time.RFC3339),

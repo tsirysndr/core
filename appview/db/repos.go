@@ -277,7 +277,7 @@ func GetReposPaginated(e Execer, page pagination.Page, filters ...orm.Filter) ([
 	// get star counts
 	{
 		starCountQuery := fmt.Sprintf(
-			`select subject, count(1) from stars where subject_type = 'repo' and subject in (%s) group by subject`,
+			`select subject, count(*) from deduped_stars where subject_type = 'repo' and subject in (%s) group by subject`,
 			inClause,
 		)
 

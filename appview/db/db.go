@@ -2465,6 +2465,17 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		`)
 		return err
 	})
+
+	orm.RunMigration(conn, logger, "deduped-stars-view", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			create view deduped_stars as
+			select did, subject_type, subject, min(created) as created
+			from stars
+			group by did, subject;
+		`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,

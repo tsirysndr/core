@@ -13,7 +13,7 @@ import (
 	"tangled.org/core/orm"
 )
 
-func UpsertStar(e Execer, star models.Star) error {
+func UpsertStar(e Execer, rkey string, star models.Star) error {
 	_, err := e.Exec(
 		`insert into stars (did, rkey, subject_type, subject, created)
 		values (?, ?, ?, ?, ?)
@@ -22,7 +22,7 @@ func UpsertStar(e Execer, star models.Star) error {
 			subject      = excluded.subject,
 			created      = excluded.created`,
 		star.Did,
-		star.Rkey,
+		rkey,
 		string(star.SubjectType),
 		star.Subject,
 		star.Created.Format(time.RFC3339),
@@ -32,8 +32,8 @@ func UpsertStar(e Execer, star models.Star) error {
 
 func GetStars(e Execer, subject string, page pagination.Page) ([]models.Star, error) {
 	query := `
-	select did, subject_type, subject, created, rkey
-	from stars
+	select did, subject_type, subject, created
+	from deduped_stars
 	where subject = ?
 	order by created desc
 	limit ? offset ?
@@ -48,7 +48,7 @@ func GetStars(e Execer, subject string, page pagination.Page) ([]models.Star, er
 	for rows.Next() {
 		var star models.Star
 		var created string
-		if err := rows.Scan(&star.Did, &star.SubjectType, &star.Subject, &created, &star.Rkey); err != nil {
+		if err := rows.Scan(&star.Did, &star.SubjectType, &star.Subject, &created); err != nil {
 			return nil, err
 		}
 
@@ -97,7 +97,7 @@ func DeleteStarByRkey(e Execer, did string, rkey string) error {
 func GetStarCount(e Execer, subjectType models.StarSubjectType, subject string) (int, error) {
 	stars := 0
 	err := e.QueryRow(
-		`select count(did) from stars where subject_type = ? and subject = ?`,
+		`select count(*) from deduped_stars where subject_type = ? and subject = ?`,
 		string(subjectType), subject,
 	).Scan(&stars)
 	if err != nil {
@@ -185,8 +185,8 @@ func GetRepoStars(e Execer, page pagination.Page, filters ...orm.Filter) ([]mode
 	}
 
 	repoQuery := fmt.Sprintf(
-		`select did, subject_type, subject, created, rkey
-		from stars
+		`select did, subject_type, subject, created
+		from deduped_stars
 		%s
 		order by created desc
 		%s`,
@@ -203,7 +203,7 @@ func GetRepoStars(e Execer, page pagination.Page, filters ...orm.Filter) ([]mode
 	for rows.Next() {
 		var star models.Star
 		var created string
-		err := rows.Scan(&star.Did, &star.SubjectType, &star.Subject, &created, &star.Rkey)
+		err := rows.Scan(&star.Did, &star.SubjectType, &star.Subject, &created)
 		if err != nil {
 			return nil, err
 		}
@@ -271,7 +271,7 @@ func CountStars(e Execer, filters ...orm.Filter) (int64, error) {
 		whereClause = " where " + strings.Join(conditions, " and ")
 	}
 
-	repoQuery := fmt.Sprintf(`select count(1) from stars %s`, whereClause)
+	repoQuery := fmt.Sprintf(`select count(*) from deduped_stars %s`, whereClause)
 	var count int64
 	if err := e.QueryRow(repoQuery, args...).Scan(&count); err != nil {
 		return 0, err
@@ -284,25 +284,12 @@ func CountStars(e Execer, filters ...orm.Filter) (int64, error) {
 func GetTopStarredReposLastWeek(e Execer) ([]models.Repo, error) {
 	// first, get the top repo DIDs by star count from the last week
 	query := `
-		with recent_starred_repos as (
-			select distinct subject
-			from stars
-			where created >= datetime('now', '-7 days')
-			  and subject_type = 'repo'
-		),
-		repo_star_counts as (
-			select
-				s.subject,
-				count(*) as stars_gained_last_week
-			from stars s
-			join recent_starred_repos rsr on s.subject = rsr.subject
-			where s.created >= datetime('now', '-7 days')
-			  and s.subject_type = 'repo'
-			group by s.subject
-		)
-		select rsc.subject
-		from repo_star_counts rsc
-		order by rsc.stars_gained_last_week desc
+		select subject
+		from deduped_stars
+		where subject_type = 'repo'
+		  and created >= datetime('now', '-7 days')
+		group by subject
+		order by count(*) desc
 		limit 5
 	`
 

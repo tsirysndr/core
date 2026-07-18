@@ -210,7 +210,6 @@ func (i *Ingester) ingestStar(ctx context.Context, e *jmodels.Event, l *slog.Log
 
 		star := models.Star{
 			Did:     did,
-			Rkey:    e.Commit.RKey,
 			Created: createdAt,
 		}
 
@@ -245,7 +244,7 @@ func (i *Ingester) ingestStar(ctx context.Context, e *jmodels.Event, l *slog.Log
 			return fmt.Errorf("star record has empty subject union")
 		}
 
-		err = db.UpsertStar(i.Db, star)
+		err = db.UpsertStar(i.Db, e.Commit.RKey, star)
 	case jmodels.CommitOperationDelete:
 		err = db.DeleteStarByRkey(i.Db, did, e.Commit.RKey)
 	}
