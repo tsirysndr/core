@@ -2,8 +2,10 @@ package spindle
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	_ "embed"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +13,7 @@ import (
 	"maps"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -692,18 +695,15 @@ func (s *Spindle) TriggerManual(ctx context.Context, repoDid syntax.DID, sha, re
 		}
 	}
 
-	repoCloneUri := s.newRepoCloneUrl(repo.Knot, repoDid)
-	repoPath := s.newRepoPath(repoDid)
-	sourceInfo := triggerRepo // default: code comes from the repo itself
-	if sourceRepo != "" && sourceRepo != repoDid {
-		sourceInfo, err = s.resolveSourceRepoInfo(ctx, sourceRepo)
-		if err != nil {
-			return "", err
-		}
+	repoCloneUri, repoPath, sourceInfo, err := s.resolveCheckout(ctx, repoDid, sourceRepo)
+	if err != nil {
+		return "", err
+	}
+	if sourceInfo == nil {
+		sourceInfo = triggerRepo
+	} else {
 		sourceRepoStr := sourceRepo.String()
 		trigger.SourceRepo = &sourceRepoStr
-		repoCloneUri = models.BuildRepoURL(sourceInfo)
-		repoPath = s.newRepoPath(sourceRepo)
 	}
 
 	pipelineId, err := s.runPipeline(ctx, repoDid, trigger, nil, repoCloneUri, repoPath, sha, workflows, sourceInfo)
@@ -714,6 +714,70 @@ func (s *Spindle) TriggerManual(ctx context.Context, repoDid syntax.DID, sha, re
 		return "", xrpc.ErrNoMatchingWorkflows
 	}
 	return pipelineId.AtUri(), nil
+}
+
+// sourceInfo is nil when the checkout comes from the target repo.
+func (s *Spindle) resolveCheckout(ctx context.Context, repoDid syntax.DID, sourceRepo syntax.DID) (cloneUri, repoPath string, sourceInfo *tangled.Pipeline_TriggerRepo, err error) {
+	repo, err := s.db.GetRepoByDid(repoDid)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("unknown repoDid %s: %w", repoDid, err)
+	}
+
+	cloneUri = s.newRepoCloneUrl(repo.Knot, repoDid)
+	repoPath = s.newRepoPath(repoDid)
+	if sourceRepo != "" && sourceRepo != repoDid {
+		sourceInfo, err = s.resolveSourceRepoInfo(ctx, sourceRepo)
+		if err != nil {
+			return "", "", nil, err
+		}
+		cloneUri = models.BuildRepoURL(sourceInfo)
+		repoPath = s.newRepoPath(sourceRepo)
+	}
+	return cloneUri, repoPath, sourceInfo, nil
+}
+
+// resolves the workflow definition at sha without executing it
+// returns a deterministic fingerprint over the resolved files.
+func (s *Spindle) DescribeWorkflowDefinition(ctx context.Context, repoDid syntax.DID, sha string, sourceRepo syntax.DID) (*tangled.CiDescribeWorkflowDefinition_Output, error) {
+	repoCloneUri, repoPath, _, err := s.resolveCheckout(ctx, repoDid, sourceRepo)
+	if err != nil {
+		return nil, err
+	}
+
+	rawPipeline, err := s.loadPipeline(ctx, repoCloneUri, repoPath, sha)
+	if err != nil {
+		return nil, fmt.Errorf("loading pipeline: %w", err)
+	}
+
+	hash := fingerprintWorkflowDefinition(rawPipeline)
+	workflows := make([]string, 0, len(rawPipeline))
+	for _, w := range rawPipeline {
+		workflows = append(workflows, w.Name)
+	}
+
+	return &tangled.CiDescribeWorkflowDefinition_Output{
+		Derived:   true,
+		Hash:      &hash,
+		Workflows: workflows,
+	}, nil
+}
+
+func fingerprintWorkflowDefinition(rawPipeline workflow.RawPipeline) string {
+	sorted := make([]workflow.RawWorkflow, len(rawPipeline))
+	copy(sorted, rawPipeline)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
+
+	h := sha256.New()
+	var lenBuf [8]byte
+	for _, w := range sorted {
+		binary.LittleEndian.PutUint64(lenBuf[:], uint64(len(w.Contents)))
+		h.Write([]byte(w.Name))
+		// terminate name to avoid ["fo", "o"] == ["f", "oo"]
+		h.Write([]byte{0})
+		h.Write(lenBuf[:])
+		h.Write(w.Contents)
+	}
+	return fmt.Sprintf("sha256:%x", h.Sum(nil))
 }
 
 func (s *Spindle) loadPipeline(ctx context.Context, repoUri, repoPath, rev string) (workflow.RawPipeline, error) {

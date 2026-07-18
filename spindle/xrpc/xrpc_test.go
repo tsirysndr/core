@@ -32,6 +32,10 @@ func (m *mockTrigger) TriggerManual(ctx context.Context, repoDid syntax.DID, sha
 	return syntax.ParseATURI("at://did:plc:repoowner/sh.tangled.ci.pipeline/testrkey")
 }
 
+func (m *mockTrigger) DescribeWorkflowDefinition(context.Context, syntax.DID, string, syntax.DID) (*tangled.CiDescribeWorkflowDefinition_Output, error) {
+	return &tangled.CiDescribeWorkflowDefinition_Output{}, nil
+}
+
 func newTestXrpcDB(t *testing.T) (*db.DB, *rbac.Enforcer) {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "spindle_xrpc.db")

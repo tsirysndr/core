@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -27,10 +28,18 @@ const ActorDid = serviceauth.ActorDid
 
 var ErrNoMatchingWorkflows = errors.New("no workflows to run")
 
+func requireSha(sha string) error {
+	if len(sha) != 40 {
+		return fmt.Errorf("sha must be a 40-character commit hash")
+	}
+	return nil
+}
+
 // this is to break an import cycle. spindle imports this package for Xrpc,
 // so this package can't import *spindle.Spindle back.
 type PipelineTrigger interface {
 	TriggerManual(ctx context.Context, repoDid syntax.DID, sha, ref string, workflows []string, sourceRepo syntax.DID, pull PullContext, inputs []*tangled.Pipeline_Pair) (syntax.ATURI, error)
+	DescribeWorkflowDefinition(ctx context.Context, repoDid syntax.DID, sha string, sourceRepo syntax.DID) (*tangled.CiDescribeWorkflowDefinition_Output, error)
 }
 
 type PullContext struct {
@@ -68,6 +77,7 @@ func (x *Xrpc) Router() http.Handler {
 
 	// service query endpoints (no auth required)
 	r.Get("/"+tangled.OwnerNSID, x.Owner)
+	r.Get("/"+tangled.CiDescribeWorkflowDefinitionNSID, x.DescribeWorkflowDefinition)
 	r.Get("/"+tangled.CiSubscribePipelineLogsNSID, x.HandleCiSubscribePipelineLogs)
 	r.Get("/"+tangled.CiQueryPipelinesNSID, x.HandleCiQueryPipelines)
 	r.Get("/"+tangled.CiGetPipelineNSID, x.HandleCiGetPipeline)

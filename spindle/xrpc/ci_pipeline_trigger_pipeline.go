@@ -105,8 +105,8 @@ func (x *Xrpc) TriggerPipeline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(sha) != 40 {
-		fail(xrpcerr.GenericError(fmt.Errorf("sha must be a 40-character commit hash")))
+	if err := requireSha(sha); err != nil {
+		fail(xrpcerr.GenericError(err))
 		return
 	}
 
