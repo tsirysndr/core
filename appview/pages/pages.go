@@ -362,6 +362,14 @@ func (p *Pages) CompleteSignup(w io.Writer) error {
 	return p.executeLogin("user/completeSignup", w, nil)
 }
 
+type SignupSuccessParams struct {
+	Handle string
+}
+
+func (p *Pages) SignupSuccess(w io.Writer, params SignupSuccessParams) error {
+	return p.executePlain("user/fragments/signupSuccess", w, params)
+}
+
 type TermsOfServiceParams struct {
 	BaseParams
 	Content template.HTML
