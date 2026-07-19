@@ -6,7 +6,7 @@
 
 {{ define "content" }}
   <form
-      class="mt-4 max-w-sm mx-auto group"
+      class="mt-4 w-full max-w-lg mx-auto group"
       hx-post="/signup"
       hx-swap="none"
       hx-disabled-elt="#signup-button"
@@ -32,7 +32,7 @@
     <div class="w-full mt-4 text-center">
       <div class="cf-turnstile" data-sitekey="{{ .CloudflareSiteKey }}" data-size="flexible"></div>
     </div>
-    <button class="btn text-base w-full my-2 mt-6" type="submit" id="signup-button" tabindex="7" >
+    <button class="btn text-base w-full my-2" type="submit" id="signup-button" tabindex="7" >
       {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
       <span class="inline group-[.htmx-request]:hidden">Join now</span>
     </button>

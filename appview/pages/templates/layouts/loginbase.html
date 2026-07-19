@@ -1,6 +1,6 @@
 {{ define "mainLayout" }}
   <div class="w-full h-screen flex items-center justify-center bg-white dark:bg-transparent">
-    <main class="max-w-md px-7 mt-4">
+    <main id="main" class="w-full max-w-md px-7 mt-4">
       {{ template "logo" }}
       {{ block "content" . }}{{ end }}
     </main>
