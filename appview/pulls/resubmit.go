@@ -345,6 +345,16 @@ func (s *Pulls) resubmitPullHelper(
 		return
 	}
 
+	pull.Submissions = append(pull.Submissions, &models.PullSubmission{
+		PullAt:      pullAt,
+		RoundNumber: newRoundNumber,
+		Patch:       newPatch,
+		Combined:    combinedPatch,
+		SourceRev:   newSourceRev,
+		Created:     time.Now(),
+	})
+	s.notifier.ResubmitPull(r.Context(), pull)
+
 	ownerSlashRepo := reporesolver.GetBaseRepoPath(r, repo)
 	s.pages.HxLocation(w, fmt.Sprintf("/%s/pulls/%d", ownerSlashRepo, pull.PullId))
 }
@@ -471,6 +481,9 @@ func (s *Pulls) resubmitStackedPullHelper(
 	// pds updates to make
 	var writes []*comatproto.RepoApplyWrites_Input_Writes_Elem
 
+	// pulls to notify for after the transaction commits
+	var resubmitted []*models.Pull
+
 	// deleted pulls are marked as deleted in the DB
 	for _, p := range deletions {
 		// do not do delete already merged PRs
@@ -580,6 +593,16 @@ func (s *Pulls) resubmitStackedPullHelper(
 				Value:      knotcompat.Pull(&record),
 			},
 		})
+
+		op.Submissions = append(op.Submissions, &models.PullSubmission{
+			PullAt:      pullAt,
+			RoundNumber: newRoundNumber,
+			Patch:       newPatch,
+			Combined:    combinedPatch,
+			SourceRev:   newSourceRev,
+			Created:     time.Now(),
+		})
+		resubmitted = append(resubmitted, op)
 	}
 
 	_, err = comatproto.RepoApplyWrites(r.Context(), client, &comatproto.RepoApplyWrites_Input{
@@ -597,6 +620,13 @@ func (s *Pulls) resubmitStackedPullHelper(
 		l.Error("failed to commit resubmit transaction", "err", err)
 		s.pages.Notice(w, "pull-resubmit-error", "Failed to resubmit pull request. Try again later.")
 		return
+	}
+
+	for _, p := range additions {
+		s.notifier.NewPull(r.Context(), p)
+	}
+	for _, p := range resubmitted {
+		s.notifier.ResubmitPull(r.Context(), p)
 	}
 
 	ownerSlashRepo := reporesolver.GetBaseRepoPath(r, repo)

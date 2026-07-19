@@ -20,19 +20,22 @@ import (
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
 	"tangled.org/core/log"
+	"tangled.org/core/orm"
 )
 
 type Notifier struct {
 	notify.BaseNotifier
-	db     *db.DB
-	logger *slog.Logger
-	client *http.Client
+	db      *db.DB
+	baseUrl string
+	logger  *slog.Logger
+	client  *http.Client
 }
 
-func NewNotifier(database *db.DB) *Notifier {
+func NewNotifier(database *db.DB, baseUrl string) *Notifier {
 	return &Notifier{
-		db:     database,
-		logger: log.New("webhook-notifier"),
+		db:      database,
+		baseUrl: baseUrl,
+		logger:  log.New("webhook-notifier"),
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -89,6 +92,109 @@ func (w *Notifier) RenameRepo(ctx context.Context, actor syntax.DID, oldRepo, ne
 	userAgent := "Tangled-Hook/rename"
 	for _, webhook := range webhooks {
 		go w.sendWebhook(ctx, webhook, string(models.WebhookEventRepoRenamed), payload.Repository.FullName, userAgent, payloadBytes)
+	}
+}
+
+func (w *Notifier) NewPull(ctx context.Context, pull *models.Pull) {
+	w.pullRequestEvent(ctx, models.WebhookEventPullRequestCreated, "created", pull.OwnerDid, pull)
+}
+
+func (w *Notifier) ResubmitPull(ctx context.Context, pull *models.Pull) {
+	w.pullRequestEvent(ctx, models.WebhookEventPullRequestResubmitted, "resubmitted", pull.OwnerDid, pull)
+}
+
+func (w *Notifier) NewPullState(ctx context.Context, actor syntax.DID, pull *models.Pull) {
+	event, action, ok := pullStateEvent(pull.State)
+	if !ok {
+		return
+	}
+	w.pullRequestEvent(ctx, event, action, actor.String(), pull)
+}
+
+// pullStateEvent maps a pull's state to the webhook event announcing the
+// transition into that state
+func pullStateEvent(state models.PullState) (models.WebhookEvent, string, bool) {
+	switch state {
+	case models.PullMerged:
+		return models.WebhookEventPullRequestMerged, "merged", true
+	case models.PullClosed:
+		return models.WebhookEventPullRequestClosed, "closed", true
+	case models.PullOpen:
+		return models.WebhookEventPullRequestReopened, "reopened", true
+	default:
+		return "", "", false
+	}
+}
+
+func (w *Notifier) pullRequestEvent(ctx context.Context, event models.WebhookEvent, action, sender string, pull *models.Pull) {
+	// pull request events originate from http handlers, whose context is
+	// canceled as soon as the handler returns; detach so in-flight
+	// deliveries are not cut short
+	ctx = context.WithoutCancel(ctx)
+
+	webhooks, err := w.activeWebhooksForEvent(string(pull.RepoDid), event)
+	if err != nil {
+		w.logger.Error("failed to get webhooks for repo", "repo_did", pull.RepoDid, "err", err)
+		return
+	}
+	if len(webhooks) == 0 {
+		return
+	}
+
+	repo, err := db.GetRepo(w.db, orm.FilterEq("repo_did", string(pull.RepoDid)))
+	if err != nil {
+		w.logger.Error("failed to get repo", "repo_did", pull.RepoDid, "err", err)
+		return
+	}
+
+	payload := buildPullRequestPayload(action, repo, pull, sender, w.baseUrl)
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		w.logger.Error("failed to marshal pull request payload", "repo_did", pull.RepoDid, "err", err)
+		return
+	}
+
+	userAgent := "Tangled-Hook/pull_request"
+	for _, webhook := range webhooks {
+		go w.sendWebhook(ctx, webhook, string(event), payload.Repository.FullName, userAgent, payloadBytes)
+	}
+}
+
+func buildPullRequestPayload(action string, repo *models.Repo, pull *models.Pull, sender, baseUrl string) *models.WebhookPullRequestPayload {
+	htmlUrl := fmt.Sprintf("%s/%s/%s/pulls/%d", baseUrl, repo.Did, repo.Slug(), pull.PullId)
+
+	pullRequest := models.WebhookPullRequest{
+		Number:       pull.PullId,
+		Title:        pull.Title,
+		Body:         pull.Body,
+		State:        pull.State.String(),
+		TargetBranch: pull.TargetBranch,
+		Owner:        models.WebhookUser{Did: pull.OwnerDid},
+		HtmlUrl:      htmlUrl,
+		CreatedAt:    pull.Created.Format(time.RFC3339),
+	}
+	if len(pull.Submissions) > 0 {
+		pullRequest.RoundNumber = pull.LastRoundNumber()
+		pullRequest.PatchUrl = fmt.Sprintf("%s/round/%d.patch", htmlUrl, pull.LastRoundNumber())
+	}
+	if pull.PullSource != nil {
+		source := &models.WebhookPullRequestSource{
+			Branch: pull.PullSource.Branch,
+		}
+		if len(pull.Submissions) > 0 {
+			source.Sha = pull.LatestSha()
+		}
+		if pull.IsForkBased() {
+			source.Repo = pull.PullSource.RepoDid.String()
+		}
+		pullRequest.Source = source
+	}
+
+	return &models.WebhookPullRequestPayload{
+		Action:      action,
+		PullRequest: pullRequest,
+		Repository:  buildWebhookRepository(repo),
+		Sender:      models.WebhookUser{Did: sender},
 	}
 }
 

@@ -10,8 +10,13 @@ import (
 type WebhookEvent string
 
 const (
-	WebhookEventPush        WebhookEvent = "push"
-	WebhookEventRepoRenamed WebhookEvent = "repository:renamed"
+	WebhookEventPush                   WebhookEvent = "push"
+	WebhookEventRepoRenamed            WebhookEvent = "repository:renamed"
+	WebhookEventPullRequestCreated     WebhookEvent = "pull_request:created"
+	WebhookEventPullRequestResubmitted WebhookEvent = "pull_request:resubmitted"
+	WebhookEventPullRequestMerged      WebhookEvent = "pull_request:merged"
+	WebhookEventPullRequestClosed      WebhookEvent = "pull_request:closed"
+	WebhookEventPullRequestReopened    WebhookEvent = "pull_request:reopened"
 )
 
 type Webhook struct {
@@ -80,4 +85,35 @@ type WebhookRenamePayload struct {
 	NewName    string            `json:"new_name"`
 	Repository WebhookRepository `json:"repository"`
 	Sender     WebhookUser       `json:"sender"`
+}
+
+// WebhookPullRequestPayload represents the payload for pull_request:* events
+type WebhookPullRequestPayload struct {
+	Action      string             `json:"action"`
+	PullRequest WebhookPullRequest `json:"pull_request"`
+	Repository  WebhookRepository  `json:"repository"`
+	Sender      WebhookUser        `json:"sender"`
+}
+
+// WebhookPullRequest represents pull request information in webhook payload
+type WebhookPullRequest struct {
+	Number       int                       `json:"number"`
+	Title        string                    `json:"title"`
+	Body         string                    `json:"body"`
+	State        string                    `json:"state"`
+	TargetBranch string                    `json:"target_branch"`
+	Source       *WebhookPullRequestSource `json:"source,omitempty"`
+	RoundNumber  int                       `json:"round_number"`
+	Owner        WebhookUser               `json:"owner"`
+	HtmlUrl      string                    `json:"html_url"`
+	PatchUrl     string                    `json:"patch_url"`
+	CreatedAt    string                    `json:"created_at"`
+}
+
+// WebhookPullRequestSource represents the source of a branch- or fork-based
+// pull request; absent for patch-based pull requests
+type WebhookPullRequestSource struct {
+	Branch string `json:"branch"`
+	Repo   string `json:"repo,omitempty"`
+	Sha    string `json:"sha,omitempty"`
 }

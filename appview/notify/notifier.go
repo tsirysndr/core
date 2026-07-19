@@ -26,6 +26,7 @@ type Notifier interface {
 	DeleteFollow(ctx context.Context, follow *models.Follow)
 
 	NewPull(ctx context.Context, pull *models.Pull)
+	ResubmitPull(ctx context.Context, pull *models.Pull)
 	NewPullState(ctx context.Context, actor syntax.DID, pull *models.Pull)
 
 	NewIssueLabelOp(ctx context.Context, actor syntax.DID, issue *models.Issue, ops []models.LabelOp)
@@ -72,6 +73,7 @@ func (m *BaseNotifier) NewFollow(ctx context.Context, follow *models.Follow)    
 func (m *BaseNotifier) DeleteFollow(ctx context.Context, follow *models.Follow) {}
 
 func (m *BaseNotifier) NewPull(ctx context.Context, pull *models.Pull)                        {}
+func (m *BaseNotifier) ResubmitPull(ctx context.Context, pull *models.Pull)                   {}
 func (m *BaseNotifier) NewPullState(ctx context.Context, actor syntax.DID, pull *models.Pull) {}
 
 func (m *BaseNotifier) UpdateProfile(ctx context.Context, profile *models.Profile) {}

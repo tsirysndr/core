@@ -95,6 +95,11 @@ func (l *loggingNotifier) NewPull(ctx context.Context, pull *models.Pull) {
 	l.inner.NewPull(ctx, pull)
 }
 
+func (l *loggingNotifier) ResubmitPull(ctx context.Context, pull *models.Pull) {
+	ctx = tlog.IntoContext(ctx, tlog.SubLogger(l.logger, "ResubmitPull"))
+	l.inner.ResubmitPull(ctx, pull)
+}
+
 func (l *loggingNotifier) NewPullState(ctx context.Context, actor syntax.DID, pull *models.Pull) {
 	ctx = tlog.IntoContext(ctx, tlog.SubLogger(l.logger, "NewPullState"))
 	l.inner.NewPullState(ctx, actor, pull)

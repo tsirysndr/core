@@ -229,8 +229,28 @@
         <input type="checkbox" name="event_repo_renamed" value="on" />
         <span class="text-sm">Repository renamed</span>
       </div>
+      <div class="flex items-center gap-2">
+        <input type="checkbox" name="event_pull_request_created" value="on" />
+        <span class="text-sm">Pull request opened</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="checkbox" name="event_pull_request_resubmitted" value="on" />
+        <span class="text-sm">Pull request resubmitted</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="checkbox" name="event_pull_request_merged" value="on" />
+        <span class="text-sm">Pull request merged</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="checkbox" name="event_pull_request_closed" value="on" />
+        <span class="text-sm">Pull request closed</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="checkbox" name="event_pull_request_reopened" value="on" />
+        <span class="text-sm">Pull request reopened</span>
+      </div>
       <p class="text-sm text-gray-500 dark:text-gray-400">
-        Additional event types (pull requests, issues) will be available in future updates.
+        Additional event types (issues) will be available in future updates.
       </p>
     </div>
   </div>
@@ -299,9 +319,19 @@
     <div class="flex flex-col gap-2 ml-4">
       {{ $hasPush := false }}
       {{ $hasRepoRenamed := false }}
+      {{ $hasPullCreated := false }}
+      {{ $hasPullResubmitted := false }}
+      {{ $hasPullMerged := false }}
+      {{ $hasPullClosed := false }}
+      {{ $hasPullReopened := false }}
       {{ range $webhook.Events }}
         {{ if eq . "push" }}{{ $hasPush = true }}{{ end }}
         {{ if eq . "repository:renamed" }}{{ $hasRepoRenamed = true }}{{ end }}
+        {{ if eq . "pull_request:created" }}{{ $hasPullCreated = true }}{{ end }}
+        {{ if eq . "pull_request:resubmitted" }}{{ $hasPullResubmitted = true }}{{ end }}
+        {{ if eq . "pull_request:merged" }}{{ $hasPullMerged = true }}{{ end }}
+        {{ if eq . "pull_request:closed" }}{{ $hasPullClosed = true }}{{ end }}
+        {{ if eq . "pull_request:reopened" }}{{ $hasPullReopened = true }}{{ end }}
       {{ end }}
       <div class="flex items-center gap-2">
         <input type="checkbox" name="event_push" value="on" {{ if $hasPush }}checked{{ end }} />
@@ -311,8 +341,28 @@
         <input type="checkbox" name="event_repo_renamed" value="on" {{ if $hasRepoRenamed }}checked{{ end }} />
         <span class="text-sm">Repository renamed</span>
       </div>
+      <div class="flex items-center gap-2">
+        <input type="checkbox" name="event_pull_request_created" value="on" {{ if $hasPullCreated }}checked{{ end }} />
+        <span class="text-sm">Pull request opened</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="checkbox" name="event_pull_request_resubmitted" value="on" {{ if $hasPullResubmitted }}checked{{ end }} />
+        <span class="text-sm">Pull request resubmitted</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="checkbox" name="event_pull_request_merged" value="on" {{ if $hasPullMerged }}checked{{ end }} />
+        <span class="text-sm">Pull request merged</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="checkbox" name="event_pull_request_closed" value="on" {{ if $hasPullClosed }}checked{{ end }} />
+        <span class="text-sm">Pull request closed</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="checkbox" name="event_pull_request_reopened" value="on" {{ if $hasPullReopened }}checked{{ end }} />
+        <span class="text-sm">Pull request reopened</span>
+      </div>
       <p class="text-sm text-gray-500 dark:text-gray-400">
-        Additional event types (pull requests, issues) will be available in future updates.
+        Additional event types (issues) will be available in future updates.
       </p>
     </div>
   </div>

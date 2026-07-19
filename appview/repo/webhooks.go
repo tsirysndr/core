@@ -12,6 +12,30 @@ import (
 	"tangled.org/core/appview/pages"
 )
 
+// webhookEventFields maps event checkbox form fields to webhook events
+var webhookEventFields = []struct {
+	field string
+	event models.WebhookEvent
+}{
+	{"event_push", models.WebhookEventPush},
+	{"event_repo_renamed", models.WebhookEventRepoRenamed},
+	{"event_pull_request_created", models.WebhookEventPullRequestCreated},
+	{"event_pull_request_resubmitted", models.WebhookEventPullRequestResubmitted},
+	{"event_pull_request_merged", models.WebhookEventPullRequestMerged},
+	{"event_pull_request_closed", models.WebhookEventPullRequestClosed},
+	{"event_pull_request_reopened", models.WebhookEventPullRequestReopened},
+}
+
+func webhookEventsFromForm(r *http.Request) []string {
+	events := []string{}
+	for _, ef := range webhookEventFields {
+		if r.FormValue(ef.field) == "on" {
+			events = append(events, string(ef.event))
+		}
+	}
+	return events
+}
+
 // Webhooks displays the webhooks settings page
 func (rp *Repo) Webhooks(w http.ResponseWriter, r *http.Request) {
 	l := rp.logger.With("handler", "Webhooks")
@@ -79,14 +103,7 @@ func (rp *Repo) AddWebhook(w http.ResponseWriter, r *http.Request) {
 
 	active := r.FormValue("active") == "on"
 
-	events := []string{}
-	if r.FormValue("event_push") == "on" {
-		events = append(events, string(models.WebhookEventPush))
-	}
-	if r.FormValue("event_repo_renamed") == "on" {
-		events = append(events, string(models.WebhookEventRepoRenamed))
-	}
-
+	events := webhookEventsFromForm(r)
 	if len(events) == 0 {
 		rp.pages.Notice(w, "webhooks-error", "At least one event must be enabled")
 		return
@@ -172,14 +189,7 @@ func (rp *Repo) UpdateWebhook(w http.ResponseWriter, r *http.Request) {
 
 	webhook.Active = r.FormValue("active") == "on"
 
-	events := []string{}
-	if r.FormValue("event_push") == "on" {
-		events = append(events, string(models.WebhookEventPush))
-	}
-	if r.FormValue("event_repo_renamed") == "on" {
-		events = append(events, string(models.WebhookEventRepoRenamed))
-	}
-
+	events := webhookEventsFromForm(r)
 	if len(events) > 0 {
 		webhook.Events = events
 	}

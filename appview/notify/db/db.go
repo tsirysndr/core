@@ -474,6 +474,10 @@ func (n *databaseNotifier) NewIssueState(ctx context.Context, actor syntax.DID, 
 	)
 }
 
+func (n *databaseNotifier) ResubmitPull(ctx context.Context, pull *models.Pull) {
+	// no-op for now
+}
+
 func (n *databaseNotifier) NewPullState(ctx context.Context, actor syntax.DID, pull *models.Pull) {
 	l := log.FromContext(ctx)
 

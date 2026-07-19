@@ -1957,7 +1957,7 @@ Webhooks allow you to receive HTTP POST notifications when events occur in your 
 
 ## Overview
 
-Webhooks send HTTP POST requests to URLs you configure whenever specific events happen. Currently, Tangled supports push events, with more event types coming soon.
+Webhooks send HTTP POST requests to URLs you configure whenever specific events happen. Currently, Tangled supports push, repository rename, and pull request events, with more event types coming soon.
 
 ## Configuring webhooks
 
@@ -1969,7 +1969,7 @@ To set up a webhook for your repository:
 4. Configure your webhook:
    - **Payload URL**: The endpoint that will receive the webhook POST requests
    - **Secret**: An optional secret key for verifying webhook authenticity (leave blank to send unsigned webhooks)
-   - **Events**: Select which events trigger the webhook (currently only push events)
+   - **Events**: Select which events trigger the webhook
    - **Active**: Toggle whether the webhook is enabled
 
 ## Webhook payload
@@ -2005,13 +2005,62 @@ When a push event occurs, Tangled sends a POST request with a JSON payload of th
 }
 ```
 
+### Pull request
+
+Pull request events are sent as separate event types, so you can subscribe to
+exactly the transitions you care about:
+
+- `pull_request:created` — a pull request was opened
+- `pull_request:resubmitted` — a new round (revision) was pushed to a pull request
+- `pull_request:merged` — a pull request was merged
+- `pull_request:closed` — a pull request was closed
+- `pull_request:reopened` — a closed pull request was reopened
+
+All pull request events share the same payload format:
+
+```json
+{
+  "action": "created",
+  "pull_request": {
+    "number": 4,
+    "title": "add dark mode",
+    "body": "implements dark mode as discussed in #2",
+    "state": "open",
+    "target_branch": "main",
+    "source": {
+      "branch": "dark-mode",
+      "sha": "7b320e5cbee2734071e4310c1d9ae401d8f6cab5"
+    },
+    "round_number": 0,
+    "owner": {
+      "did": "did:plc:hwevmowznbiukdf6uk5dwrrq"
+    },
+    "html_url": "https://tangled.org/did:plc:hwevmowznbiukdf6uk5dwrrq/some-repo/pulls/4",
+    "patch_url": "https://tangled.org/did:plc:hwevmowznbiukdf6uk5dwrrq/some-repo/pulls/4/round/0.patch",
+    "created_at": "2025-09-15T08:57:23Z"
+  },
+  "repository": { ... },
+  "sender": {
+    "did": "did:plc:hwevmowznbiukdf6uk5dwrrq"
+  }
+}
+```
+
+Notes:
+
+- `action` mirrors the event type suffix (`created`, `resubmitted`, `merged`, `closed`, `reopened`).
+- `repository` has the same format as in the push payload.
+- The patch itself is not embedded in the payload (patches can be large); fetch it from `patch_url` instead. `round_number` identifies the latest round, and `patch_url` always points at that round's patch.
+- `source` is only present for branch-based and fork-based pull requests; it is omitted for patch-based pulls. For fork-based pulls, `source.repo` contains the DID of the source repository.
+- `sender` is the user who performed the action.
+
 ## HTTP headers
 
 Each webhook request includes the following headers:
 
 - `Content-Type: application/json`
-- `User-Agent: Tangled-Hook/<short-sha>` — User agent with short SHA of the commit
-- `X-Tangled-Event: push` — The event type
+- `User-Agent: Tangled-Hook/<short-sha>` — User agent with short SHA of the commit (push events); `Tangled-Hook/pull_request` for pull request events
+- `X-Tangled-Event: push` — The full event type (e.g. `push`, `pull_request:merged`)
 - `X-Tangled-Hook-ID: <webhook-id>` — The webhook ID
 - `X-Tangled-Delivery: <uuid>` — Unique delivery ID
 - `X-Tangled-Signature-256: sha256=<hmac>` — HMAC-SHA256 signature (if secret configured)

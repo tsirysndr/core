@@ -90,6 +90,10 @@ func (m *mergedNotifier) NewPull(ctx context.Context, pull *models.Pull) {
 	m.fanout(func(n Notifier) { n.NewPull(ctx, pull) })
 }
 
+func (m *mergedNotifier) ResubmitPull(ctx context.Context, pull *models.Pull) {
+	m.fanout(func(n Notifier) { n.ResubmitPull(ctx, pull) })
+}
+
 func (m *mergedNotifier) NewPullState(ctx context.Context, actor syntax.DID, pull *models.Pull) {
 	m.fanout(func(n Notifier) { n.NewPullState(ctx, actor, pull) })
 }
