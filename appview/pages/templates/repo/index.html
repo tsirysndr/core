@@ -246,7 +246,7 @@
         <!-- tags/branches -->
         {{ $tagsForCommit := index $.TagMap .Hash.String }}
         {{ if gt (len $tagsForCommit) 0 }}
-        <span class="flex items-center gap-1">
+        <span class="flex flex-wrap items-center gap-1">
           {{ range $tagsForCommit }}
             <span class="text-xs rounded bg-gray-100 dark:bg-gray-700 text-black dark:text-white font-mono px-2 mx-[2px] inline-flex items-center">
               {{ . }}
