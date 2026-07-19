@@ -77,7 +77,7 @@ steps:
 ```
 
 You can read the [full manifest spec
-here](https://tangled.sh/@tangled.sh/core/blob/master/docs/spindle/pipeline.md),
+here](https://docs.tangled.org/spindles#pipelines),
 but the `dependencies` block is the real interesting bit.
 Dependencies for your workflow, like Go, Node.js, Python
 etc. can be pulled in from nixpkgs.
