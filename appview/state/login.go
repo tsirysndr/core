@@ -20,12 +20,14 @@ func (s *State) Login(w http.ResponseWriter, r *http.Request) {
 		returnURL := r.URL.Query().Get("return_url")
 		errorCode := r.URL.Query().Get("error")
 		addAccount := r.URL.Query().Get("mode") == "add_account"
+		handle := r.URL.Query().Get("handle")
 
 		registry := s.oauth.GetAccounts(r)
 		s.pages.Login(w, pages.LoginParams{
 			ReturnUrl:  returnURL,
 			ErrorCode:  errorCode,
 			AddAccount: addAccount,
+			Handle:     handle,
 			Accounts:   registry.Accounts,
 		})
 	case http.MethodPost:

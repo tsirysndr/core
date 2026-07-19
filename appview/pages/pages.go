@@ -341,6 +341,7 @@ type LoginParams struct {
 	ReturnUrl  string
 	ErrorCode  string
 	AddAccount bool
+	Handle     string
 	Accounts   []oauth.AccountInfo
 }
 

@@ -54,7 +54,7 @@
   {{ end }}
 
   <form
-      class="mt-4 group"
+      class="mt-4 w-full max-w-lg mx-auto group"
       hx-post="/login"
       hx-swap="none"
       hx-disabled-elt="#login-button"
@@ -72,6 +72,7 @@
               tabindex="1"
               required
               placeholder="akshay.tngl.sh"
+              value="{{ .Handle }}"
               class="text-lg md:text-base"
           />
           <span class="text-sm text-gray-500 mt-1">
