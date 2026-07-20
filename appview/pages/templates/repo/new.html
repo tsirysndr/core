@@ -23,6 +23,7 @@
   <form hx-post="/repo/new" hx-swap="none" hx-indicator="#spinner">
     {{ template "step-1" . }}
     {{ template "step-2" . }}
+    {{ template "step-3" . }}
 
     <div class="mt-8 flex justify-end">
       <button type="submit" class="btn-create flex items-center gap-2">
@@ -63,7 +64,7 @@
       {{ template "numberCircle" 2 }}
     </div>
 
-    <div class="flex-1">
+    <div class="flex-1 pb-12">
       <h2 class="text-lg font-medium dark:text-white">Configuration</h2>
       <div class="text-sm text-gray-500 dark:text-gray-400 mb-4">Repository settings and hosting.</div>
 
@@ -73,6 +74,30 @@
       </div>
     </div>
   </div>
+{{ end }}
+
+{{ define "step-3" }}
+  <details class="group/advanced">
+    <summary class="flex gap-4 items-center relative border-l border-gray-200 dark:border-gray-700 pl-6 cursor-pointer list-none">
+      <div class="absolute -left-3 top-1/2 -translate-y-1/2">
+        <div class="w-6 h-6 bg-gray-200 dark:bg-gray-600 dark:text-white rounded-full flex items-center justify-center">
+          {{ i "plus" "w-4 h-4" }}
+        </div>
+      </div>
+
+      <div class="flex-1">
+        <h2 class="text-lg font-medium dark:text-white">Advanced</h2>
+      </div>
+    </summary>
+
+    <div class="flex gap-4 relative border-l border-gray-200 dark:border-gray-700 pl-6">
+      <div class="flex-1 pt-4">
+        <div class="space-y-2">
+          {{ template "spindle" . }}
+        </div>
+      </div>
+    </div>
+  </details>
 {{ end }}
 
 {{ define "name" }}
@@ -171,8 +196,46 @@
   </div>
 {{ end }}
 
+{{ define "spindle" }}
+  <!-- Spindle Selection -->
+  <div>
+    <label class="block text-sm font-bold dark:text-white mb-1">
+      Select a spindle
+    </label>
+    <div class="w-full space-y-2">
+      <div class="flex items-center">
+        <input
+          type="radio"
+          name="spindle"
+          value=""
+          class="mr-2"
+          id="spindle-none"
+          checked
+        />
+        <label for="spindle-none" class="dark:text-white">No spindle</label>
+      </div>
+      {{ range .Spindles }}
+        <div class="flex items-center">
+          <input
+            type="radio"
+            name="spindle"
+            value="{{ . }}"
+            class="mr-2"
+            id="spindle-{{ . }}"
+          />
+          <label for="spindle-{{ . }}" class="dark:text-white lowercase">{{ . }}</label>
+        </div>
+      {{ end }}
+    </div>
+    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+      A spindle runs your CI workflows.
+      You can also <a href="/settings/spindles" class="underline">register your own spindle</a>.
+    </p>
+  </div>
+{{ end }}
+
 {{ define "numberCircle" }}
-  <div class="w-6 h-6 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center text-sm font-medium mt-1">
+  <div class="w-6 h-6 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center text-sm font-medium">
     {{.}}
   </div>
 {{ end }}

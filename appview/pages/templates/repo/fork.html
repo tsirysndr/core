@@ -124,7 +124,63 @@
         </div>
       </div>
 
-      <div class="py-8 flex justify-end border-l border-gray-200 dark:border-gray-700 pl-6">
+      {{/* Step 3 — Advanced */}}
+      <details class="group/advanced">
+        <summary class="flex gap-4 items-center relative border-l border-gray-200 dark:border-gray-700 pl-6 cursor-pointer list-none">
+          <div class="absolute top-1/2 -translate-y-1/2 -left-[11px]">
+            <div class="size-6 bg-gray-200 dark:bg-gray-600 dark:text-white rounded-full flex items-center justify-center">
+              {{ i "plus" "size-4" }}
+            </div>
+          </div>
+          <div class="flex-1 flex flex-col gap-1">
+            <h2 class="text-lg font-medium dark:text-white">Advanced</h2>
+          </div>
+        </summary>
+
+        <div class="flex gap-4 relative border-l border-gray-200 dark:border-gray-700 pl-6 pb-6">
+          <div class="flex-1 flex flex-col gap-2 pt-4">
+            <div class="space-y-4">
+
+            {{/* Spindle list */}}
+            <div>
+              <label class="block text-sm font-bold dark:text-white mb-1">Select a spindle</label>
+              <div class="w-full dark:bg-gray-800 dark:text-white dark:border-gray-700 space-y-2">
+                <div class="flex items-center">
+                  <input
+                    type="radio"
+                    name="spindle"
+                    value=""
+                    id="spindle-none"
+                    checked
+                    class="mr-2"
+                  />
+                  <label for="spindle-none" class="dark:text-white">No spindle</label>
+                </div>
+                {{ range .Spindles }}
+                  <div class="flex items-center">
+                    <input
+                      type="radio"
+                      name="spindle"
+                      value="{{ . }}"
+                      id="spindle-{{ . }}"
+                      class="mr-2"
+                    />
+                    <label for="spindle-{{ . }}" class="dark:text-white lowercase">{{ . }}</label>
+                  </div>
+                {{ end }}
+              </div>
+              <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                A spindle runs your CI workflows.
+                You can also <a href="/settings/spindles" class="underline">register your own spindle</a>.
+              </p>
+            </div>
+
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <div class="py-8 flex justify-end">
         <button type="submit" class="btn-create flex items-center gap-2">
           {{ i "git-fork" "size-4" }}
           Fork repository

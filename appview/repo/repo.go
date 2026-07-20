@@ -1418,9 +1418,15 @@ func (rp *Repo) ForkRepo(w http.ResponseWriter, r *http.Request) {
 		user := rp.oauth.GetMultiAccountUser(r)
 		knots := rp.acl.KnotsForUser(r.Context(), user.Did)
 
+		spindles, err := rp.enforcer.GetSpindlesForUser(user.Did)
+		if err != nil {
+			l.Error("failed to fetch spindles", "err", err)
+		}
+
 		rp.pages.ForkRepo(w, pages.ForkRepoParams{
 			BaseParams: pages.BaseParamsFromContext(r.Context()),
 			Knots:      knots,
+			Spindles:   spindles,
 			RepoInfo:   rp.repoResolver.GetRepoInfo(r, user),
 		})
 
@@ -1437,6 +1443,21 @@ func (rp *Repo) ForkRepo(w http.ResponseWriter, r *http.Request) {
 		if !rp.acl.IsRepoCreateAllowed(r.Context(), targetKnot, user.Did) {
 			rp.pages.Notice(w, "repo", "You do not have permission to create a repo in this knot.")
 			return
+		}
+
+		// optional spindle selection; validate the user is a member if provided
+		spindle := r.FormValue("spindle")
+		if spindle != "" {
+			validSpindles, err := rp.enforcer.GetSpindlesForUser(user.Did)
+			if err != nil {
+				l.Error("failed to fetch spindles", "err", err)
+				rp.pages.Notice(w, "repo", "Failed to configure spindle. Try again later.")
+				return
+			}
+			if !slices.Contains(validSpindles, spindle) {
+				rp.pages.Notice(w, "repo", "Invalid spindle selection.")
+				return
+			}
 		}
 
 		// choose a name for a fork
@@ -1530,6 +1551,7 @@ func (rp *Repo) ForkRepo(w http.ResponseWriter, r *http.Request) {
 			Rkey:        rkey,
 			Source:      forkSource,
 			Description: forkDescription,
+			Spindle:     spindle,
 			Created:     time.Now(),
 			Labels:      rp.config.Label.DefaultLabelDefs,
 			RepoDid:     repoDid,

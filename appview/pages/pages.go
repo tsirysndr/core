@@ -704,7 +704,8 @@ func (p *Pages) SpindleDashboard(w io.Writer, params SpindleDashboardParams) err
 
 type NewRepoParams struct {
 	BaseParams
-	Knots []string
+	Knots    []string
+	Spindles []string
 }
 
 func (p *Pages) NewRepo(w io.Writer, params NewRepoParams) error {
@@ -714,6 +715,7 @@ func (p *Pages) NewRepo(w io.Writer, params NewRepoParams) error {
 type ForkRepoParams struct {
 	BaseParams
 	Knots    []string
+	Spindles []string
 	RepoInfo repoinfo.RepoInfo
 }
 

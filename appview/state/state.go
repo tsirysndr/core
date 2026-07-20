@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -449,9 +450,15 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 		user := s.oauth.GetMultiAccountUser(r)
 		knots := s.aclService.KnotsForUser(r.Context(), user.Did)
 
+		spindles, err := s.enforcer.GetSpindlesForUser(user.Did)
+		if err != nil {
+			s.logger.Error("failed to fetch spindles", "err", err)
+		}
+
 		s.pages.NewRepo(w, pages.NewRepoParams{
 			BaseParams: pages.BaseParamsFromContext(r.Context()),
 			Knots:      knots,
+			Spindles:   spindles,
 		})
 
 	case http.MethodPost:
@@ -493,6 +500,22 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 			s.pages.Notice(w, "repo", "Description must be 140 characters or fewer.")
 			return
 		}
+
+		// optional spindle selection; validate the user is a member if provided
+		spindle := r.FormValue("spindle")
+		if spindle != "" {
+			validSpindles, err := s.enforcer.GetSpindlesForUser(user.Did)
+			if err != nil {
+				l.Error("failed to fetch spindles", "err", err)
+				s.pages.Notice(w, "repo", "Failed to configure spindle. Try again later.")
+				return
+			}
+			if !slices.Contains(validSpindles, spindle) {
+				s.pages.Notice(w, "repo", "Invalid spindle selection.")
+				return
+			}
+		}
+		l = l.With("spindle", spindle)
 
 		// ACL validation
 		if !s.aclService.IsRepoCreateAllowed(r.Context(), domain, user.Did) {
@@ -570,6 +593,7 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 			Knot:        domain,
 			Rkey:        rkey,
 			Description: description,
+			Spindle:     spindle,
 			Created:     time.Now(),
 			Labels:      s.config.Label.DefaultLabelDefs,
 			RepoDid:     repoDid,
