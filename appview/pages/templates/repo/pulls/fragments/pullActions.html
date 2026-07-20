@@ -35,10 +35,6 @@
     {{ end }}
   >
     {{ if and (not $loading) $isLastRound }}
-      {{ if and $isOpen $isForkBased (not .HasPipeline) (ne .RepoInfo.Spindle "") }}
-        {{ template "workflowWarning" . }}
-      {{ end }}
-      {{ template "mergeCheck" . }}
       {{ template "resubmitStatus" . }}
     {{ end }}
     <div id="actions-{{$roundNumber}}" hx-target="this" class="flex flex-wrap gap-2 relative"
@@ -142,6 +138,15 @@
       {{ end }}
     </div>
   </div>
+
+  {{ if and (not $loading) $isLastRound }}
+    <div id="mergecheck-banner" hx-swap-oob="innerHTML">
+      {{ if and $isOpen $isForkBased (not .HasPipeline) (ne .RepoInfo.Spindle "") }}
+        {{ template "workflowWarning" . }}
+      {{ end }}
+      {{ template "mergeCheck" . }}
+    </div>
+  {{ end }}
 {{ end }}
 
 {{ define "workflowWarning" }}
@@ -149,7 +154,7 @@
     <details class="group/ci">
       <summary class="flex items-center gap-2 cursor-pointer list-none">
         {{ i "triangle-alert" "w-4 h-4 text-amber-600 dark:text-amber-500" }}
-        <span class="font-medium text-amber-600 dark:text-amber-500">Workflow files changed in this round</span>
+        <span class="font-medium text-amber-600 dark:text-amber-500">Workflow files changed</span>
         <div class="text-sm text-gray-500 dark:text-gray-400">
           <span class="group-open/ci:hidden inline">Expand</span>
           <span class="hidden group-open/ci:inline">Collapse</span>
@@ -197,7 +202,7 @@
       {{ if .WorkflowsChanged }}
         <div class="flex items-center gap-2 text-amber-600 dark:text-amber-500">
           {{ i "triangle-alert" "size-4" }}
-          <span class="font-medium">Workflow files changed in this round</span>
+          <span class="font-medium">Workflow files changed</span>
         </div>
         <ul class="space-y-1 overflow-x-auto pl-6">
           {{ range .ChangedWorkflowFiles }}

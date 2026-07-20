@@ -348,6 +348,16 @@
       {{ template "submissionInfo" $ }}
       {{ template "submissionCommits" $ }}
       {{ template "submissionPipeline" $ }}
+      {{ if eq $lastIdx $round }}
+        <div id="mergecheck-banner">
+          {{ if $root.Pull.State.IsOpen }}
+            <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+              {{ i "loader-circle" "w-4 h-4 animate-spin" }}
+              <span>Checking mergeability…</span>
+            </div>
+          {{ end }}
+        </div>
+      {{ end }}
     </div>
   </div>
 {{ end }}
