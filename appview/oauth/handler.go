@@ -15,6 +15,7 @@ import (
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/auth/oauth"
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	lexutil "github.com/bluesky-social/indigo/lex/util"
 	xrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-chi/chi/v5"
 	"github.com/posthog/posthog-go"
@@ -114,6 +115,8 @@ func (o *OAuth) callback(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	o.ensureProfileRecord(sessData.AccountDID, sessData.SessionID)
 
 	go o.addToDefaultKnot(sessData.AccountDID)
 	go o.addToDefaultSpindle(sessData.AccountDID.String())
@@ -520,6 +523,51 @@ func (o *OAuth) autoClaimTnglShDomain(did string) {
 	} else {
 		l.Info("autoClaimTnglShDomain: claimed domain", "domain", handle)
 	}
+}
+
+// ensureProfileRecord writes an empty profile record to the user's PDS if they
+// don't already have one, serves as a marker record for tangled uers
+//
+// also helps inform onboarding state
+func (o *OAuth) ensureProfileRecord(did syntax.DID, sessionId string) {
+	ctx := context.Background()
+	l := o.Logger.With("did", did)
+
+	didStr := did.String()
+	if profile, err := db.GetProfile(o.Db, didStr); err != nil {
+		l.Error("ensureProfileRecord: failed to read profile from db", "err", err)
+		return
+	} else if profile != nil {
+		// already has a profile record, leave it untouched
+		return
+	}
+
+	session, err := o.resumeSession(ctx, did, sessionId)
+	if err != nil {
+		l.Error("ensureProfileRecord: failed to resume session", "err", err)
+		return
+	}
+	client := session.APIClient()
+
+	_, err = comatproto.RepoPutRecord(ctx, client, &comatproto.RepoPutRecord_Input{
+		Collection: tangled.ActorProfileNSID,
+		Repo:       didStr,
+		Rkey:       "self",
+		Record: &lexutil.LexiconTypeDecoder{
+			Val: &tangled.ActorProfile{},
+		},
+	})
+	if err != nil {
+		l.Error("ensureProfileRecord: failed to write profile record", "err", err)
+		return
+	}
+
+	// mirror to the local db so the appview reflects the record immediately
+	if err := db.UpsertProfile(o.Db, &models.Profile{Did: didStr}); err != nil {
+		l.Error("ensureProfileRecord: failed to upsert profile in db", "err", err)
+	}
+
+	l.Info("ensureProfileRecord: created empty profile record")
 }
 
 // getAppPasswordSession returns a cached AppPasswordSession, creating one if needed.
