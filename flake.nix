@@ -57,6 +57,10 @@
       url = "https://cdn.jsdelivr.net/npm/mathjax@4.1.2/tex-svg.js";
       flake = false;
     };
+    tailwindcss-animated-src = {
+      url = "https://registry.npmjs.org/tailwindcss-animated/-/tailwindcss-animated-1.1.2.tgz";
+      flake = false;
+    };
     ibm-plex-mono-src = {
       url = "https://github.com/IBM/plex/releases/download/%40ibm%2Fplex-mono%401.1.0/ibm-plex-mono.zip";
       flake = false;
@@ -89,6 +93,7 @@
     microvm,
     fetch-tangled,
     mathjax-src,
+    tailwindcss-animated-src,
     ...
   }: let
     supportedSystems = ["x86_64-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin"];
@@ -150,7 +155,7 @@
         lexgen = self.callPackage ./nix/pkgs/lexgen.nix {inherit indigo;};
         goat = self.callPackage ./nix/pkgs/goat.nix {inherit indigo;};
         appview-static-files = self.callPackage ./nix/pkgs/appview-static-files.nix {
-          inherit htmx-src htmx-ws-src lucide-src inter-fonts-src ibm-plex-mono-src actor-typeahead-src mermaid-src hls-src mathjax-src;
+          inherit htmx-src htmx-ws-src lucide-src inter-fonts-src ibm-plex-mono-src actor-typeahead-src mermaid-src hls-src mathjax-src tailwindcss-animated-src;
         };
         appview = self.callPackage ./nix/pkgs/appview.nix {};
         blog = self.callPackage ./nix/pkgs/blog.nix {};
@@ -319,6 +324,12 @@
     devShells = forAllSystems (system: let
       pkgs = nixpkgsFor.${system};
       packages' = self.packages.${system};
+      tailwindcss-plugins = pkgs.linkFarm "tailwindcss-plugins" [
+        {
+          name = "tailwindcss-animated";
+          path = tailwindcss-animated-src;
+        }
+      ];
       staticShell = args:
         (pkgs.mkShell.override {
           stdenv = pkgs.pkgsStatic.stdenv;
@@ -375,6 +386,7 @@
           ];
         shellHook = ''
           export CC=${pkgs.stdenv.cc}/bin/cc
+          export NODE_PATH=${tailwindcss-plugins}''${NODE_PATH:+:$NODE_PATH}
           mkdir -p appview/pages/static
           # temporary self-heal for workspaces that copied static assets as read-only
           [ -d appview/pages/static/icons ] && [ ! -w appview/pages/static/icons ] && chmod -R u+rwX appview/pages/static
@@ -394,6 +406,12 @@
     apps = forAllSystems (system: let
       pkgs = nixpkgsFor."${system}";
       packages' = self.packages.${system};
+      tailwindcss-plugins = pkgs.linkFarm "tailwindcss-plugins" [
+        {
+          name = "tailwindcss-animated";
+          path = tailwindcss-animated-src;
+        }
+      ];
       air-watcher = name: arg:
         pkgs.writeShellScriptBin "run"
         ''
@@ -405,6 +423,7 @@
         pkgs.writeShellScriptBin "run"
         ''
           export BROWSERSLIST_IGNORE_OLD_DATA=true
+          export NODE_PATH=${tailwindcss-plugins}
           ${pkgs.tailwindcss}/bin/tailwindcss --watch=always -i input.css -o ./appview/pages/static/tw.css
         '';
     in {
