@@ -123,9 +123,9 @@
           hx-boost="true"
           href="/{{ .RepoInfo.FullName }}/fork"
         >
-          {{ i "git-fork" "w-4 h-4" }}
-          Fork
+          {{ i "git-fork" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
           {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+          Fork
         </a>
         <a
           href="/{{ .RepoInfo.FullName }}/forks"
