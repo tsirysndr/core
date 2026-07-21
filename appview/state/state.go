@@ -178,7 +178,7 @@ func Make(ctx context.Context, config *config.Config) (*State, error) {
 	}
 	notifiers = append(notifiers, indexer)
 
-	notifiers = append(notifiers, whnotify.NewNotifier(d, config.Core.BaseUrl()))
+	notifiers = append(notifiers, whnotify.NewNotifier(d, config.Core.BaseUrl(), config.Core.Dev))
 
 	notifier := notify.NewMergedNotifier(notifiers)
 	notifier = lognotify.NewLoggingNotifier(notifier, tlog.SubLogger(logger, "notify"))

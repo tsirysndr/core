@@ -1,4 +1,4 @@
-package settings
+package userutil
 
 import (
 	"regexp"
@@ -98,7 +98,7 @@ func foldToASCII(s string) string {
 //  3. trailing digits stripped
 //  4. separators stripped + trailing digits stripped
 //  5. leetspeak normalised variants of all of the above
-func subdomainHasSlur(subdomain string) bool {
+func HasSlur(subdomain string) bool {
 	lower := strings.ToLower(subdomain)
 	normalized := strings.NewReplacer(".", "", "-", "", "_", "").Replace(lower)
 	stripped := stripTrailingDigits(lower)

@@ -19,6 +19,7 @@ import (
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/notify"
+	"tangled.org/core/hostutil"
 	"tangled.org/core/log"
 	"tangled.org/core/orm"
 )
@@ -31,14 +32,14 @@ type Notifier struct {
 	client  *http.Client
 }
 
-func NewNotifier(database *db.DB, baseUrl string) *Notifier {
+func NewNotifier(database *db.DB, baseUrl string, dev bool) *Notifier {
 	return &Notifier{
 		db:      database,
 		baseUrl: baseUrl,
 		logger:  log.New("webhook-notifier"),
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		// user-supplied webhook URLs are untrusted: block internal address
+		// ranges and don't follow redirects to guard against SSRF.
+		client: hostutil.SafeClient(dev, 30*time.Second),
 	}
 }
 
@@ -196,6 +197,20 @@ func buildPullRequestPayload(action string, repo *models.Repo, pull *models.Pull
 		Repository:  buildWebhookRepository(repo),
 		Sender:      models.WebhookUser{Did: sender},
 	}
+}
+
+// Redeliver re-sends a stored delivery via the live send-and-record path,
+// signing with the webhook's current secret.
+func (w *Notifier) Redeliver(ctx context.Context, webhook models.Webhook, prev models.WebhookDelivery) {
+	// recover the repo full name (X-Tangled-Repo header) from the stored payload
+	var meta struct {
+		Repository struct {
+			FullName string `json:"full_name"`
+		} `json:"repository"`
+	}
+	_ = json.Unmarshal([]byte(prev.RequestBody), &meta)
+
+	w.sendWebhook(ctx, webhook, prev.Event, meta.Repository.FullName, "Tangled-Hook/retry", []byte(prev.RequestBody))
 }
 
 func (w *Notifier) activeWebhooksForEvent(repoDid string, event models.WebhookEvent) ([]models.Webhook, error) {

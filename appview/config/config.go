@@ -23,6 +23,11 @@ type CoreConfig struct {
 	Dev                     bool   `env:"DEV, default=false"`
 	DisallowedNicknamesFile string `env:"DISALLOWED_NICKNAMES_FILE"`
 
+	// origin allowed to call the xrpc endpoints from the browser (the svelte
+	// frontend). empty allows any origin, which is safe here since xrpc uses
+	// bearer service-auth tokens rather than cookies.
+	XrpcCorsOrigin string `env:"XRPC_CORS_ORIGIN"`
+
 	// temporarily, to add users to default knot and spindle
 	AppPassword string `env:"APP_PASSWORD"`
 

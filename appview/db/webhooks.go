@@ -283,6 +283,58 @@ func GetWebhookDeliveries(e Execer, webhookId int64, limit int) ([]models.Webhoo
 	return deliveries, nil
 }
 
+// GetWebhookDelivery returns a single delivery by its delivery_id (a uuid).
+func GetWebhookDelivery(e Execer, deliveryId string) (*models.WebhookDelivery, error) {
+	var d models.WebhookDelivery
+	var createdAt string
+	var success int
+	var responseCode sql.NullInt64
+	var responseBody sql.NullString
+
+	err := e.QueryRow(`
+		select
+			id,
+			webhook_id,
+			event,
+			delivery_id,
+			url,
+			request_body,
+			response_code,
+			response_body,
+			success,
+			created_at
+		from webhook_deliveries
+		where delivery_id = ?
+	`, deliveryId).Scan(
+		&d.Id,
+		&d.WebhookId,
+		&d.Event,
+		&d.DeliveryId,
+		&d.Url,
+		&d.RequestBody,
+		&responseCode,
+		&responseBody,
+		&success,
+		&createdAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	d.Success = success == 1
+	if responseCode.Valid {
+		d.ResponseCode = int(responseCode.Int64)
+	}
+	if responseBody.Valid {
+		d.ResponseBody = responseBody.String
+	}
+	if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
+		d.CreatedAt = t
+	}
+
+	return &d, nil
+}
+
 // GetWebhooksForRepo is a convenience function to get all webhooks for a repository
 func GetWebhooksForRepo(e Execer, repoDid string) ([]models.Webhook, error) {
 	return GetWebhooks(e, orm.FilterEq("repo_did", repoDid))

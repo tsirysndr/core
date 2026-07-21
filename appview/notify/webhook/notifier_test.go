@@ -224,7 +224,7 @@ func newNotifierTestEnv(t *testing.T, events []string) *notifierTestEnv {
 	}
 
 	return &notifierTestEnv{
-		notifier: NewNotifier(d, "https://tangled.org"),
+		notifier: NewNotifier(d, "https://tangled.org", true),
 		webhook:  webhook,
 		db:       d,
 		received: received,

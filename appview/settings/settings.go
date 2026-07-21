@@ -24,6 +24,7 @@ import (
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/sites"
+	"tangled.org/core/appview/state/userutil"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/tid"
 
@@ -145,7 +146,7 @@ func (s *Settings) claimSitesDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if subdomainHasSlur(subdomain) {
+	if userutil.HasSlur(subdomain) {
 		s.Pages.Notice(w, "settings-sites-error", "That subdomain is not allowed.")
 		return
 	}
