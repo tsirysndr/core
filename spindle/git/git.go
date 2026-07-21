@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -65,6 +66,16 @@ func Version() (*version.Version, error) {
 
 const WorkflowDir = `/.tangled/workflows`
 
+func runGit(ctx context.Context, args ...string) error {
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return nil
+}
+
 func SparseSyncGitRepo(ctx context.Context, cloneUri, path, rev string) error {
 	defer repoLocks.lock(path)()
 
@@ -88,21 +99,43 @@ func SparseSyncGitRepo(ctx context.Context, cloneUri, path, rev string) error {
 		rev = "HEAD"
 	}
 	if !exist {
-		if err := exec.CommandContext(ctx, "git", "clone", "--no-checkout", "--depth=1", "--filter=tree:0", "--revision="+rev, cloneUri, path).Run(); err != nil {
+		if err := runGit(ctx, "clone", "--no-checkout", "--depth=1", "--filter=tree:0", "--revision="+rev, cloneUri, path); err != nil {
 			return fmt.Errorf("git clone: %w", err)
 		}
-		if err := exec.CommandContext(ctx, "git", "-C", path, "sparse-checkout", "set", "--no-cone", WorkflowDir).Run(); err != nil {
+		if err := runGit(ctx, "-C", path, "sparse-checkout", "set", "--no-cone", WorkflowDir); err != nil {
 			return fmt.Errorf("git sparse-checkout set: %w", err)
 		}
 	} else {
-		if err := exec.CommandContext(ctx, "git", "-C", path, "fetch", "--depth=1", "--filter=tree:0", "origin", rev).Run(); err != nil {
-			return fmt.Errorf("git fetch: %w", err)
+		if err := runGit(ctx, "-C", path, "fetch", "--depth=1", "--filter=tree:0", "origin", rev); err != nil {
+			// remove any locks if the repo was left in a mid fetch state
+			removeStaleLocks(path)
+			if retryErr := runGit(ctx, "-C", path, "fetch", "--depth=1", "--filter=tree:0", "origin", rev); retryErr != nil {
+				// if still broken, wipe and refetch
+				if rmErr := os.RemoveAll(path); rmErr != nil {
+					return fmt.Errorf("git fetch: %w (cleanup failed: %v)", retryErr, rmErr)
+				}
+				if cloneErr := runGit(ctx, "clone", "--no-checkout", "--depth=1", "--filter=tree:0", "--revision="+rev, cloneUri, path); cloneErr != nil {
+					return fmt.Errorf("git fetch: %w (re-clone failed: %v)", retryErr, cloneErr)
+				}
+				if cloneErr := runGit(ctx, "-C", path, "sparse-checkout", "set", "--no-cone", WorkflowDir); cloneErr != nil {
+					return fmt.Errorf("git sparse-checkout set: %w", cloneErr)
+				}
+			}
 		}
 	}
-	if err := exec.CommandContext(ctx, "git", "-C", path, "checkout", rev).Run(); err != nil {
+	if err := runGit(ctx, "-C", path, "checkout", rev); err != nil {
 		return fmt.Errorf("git checkout: %w", err)
 	}
 	return nil
+}
+
+func removeStaleLocks(path string) {
+	// removes shallow.lock, index.lock, etc., all are stale locks
+	// worst case scenario we fall through to wipe and refetch anyway
+	locks, _ := filepath.Glob(filepath.Join(path, ".git", "*.lock"))
+	for _, lock := range locks {
+		os.Remove(lock)
+	}
 }
 
 func isDir(path string) (bool, error) {
