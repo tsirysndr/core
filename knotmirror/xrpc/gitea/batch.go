@@ -228,89 +228,73 @@ func ReadCommit(oid plumbing.Hash, reader io.Reader) (*object.Commit, error) {
 		ExtraHeaders: make(map[string][]byte),
 	}
 
-	payloadSB := new(strings.Builder)
-	signatureSB := new(strings.Builder)
-	messageSB := new(strings.Builder)
-	firstLine := true
-	message := false
-	pgpsig := false
-
-	bufReader, ok := reader.(*bufio.Reader)
-	if !ok {
-		bufReader = bufio.NewReader(reader)
-	}
-
-readLoop:
+	bufReader := bufio.NewReader(reader)
+	inHeader := true
+	var payloadSB, messageSB bytes.Buffer
+	var headerKey string
+	var headerValue []byte
 	for {
 		line, err := bufReader.ReadBytes('\n')
-		if err != nil {
-			if err == io.EOF {
-				if message {
-					_, _ = messageSB.Write(line)
-				}
-				_, _ = payloadSB.Write(line)
-				break readLoop
-			}
+		if err != nil && err != io.EOF {
 			return nil, err
 		}
-		if pgpsig {
-			if len(line) > 0 && line[0] == ' ' {
-				_, _ = signatureSB.Write(line[1:])
-				continue
-			}
-			pgpsig = false
+		if len(line) == 0 {
+			break
 		}
 
-		if !message {
-			// This is probably not correct but is copied from go-gits interpretation...
-			trimmed := bytes.TrimSpace(line)
-			if len(trimmed) == 0 {
-				message = true
-				_, _ = payloadSB.Write(line)
-				continue
-			}
-
-			k, data, _ := bytes.Cut(line, []byte{' '})
-
-			switch string(k) {
-			case "tree":
-				commit.TreeHash = plumbing.NewHash(string(data))
-				_, _ = payloadSB.Write(line)
-			case "parent":
-				commit.ParentHashes = append(commit.ParentHashes, plumbing.NewHash(string(data)))
-				_, _ = payloadSB.Write(line)
-			case "author":
-				commit.Author.Decode(data)
-				_, _ = payloadSB.Write(line)
-			case "committer":
-				commit.Committer.Decode(data)
-				_, _ = payloadSB.Write(line)
-			case "gpgsig":
-				fallthrough
-			case "gpgsig-sha256": // FIXME: no intertop, so only 1 exists at present.
-				_, _ = signatureSB.Write(data)
-				_ = signatureSB.WriteByte('\n')
-				pgpsig = true
-			default:
-				commit.ExtraHeaders[string(k)] = bytes.TrimSpace(data)
-				// If the first line is not any of the known headers, then it is probably the prefix added when git cat-file is called with --batch, and that is not part of the payload
-				if !firstLine {
-					// Every subsequent header field is added to the payload
-					_, _ = payloadSB.Write(line)
+		if inHeader {
+			inHeader = !(len(line) == 1 && line[0] == '\n') // a bare newline ends the header block
+			k, v, _ := bytes.Cut(line, []byte{' '})
+			if len(k) != 0 || !inHeader {
+				if headerKey != "" {
+					assignCommitHeader(commit, headerKey, headerValue)
 				}
+				headerKey = string(k) // also resets headerValue via the assignment below
+				headerValue = v
+			} else {
+				headerValue = append(headerValue, v...)
+			}
+			if headerKey != "gpgsig" && headerKey != "gpgsig-sha256" {
+				_, _ = payloadSB.Write(line)
 			}
 		} else {
 			_, _ = messageSB.Write(line)
 			_, _ = payloadSB.Write(line)
 		}
 
-		firstLine = false
+		if err == io.EOF {
+			break
+		}
 	}
+
 	commit.Message = messageSB.String()
 	// TODO: pass raw payload so we can verify it without reconstructing the payload
-	commit.PGPSignature = signatureSB.String()
-
+	// if commit.Signature != nil {
+	// 	commit.Signature.Payload = payloadSB.String()
+	// }
 	return commit, nil
+}
+
+func assignCommitHeader(commit *object.Commit, headerKey string, headerValue []byte) {
+	value := bytes.TrimSuffix(headerValue, []byte{'\n'})
+	switch headerKey {
+	case "tree":
+		commit.TreeHash = plumbing.NewHash(string(value))
+	case "parent":
+		commit.ParentHashes = append(commit.ParentHashes, plumbing.NewHash(string(value)))
+	case "author":
+		commit.Author.Decode(value)
+	case "committer":
+		commit.Committer.Decode(value)
+	case "gpgsig", "gpgsig-sha256":
+		// if there are duplicate "gpgsig" and "gpgsig-sha256" headers, then the signature must have already been invalid
+		// so we don't need to handle duplicate headers here
+		commit.PGPSignature = string(value)
+	case "mergetag":
+		commit.MergeTag = string(value)
+	default:
+		commit.ExtraHeaders[headerKey] = value
+	}
 }
 
 // ParseCatFileTreeLine reads an entry from a tree in a cat-file --batch stream
