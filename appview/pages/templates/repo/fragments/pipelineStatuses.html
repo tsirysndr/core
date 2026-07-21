@@ -1,0 +1,9 @@
+{{ define "repo/fragments/pipelineStatuses" }}
+  {{ $root := . }}
+  {{ range $sha, $pipeline := .Pipelines }}
+    {{ if gt (len $pipeline.Statuses) 0 }}
+      {{ $id := printf "pipeline-status-%s" $sha }}
+      <span id="{{ $id }}" hx-swap-oob="outerHTML:#{{ $id }}">{{ template "repo/pipelines/fragments/pipelineSymbolLong" (dict "RepoInfo" $root.RepoInfo "Pipeline" $pipeline) }}</span>
+    {{ end }}
+  {{ end }}
+{{ end }}

@@ -1,9 +1,0 @@
-{{ define "repo/fragments/commitPipelineStatuses" }}
-  {{ range $sha, $pipeline := .Pipelines }}
-    {{ if gt (len $pipeline.Statuses) 0 }}
-    <span id="commit-pipeline-{{ $sha }}" hx-swap-oob="outerHTML:#commit-pipeline-{{ $sha }}">
-      {{ template "repo/pipelines/fragments/pipelineSymbolLong" (dict "RepoInfo" $.RepoInfo "Pipeline" $pipeline) }}
-    </span>
-    {{ end }}
-  {{ end }}
-{{ end }}

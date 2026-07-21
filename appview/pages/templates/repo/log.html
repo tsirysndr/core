@@ -72,7 +72,7 @@
 
                 <!-- ci status -->
                 <span class="text-xs">
-                  <span id="commit-pipeline-{{ $commit.Hash.String }}"></span>
+                  <span id="pipeline-status-{{ $commit.Hash.String }}"></span>
                 </span>
             </div>
 
@@ -151,7 +151,7 @@
                     <span>{{ template "repo/fragments/shortTime" $commit.Committer.When }}</span>
 
                     <!-- ci status -->
-                    <span id="commit-pipeline-{{ $commit.Hash.String }}"></span>
+                    <span id="pipeline-status-{{ $commit.Hash.String }}"></span>
                 </div>
             </div>
         {{ end }}

@@ -1758,7 +1758,7 @@ type PipelineStatusesParams struct {
 }
 
 func (p *Pages) PipelineStatusesFragment(w io.Writer, params PipelineStatusesParams) error {
-	return p.executePlain("repo/fragments/commitPipelineStatuses", w, params)
+	return p.executePlain("repo/fragments/pipelineStatuses", w, params)
 }
 
 type WorkflowParams struct {

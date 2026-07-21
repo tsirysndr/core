@@ -14,9 +14,6 @@ import (
 	"tangled.org/core/orm"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
-	"tangled.org/core/hostutil"
-	"tangled.org/core/types"
 )
 
 func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
@@ -211,11 +208,9 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var stacks []models.Stack
-	var shas []string
 
 	pullMap := make(map[string]*models.Pull)
 	for _, p := range pulls {
-		shas = append(shas, p.LatestSha())
 		pullMap[p.AtUri().String()] = p
 	}
 
@@ -264,27 +259,6 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 		stacks = append(stacks, stack)
 	}
 
-	// commitId -> latest pipeline
-	pipelines := func(ctx context.Context, shas []string) map[string]types.Pipeline {
-		m := make(map[string]types.Pipeline)
-		if f.Spindle == "" {
-			return m
-		}
-		spindleUrl, err := hostutil.EnsureHttpScheme(f.Spindle)
-		if err != nil {
-			l.Error("invalid spindle host", "host", f.Spindle, "err", err)
-			return m
-		}
-		xrpcc := &indigoxrpc.Client{Host: spindleUrl}
-		out, err := tangled.CiQueryPipelines(ctx, xrpcc, shas, "", nil, 0, f.RepoDid)
-		if err != nil {
-			l.Error("failed to fetch pipelines", "err", err)
-			return m
-		}
-
-		return types.PipelinesByCommit(out.Pipelines)
-	}(r.Context(), shas)
-
 	labelDefs, err := db.GetLabelDefinitions(
 		s.db,
 		orm.FilterIn("at_uri", f.Labels),
@@ -326,7 +300,6 @@ func (s *Pulls) RepoPulls(w http.ResponseWriter, r *http.Request) {
 		FilterState:        filterState,
 		FilterQuery:        query.String(),
 		Stacks:             stacks,
-		Pipelines:          pipelines,
 		Page:               page,
 		PullCount:          totalPulls,
 		VouchRelationships: vouchRelationships,

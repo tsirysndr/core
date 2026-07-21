@@ -5,11 +5,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/appview/middleware"
+	"tangled.org/core/appview/pipelines"
 )
 
 func (s *Pulls) Router(mw *middleware.Middleware) http.Handler {
 	r := chi.NewRouter()
 	r.With(middleware.Paginate).Get("/", s.RepoPulls)
+	r.Get("/pipeline-statuses", pipelines.StatusesHandler(s.oauth, s.repoResolver, s.pages, s.logger))
 	r.With(middleware.AuthMiddleware(s.oauth)).Route("/new", func(r chi.Router) {
 		r.Get("/", s.NewPull)
 		r.Get("/refresh", s.RefreshCompose)

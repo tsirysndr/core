@@ -12,6 +12,7 @@ import (
 	"tangled.org/core/appview/commitverify"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/pages"
+	"tangled.org/core/appview/pipelines"
 	"tangled.org/core/types"
 	xrpcclient "tangled.org/core/xrpc/xrpcclient"
 
@@ -238,13 +239,13 @@ func (rp *Repo) Commit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := rp.oauth.GetMultiAccountUser(r)
-	pipelines, err := getPipelineStatuses(r.Context(), f, []string{result.Diff.Commit.This})
+	statuses, err := pipelines.FetchStatuses(r.Context(), f, []string{result.Diff.Commit.This})
 	if err != nil {
-		l.Error("failed to getPipelineStatuses", "err", err)
+		l.Error("failed to FetchStatuses", "err", err)
 		// non-fatal
 	}
 	var pipeline *types.Pipeline
-	if p, ok := pipelines[result.Diff.Commit.This]; ok {
+	if p, ok := statuses[result.Diff.Commit.This]; ok {
 		pipeline = &p
 	}
 

@@ -102,11 +102,7 @@
                       </span>
                     </span>
 
-                    {{ $pipeline := index $.Pipelines $topPR.LatestSha }}
-                    {{ if and $pipeline $pipeline.Id }}
-                      <span class="before:content-['·']"></span>
-                      {{ template "repo/pipelines/fragments/pipelineSymbol" (dict "Pipeline" $pipeline "ShortSummary" true) }}
-                    {{ end }}
+                    <span id="pipeline-status-{{ $topPR.LatestSha }}" class="contents"></span>
 
                     {{ $state := $topPR.Labels }}
                     {{ range $k, $d := $.LabelDefs }}
@@ -144,6 +140,14 @@
           "QueryParams" (queryParams "q" .FilterQuery)
       ) }}
     {{ end }}
+    {{ if and .Stacks .RepoInfo.Spindle }}
+    <div
+      class="hidden"
+      hx-get="/{{ .RepoInfo.FullName }}/pulls/pipeline-statuses?{{ range .Stacks }}{{ range . }}sha={{ .LatestSha }}&{{ end }}{{ end }}"
+      hx-trigger="load"
+      hx-swap="none"
+    ></div>
+    {{ end }}
 {{ end }}
 
 {{ define "stackedPullList" }}
@@ -155,7 +159,7 @@
       <a href="/{{ $root.RepoInfo.FullName }}/pulls/{{ $pull.PullId }}" class="no-underline hover:no-underline hover:bg-gray-100/25 hover:dark:bg-gray-700/25">
         <div class="flex gap-2 items-center px-6">
           <div class="flex-grow min-w-0 w-full py-2">
-            {{ template "repo/pulls/fragments/summarizedPullHeader" (list $pull $pipeline) }}
+            {{ template "repo/pulls/fragments/summarizedPullHeader" (list $pull $pipeline $root.RepoInfo) }}
           </div>
         </div>
       </a>

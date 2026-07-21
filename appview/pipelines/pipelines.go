@@ -14,6 +14,7 @@ import (
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/middleware"
+	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/reporesolver"
@@ -75,6 +76,69 @@ func New(
 		db:           db,
 		enforcer:     enforcer,
 		logger:       logger,
+	}
+}
+
+// FetchStatuses fetches pipelines from the repo's spindle, keyed by commit sha.
+func FetchStatuses(
+	ctx context.Context,
+	repo *models.Repo,
+	shas []string,
+) (map[string]types.Pipeline, error) {
+	m := make(map[string]types.Pipeline)
+
+	if len(shas) == 0 || repo.Spindle == "" {
+		return m, nil
+	}
+
+	spindleUrl, err := hostutil.EnsureHttpScheme(repo.Spindle)
+	if err != nil {
+		return m, nil
+	}
+
+	xrpcc := &indigoxrpc.Client{Host: spindleUrl}
+	out, err := tangled.CiQueryPipelines(ctx, xrpcc, shas, "", nil, 0, repo.RepoDid)
+	if err != nil {
+		return nil, err
+	}
+
+	return types.PipelinesByCommit(out.Pipelines), nil
+}
+
+// StatusesHandler renders the pipeline-statuses fragment for a set of commit
+// shas (given as repeated "sha" query params). It backs both the repo's
+// commit-statuses endpoint and the pull request's pipeline-statuses endpoint.
+func StatusesHandler(
+	oauth *oauth.OAuth,
+	repoResolver *reporesolver.RepoResolver,
+	pgs *pages.Pages,
+	logger *slog.Logger,
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		l := logger.With("handler", "StatusesHandler")
+
+		f, err := repoResolver.Resolve(r)
+		if err != nil {
+			l.Error("failed to resolve repo", "err", err)
+			return
+		}
+
+		user := oauth.GetMultiAccountUser(r)
+		shas := r.URL.Query()["sha"]
+
+		statuses, err := FetchStatuses(r.Context(), f, shas)
+		if err != nil {
+			l.Error("failed to fetch pipeline statuses", "err", err)
+			return
+		}
+
+		err = pgs.PipelineStatusesFragment(w, pages.PipelineStatusesParams{
+			RepoInfo:  repoResolver.GetRepoInfo(r, user),
+			Pipelines: statuses,
+		})
+		if err != nil {
+			l.Error("failed to render pipeline statuses", "err", err)
+		}
 	}
 }
 

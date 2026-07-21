@@ -5,12 +5,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/appview/middleware"
+	"tangled.org/core/appview/pipelines"
 )
 
 func (rp *Repo) Router(mw *middleware.Middleware) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", rp.Index)
-	r.Get("/commit-statuses", rp.PipelineStatuses)
+	r.Get("/commit-statuses", pipelines.StatusesHandler(rp.oauth, rp.repoResolver, rp.pages, rp.logger))
 	r.Get("/opengraph", rp.Opengraph)
 	r.Get("/feed.atom", rp.AtomFeed)
 	r.Get("/commits/{ref}", rp.Log)

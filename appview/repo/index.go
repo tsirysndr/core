@@ -23,6 +23,7 @@ import (
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/appview/pages/markup"
+	"tangled.org/core/appview/pipelines"
 	"tangled.org/core/types"
 
 	"github.com/go-chi/chi/v5"
@@ -122,7 +123,7 @@ func (rp *Repo) Index(w http.ResponseWriter, r *http.Request) {
 	}
 	pipelineCh := make(chan pipelineResult, 1)
 	go func() {
-		p, err := getPipelineStatuses(r.Context(), f, shas)
+		p, err := pipelines.FetchStatuses(r.Context(), f, shas)
 		pipelineCh <- pipelineResult{p, err}
 	}()
 
@@ -198,30 +199,6 @@ func (rp *Repo) Index(w http.ResponseWriter, r *http.Request) {
 		EmailToDid:      emailToDidMap,
 		VerifiedCommits: vc,
 		Languages:       languageInfo,
-	})
-}
-
-func (rp *Repo) PipelineStatuses(w http.ResponseWriter, r *http.Request) {
-	l := rp.logger.With("handler", "PipelineStatuses")
-
-	f, err := rp.repoResolver.Resolve(r)
-	if err != nil {
-		l.Error("failed to resolve repo", "err", err)
-		return
-	}
-
-	user := rp.oauth.GetMultiAccountUser(r)
-	shas := r.URL.Query()["sha"]
-
-	pipelines, err := getPipelineStatuses(r.Context(), f, shas)
-	if err != nil {
-		l.Error("failed to fetch pipeline statuses", "err", err)
-		return
-	}
-
-	rp.pages.PipelineStatusesFragment(w, pages.PipelineStatusesParams{
-		RepoInfo:  rp.repoResolver.GetRepoInfo(r, user),
-		Pipelines: pipelines,
 	})
 }
 

@@ -1,16 +1,11 @@
 package repo
 
 import (
-	"context"
 	"maps"
 	"slices"
 	"sort"
 	"strings"
 
-	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
-	"tangled.org/core/api/tangled"
-	"tangled.org/core/appview/models"
-	"tangled.org/core/hostutil"
 	"tangled.org/core/types"
 )
 
@@ -86,34 +81,4 @@ func balanceIndexItems(commitCount, branchCount, tagCount, fileCount int) (commi
 	}
 
 	return
-}
-
-// fetch pipelines from spindle and map by commit sha
-func getPipelineStatuses(
-	ctx context.Context,
-	repo *models.Repo,
-	shas []string,
-) (map[string]types.Pipeline, error) {
-	m := make(map[string]types.Pipeline)
-
-	if len(shas) == 0 {
-		return m, nil
-	}
-
-	if repo.Spindle == "" {
-		return m, nil
-	}
-
-	spindleUrl, err := hostutil.EnsureHttpScheme(repo.Spindle)
-	if err != nil {
-		return m, nil
-	}
-
-	xrpcc := &indigoxrpc.Client{Host: spindleUrl}
-	out, err := tangled.CiQueryPipelines(ctx, xrpcc, shas, "", nil, 0, repo.RepoDid)
-	if err != nil {
-		return nil, err
-	}
-
-	return types.PipelinesByCommit(out.Pipelines), nil
 }
