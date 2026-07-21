@@ -1,7 +1,7 @@
 {{ define "repo/fragments/shortTimeAgo" }}
   {{ $formatted := shortRelTimeFmt . }}
   {{ $content := printf "%s ago" $formatted }}
-  {{ if eq $formatted "now" }}
+  {{ if or (eq $formatted "now") (isFutureTime .) }}
     {{ $content = "now" }}
   {{ end }}
   {{ template "repo/fragments/timeWrapper" (dict "Time" . "Content" $content) }}
