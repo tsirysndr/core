@@ -308,8 +308,9 @@ func (rp *Repo) buildIndexResponse(ctx context.Context, repo *models.Repo, ref s
 	// if ref is still empty, this means the default branch is not set
 	if ref == "" {
 		return &types.RepoIndexResponse{
-			IsEmpty:  true,
-			Branches: branchesResp.Branches,
+			IsEmpty:       true,
+			Branches:      branchesResp.Branches,
+			TotalBranches: branchesResp.Total,
 		}, nil
 	}
 
@@ -412,7 +413,9 @@ func (rp *Repo) buildIndexResponse(ctx context.Context, repo *models.Repo, ref s
 		Commits:        logResp.Commits,
 		Files:          files,
 		Branches:       branchesResp.Branches,
+		TotalBranches:  branchesResp.Total,
 		Tags:           tagsResp.Tags,
+		TotalTags:      tagsResp.Total,
 		TotalCommits:   logResp.Total,
 	}
 
