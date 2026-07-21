@@ -1586,17 +1586,6 @@ func (p *Pages) PullActionsFragment(w io.Writer, params PullActionsParams) error
 	return p.executePlain("repo/pulls/fragments/pullActions", w, params)
 }
 
-type PullNewCommentParams struct {
-	BaseParams
-	RepoInfo    repoinfo.RepoInfo
-	Pull        *models.Pull
-	RoundNumber int
-}
-
-func (p *Pages) PullNewCommentFragment(w io.Writer, params PullNewCommentParams) error {
-	return p.executePlain("repo/pulls/fragments/pullNewComment", w, params)
-}
-
 type RepoCompareParams struct {
 	BaseParams
 	RepoInfo repoinfo.RepoInfo

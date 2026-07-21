@@ -37,19 +37,51 @@
     {{ if and (not $loading) $isLastRound }}
       {{ template "resubmitStatus" . }}
     {{ end }}
-    <div id="actions-{{$roundNumber}}" hx-target="this" class="flex flex-wrap gap-2 relative"
+    <input type="checkbox" id="comment-toggle-{{$roundNumber}}" class="peer/comment hidden"/>
+    <div class="hidden peer-checked/comment:flex flex-col gap-2">
+      <form
+        class="w-full flex flex-wrap gap-2 group"
+        hx-post="/comment"
+        hx-trigger="submit, keydown[(ctrlKey || metaKey) && key=='Enter'] from:find textarea"
+        hx-target="#pull-comments-{{ .RoundNumber }}"
+        hx-swap="beforeend"
+        hx-disabled-elt="find button[type='submit']"
+        hx-on::after-request="if(event.target === this && event.detail.successful) htmx.ajax('GET', '/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/round/{{ .RoundNumber }}/actions', {target: '#action-card-{{ .RoundNumber }}', swap: 'outerHTML'})"
+      >
+        <input name="subject-uri" type="hidden" value="{{ .Pull.AtUri }}">
+        <input name="pull-round-idx" type="hidden" value="{{ .RoundNumber }}">
+        {{ template "fragments/markdownEditor"
+          (dict "Name"        "body"
+                "BlobName"    "blob"
+                "Rows"        8
+                "Required"    true
+                "Placeholder" "Add to the discussion...") }}
+        <div class="flex flex-wrap items-stretch justify-end gap-2 text-gray-500 dark:text-gray-400 text-sm w-full">
+          <label title="Toggle comment form" for="comment-toggle-{{$roundNumber}}" class="btn-flat text-red-500 dark:text-red-400 flex gap-2 items-center">
+            {{ i "x" "size-4" }}
+            <span>Cancel</span>
+          </label>
+          <button
+            type="submit"
+            class="btn-create-flat flex items-center gap-2">
+              {{ i "reply" "size-4 inline group-[.htmx-request]:hidden" }}
+              {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
+              Reply
+          </button>
+        </div>
+        <div id="comment-error-{{ .RoundNumber }}" class="error"></div>
+      </form>
+    </div>
+    <div id="actions-{{$roundNumber}}" hx-target="this" class="peer-checked/comment:hidden flex flex-wrap gap-2 relative"
       {{ if $loading }}
         hx-swap="outerHTML"
       {{ end }}
     >
       {{ if .LoggedInUser }}
-      <button
-        hx-get="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/round/{{ $roundNumber }}/comment"
-        class="btn-flat p-2 flex items-center gap-2 no-underline hover:no-underline group">
-          {{ i "message-square-plus" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
-          {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-          Comment
-      </button>
+      <label title="Toggle comment form" for="comment-toggle-{{$roundNumber}}" class="btn-flat">
+        {{ i "message-square-plus" "size-4" }}
+        <span>Comment</span>
+      </label>
       {{ end }}
       {{ if and (not $loading) .BranchDeleteStatus }}
         <button
