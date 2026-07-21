@@ -110,6 +110,9 @@ func (x *Xrpc) listCommits(ctx context.Context, repo syntax.DID, ref string, lim
 				return nil, fmt.Errorf("unexpected type: %s for commit id: %s", typ, commitId)
 			}
 			c, err := gitea.ReadCommit(plumbing.NewHash(string(commitId)), io.LimitReader(br, size))
+			if err != nil {
+				return nil, err
+			}
 			if _, err := br.Discard(1); err != nil {
 				return nil, err
 			}

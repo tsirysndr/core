@@ -13,7 +13,9 @@ type RepoIndexResponse struct {
 	Commits        []Commit
 	Files          []NiceTree
 	Branches       []Branch
+	TotalBranches  int
 	Tags           []*TagReference
+	TotalTags      int
 	TotalCommits   int
 }
 
@@ -56,7 +58,8 @@ type Branch struct {
 }
 
 type RepoTagsResponse struct {
-	Tags []*TagReference `json:"tags,omitempty"`
+	Tags  []*TagReference `json:"tags,omitempty"`
+	Total int             `json:"total,omitempty"`
 }
 
 type RepoTagResponse struct {
@@ -65,6 +68,7 @@ type RepoTagResponse struct {
 
 type RepoBranchesResponse struct {
 	Branches []Branch `json:"branches,omitempty"`
+	Total    int      `json:"total,omitempty"`
 }
 
 type RepoBranchResponse struct {

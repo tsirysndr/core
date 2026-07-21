@@ -1,9 +1,11 @@
 package xrpc
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
+	"os/exec"
 	"strconv"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
@@ -60,7 +62,7 @@ func (x *Xrpc) ListTags(w http.ResponseWriter, r *http.Request) {
 func (x *Xrpc) listTags(ctx context.Context, repo syntax.DID, limit int, cursor int64) (*types.RepoTagsResponse, error) {
 	repoPath, err := x.makeRepoPath(ctx, repo)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve repo did: %w", err)
+		return nil, fmt.Errorf("resolving repo did: %w", err)
 	}
 
 	gr, err := git.PlainOpen(repoPath)
@@ -92,7 +94,24 @@ func (x *Xrpc) listTags(ctx context.Context, repo syntax.DID, limit int, cursor 
 		}
 	}
 
+	// -> total
+	total, err := func(repoPath string) (int, error) {
+		out, err := exec.Command("git", "-C", repoPath, "for-each-ref", "--format=%(refname)", "refs/tags").Output()
+		if err != nil {
+			return 0, err
+		}
+		out = bytes.TrimSpace(out)
+		if len(out) == 0 {
+			return 0, nil
+		}
+		return bytes.Count(out, []byte{'\n'}) + 1, nil
+	}(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("counting git tags: %w", err)
+	}
+
 	return &types.RepoTagsResponse{
-		Tags: rtags,
+		Tags:  rtags,
+		Total: total,
 	}, nil
 }
