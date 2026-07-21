@@ -112,6 +112,15 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 			repo_did  text not null,
 			commit_id text not null
 		);
+		create table if not exists jobs (
+			id integer primary key autoincrement,
+			repo_did text not null,
+			pipeline_id_knot text not null,
+			pipeline_id_rkey text not null,
+			source_repo text,
+			tpl text not null,
+			created_at integer not null default (strftime('%s', 'now'))
+		);
 
 		create table if not exists workflows (
 			id          integer primary key autoincrement,

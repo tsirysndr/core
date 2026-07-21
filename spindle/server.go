@@ -40,7 +40,6 @@ import (
 	"tangled.org/core/spindle/engines/nixery"
 	"tangled.org/core/spindle/git"
 	"tangled.org/core/spindle/models"
-	"tangled.org/core/spindle/queue"
 	"tangled.org/core/spindle/secrets"
 	"tangled.org/core/spindle/xrpc"
 	"tangled.org/core/tid"
@@ -64,7 +63,6 @@ type Spindle struct {
 	l        *slog.Logger
 	n        *notifier.Notifier
 	engs     map[string]models.Engine
-	jq       *queue.Queue
 	cfg      *config.Config
 	ks       *eventconsumer.Consumer
 	res      *idresolver.Resolver
@@ -73,6 +71,7 @@ type Spindle struct {
 	motd     []byte
 	motdMu   sync.RWMutex
 	rootCtx  context.Context
+	jobWake  chan struct{}
 }
 
 // New creates a new Spindle server with the provided configuration and engines.
@@ -116,9 +115,6 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB, engines map[string]m
 		return nil, fmt.Errorf("failed to run startup migrations: %w", err)
 	}
 
-	jq := queue.NewQueue(cfg.Server.QueueSize, cfg.Server.MaxJobCount)
-	logger.Info("initialized queue", "queueSize", cfg.Server.QueueSize, "numWorkers", cfg.Server.MaxJobCount)
-
 	collections := []string{
 		tangled.SpindleMemberNSID,
 		tangled.RepoNSID,
@@ -161,13 +157,13 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB, engines map[string]m
 		l:       logger,
 		n:       &n,
 		engs:    engines,
-		jq:      jq,
 		cfg:     cfg,
 		res:     resolver,
 		verify:  repoverify.New(resolver, cfg.Server.Dev),
 		vault:   vault,
 		motd:    defaultMotd,
 		rootCtx: ctx,
+		jobWake: make(chan struct{}, 1),
 	}
 
 	err = e.AddSpindle(rbacDomain)
@@ -236,11 +232,6 @@ func (s *Spindle) DB() *db.DB {
 	return s.db
 }
 
-// Queue returns the job queue instance.
-func (s *Spindle) Queue() *queue.Queue {
-	return s.jq
-}
-
 // Engines returns the map of available engines.
 func (s *Spindle) Engines() map[string]models.Engine {
 	return s.engs
@@ -278,8 +269,7 @@ func (s *Spindle) GetMotdContent() []byte {
 // Start starts the Spindle server (blocking).
 func (s *Spindle) Start(ctx context.Context) error {
 	// starts a job queue runner in the background
-	s.jq.Start()
-	defer s.jq.Stop()
+	s.StartJobWorkers(ctx)
 
 	// Stop vault token renewal if it implements Stopper
 	if stopper, ok := s.vault.(secrets.Stopper); ok {
@@ -758,98 +748,110 @@ func (s *Spindle) loadPipeline(ctx context.Context, repoUri, repoPath, rev strin
 	return rawPipeline, nil
 }
 
-// processPipeline enqueues the workflows in tpl.
-func (s *Spindle) processPipeline(repoDid syntax.DID, tpl tangled.Pipeline, pipelineId models.PipelineId, sourceRepo *tangled.Pipeline_TriggerRepo) error {
-	// derive security-relevant things like whether this run is trusted and can be passed
-	// secrets to from the original metadata.
-	pipelineEnv := models.PipelineEnvVarsForSource(tpl.TriggerMetadata, pipelineId, sourceRepo)
+func (s *Spindle) StartJobWorkers(ctx context.Context) {
+	for range s.cfg.Server.MaxJobCount {
+		go func() {
+			for {
+				job, err := s.db.DequeueJob(ctx)
+				if err != nil {
+					s.l.Error("failed to dequeue job", "error", err)
+				}
+				if job == nil {
+					// sleep until a new job wakes us
+					select {
+					case <-ctx.Done():
+						return
+					case <-s.jobWake:
+					}
+					continue
+				}
+				s.runJob(ctx, job)
+			}
+		}()
+	}
+}
+
+func (s *Spindle) runJob(ctx context.Context, job *db.JobRow) {
+	pipelineId := models.PipelineId{
+		Knot: job.PipelineIdKnot,
+		Rkey: job.PipelineIdRkey,
+	}
+
+	pipelineEnv := models.PipelineEnvVarsForSource(job.Tpl.TriggerMetadata, pipelineId, job.SourceRepo)
 	trustedSource := true
-	if tm := tpl.TriggerMetadata; tm != nil && tm.SourceRepo != nil &&
-		*tm.SourceRepo != "" && *tm.SourceRepo != repoDid.String() {
+	if tm := job.Tpl.TriggerMetadata; tm != nil && tm.SourceRepo != nil &&
+		*tm.SourceRepo != "" && *tm.SourceRepo != job.RepoDid {
 		trustedSource = false
 	}
 
-	// swap the repo with our sourceRepo if we are running a pipeline on a fork.
-	// the metadata stays the same. we check whether the repo is trusted above,
-	// so this only affects the clone URL.
-	initTpl := tpl
-	if sourceRepo != nil && tpl.TriggerMetadata != nil {
-		tm := *tpl.TriggerMetadata
-		tm.Repo = sourceRepo
+	initTpl := job.Tpl
+	if job.SourceRepo != nil && job.Tpl.TriggerMetadata != nil {
+		tm := *job.Tpl.TriggerMetadata
+		tm.Repo = job.SourceRepo
 		initTpl.TriggerMetadata = &tm
 	}
 
-	// filter & init workflows
 	workflows := make(map[models.Engine][]models.Workflow)
-	for _, w := range tpl.Workflows {
+	for _, w := range job.Tpl.Workflows {
 		if w == nil {
 			continue
 		}
 		eng, ok := s.engs[w.Engine]
 		if !ok {
-			err := s.db.StatusFailed(models.WorkflowId{
+			_ = s.db.StatusFailed(models.WorkflowId{
 				PipelineId: pipelineId,
 				Name:       w.Name,
 			}, fmt.Sprintf("unknown engine %#v", w.Engine), -1, s.n)
-			if err != nil {
-				return fmt.Errorf("db.StatusFailed: %w", err)
-			}
-
 			continue
 		}
 
 		ewf, err := eng.InitWorkflow(*w, initTpl)
 		if err != nil {
-			err = s.db.StatusFailed(models.WorkflowId{
+			_ = s.db.StatusFailed(models.WorkflowId{
 				PipelineId: pipelineId,
 				Name:       w.Name,
 			}, fmt.Sprintf("init workflow: %s", err), -1, s.n)
-			if err != nil {
-				return fmt.Errorf("db.StatusFailed: %w", err)
-			}
-
 			continue
 		}
 
-		// inject TANGLED_* env vars after InitWorkflow
-		// This prevents user-defined env vars from overriding them
 		if ewf.Environment == nil {
 			ewf.Environment = make(map[string]string)
 		}
 		maps.Copy(ewf.Environment, pipelineEnv)
-
 		workflows[eng] = append(workflows[eng], *ewf)
 	}
 
-	// enqueue pipeline
-	ok := s.jq.Enqueue(repoDid, queue.Job{
-		Run: func() error {
-			engine.StartWorkflows(log.SubLogger(s.l, "engine"), s.vault, s.cfg, s.db, s.n, s.rootCtx, &models.Pipeline{
-				RepoDid:       repoDid,
-				Workflows:     workflows,
-				TrustedSource: trustedSource,
-			}, pipelineId)
-			return nil
-		},
-		OnFail: func(jobError error) {
-			s.l.Error("pipeline run failed", "error", jobError)
-		},
-	})
-	if !ok {
-		return fmt.Errorf("failed to enqueue pipeline: queue is full")
-	}
-	s.l.Info("pipeline enqueued successfully", "id", pipelineId)
+	engine.StartWorkflows(log.SubLogger(s.l, "engine"), s.vault, s.cfg, s.db, s.n, s.rootCtx, &models.Pipeline{
+		RepoDid:       syntax.DID(job.RepoDid),
+		Workflows:     workflows,
+		TrustedSource: trustedSource,
+	}, pipelineId)
+}
 
-	// after successful enqueue, emit StatusPending for all workflows
-	for _, ewfs := range workflows {
-		for _, ewf := range ewfs {
-			err := s.db.StatusPending(models.WorkflowId{
-				PipelineId: pipelineId,
-				Name:       ewf.Name,
-			}, s.n)
-			if err != nil {
-				return fmt.Errorf("db.StatusPending: %w", err)
-			}
+// enqueues the workflows in tpl.
+func (s *Spindle) processPipeline(repoDid syntax.DID, tpl tangled.Pipeline, pipelineId models.PipelineId, sourceRepo *tangled.Pipeline_TriggerRepo) error {
+	err := s.db.EnqueueJob(s.rootCtx, repoDid.String(), pipelineId, sourceRepo, tpl)
+	if err != nil {
+		return fmt.Errorf("failed to enqueue durable job: %w", err)
+	}
+	s.l.Info("pipeline enqueued successfully to db", "id", pipelineId)
+
+	// wake up an idle worker to pick up more jobs if any
+	select {
+	case s.jobWake <- struct{}{}:
+	default:
+	}
+
+	// pipelines visible from now on, they are sitting in queue
+	for _, w := range tpl.Workflows {
+		if w == nil {
+			continue
+		}
+		if err := s.db.StatusPending(models.WorkflowId{
+			PipelineId: pipelineId,
+			Name:       w.Name,
+		}, s.n); err != nil {
+			return fmt.Errorf("db.StatusPending: %w", err)
 		}
 	}
 	return nil
