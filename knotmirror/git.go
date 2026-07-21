@@ -79,7 +79,7 @@ func (c *CliGitMirrorManager) clone(ctx context.Context, path, url string) error
 		}
 		return fmt.Errorf("running 'git clone --mirror %s': %w\n%s", url, err, msg)
 	}
-	writeCommitGraph(ctx, path, 30 * time.Second)
+	writeCommitGraph(ctx, path, 30*time.Second)
 	return nil
 }
 
@@ -132,7 +132,7 @@ func (c *CliGitMirrorManager) fetch(ctx context.Context, path, url string) error
 		}
 	}
 
-	writeCommitGraph(ctx, path, 3 * time.Second)
+	writeCommitGraph(ctx, path, 3*time.Second)
 	return nil
 }
 
