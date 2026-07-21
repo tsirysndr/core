@@ -91,6 +91,7 @@
     </div>
     {{ template "features1" . }}
     {{ template "features2" . }}
+    {{ template "features3" . }}
     {{ template "recentUpdates" . }}
     {{ if .ShowNewsletter }}{{ template "newsletter" . }}{{ end }}
   </div>
@@ -356,6 +357,61 @@
 {{ end }}
 
 {{ define "features2" }}
+  {{ $cardStyle := "w-full max-w-[548px] bg-white dark:bg-gray-800 rounded shadow-sm border border-gray-200 dark:border-gray-700 p-4 md:p-6 flex flex-col" }}
+  {{ $imgBoxStyle := "w-full rounded overflow-hidden outline outline-1 -outline-offset-1 outline-gray-200 dark:outline-gray-700 bg-gradient-to-b from-slate-50 to-slate-100 dark:from-gray-800 dark:to-gray-900 mb-6" }}
+  {{ $titleStyle := "text-2xl md:text-3xl font-bold mb-2 md:mb-3 text-gray-900 dark:text-gray-100" }}
+  {{ $descriptionStyle := "text-gray-600 dark:text-gray-300 leading-relaxed mb-6 flex-1" }}
+  {{ $linkStyle := "hover:no-underline inline-flex items-center gap-2 text-sm md:text-base text-black dark:text-white font-medium" }}
+
+  <div class="w-full max-w-screen-xl mx-auto px-2">
+    <div class="text-center mb-10 md:mb-16 space-y-3">
+      <h2 class="text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100">Tools to help you work</h2>
+      <p class="text-lg text-gray-600 dark:text-gray-400">For when the internet shows up in your inbox.</p>
+    </div>
+
+    <div class="flex flex-col md:flex-row items-center md:items-stretch md:justify-center gap-6">
+      <div class="{{ $cardStyle }}">
+        <div class="{{ $imgBoxStyle }}">
+          <picture class="block">
+            <source srcset="https://assets.tangled.network/home-page-vouching-dark.svg" media="(prefers-color-scheme: dark)" />
+            <img src="https://assets.tangled.network/home-page-vouching-light.svg" class="block w-full h-auto" alt="A globe with contributors carrying coloured trust shields, connected in a web" />
+          </picture>
+        </div>
+        <h3 class="{{ $titleStyle }}">A web of trust</h3>
+        <p class="{{ $descriptionStyle }}">
+          Vouch for the people you collaborate with. Trusted contributors carry
+          a green shield right where you interact with them, so you and your
+          circle can tell real work from LLM spam at a glance.
+        </p>
+        <a href="https://blog.tangled.org/vouching/" class="{{ $linkStyle }}">
+          Learn more
+          {{ i "arrow-right" "size-4" }}
+        </a>
+      </div>
+
+      <div class="{{ $cardStyle }}">
+        <div class="{{ $imgBoxStyle }}">
+          <picture class="block">
+            <source srcset="https://assets.tangled.network/home-page-focus-dark.svg" media="(prefers-color-scheme: dark)" />
+            <img src="https://assets.tangled.network/home-page-focus-light.svg" class="block w-full h-auto" alt="A focus-mode inbox stepping through issues, pull requests, and mentions one at a time" />
+          </picture>
+        </div>
+        <h3 class="{{ $titleStyle }}">Focus mode</h3>
+        <p class="{{ $descriptionStyle }}">
+          Focus Mode is a new way to clear notifications: lock in and knock out
+          your list one item at a time, with a task bar that nudges you to stay
+          on track until the queue is empty.
+        </p>
+        <a href="https://blog.tangled.org/newsletter-03/#focus-mode" class="{{ $linkStyle }}">
+          Learn more
+          {{ i "arrow-right" "size-4" }}
+        </a>
+      </div>
+    </div>
+  </div>
+{{ end }}
+
+{{ define "features3" }}
   {{ $cardStyle := "bg-white dark:bg-gray-800 rounded shadow-sm border border-gray-200 dark:border-gray-700" }}
   {{ $cardInnerStyle := "flex flex-row items-center gap-4 md:gap-6 p-4 md:p-6 md:pt-8 relative" }}
   {{ $contentStyle := "flex-1 flex flex-col" }}
