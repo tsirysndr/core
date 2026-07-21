@@ -18,6 +18,12 @@ import (
 
 type ProcessFunc func(ctx context.Context, source Source, event eventstream.Event) error
 
+// server sends a ping every 30s, so any silence longer than this means the
+// connection is half-open, dropped without a close frame.
+// so without a read deadline, ReadMessage only notices when the kernel's
+// tcp keepalive gives up.
+const livenessTimeout = 90 * time.Second
+
 type ConsumerConfig struct {
 	Sources           map[Source]struct{}
 	ProcessFunc       ProcessFunc
@@ -325,6 +331,18 @@ func (c *Consumer) runConnection(ctx context.Context, source Source) error {
 
 	c.logger.Info("connected", "source", source)
 
+	conn.SetReadDeadline(time.Now().Add(livenessTimeout))
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(livenessTimeout))
+	})
+	conn.SetPingHandler(func(appData string) error {
+		err := conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(10*time.Second))
+		if err != nil {
+			return err
+		}
+		return conn.SetReadDeadline(time.Now().Add(livenessTimeout))
+	})
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -337,6 +355,7 @@ func (c *Consumer) runConnection(ctx context.Context, source Source) error {
 			if msgType != websocket.TextMessage {
 				continue
 			}
+			conn.SetReadDeadline(time.Now().Add(livenessTimeout))
 			select {
 			case c.jobQueue <- job{source: source, message: msg}:
 			case <-ctx.Done():
