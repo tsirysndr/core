@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/go-git/go-git/v5"
 	gitconfig "github.com/go-git/go-git/v5/config"
@@ -77,6 +79,7 @@ func (c *CliGitMirrorManager) clone(ctx context.Context, path, url string) error
 		}
 		return fmt.Errorf("running 'git clone --mirror %s': %w\n%s", url, err, msg)
 	}
+	writeCommitGraph(ctx, path, 30 * time.Second)
 	return nil
 }
 
@@ -129,7 +132,16 @@ func (c *CliGitMirrorManager) fetch(ctx context.Context, path, url string) error
 		}
 	}
 
+	writeCommitGraph(ctx, path, 3 * time.Second)
 	return nil
+}
+
+func writeCommitGraph(ctx context.Context, path string, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	if err := exec.CommandContext(ctx, "git", "-C", path, "commit-graph", "write", "--reachable", "--split").Run(); err != nil {
+		log.Println("failed to run commit-graph", err)
+	}
 }
 
 func (c *CliGitMirrorManager) Sync(ctx context.Context, repo *models.Repo) error {
