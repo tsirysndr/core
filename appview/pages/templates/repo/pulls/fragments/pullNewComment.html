@@ -8,7 +8,7 @@
     hx-target="#pull-comments-{{ .RoundNumber }}"
     hx-swap="beforeend"
     hx-disabled-elt="find button[type='submit']"
-    hx-on::after-request="if(event.detail.successful) htmx.ajax('GET', '/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/round/{{ .RoundNumber }}/actions', {target: '#actions-{{ .RoundNumber }}', swap: 'outerHTML'})"
+    hx-on::after-request="if(event.target === this && event.detail.successful) htmx.ajax('GET', '/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/round/{{ .RoundNumber }}/actions', {target: '#action-card-{{ .RoundNumber }}', swap: 'outerHTML'})"
   >
     <input name="subject-uri" type="hidden" value="{{ .Pull.AtUri }}">
     <input name="pull-round-idx" type="hidden" value="{{ .RoundNumber }}">
@@ -37,7 +37,7 @@
     class="btn-flat text-red-500 dark:text-red-400 flex gap-2 items-center group"
     hx-get="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/round/{{ .RoundNumber }}/actions"
     hx-swap="outerHTML"
-    hx-target="#actions-{{.RoundNumber}}"
+    hx-target="#action-card-{{.RoundNumber}}"
   >
     {{ i "x" "w-4 h-4" }}
     <span>Cancel</span>
