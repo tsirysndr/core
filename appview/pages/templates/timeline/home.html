@@ -71,8 +71,24 @@
 
 {{ define "content" }}
   <div class="flex flex-col gap-20 md:gap-40 my-20 md:my-32">
-    {{ template "timeline/fragments/hero" . }}
-    {{ template "timeline/fragments/preview" . }}
+    <div class="relative">
+      <div class="hidden md:block absolute inset-0 pointer-events-none z-0 opacity-50 dark:opacity-5
+        [mask-image:linear-gradient(to_bottom,black_0%,black_60%,transparent_100%)]
+        [-webkit-mask-image:linear-gradient(to_bottom,black_0%,black_60%,transparent_100%)]
+        [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat]
+        [mask-size:100%_100%] [-webkit-mask-size:100%_100%]">
+        <div class="absolute inset-0 bg-slate-200 dark:bg-slate-400
+          [mask-image:url('https://assets.tangled.network/Rope.svg')]
+          [-webkit-mask-image:url('https://assets.tangled.network/Rope.svg')]
+          [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat]
+          [mask-position:10%_center] [-webkit-mask-position:10%_center]
+          [mask-size:contain] [-webkit-mask-size:contain]"></div>
+      </div>
+      <div class="relative z-10 flex flex-col gap-20 md:gap-40">
+        {{ template "timeline/fragments/hero" . }}
+        {{ template "timeline/fragments/preview" . }}
+      </div>
+    </div>
     {{ template "features1" . }}
     {{ template "features2" . }}
     {{ template "recentUpdates" . }}
@@ -106,7 +122,8 @@
 {{ block "mainLayout" . }}
   <div class="flex-grow relative">
     <div
-      class="absolute opacity-50 dark:opacity-5 inset-x-0 top-0 bottom-[-50px] md:bottom-[-150px] pointer-events-none bg-slate-200 dark:bg-slate-400 [mask-image:url('https://assets.tangled.network/yarn_ball_mask.svg')] [mask-repeat:no-repeat] [mask-position:right_bottom] [-webkit-mask-image:url('https://assets.tangled.network/yarn_ball_mask.svg')] [-webkit-mask-repeat:no-repeat] [-webkit-mask-position:right_bottom] w-full">
+      class="absolute opacity-50 dark:opacity-5 inset-x-0 top-0 bottom-[-50px] md:bottom-[-150px] pointer-events-none w-full [mask-image:linear-gradient(to_top,transparent_0px,black_250px)] [-webkit-mask-image:linear-gradient(to_top,transparent_0px,black_250px)] [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat] [mask-size:100%_100%] [-webkit-mask-size:100%_100%]">
+      <div class="absolute inset-0 bg-slate-200 dark:bg-slate-400 [mask-image:url('https://assets.tangled.network/yarn_ball_mask.svg')] [-webkit-mask-image:url('https://assets.tangled.network/yarn_ball_mask.svg')] [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat] [mask-position:right_bottom] [-webkit-mask-position:right_bottom] [mask-size:auto] [-webkit-mask-size:auto]"></div>
     </div>
     <div class="max-w-screen-xl mx-auto flex flex-col gap-4 relative z-10">
       {{ block "contentLayout" . }}
@@ -349,7 +366,20 @@
   {{ $iconCircleStyle := "rounded-full flex items-center justify-center border border-gray-200 dark:border-gray-700" }}
   {{ $linkDesktopStyle := "hover:no-underline hidden md:inline-flex absolute -bottom-10 -right-14 items-center gap-2 p-3 text-base btn" }}
 
-  <div class="w-full flex flex-col gap-6 md:gap-40 max-w-5xl mx-auto px-2">
+  <div class="relative">
+    <div class="hidden md:block absolute -top-32 -bottom-32 inset-x-0 pointer-events-none z-0 opacity-50 dark:opacity-5
+      [mask-image:linear-gradient(to_bottom,transparent_0%,black_15%,black_85%,transparent_100%)]
+      [-webkit-mask-image:linear-gradient(to_bottom,transparent_0%,black_15%,black_85%,transparent_100%)]
+      [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat]
+      [mask-size:100%_100%] [-webkit-mask-size:100%_100%]">
+      <div class="absolute inset-0 bg-slate-200 dark:bg-slate-400
+        [mask-image:url('https://assets.tangled.network/rope-2.svg')]
+        [-webkit-mask-image:url('https://assets.tangled.network/rope-2.svg')]
+        [mask-repeat:no-repeat] [-webkit-mask-repeat:no-repeat]
+        [mask-position:-400px_center] [-webkit-mask-position:-400px_center]
+        [mask-size:auto_200%] [-webkit-mask-size:auto_200%]"></div>
+    </div>
+  <div class="relative z-10 w-full flex flex-col gap-6 md:gap-40 max-w-5xl mx-auto px-2">
     <div class="{{ $cardStyle }} md:mr-32">
       <div class="{{ $cardInnerStyle }}">
         {{ $moreLink := "https://docs.tangled.org/quick-start-guide.html#login-or-sign-up" }}
@@ -444,6 +474,7 @@
         </div>
       </div>
     </div>
+  </div>
   </div>
 {{ end }}
 
