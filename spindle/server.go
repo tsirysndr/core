@@ -197,6 +197,8 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB, engines map[string]m
 	ccfg.Logger = log.SubLogger(logger, "eventconsumer")
 	ccfg.ProcessFunc = spindle.processKnotStream
 	ccfg.CursorStore = cursorStore
+	ccfg.WorkerCount = 16
+	ccfg.QueueSize = 200
 	if cfg.Server.Dev {
 		ccfg.RetryInterval = 5 * time.Second
 		ccfg.MaxRetryInterval = 10 * time.Second
@@ -444,10 +446,6 @@ func (s *Spindle) processKnotStream(ctx context.Context, src eventconsumer.Sourc
 		// NOTE: we are blindly trusting the knot that it will return only repos it own
 		repoCloneUri := s.newRepoCloneUrl(src.Host, repoDid)
 		repoPath := s.newRepoPath(repoDid)
-		if err := git.SparseSyncGitRepo(ctx, repoCloneUri, repoPath, event.NewSha); err != nil {
-			return fmt.Errorf("sync git repo: %w", err)
-		}
-		l.Info("synced git repo")
 
 		triggerRepo, err := s.buildTriggerRepo(ctx, repo)
 		if err != nil {
