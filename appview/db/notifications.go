@@ -551,8 +551,9 @@ func (d *DB) UpdateNotificationPreferences(ctx context.Context, prefs *models.No
 }
 
 // GetPendingEmailDigestRecipients returns DIDs of users who have email
-// notifications enabled, have a verified primary email, and have unemaileD
-// notifications older than olderThan for email-eligible notification types.
+// notifications enabled, have a verified primary email, and have unread,
+// unemailed notifications older than olderThan for email-eligible notification
+// types.
 func GetPendingEmailDigestRecipients(e Execer, olderThan time.Time) ([]string, error) {
 	placeholders := make([]string, len(models.EmailNotificationTypes))
 	args := []any{olderThan.UTC().Format(time.RFC3339)}
@@ -568,6 +569,7 @@ func GetPendingEmailDigestRecipients(e Execer, olderThan time.Time) ([]string, e
 		JOIN notification_preferences np ON np.user_did = n.recipient_did
 		JOIN emails e ON e.did = n.recipient_did AND e.is_primary = 1 AND e.verified = 1
 		WHERE n.emailed = 0
+		  AND n.read = 0
 		  AND n.created < ?
 		  AND np.email_notifications = 1
 		  AND n.type IN (%s)
@@ -590,8 +592,9 @@ func GetPendingEmailDigestRecipients(e Execer, olderThan time.Time) ([]string, e
 	return dids, rows.Err()
 }
 
-// GetPendingNotificationsForEmailDigest returns all unemailed notifications
-// older than olderThan for email-eligible types for a specific recipient.
+// GetPendingNotificationsForEmailDigest returns all unread, unemailed
+// notifications older than olderThan for email-eligible types for a specific
+// recipient.
 func GetPendingNotificationsForEmailDigest(e Execer, recipientDid string, olderThan time.Time) ([]*models.NotificationWithEntity, error) {
 	placeholders := make([]string, len(models.EmailNotificationTypes))
 	args := []any{recipientDid, olderThan.UTC().Format(time.RFC3339)}
@@ -614,6 +617,7 @@ func GetPendingNotificationsForEmailDigest(e Execer, recipientDid string, olderT
 		LEFT JOIN pulls p ON n.pull_id = p.id
 		WHERE n.recipient_did = ?
 		  AND n.emailed = 0
+		  AND n.read = 0
 		  AND n.created < ?
 		  AND n.type IN (%s)
 		ORDER BY n.created DESC
