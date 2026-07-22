@@ -638,11 +638,11 @@ func qemuArgs(cfg qemuArgsConfig) ([]string, error) {
 		return nil, err
 	}
 
-	if err := addQEMUNetworkArgs(&b, cfg.Image.NetworkInterfaces); err != nil {
+	if err := addQEMUNetworkArgs(&b, cfg); err != nil {
 		return nil, err
 	}
 
-	b.Optf("-device", "vhost-vsock-device,guest-cid=%d", cfg.CID)
+	b.Optf("-device", "vhost-vsock-%s,guest-cid=%d", cfg.Image.RunnerConfig.VirtioTransport, cfg.CID)
 
 	if len(cfg.Image.RunnerConfig.ExtraArgs) > 0 {
 		b.Add(cfg.Image.RunnerConfig.ExtraArgs...)
@@ -667,7 +667,7 @@ func addQEMUMachineArgs(b *argBuilder, cfg qemuArgsConfig, uuid uuid.UUID) {
 	b.Opt("-kernel", cfg.Image.Kernel)
 	b.Opt("-initrd", cfg.Image.Initrd)
 
-	b.Opt("-device", "virtio-rng-device")
+	b.Optf("-device", "virtio-rng-%s", cfg.Image.RunnerConfig.VirtioTransport)
 
 	b.Optf("-smbios", "type=1,uuid=%s", uuid)
 	b.Opt("-serial", "file:"+cfg.SerialLogPath)
@@ -677,7 +677,7 @@ func addQEMUMachineArgs(b *argBuilder, cfg qemuArgsConfig, uuid uuid.UUID) {
 	// support serial itself for early kernel boot but thats OK.
 	if cfg.Image.RunnerConfig.Console == "hvc0" {
 		b.Optf("-chardev", "file,id=virtiocon0,path=%s,append=on", cfg.SerialLogPath)
-		b.Add("-device", "virtio-serial-device")
+		b.Optf("-device", "virtio-serial-%s", cfg.Image.RunnerConfig.VirtioTransport)
 		b.Opt("-device", "virtconsole,chardev=virtiocon0")
 	}
 	b.Opt("-display", "none")
@@ -699,7 +699,7 @@ func addQEMUStoreArgs(b *argBuilder, cfg qemuArgsConfig) {
 	drive.Add("aio=io_uring")
 
 	b.Opt("-drive", drive.String())
-	b.Opt("-device", "virtio-blk-device,drive=store")
+	b.Optf("-device", "virtio-blk-%s,drive=store", cfg.Image.RunnerConfig.VirtioTransport)
 }
 
 func addQEMUKVMArgs(b *argBuilder, image ImageSpec) {
@@ -730,14 +730,14 @@ func addQEMUVolumeArgs(b *argBuilder, cfg qemuArgsConfig) error {
 		drive.Add("cache=none")
 
 		b.Opt("-drive", drive.String())
-		b.Optf("-device", "virtio-blk-device,drive=%s", driveID)
+		b.Optf("-device", "virtio-blk-%s,drive=%s", cfg.Image.RunnerConfig.VirtioTransport, driveID)
 	}
 
 	return nil
 }
 
-func addQEMUNetworkArgs(b *argBuilder, interfaces []NetworkInterface) error {
-	for _, networkInterface := range interfaces {
+func addQEMUNetworkArgs(b *argBuilder, cfg qemuArgsConfig) error {
+	for _, networkInterface := range cfg.Image.NetworkInterfaces {
 		if networkInterface.Type != "slirp4netns" {
 			return fmt.Errorf("unsupported microvm network interface type %q", networkInterface.Type)
 		}
@@ -752,8 +752,8 @@ func addQEMUNetworkArgs(b *argBuilder, interfaces []NetworkInterface) error {
 
 		b.Opt("-netdev", netdevOpts.String())
 		b.Optf(
-			"-device", "virtio-net-device,netdev=%s,mac=%s",
-			networkInterface.ID, networkInterface.MAC,
+			"-device", "virtio-net-%s,netdev=%s,mac=%s",
+			cfg.Image.RunnerConfig.VirtioTransport, networkInterface.ID, networkInterface.MAC,
 		)
 	}
 

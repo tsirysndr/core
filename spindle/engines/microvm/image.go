@@ -16,6 +16,15 @@ type RunnerConfig struct {
 	Machine   string   `json:"machine,omitempty"`
 	Console   string   `json:"console,omitempty"`
 	ExtraArgs []string `json:"extraArgs,omitempty"`
+
+	// Selects the virtio transport to pass to QEMU, as `-virtio-DEVICE-TRANSPORT`.
+	// One of:
+	// device: The microvm machine's preferred transport, MMIO:
+	//   https://www.qemu.org/docs/master/system/i386/microvm.html
+	//   Requires the virtio-mmio kernel module in the guest.
+	// pci: Use this if the guest kernel does not support MMIO (CONFIG_VIRTIO_MMIO).
+	//   Requires the virtio-pci kernel module in the guest.
+	VirtioTransport string `json:"virtioTransport,omitempty"`
 }
 
 type ImageSpec struct {
@@ -73,6 +82,9 @@ func LoadImageSpec(path string) (ImageSpec, error) {
 	spec.Kernel = resolveImageSpecPath(base, spec.Kernel)
 	spec.Initrd = resolveImageSpecPath(base, spec.Initrd)
 	spec.StoreDisk = resolveImageSpecPath(base, spec.StoreDisk)
+	if spec.RunnerConfig.VirtioTransport == "" {
+		spec.RunnerConfig.VirtioTransport = "device"
+	}
 
 	if err := spec.Validate(); err != nil {
 		return ImageSpec{}, err
@@ -99,6 +111,11 @@ func (s ImageSpec) Validate() error {
 	if s.RunnerType == "qemu" || s.RunnerType == "" {
 		if s.RunnerConfig.Machine == "" {
 			return fmt.Errorf("microvm image spec missing runnerConfig.machine for qemu runner")
+		}
+		if s.RunnerConfig.VirtioTransport != "" &&
+			s.RunnerConfig.VirtioTransport != "device" &&
+			s.RunnerConfig.VirtioTransport != "pci" {
+			return fmt.Errorf("microvm image spec virtioTransport unknown: %s", s.RunnerConfig.VirtioTransport)
 		}
 	}
 	if s.MemoryMiB <= 0 {
