@@ -145,7 +145,7 @@
 {{ define "features1" }}
   {{ $labelStyle := "normal-case cursor-pointer w-auto md:w-full p-4 md:px-6 rounded bg-white dark:bg-gray-800 font-medium text-base md:text-lg opacity-50 border border-gray-200 dark:border-gray-700 relative overflow-hidden" }}
   {{ $spanStyle := "z-10 items-center justify-between gap-2 w-full" }}
-  {{ $connectorStyle := "w-0.5 h-6 bg-gray-300 dark:bg-gray-600 opacity-0 mx-auto" }}
+  {{ $connectorStyle := "w-0.5 h-6 bg-gray-200 dark:bg-gray-700 opacity-0 mx-auto" }}
   {{ $contentStyle := "hidden bg-white dark:bg-gray-800 rounded shadow-sm border border-gray-200 dark:border-gray-700 grid-cols-1 animate-fadein" }}
   {{ $progressOverlayStyle := "absolute inset-0 bg-gray-600/10 dark:bg-gray-100/10 w-0 transition-none" }}
 
@@ -182,7 +182,7 @@
     <input type="radio" id="feature-spindles" name="feature" class="peer/spindles hidden" />
 
     <label for="feature-prs" class="{{ $labelStyle }} peer-checked/prs:opacity-100 peer-checked/prs:shadow-sm">
-      <span class="label-text hidden md:inline-flex {{ $spanStyle }}">A better way to review {{ i "git-pull-request" "size-5" }}</span>
+      <span class="label-text hidden md:inline-flex {{ $spanStyle }}">Stacked Pull-Requests {{ i "git-pull-request" "size-5" }}</span>
       <span class="icon-only inline-flex md:hidden {{ $spanStyle }}">{{ i "git-pull-request" "size-5" }}</span>
       <div class="{{ $progressOverlayStyle }}" data-progress="prs"></div>
     </label>
@@ -194,7 +194,7 @@
     </label>
 
     <label for="feature-spindles" class="{{ $labelStyle }} peer-checked/spindles:opacity-100 peer-checked/spindles:shadow-sm">
-      <span class="label-text hidden md:inline-flex {{ $spanStyle }}">Quick and easy CI {{ i "layers-2" "size-5" }}</span>
+      <span class="label-text hidden md:inline-flex {{ $spanStyle }}">MicroVM-based CI {{ i "layers-2" "size-5" }}</span>
       <span class="icon-only inline-flex md:hidden {{ $spanStyle }}">{{ i "layers-2" "size-5" }}</span>
       <div class="{{ $progressOverlayStyle }}" data-progress="spindles"></div>
     </label>
@@ -280,14 +280,12 @@
         <section class="space-y-4">
           <h1 class="{{ $titleStyle }}">Nix-powered CI</h1>
           <p class="text-gray-600 dark:text-gray-400">
-            Pick and choose dependencies for your CI pipelines from <a
-              href="https://docs.tangled.org/spindles.html#dependencies"
-              class="no-underline"><code>nixpkgs</code></a>, one of the biggest
-            package repositories.
+            Run your CI in NixOS powered microVMs. Build containers with Docker
+            or setup up services like Postgres, Redis.
             <br>
-            Support for Docker and MicroVM based runners coming soon!
+            Inputs are cached making subsequent runs <em>quick</em>.
           </p>
-          <a href="https://docs.tangled.org/spindles.html#pipelines" class="hover:no-underline inline-flex items-center gap-2 text-sm md:text-base text-black dark:text-white font-medium">
+          <a href="https://blog.tangled.org/spindle-microvm/" class="hover:no-underline inline-flex items-center gap-2 text-sm md:text-base text-black dark:text-white font-medium">
             Learn more
             {{ i "arrow-right" "size-4" }}
           </a>
