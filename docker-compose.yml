@@ -308,12 +308,12 @@ services:
     networks: [tngl]
 
   tailwind:
-    image: d3fk/tailwindcss:v3
+    build:
+      context: .
+      dockerfile: localinfra/tailwind.Dockerfile
     restart: unless-stopped
     working_dir: /build
     init: true
-    environment:
-      BROWSERSLIST_IGNORE_OLD_DATA: "true"
     volumes:
       - ./tailwind.config.js:/build/tailwind.config.js:ro
       - ./input.css:/build/input.css:ro
