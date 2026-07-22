@@ -25,7 +25,7 @@ import (
 
 const (
 	minGuestCID         = 3
-	vmCrashLogTailBytes = 4096
+	vmCrashLogTailBytes = 8192
 )
 
 func AllocateCID() (uint32, error) {

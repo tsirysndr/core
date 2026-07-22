@@ -337,6 +337,54 @@
       spindle-alpine-image-tarball = linuxPkgs.runCommand "spindle-alpine-image-tarball.tar.gz" {} ''
         tar -S -C ${self.packages.${system}.spindle-alpine-image} -h -czf $out .
       '';
+
+      spindle-almalinux10-image = let
+        branch = "10";
+        version = "${branch}.2";
+        arch = "x86_64";
+        goarch = "amd64";
+        kver = "6.12.0-211.34.1.el10_2.${arch}";
+
+        # Every time a new point release comes out, and the previous one is deprecated,
+        # those repos get moved to the vault URL. However, for CI purposes, it
+        # would be annoying if the image completely stopped working from a new
+        # release being available, so we just fall back to the vault URL until
+        # the RPMs can be updated.
+        makeRpmUrls = rpm: [
+          "https://repo.almalinux.org/almalinux/${version}/BaseOS/${arch}/os/Packages/${rpm}"
+          "https://vault.almalinux.org/almalinux/${version}/BaseOS/${arch}/os/Packages/${rpm}"
+        ];
+      in
+        linuxPkgs.callPackage ./nix/pkgs/spindle-almalinux-image.nix {
+          inherit arch kver spindle-image-helpers;
+          rootfs = linuxPkgs.fetchurl {
+            url = "https://github.com/AlmaLinux/container-images/raw/cd5582c41aaf7f695b2473264b322f4080066796/default/${goarch}/almalinux-${branch}-default-${goarch}.tar.xz";
+            hash = "sha256-60TIMFmaCoPv//XLAm6Cm/wkpmtbwH996zgM7CB/ypQ=";
+          };
+          kernel-modules-core = linuxPkgs.fetchurl {
+            urls = makeRpmUrls "kernel-modules-core-${kver}.rpm";
+            hash = "sha256-KYR/dnm/oCglQ4uvFTZlW6WBR1HBUNh/yS64PxyIQvk=";
+          };
+          kernel-modules = linuxPkgs.fetchurl {
+            urls = makeRpmUrls "kernel-modules-${kver}.rpm";
+            hash = "sha256-n2SPQuM+dmTQn4Ustkl9GyF8xH3godU0fjJO8oz4JDY=";
+          };
+          uki = linuxPkgs.fetchurl {
+            urls = makeRpmUrls "kernel-uki-virt-${kver}.rpm";
+            hash = "sha256-ds2+uSPpuHHoVyYaUrh8DSwWgVWYMijgGoneAE+JP9I=";
+          };
+          # doas-sudo-shim 0.1.x in the repos requires util-linux, which isn't in the
+          # container and is annoying to get inside, so just get it ourselves.
+          doas-sudo-shim-src = linuxPkgs.fetchFromGitHub {
+            owner = "jirutka";
+            repo = "doas-sudo-shim";
+            rev = "v0.2.0";
+            sha256 = "sha256-USSakVUzCbUY1DJLmDCiwdq/xjOwwnm3VtXBBeXeV1A=";
+          };
+        };
+      spindle-almalinux10-image-tarball = linuxPkgs.runCommand "spindle-almalinux10-image-tarball.tar.gz" {} ''
+        tar -S -C ${self.packages.${system}.spindle-almalinux10-image} -h -czf $out .
+      '';
     });
     defaultPackage = forAllSystems (system: self.packages.${system}.appview);
     devShells = forAllSystems (system: let

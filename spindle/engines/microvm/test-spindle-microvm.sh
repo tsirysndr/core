@@ -215,6 +215,12 @@ mkdir -p "$TEMP_DIR/alpine-image"
 tar -C "$TEMP_DIR/alpine-image" -xzf "$ALPINE_TARBALL_PATH"
 ALPINE_IMAGE_SPEC_JSON="$TEMP_DIR/alpine-image/spec.json"
 
+log "build almalinux10 microvm image tarball"
+AL10_TARBALL_PATH=$(nix build .#spindle-almalinux10-image-tarball --no-link --print-out-paths)
+mkdir -p "$TEMP_DIR/almalinux10-image"
+tar -C "$TEMP_DIR/almalinux10-image" -xzf "$AL10_TARBALL_PATH"
+AL10_IMAGE_SPEC_JSON="$TEMP_DIR/almalinux10-image/spec.json"
+
 kill_temp_dir_procs() {
     if [ -f "$TEMP_DIR/ncps.pid" ]; then
         kill "$(cat "$TEMP_DIR/ncps.pid")" 2>/dev/null || true
@@ -890,9 +896,12 @@ cache_has_path() {
     return 1
 }
 
-test_alpine_nix() {
+test_generic_distro_nix() {
+    local name="$1"
+    local spec="$2"
+
     local test_store_path
-    test_store_path=$(nix-build -E 'with import <nixpkgs> {}; writeText "alpine-nix-test" "hello from cache to alpine"' --no-out-link)
+    test_store_path=$(nix-build -E 'with import <nixpkgs> {}; writeText "'$name'-nix-test" "hello from cache to '$name'"' --no-out-link)
     nix copy --to "$CACHE_UPLOAD_URL?secret-key=$CACHE_SECRET_KEY_PATH" "$test_store_path"
 
     # exercise the full local-cache path: daemon connectivity, substitution,
@@ -900,10 +909,11 @@ test_alpine_nix() {
     # new flakes/nix-command (nix build) frontends. the two build derivations
     # use distinct names so we can confirm each got uploaded back to the cache.
     local out
-    out=$(run_vm --spec "$ALPINE_IMAGE_SPEC_JSON" --name "alpine-nix" --timeout "180s" --upload -- /bin/sh -lc '
+    out=$(run_vm --spec "$spec" --name "$name-nix" --timeout "180s" --upload -- /bin/sh -lc '
 set -eu
 export HOME=/workspace
 store_path=$1
+name=$2
 
 echo "nix_version=$(nix --version | head -n1)"
 { nix store info >/dev/null 2>&1 || nix store ping >/dev/null 2>&1; } && echo "daemon=ok"
@@ -922,7 +932,7 @@ export DEP="$store_path"
 cat > /workspace/new.nix <<NIXEOF
 let dep = builtins.storePath (builtins.getEnv "DEP"); in
 derivation {
-  name = "alpine-nix-build-new";
+  name = "$name-nix-build-new";
   system = "x86_64-linux";
   builder = "/bin/sh";
   # the sandbox only provides the sh builtin shell (no coreutils in PATH), so
@@ -938,26 +948,26 @@ echo "new_content=$(tr "\n" "|" < "$new_path")"
 # build via the classic CLI
 cat > /workspace/old.nix <<NIXEOF
 derivation {
-  name = "alpine-nix-build-old";
+  name = "$name-nix-build-old";
   system = "x86_64-linux";
   builder = "/bin/sh";
-  args = [ "-c" "echo built-on-alpine > \$out" ];
+  args = [ "-c" "echo built-on-$name > \$out" ];
 }
 NIXEOF
 old_path=$(nix-build /workspace/old.nix --no-out-link)
 echo "old_path=$old_path"
-' sh "$test_store_path") || return 1
+' sh "$test_store_path" "$name") || return 1
 
     check_needles "$out" \
-        "daemon=ok" "substituted=hello from cache to alpine" "path_info=ok" \
+        "daemon=ok" "substituted=hello from cache to $name" "path_info=ok" \
         "requisites=[1-9][0-9]*" "new_content=via-nix-build-with-dep" || return 1
 
     local clean new_path old_path
     clean=$(echo "$out" | strip_ansi)
-    new_path=$(echo "$clean" | grep -o 'new_path=/nix/store/[a-z0-9]*-alpine-nix-build-new' | cut -d= -f2)
-    old_path=$(echo "$clean" | grep -o 'old_path=/nix/store/[a-z0-9]*-alpine-nix-build-old' | cut -d= -f2)
+    new_path=$(echo "$clean" | grep -o "new_path=/nix/store/[a-z0-9]*-$name-nix-build-new" | cut -d= -f2)
+    old_path=$(echo "$clean" | grep -o "old_path=/nix/store/[a-z0-9]*-$name-nix-build-old" | cut -d= -f2)
     if [ -z "$new_path" ] || [ -z "$old_path" ]; then
-        echo "error: could not extract both built store paths from alpine guest output" >&2
+        echo "error: could not extract both built store paths from guest output" >&2
         return 1
     fi
     if ! cache_has_path "$new_path"; then
@@ -968,12 +978,81 @@ echo "old_path=$old_path"
         echo "error: nix-build (classic CLI) output was not uploaded to the cache" >&2
         return 1
     fi
-    echo "success: alpine guest substituted, queried the store db, built via both CLIs, and uploaded both outputs"
+    echo "success: guest substituted, queried the store db, built via both CLIs, and uploaded both outputs"
+}
+
+test_alpine_nix() {
+    test_generic_distro_nix alpine $ALPINE_IMAGE_SPEC_JSON
+}
+
+test_almalinux10() {
+    local hello_path
+    hello_path=$(nix-build -E 'with import <nixpkgs> {}; hello' --no-out-link)
+
+    local out
+    out=$(run_vm --spec "$AL10_IMAGE_SPEC_JSON" --name "almalinux10" --timeout "180s" --no-cache -- /bin/sh -lc '
+set -eu
+export HOME=/workspace
+hello_path=$1
+echo "release=$(cat /etc/almalinux-release)"
+echo "user=$(id -un)"
+git version
+bash -c "echo bash=\$BASH_VERSION"
+touch /workspace/write-test
+echo "workspace writable"
+git ls-remote https://tangled.org/@tangled.org/core HEAD >/dev/null
+echo "git over https ok"
+sudo dnf install -y make
+echo "dnf ok"
+# substitute a real package from cache.nixos.org over HTTPS and run it
+nix-store --realise "$hello_path" >/dev/null
+echo "ran=$("$hello_path/bin/hello")"
+' sh "$hello_path") || return 1
+
+    check_needles "$out" \
+        "release=" "user=spindle-workflow" "git version" "bash=" \
+        "workspace writable" "git over https ok" "dnf ok" "ran=Hello, world!" || return 1
+    echo "success: almalinux10 guest booted, ran as workflow user, wrote workspace, cloned + installed over the network, and substituted+ran a package from cache.nixos.org over HTTPS"
+}
+
+test_almalinux10_podman() {
+    # install podman via dnf and run a real container as the workflow user.
+    # rootless podman lives entirely in the writable workspace (storage + runroot
+    # under XDG dirs there), uses podman's default storage driver, and pulls over
+    # the guest network like the other alpine tests.
+    local out
+    out=$(run_vm --spec "$AL10_IMAGE_SPEC_JSON" --name "almalinux10-podman" --timeout "300s" --no-cache -- /bin/sh -lc '
+set -eu
+# no env setup here on purpose: shuttle seeds USER/LOGNAME/HOME/SHELL from the
+# workflow users passwd entry and provisions XDG_RUNTIME_DIR, so rootless podman
+# works out of the box. asserting those below doubles as a check on that.
+
+sudo dnf install -y podman
+echo "user=$(id -un) USER=$USER HOME=$HOME XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
+echo "newuidmap=$(command -v newuidmap)"
+echo "podman_version=$(podman --version)"
+
+podman info >/dev/null
+echo "storage_driver=$(podman info --format "{{.Store.GraphDriverName}}")"
+
+podman run --rm --network=host docker.io/library/alpine cat /etc/alpine-release | sed "s/^/container_release=/"
+podman run --rm --network=host docker.io/library/alpine echo container-ran-ok
+' sh) || return 1
+
+    check_needles "$out" \
+        "user=spindle-workflow USER=spindle-workflow HOME=/workspace XDG_RUNTIME_DIR=/run/user/970" \
+        "newuidmap=/" "podman_version=" \
+        "storage_driver=" "container_release=[0-9]+\." "container-ran-ok" || return 1
+    echo "success: almalinux10 guest installed podman via apk and pulled + ran a rootless container"
+}
+
+test_almalinux10_nix() {
+    test_generic_distro_nix almalinux10 $AL10_IMAGE_SPEC_JSON
 }
 
 test_oom_detection() {
     local label spec
-    for label in "alpine" "nixos"; do
+    for label in "almalinux10" "alpine" "nixos"; do
         echo "testing oom on $label..."
         local work_dir="$TEMP_DIR/work-oom-test-$label"
         mkdir -p "$work_dir"
@@ -982,14 +1061,18 @@ test_oom_detection() {
         if [ "$label" = "alpine" ]; then
             spec="$ALPINE_IMAGE_SPEC_JSON"
             cmd_args=(awk 'BEGIN { while(1) a[i++]=1 }')
+        elif [ "$label" = "almalinux10" ]; then
+            spec="$AL10_IMAGE_SPEC_JSON"
+            # intermediate generator required to avoid a boring MemoryError
+            cmd_args=(python3 -c 'list(i for i in range(999999999))')
         else
             spec="$IMAGE_SPEC_JSON"
             cmd_args=(/run/current-system/sw/bin/jq -n '[repeat(1)]')
         fi
 
-        local mem_mib=128
-        if [ "$label" = "nixos" ]; then
-            mem_mib=512
+        local mem_mib=512
+        if [ "$label" = "alpine" ]; then
+            mem_mib=128
         fi
 
         local args=(
@@ -1013,6 +1096,9 @@ test_oom_detection() {
 }
 
 TESTS=(
+    test_almalinux10
+    test_almalinux10_nix
+    test_almalinux10_podman
     test_alpine
     test_alpine_nix
     test_alpine_podman

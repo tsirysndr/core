@@ -28,5 +28,6 @@ extract_image() {
 
 extract_image spindle-nixos-image-tarball nixos-x86_64 nixos
 extract_image spindle-alpine-image-tarball alpine-x86_64 alpine
+extract_image spindle-almalinux10-image-tarball almalinux10-x86_64 almalinux10 almalinux
 
 echo "prepared spindle microVM images in $image_root"

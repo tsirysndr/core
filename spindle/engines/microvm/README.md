@@ -17,13 +17,13 @@ Currently two kinds of images are supported:
   `virtualisation`, `registry`, `caches` in the workflow file itself. The guest
   agent will build (or if it's cached, spindle will send the store path for
   realization) and activate it before any workflow steps are ran.
-- Non-NixOS: this is mainly just Alpine for now, but can be anything else.
+- Non-NixOS: this is just Alpine & AlmaLinux for now, but can be anything else.
   Workflow-level configuration like NixOS aren't supported while using these. If
   Nix exists inside the image (like in our Alpine image) it will still be able
   to make use of the spindle cache.
 
 (For testing, you can run `bash spindle/engines/microvm/test-spindle-microvm.sh`
-from repo root. These test the Alpine & NixOS, and features like if Docker
+from repo root. These test Alpine, AlmaLinux, and NixOS, and features like if Docker
 works, public internet is reachable, and so on.)
 
 ## Image builds
@@ -32,10 +32,10 @@ Image builds right now are done via Nix:
 
 - For NixOS, we use [microvm.nix](https://github.com/microvm-nix/microvm.nix),
   and layer our own configs on-top, see [here](../../../nix/microvm).
-- For Alpine we have a small-ish Nix definition that includes fetching the
-  kernel, initrd, kernel modules; setting up the init script that configures the
-  VM proper; copying dependencies (like `nix` or `git`) into a rootfs and
-  creating a squashfs from it.
+- For Alpine and AlmaLinux we have a small-ish Nix definition that includes
+  fetching the kernel, initrd, kernel modules; setting up the init system that
+  configures the VM proper; copying dependencies (like `nix` or `git`) into a
+  rootfs and creating a squashfs from it.
 
 This does not mean it *has* to be done via Nix, as long as your images are what
 spindle expects, they should work. That is:

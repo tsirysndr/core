@@ -1115,7 +1115,7 @@ There are two flavours of images:
   `registry` and `caches` fields below are all understood
   here, and the guest builds and activates that configuration
   before any of your steps run.
-- **Non-NixOS images** (e.g. `alpine`): there's no NixOS to
+- **Non-NixOS images** (e.g. `alpine`, `almalinux10`): there's no NixOS to
   configure, so the workflow-level config fields above have
   no effect. You still get a full machine to run steps in.
 
@@ -1600,6 +1600,8 @@ tarball you can copy to another host):
 nix build .#spindle-nixos-image
 # an Alpine image
 nix build .#spindle-alpine-image
+# an AlmaLinux 10 image
+nix build .#spindle-almalinux10-image
 ```
 
 #### Installing images
