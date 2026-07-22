@@ -24,8 +24,9 @@ You have {{.Count}} new notification(s) on Tangled:
 {{range .Groups}}- {{wrap 70 "  " .Header}}{{if .EntityRef}}
   {{wrap 70 "  " .EntityRef}}{{end}}
   {{.URL}}
-{{end}}
----
+{{end}}{{if .HasMore}}
+View more notifications: {{.NotificationsURL}}
+{{end}}---
 Manage notifications: {{.SettingsURL}}
 `
 
@@ -73,6 +74,11 @@ const digestHTMLTmpl = `<!DOCTYPE html>
                   </tr>
                   {{end}}
                 </table>
+                {{if .HasMore}}
+                <p style="font-size:14px;padding:16px 0 0 0;margin:0;">
+                  <a href="{{.NotificationsURL}}" style="color:#111827;text-decoration:underline;font-weight:400;">View more notifications</a>
+                </p>
+                {{end}}
                 <table align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation">
                   <tbody>
                     <tr>
@@ -189,12 +195,18 @@ func wordwrap(width int, indent, text string) string {
 	return b.String()
 }
 
+// digestMaxGroups caps how many notifications are itemized in a digest email;
+// beyond this a "View more" link points to the notifications page.
+const digestMaxGroups = 10
+
 type digestData struct {
-	RecipientHandle string
-	Count           int
-	Groups          []digestGroup
-	SettingsURL     string
-	AssetsURL       string
+	RecipientHandle  string
+	Count            int
+	Groups           []digestGroup
+	HasMore          bool
+	NotificationsURL string
+	SettingsURL      string
+	AssetsURL        string
 }
 
 // Dispatcher polls the notifications table and sends digest emails.
@@ -326,9 +338,16 @@ func (d *Dispatcher) sendDigest(ctx context.Context, recipientDid string, cutoff
 }
 
 func (d *Dispatcher) renderDigest(ctx context.Context, recipientHandle string, notifs []*models.NotificationWithEntity) (subject, text, html string, err error) {
-	groups := make([]digestGroup, 0, len(notifs))
+	count := len(notifs)
 
-	for _, n := range notifs {
+	shown := notifs
+	if len(shown) > digestMaxGroups {
+		shown = shown[:digestMaxGroups]
+	}
+
+	groups := make([]digestGroup, 0, len(shown))
+
+	for _, n := range shown {
 		actorHandle := n.ActorDid
 		if id, err2 := d.resolver.ResolveIdent(ctx, n.ActorDid); err2 == nil && !id.Handle.IsInvalidHandle() {
 			actorHandle = id.Handle.String()
@@ -354,16 +373,21 @@ func (d *Dispatcher) renderDigest(ctx context.Context, recipientHandle string, n
 		})
 	}
 
-	count := len(notifs)
 	data := digestData{
-		RecipientHandle: recipientHandle,
-		Count:           count,
-		Groups:          groups,
-		SettingsURL:     d.baseURL + "/settings/notifications",
-		AssetsURL:       d.assetsURL,
+		RecipientHandle:  recipientHandle,
+		Count:            count,
+		Groups:           groups,
+		HasMore:          count > digestMaxGroups,
+		NotificationsURL: d.baseURL + "/notifications",
+		SettingsURL:      d.baseURL + "/settings/notifications",
+		AssetsURL:        d.assetsURL,
 	}
 
-	subject = fmt.Sprintf("[%s] %d notification(s)", recipientHandle, count)
+	if count > digestMaxGroups {
+		subject = fmt.Sprintf("[%s] %d+ notifications", recipientHandle, digestMaxGroups)
+	} else {
+		subject = fmt.Sprintf("[%s] %d notification(s)", recipientHandle, count)
+	}
 
 	var textBuf bytes.Buffer
 	if err = d.textTmpl.Execute(&textBuf, data); err != nil {
