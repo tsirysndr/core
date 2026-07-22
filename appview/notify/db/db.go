@@ -555,8 +555,6 @@ func (n *databaseNotifier) notifyEvent(
 		return
 	}
 
-	recipients.Remove(actorDid)
-
 	// Apply subscription overrides for thread-activity events only.
 	// Mention and assignment events are targeted at specific users and should
 	// not be broadcast to all thread subscribers.
@@ -590,6 +588,8 @@ func (n *databaseNotifier) notifyEvent(
 			}
 		}
 	}
+
+	recipients.Remove(actorDid)
 
 	// Auto-subscribe the actor to this issue/pull when they interact with it.
 	// This happens outside the transaction since it’s best-effort.
