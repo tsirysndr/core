@@ -514,6 +514,27 @@ func GetNotificationPreferences(e Execer, filters ...orm.Filter) (map[syntax.DID
 }
 
 func (d *DB) UpdateNotificationPreferences(ctx context.Context, prefs *models.NotificationPreferences) error {
+	tx, err := d.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	var prevEmailEnabled bool
+	var hadPrefs bool
+	row := tx.QueryRowContext(ctx,
+		`SELECT email_notifications FROM notification_preferences WHERE user_did = ?`,
+		prefs.UserDid,
+	)
+	switch err := row.Scan(&prevEmailEnabled); err {
+	case nil:
+		hadPrefs = true
+	case sql.ErrNoRows:
+		hadPrefs = false
+	default:
+		return fmt.Errorf("failed to read existing preferences: %w", err)
+	}
+
 	query := `
 		INSERT OR REPLACE INTO notification_preferences
 		(user_did, repo_starred, issue_created, issue_commented, pull_created,
@@ -522,7 +543,7 @@ func (d *DB) UpdateNotificationPreferences(ctx context.Context, prefs *models.No
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
-	result, err := d.DB.ExecContext(ctx, query,
+	result, err := tx.ExecContext(ctx, query,
 		prefs.UserDid,
 		prefs.RepoStarred,
 		prefs.IssueCreated,
@@ -539,6 +560,15 @@ func (d *DB) UpdateNotificationPreferences(ctx context.Context, prefs *models.No
 		return fmt.Errorf("failed to update notification preferences: %w", err)
 	}
 
+	// on enabling email notifications (from disabled or from no prior setting),
+	// mark existing unemailed notifications as emailed so they aren't dispatched
+	// as a backlog on the next digest tick.
+	if prefs.EmailNotifications && (!hadPrefs || !prevEmailEnabled) {
+		if err := MarkAllNotificationsEmailed(tx, string(prefs.UserDid)); err != nil {
+			return fmt.Errorf("failed to suppress notification backlog: %w", err)
+		}
+	}
+
 	if prefs.ID == 0 {
 		id, err := result.LastInsertId()
 		if err != nil {
@@ -547,7 +577,7 @@ func (d *DB) UpdateNotificationPreferences(ctx context.Context, prefs *models.No
 		prefs.ID = id
 	}
 
-	return nil
+	return tx.Commit()
 }
 
 // GetPendingEmailDigestRecipients returns DIDs of users who have email
@@ -747,6 +777,17 @@ func MarkNotificationsEmailed(e Execer, ids []int64) error {
 		strings.Join(placeholders, ", "),
 	)
 	_, err := e.Exec(query, args...)
+	return err
+}
+
+// MarkAllNotificationsEmailed marks every currently-unemailed notification for
+// the recipient as emailed=1. Used when a user re-enables email notifications so
+// the pre-existing backlog isn't dispatched in one digest.
+func MarkAllNotificationsEmailed(e Execer, recipientDid string) error {
+	_, err := e.Exec(
+		`UPDATE notifications SET emailed = 1 WHERE recipient_did = ? AND emailed = 0`,
+		recipientDid,
+	)
 	return err
 }
 
