@@ -219,6 +219,13 @@
       packages = mkPackageSet pkgs;
       staticPackages = mkPackageSet pkgs.pkgsStatic;
       crossPackages = mkPackageSet pkgs.pkgsCross.gnu64.pkgsStatic;
+
+      spindle-image-helpers = let
+        shuttle = (mkPackageSet linuxPkgs).shuttle-static;
+      in
+        linuxPkgs.callPackage ./nix/pkgs/spindle-image-helpers.nix {
+          inherit shuttle;
+        };
     in {
       inherit
         (packages)
@@ -303,11 +310,9 @@
         version = "${branch}.0";
         arch = "x86_64";
         cdn = "https://dl-cdn.alpinelinux.org/alpine/v${branch}/releases/${arch}";
-
-        shuttle = (mkPackageSet linuxPkgs).shuttle-static;
       in
         linuxPkgs.callPackage ./nix/pkgs/spindle-alpine-image.nix {
-          inherit arch shuttle;
+          inherit arch spindle-image-helpers;
           repositories = [
             "https://dl-cdn.alpinelinux.org/alpine/v${branch}/main"
             "https://dl-cdn.alpinelinux.org/alpine/v${branch}/community"
