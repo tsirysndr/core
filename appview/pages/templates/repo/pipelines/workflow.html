@@ -112,7 +112,7 @@
 {{ define "sidebarActions" }}
   <div class="mt-auto flex w-full flex-col gap-2">
     {{ with .SSHLogCommand }}
-    <button type="button" class="btn flex h-9 min-h-9 w-full items-center justify-center gap-1.5 px-2 py-2 text-sm leading-5" onclick="navigator.clipboard.writeText({{ printf "%q" . }})" title="{{ . }}">
+    <button type="button" class="btn flex h-9 min-h-9 w-full items-center justify-center gap-1.5 px-2 py-2 text-sm leading-5" onclick="const button=this; navigator.clipboard.writeText(button.title).then(() => { const content=button.innerHTML; button.textContent='Copied!'; setTimeout(() => button.innerHTML=content, 1500) })" title="{{ . }}">
       {{ i "copy" "size-4" }} Watch logs via SSH
     </button>
     {{ end }}
