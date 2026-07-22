@@ -122,6 +122,12 @@ func TestCacheProxyJoinsSubpathQueryAndAuth(t *testing.T) {
 	}
 }
 
+func TestCacheProxyGuardAllowsPublicIPv4(t *testing.T) {
+	if err := refuseSpecialPurposeAddrs("tcp", "104.26.13.82:443", nil); err != nil {
+		t.Fatalf("public IPv4 address was blocked: %v", err)
+	}
+}
+
 func TestCacheProxyGuardedUpstreamCannotReachBlockedRanges(t *testing.T) {
 	// httptest listens on 127.0.0.1, which is in the blocked ranges; reaching
 	// it would mean a workflow-defined cache can hit the host's loopback

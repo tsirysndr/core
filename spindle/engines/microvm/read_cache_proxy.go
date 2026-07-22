@@ -252,7 +252,16 @@ func refuseSpecialPurposeAddrs(network, address string, _ syscall.RawConn) error
 	if ip == nil {
 		return fmt.Errorf("refusing to dial non-IP address %q", host)
 	}
+	bits := 128
+	if ip4 := ip.To4(); ip4 != nil {
+		ip = ip4
+		bits = 32
+	}
 	for _, ipnet := range blockedNamespaceNets {
+		_, blockedBits := ipnet.Mask.Size()
+		if blockedBits != bits {
+			continue
+		}
 		if ipnet.Contains(ip) {
 			return fmt.Errorf("refusing to dial %s: %s is blocked for workflow caches", ip, ipnet)
 		}
