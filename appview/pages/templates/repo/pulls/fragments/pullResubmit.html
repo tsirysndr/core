@@ -18,6 +18,7 @@
         <form 
           hx-post="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}/resubmit" 
           hx-swap="none"
+          hx-include="this"
           class="w-full flex flex-wrap gap-2"
           hx-indicator="#resubmit-spinner"
         >
