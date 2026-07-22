@@ -43,6 +43,8 @@ in {
       ];
       before = ["nix-daemon.service"];
       restartIfChanged = false;
+      # nix flakes require git
+      path = [pkgs.gitMinimal];
       environment = {
         NIX_PATH = lib.concatStringsSep ":" config.nix.nixPath;
       };
