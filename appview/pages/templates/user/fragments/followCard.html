@@ -17,10 +17,9 @@
         {{ end }}
         <div class="text-sm flex items-center gap-2 my-2 overflow-hidden text-ellipsis whitespace-nowrap max-w-full">
           <span class="flex-shrink-0">{{ i "users" "size-4" }}</span>
-          <span id="followers" data-followers-did="{{ .UserDid }}"><a href="/{{ $userIdent }}?tab=followers">{{
-              .FollowersCount }} followers</a></span>
+          <span id="followers" data-followers-did="{{ .UserDid }}"><a href="/{{ $userIdent }}?tab=followers">{{ scaleFmt .FollowersCount }} followers</a></span>
           <span class="select-none after:content-['·']"></span>
-          <span id="following"><a href="/{{ $userIdent }}?tab=following">{{ .FollowingCount }} following</a></span>
+          <span id="following"><a href="/{{ $userIdent }}?tab=following">{{ scaleFmt .FollowingCount }} following</a></span>
         </div>
       </div>
       {{ if and .LoggedInUser (ne .FollowStatus.String "IsSelf") }}
