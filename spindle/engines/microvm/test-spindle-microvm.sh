@@ -139,7 +139,7 @@ print_summary() {
 
 skip_test() {
     echo "skipped: $*"
-    return "$SKIP_TEST_RC"
+    exit "$SKIP_TEST_RC"
 }
 
 host_is_nixos() {
@@ -391,7 +391,7 @@ run_test_job() {
     log "[$name] start (vsock port $port)"
 
     local status="Passed"
-    if "$func" > "$logfile" 2>&1; then
+    if ("$func") > "$logfile" 2>&1; then
         status="Passed"
     else
         local rc=$?
