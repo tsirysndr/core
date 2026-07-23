@@ -2476,6 +2476,17 @@ func Make(ctx context.Context, dbPath string) (*DB, error) {
 		return err
 	})
 
+	// gets rid of a few b-tree order bys in getissue queries and replaces them with search
+	orm.RunMigration(conn, logger, "add-issue-list-indexes", func(tx *sql.Tx) error {
+		_, err := tx.Exec(`
+			drop index if exists idx_issues_repo_did;
+			create index if not exists idx_issues_repo_created on issues(repo_did, created desc);
+			create index if not exists idx_comments_subject_uri on comments(subject_uri);
+			create index if not exists idx_label_ops_subject on label_ops(subject);
+		`)
+		return err
+	})
+
 	return &DB{
 		db,
 		logger,
