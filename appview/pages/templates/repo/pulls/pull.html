@@ -601,11 +601,7 @@
         <div id="pull-action-error" class="error empty:hidden"></div>
       {{ end }}
     </div>
-    <div hx-include="this" class="relative -ml-10 bg-gray-50 dark:bg-gray-900">
-      {{ if $root.LoggedInUser }}
-        <input name="subject-uri" type="hidden" value="{{ $root.Pull.AtUri }}">
-        <input name="pull-round-idx" type="hidden" value="{{ $item.RoundNumber }}">
-      {{ end }}
+    <div class="relative -ml-10 bg-gray-50 dark:bg-gray-900">
       {{ template "repo/pulls/fragments/pullActions"
         (dict
           "LoggedInUser" $root.LoggedInUser
