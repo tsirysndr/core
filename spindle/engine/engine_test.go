@@ -155,3 +155,112 @@ func TestStartWorkflows_CollisionRejection(t *testing.T) {
 		t.Fatalf("expected unique status to be success, got status=%v err=%v", statusUnique, err)
 	}
 }
+
+func TestCancelWorkflow_NotOverwritten(t *testing.T) {
+	t.Parallel()
+
+	testDB := newTestDB(t)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
+	stepStarted := make(chan struct{})
+	eng := &mockEngine{
+		runStepFunc: func(ctx context.Context, wid models.WorkflowId, idx int) error {
+			close(stepStarted)
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	}
+
+	pipelineId := models.PipelineId{
+		Knot: "test-knot",
+		Rkey: "test-rkey",
+	}
+
+	wid := models.WorkflowId{
+		PipelineId: pipelineId,
+		Name:       "cancel_test_job",
+	}
+
+	pipeline := &models.Pipeline{
+		Workflows: map[models.Engine][]models.Workflow{
+			eng: {
+				{
+					Name:  "cancel_test_job",
+					Steps: []models.Step{mockStep{name: "step1"}},
+				},
+			},
+		},
+	}
+
+	cfg := &config.Config{Server: config.Server{LogDir: t.TempDir()}}
+	doneChan := make(chan struct{})
+	go func() {
+		StartWorkflows(logger, nil, cfg, testDB, nil, context.Background(), pipeline, pipelineId)
+		close(doneChan)
+	}()
+
+	select {
+	case <-stepStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for step to start")
+	}
+
+	_ = testDB.StatusCancelled(wid, "User canceled the workflow", -1, nil)
+	CancelWorkflow(wid)
+
+	select {
+	case <-doneChan:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for StartWorkflows to complete")
+	}
+
+	// the runner writes StatusCancelled itself when it sees the canceled ctx
+	// the handler writes nothing for a live wf, so nothing lands after to overwrite it
+	st, err := testDB.GetStatus(wid)
+	if err != nil {
+		t.Fatalf("GetStatus error = %v", err)
+	}
+	if st.Status != string(models.StatusKindCancelled) {
+		t.Fatalf("expected status to be cancelled, got %s", st.Status)
+	}
+}
+
+func TestSetupTimeout_ReportsTimeout(t *testing.T) {
+	t.Parallel()
+
+	testDB := newTestDB(t)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
+	// setup blocks past the workflow timeout, so it should land as timeout not failed
+	eng := &mockEngine{
+		timeout: 100 * time.Millisecond,
+		setupFunc: func(ctx context.Context, wid models.WorkflowId) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	}
+
+	pipelineId := models.PipelineId{Knot: "test-knot", Rkey: "test-rkey"}
+	wid := models.WorkflowId{PipelineId: pipelineId, Name: "timeout_job"}
+
+	pipeline := &models.Pipeline{
+		Workflows: map[models.Engine][]models.Workflow{
+			eng: {{Name: "timeout_job", Steps: []models.Step{mockStep{name: "step1"}}}},
+		},
+	}
+
+	cfg := &config.Config{Server: config.Server{LogDir: t.TempDir()}}
+	StartWorkflows(logger, nil, cfg, testDB, nil, context.Background(), pipeline, pipelineId)
+
+	st, err := testDB.GetStatus(wid)
+	if err != nil {
+		t.Fatalf("GetStatus error = %v", err)
+	}
+	if st.Status != string(models.StatusKindTimeout) {
+		t.Fatalf("expected status to be timeout, got %s", st.Status)
+	}
+
+	if len(eng.runStepCalls) != 0 {
+		t.Fatalf("expected no steps to run after setup timeout, got %d", len(eng.runStepCalls))
+	}
+}

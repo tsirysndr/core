@@ -7,6 +7,7 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/spindle/engine"
 	"tangled.org/core/spindle/models"
 	xrpcerr "tangled.org/core/xrpc/errors"
 )
@@ -86,16 +87,23 @@ func (x *Xrpc) CancelPipeline(w http.ResponseWriter, r *http.Request) {
 		}
 		l.Debug("cancel pipeline", "wid", wid)
 
-		for _, engine := range x.Engines {
+		// dont cancel a workflow that already finished
+		st, err := x.Db.GetStatus(wid)
+		if err == nil && models.StatusKind(st.Status).IsFinish() {
+			continue
+		}
+
+		if err := x.Db.StatusCancelled(wid, "User canceled the workflow", -1, x.Notifier); err != nil {
+			fail(xrpcerr.GenericError(fmt.Errorf("failed to emit status cancelled: %w", err)))
+			return
+		}
+
+		engine.CancelWorkflow(wid)
+
+		for _, eng := range x.Engines {
 			l.Debug("destroying workflow", "wid", wid)
-			err := engine.DestroyWorkflow(r.Context(), wid)
-			if err != nil {
+			if err := eng.DestroyWorkflow(r.Context(), wid); err != nil {
 				fail(xrpcerr.GenericError(fmt.Errorf("failed to destroy workflow: %w", err)))
-				return
-			}
-			err = x.Db.StatusCancelled(wid, "User canceled the workflow", -1, x.Notifier)
-			if err != nil {
-				fail(xrpcerr.GenericError(fmt.Errorf("failed to emit status failed: %w", err)))
 				return
 			}
 		}

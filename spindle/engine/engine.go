@@ -16,9 +16,51 @@ import (
 )
 
 var (
-	ErrTimedOut       = errors.New("timed out")
-	ErrWorkflowFailed = errors.New("workflow failed")
+	ErrTimedOut         = errors.New("timed out")
+	ErrWorkflowFailed   = errors.New("workflow failed")
+	ErrWorkflowCanceled = errors.New("workflow canceled")
 )
+
+var (
+	activeMu      sync.Mutex
+	activeCancels = make(map[models.WorkflowId]context.CancelCauseFunc)
+)
+
+func CancelWorkflow(wid models.WorkflowId) {
+	activeMu.Lock()
+	cancel, ok := activeCancels[wid]
+	activeMu.Unlock()
+	if ok {
+		cancel(ErrWorkflowCanceled)
+	}
+}
+
+// user cancel, timeout is DeadlineExceeded
+func isCanceled(wfCtx context.Context) bool {
+	return errors.Is(context.Cause(wfCtx), ErrWorkflowCanceled)
+}
+
+// for when recording early wf cancellations
+func writeWfError(db *db.DB, n *notifier.Notifier, l *slog.Logger, wfCtx context.Context, wid models.WorkflowId, phase string, err error) {
+	l = l.With("wid", wid, "phase", phase)
+	switch {
+	case isCanceled(wfCtx):
+		l.Info("workflow canceled")
+		if dbErr := db.StatusCancelled(wid, "User canceled the workflow", -1, n); dbErr != nil {
+			l.Error("failed to set workflow status to cancelled", "err", dbErr)
+		}
+	case errors.Is(err, ErrTimedOut) || errors.Is(wfCtx.Err(), context.DeadlineExceeded):
+		l.Info("workflow timed out")
+		if dbErr := db.StatusTimeout(wid, n); dbErr != nil {
+			l.Error("failed to set workflow status to timeout", "err", dbErr)
+		}
+	default:
+		l.Error("workflow failed", "err", err)
+		if dbErr := db.StatusFailed(wid, err.Error(), -1, n); dbErr != nil {
+			l.Error("failed to set workflow status to failed", "err", dbErr)
+		}
+	}
+}
 
 type workflowFinalizer interface {
 	FinalizeWorkflow(ctx context.Context, wid models.WorkflowId, wf *models.Workflow, wfLogger models.WorkflowLogger) error
@@ -82,7 +124,10 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 			}
 
 			wg.Go(func() {
-
+				if st, err := db.GetStatus(wid); err == nil && models.StatusKind(st.Status).IsFinish() {
+					l.Info("skipping finished workflow", "wid", wid, "status", st.Status)
+					return
+				}
 				defer func() {
 					if s3 != nil {
 						logFile := filepath.Join(cfg.Server.LogDir, fmt.Sprintf("%s.log", wid.String()))
@@ -101,17 +146,28 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 					defer wfLogger.Close()
 				}
 
+				timeoutCtx, timeoutCancel := context.WithTimeout(ctx, workflowTimeout)
+				defer timeoutCancel()
+
+				wfCtx, userCancel := context.WithCancelCause(timeoutCtx)
+				defer userCancel(nil)
+
+				// allow wf context to be cancelled properly by manual cancel
+				activeMu.Lock()
+				activeCancels[wid] = userCancel
+				activeMu.Unlock()
+				defer func() {
+					activeMu.Lock()
+					delete(activeCancels, wid)
+					activeMu.Unlock()
+				}()
+
 				l.Info("waiting for slot", "wid", wid)
 				slot := WorkflowSlot(NoopSlot{})
 				if s, ok := eng.(WorkflowSlotter); ok {
-					var err error
-					slot, err = s.AcquireWorkflowSlot(ctx, wid, &w)
+					slot, err = s.AcquireWorkflowSlot(wfCtx, wid, &w)
 					if err != nil {
-						l.Error("failed to acquire slot", "wid", wid, "err", err)
-						dbErr := db.StatusFailed(wid, err.Error(), -1, n)
-						if dbErr != nil {
-							l.Error("failed to set workflow status to failed", "wid", wid, "err", dbErr)
-						}
+						writeWfError(db, n, l, wfCtx, wid, "waiting for slot", err)
 						return
 					}
 				}
@@ -123,39 +179,27 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 					return
 				}
 
-				err = eng.SetupWorkflow(ctx, wid, &w, wfLogger)
+				err = eng.SetupWorkflow(wfCtx, wid, &w, wfLogger)
 				if err != nil {
-					// TODO(winter): Should this always set StatusFailed?
-					// In the original, we only do in a subset of cases.
-					l.Error("setting up workflow", "wid", wid, "err", err)
-
-					destroyErr := eng.DestroyWorkflow(ctx, wid)
-					if destroyErr != nil {
-						l.Error("failed to destroy workflow after setup failure", "error", destroyErr)
+					if !isCanceled(wfCtx) {
+						if destroyErr := eng.DestroyWorkflow(ctx, wid); destroyErr != nil {
+							l.Error("failed to destroy workflow after setup failure", "error", destroyErr)
+						}
 					}
-
-					dbErr := db.StatusFailed(wid, err.Error(), -1, n)
-					if dbErr != nil {
-						l.Error("failed to set workflow status to failed", "wid", wid, "err", dbErr)
-					}
+					writeWfError(db, n, l, wfCtx, wid, "setting up workflow", err)
 					return
 				}
 				defer eng.DestroyWorkflow(ctx, wid)
 
-				ctx, cancel := context.WithTimeout(ctx, workflowTimeout)
-				defer cancel()
-
 				for stepIdx, step := range w.Steps {
-					// log start of step
 					if wfLogger != nil {
 						wfLogger.
 							ControlWriter(stepIdx, step, models.StepStatusStart).
 							Write([]byte{0})
 					}
 
-					err = eng.RunStep(ctx, wid, &w, stepIdx, allSecrets, wfLogger)
+					err = eng.RunStep(wfCtx, wid, &w, stepIdx, allSecrets, wfLogger)
 
-					// log end of step
 					if wfLogger != nil {
 						wfLogger.
 							ControlWriter(stepIdx, step, models.StepStatusEnd).
@@ -163,29 +207,21 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 					}
 
 					if err != nil {
-						if errors.Is(err, ErrTimedOut) {
-							dbErr := db.StatusTimeout(wid, n)
-							if dbErr != nil {
-								l.Error("failed to set workflow status to timeout", "wid", wid, "err", dbErr)
-							}
-						} else {
-							dbErr := db.StatusFailed(wid, err.Error(), -1, n)
-							if dbErr != nil {
-								l.Error("failed to set workflow status to failed", "wid", wid, "err", dbErr)
-							}
-						}
+						writeWfError(db, n, l, wfCtx, wid, "running step", err)
 						return
 					}
 				}
 
 				if finalizer, ok := eng.(workflowFinalizer); ok {
-					if err := finalizer.FinalizeWorkflow(ctx, wid, &w, wfLogger); err != nil {
-						dbErr := db.StatusFailed(wid, err.Error(), -1, n)
-						if dbErr != nil {
-							l.Error("failed to set workflow status to failed", "wid", wid, "err", dbErr)
-						}
+					if err := finalizer.FinalizeWorkflow(wfCtx, wid, &w, wfLogger); err != nil {
+						writeWfError(db, n, l, wfCtx, wid, "finalizing", err)
 						return
 					}
+				}
+
+				if isCanceled(wfCtx) {
+					writeWfError(db, n, l, wfCtx, wid, "before success", nil)
+					return
 				}
 
 				err = db.StatusSuccess(wid, n)
