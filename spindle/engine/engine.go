@@ -47,17 +47,41 @@ func StartWorkflows(l *slog.Logger, vault secrets.Manager, cfg *config.Config, d
 		l.Error("error creating s3 client", "err", err)
 	}
 
+	// wid.String() is lossy so two different names can map to the same key
+	// eg. "foo bar" and "foo-bar"...
+	wfCounts := make(map[string]int)
+	for _, wfs := range pipeline.Workflows {
+		for _, w := range wfs {
+			wid := models.WorkflowId{
+				PipelineId: pipelineId,
+				Name:       w.Name,
+			}
+			wfCounts[wid.String()]++
+		}
+	}
+
 	var wg sync.WaitGroup
 	for eng, wfs := range pipeline.Workflows {
 		workflowTimeout := eng.WorkflowTimeout()
 		l.Info("using workflow timeout", "timeout", workflowTimeout)
 
 		for _, w := range wfs {
-			wg.Go(func() {
-				wid := models.WorkflowId{
-					PipelineId: pipelineId,
-					Name:       w.Name,
+			w := w
+			wid := models.WorkflowId{
+				PipelineId: pipelineId,
+				Name:       w.Name,
+			}
+
+			if wfCounts[wid.String()] > 1 {
+				l.Warn("skipping workflow due to name collision", "wid", wid, "key", wid.String())
+				dbErr := db.StatusFailed(wid, fmt.Sprintf("colliding workflow name: %s; rename to something else", wid.String()), -1, n)
+				if dbErr != nil {
+					l.Error("failed to set workflow status to failed", "wid", wid, "err", dbErr)
 				}
+				continue
+			}
+
+			wg.Go(func() {
 
 				defer func() {
 					if s3 != nil {
