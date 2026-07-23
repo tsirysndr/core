@@ -102,15 +102,15 @@ func (o *OAuth) HandlePermanentAuthErr(ctx context.Context, did syntax.DID, sess
 
 func New(config *config.Config, ph posthog.Client, db *db.DB, enforcer *rbac.Enforcer, acl KnotMembership, res *idresolver.Resolver, logger *slog.Logger) (*OAuth, error) {
 	var oauthConfig oauth.ClientConfig
-	var clientUri string
+	clientUri := config.Core.BaseUrl()
+	callbackUri := clientUri + "/oauth/callback"
 	if config.Core.Dev {
-		clientUri = "http://127.0.0.1:3000"
-		callbackUri := clientUri + "/oauth/callback"
+		if config.Core.Hostname() == "localhost" {
+			logger.Warn("dev OAuth requires a loopback IP host; use 127.0.0.1 instead of 'localhost'", "host", config.Core.AppviewHost)
+		}
 		oauthConfig = oauth.NewLocalhostConfig(callbackUri, TangledScopes)
 	} else {
-		clientUri = "https://" + config.Core.AppviewHost
 		clientId := fmt.Sprintf("%s/oauth/client-metadata.json", clientUri)
-		callbackUri := clientUri + "/oauth/callback"
 		oauthConfig = oauth.NewPublicConfig(clientId, callbackUri, TangledScopes)
 	}
 

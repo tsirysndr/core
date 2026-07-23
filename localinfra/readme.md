@@ -51,3 +51,5 @@ To make that work:
     This writes the image directory under `out/localinfra-spindle-images`.
 5. `docker compose up`
 6. AppView will be running on `127.0.0.1:3000` with two test users: `alice.pds.tngl.boltless.dev` and `bob.pds.tngl.boltless.dev`. Both with password `password`.
+
+`TANGLED_APPVIEW_HOST` must be a loopback IP with the mapped port (`127.0.0.1:3000`), not `localhost`: atproto's dev OAuth client requires a loopback IP for the redirect URI. If you remap the published appview port, update `TANGLED_APPVIEW_HOST` in `docker-compose.yml` to match.

@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -38,6 +39,15 @@ func (c *CoreConfig) BaseUrl() string {
 		return "https://" + c.AppviewHost
 	}
 	return "http://" + c.AppviewHost
+}
+
+// Hostname returns AppviewHost with any port stripped, for consumers that need
+// a bare host (e.g. an ssh destination) rather than a URL authority.
+func (c *CoreConfig) Hostname() string {
+	if host, _, err := net.SplitHostPort(c.AppviewHost); err == nil {
+		return host
+	}
+	return c.AppviewHost
 }
 
 type OAuthConfig struct {

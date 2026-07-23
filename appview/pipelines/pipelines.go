@@ -305,7 +305,7 @@ func (p *Pipelines) sshLogCommand(repoDid, sha string) string {
 	if err != nil || port == "" {
 		return ""
 	}
-	return fmt.Sprintf("ssh -t -p %s %s %s %s", port, p.config.Core.AppviewHost, repoDid, sha)
+	return fmt.Sprintf("ssh -t -p %s %s %s %s", port, p.config.Core.Hostname(), repoDid, sha)
 }
 
 var upgrader = websocket.Upgrader{
