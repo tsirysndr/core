@@ -971,6 +971,47 @@ echo "old_path=$old_path"
     echo "success: alpine guest substituted, queried the store db, built via both CLIs, and uploaded both outputs"
 }
 
+test_oom_detection() {
+    local label spec
+    for label in "alpine" "nixos"; do
+        echo "testing oom on $label..."
+        local work_dir="$TEMP_DIR/work-oom-test-$label"
+        mkdir -p "$work_dir"
+
+        local -a cmd_args
+        if [ "$label" = "alpine" ]; then
+            spec="$ALPINE_IMAGE_SPEC_JSON"
+            cmd_args=(awk 'BEGIN { while(1) a[i++]=1 }')
+        else
+            spec="$IMAGE_SPEC_JSON"
+            cmd_args=(/run/current-system/sw/bin/jq -n '[repeat(1)]')
+        fi
+
+        local mem_mib=128
+        if [ "$label" = "nixos" ]; then
+            mem_mib=512
+        fi
+
+        local args=(
+            --image-spec "$spec"
+            --work-dir "$work_dir"
+            --exec-timeout "45s"
+            --port "$SPINDLE_TEST_VSOCK_PORT"
+            --memory-mib "$mem_mib"
+        )
+
+        local out
+        if out=$(./spindle/spindle-microvm-run "${args[@]}" -- "${cmd_args[@]}" 2>&1); then
+            echo "error: expected spindle-microvm-run to fail on $label, but it exited 0" >&2
+            echo "output: $out" >&2
+            return 1
+        fi
+
+        check_needles "$out" "killed by guest kernel OOM" || return 1
+    done
+    echo "success: guest process OOM detected successfully on both alpine and nixos"
+}
+
 TESTS=(
     test_alpine
     test_alpine_nix
@@ -986,6 +1027,7 @@ TESTS=(
     test_activation_cache_substitution
     test_activation_docker
     test_activation_cached_realize
+    test_oom_detection
 )
 
 log "running ${#TESTS[@]} tests"

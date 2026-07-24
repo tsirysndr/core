@@ -304,6 +304,11 @@ func runMicroVMRunDev(ctx context.Context, cmd *cli.Command) error {
 		Stderr: os.Stderr,
 	})
 	if err != nil {
+		if detail := microvm.VMCrashLog(vm); detail != "" {
+			if parsedErr, ok := microvm.ParseCrashLog(detail); ok {
+				return fmt.Errorf("%w: %w", parsedErr, err)
+			}
+		}
 		return err
 	}
 

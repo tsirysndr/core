@@ -153,7 +153,26 @@ pub async fn run_capture(spec: Spec) -> Result<CaptureOutput> {
     })
 }
 
+fn read_oom_kill_count() -> u32 {
+    let content = match std::fs::read_to_string("/proc/vmstat") {
+        Ok(c) => c,
+        Err(_) => return 0,
+    };
+    for line in content.lines() {
+        let mut parts = line.split_whitespace();
+        if parts.next() == Some("oom_kill") {
+            if let Some(count_str) = parts.next() {
+                if let Ok(count) = count_str.parse::<u32>() {
+                    return count;
+                }
+            }
+        }
+    }
+    0
+}
+
 pub fn spawn_streaming(mut spec: Spec) -> Result<StreamingCommand> {
+    let oom_kill_before = read_oom_kill_count();
     let mut child = spawn(&mut spec)?;
     let stdout = child.stdout.take().context("stdout pipe missing")?;
     let stderr = child.stderr.take().context("stderr pipe missing")?;
@@ -164,7 +183,7 @@ pub fn spawn_streaming(mut spec: Spec) -> Result<StreamingCommand> {
     drop(events_tx);
 
     let exit = tokio::spawn(async move {
-        let exit = wait_child(&mut child, spec.timeout).await;
+        let exit = wait_child(&mut child, spec.timeout, oom_kill_before).await;
 
         // ensure all output is observed before exiting
         // this assumes children dont daemonize and hold onto the stdout/err
@@ -226,7 +245,11 @@ fn spawn(spec: &mut Spec) -> Result<Child> {
         .with_context(|| format!("spawn {}", display_os(&spec.program)))
 }
 
-async fn wait_child(child: &mut Child, timeout: Option<Duration>) -> ExitResult {
+async fn wait_child(
+    child: &mut Child,
+    timeout: Option<Duration>,
+    oom_kill_before: u32,
+) -> ExitResult {
     let wait = child.wait();
     let status = match timeout {
         Some(timeout) => match tokio::time::timeout(timeout, wait).await {
@@ -249,14 +272,25 @@ async fn wait_child(child: &mut Child, timeout: Option<Duration>) -> ExitResult 
     };
 
     match status {
-        Ok(status) => ExitResult {
-            exit_code: status
-                .code()
-                .or_else(|| status.signal().map(|signal| 128 + signal))
-                .unwrap_or(1),
-            error: None,
-            timed_out: false,
-        },
+        Ok(status) => {
+            let code = status.code();
+            let signal = status.signal();
+            let exit_code = code.or_else(|| signal.map(|sig| 128 + sig)).unwrap_or(1);
+
+            let mut error = None;
+            if signal == Some(9) {
+                let oom_kill_after = read_oom_kill_count();
+                if oom_kill_after > oom_kill_before {
+                    error = Some("guest process killed by guest kernel OOM".to_owned());
+                }
+            }
+
+            ExitResult {
+                exit_code,
+                error,
+                timed_out: false,
+            }
+        }
         Err(error) => ExitResult {
             exit_code: 1,
             error: Some(error.to_string()),

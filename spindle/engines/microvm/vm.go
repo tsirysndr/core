@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -285,7 +286,7 @@ func watchVMExit(ctx context.Context, vm VMHandle) (context.Context, *atomic.Boo
 	return watchCtx, exited, cancel
 }
 
-func vmCrashLog(vm VMHandle) string {
+func VMCrashLog(vm VMHandle) string {
 	if vm == nil {
 		return ""
 	}
@@ -372,4 +373,22 @@ func StartVM(ctx context.Context, cfg VMConfig, logger *slog.Logger) (VMHandle, 
 	}
 
 	return runner.Start(ctx, cfg, volumePaths, logger)
+}
+
+// checks serial log for ooms or kernel panic
+// this is very linux specific! but these strings are stable in linux itself, see mm/oom_kill.c and kernel/panic.c
+func ParseCrashLog(detail string) (error, bool) {
+	if strings.Contains(detail, "Out of memory:") {
+		// we can show process name where possible
+		re := regexp.MustCompile(`Out of memory: Killed process \d+ \(([^)]+)\)`)
+		matches := re.FindStringSubmatch(detail)
+		if len(matches) > 1 {
+			return fmt.Errorf("guest out of memory (process '%s' killed by guest kernel OOM)", matches[1]), true
+		}
+		return errors.New("guest out of memory (OOM killer invoked)"), true
+	}
+	if strings.Contains(detail, "Kernel panic") {
+		return errors.New("guest kernel panic"), true
+	}
+	return nil, false
 }

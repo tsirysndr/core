@@ -137,7 +137,7 @@ func StartQEMU(ctx context.Context, cfg QEMUConfig, logger *slog.Logger) (VMHand
 	var ok bool
 	defer func() {
 		if !ok {
-			if detail := vmCrashLog(handle); detail != "" {
+			if detail := VMCrashLog(handle); detail != "" {
 				logger.Error("microVM failed to start", "cid", handle.cid, "detail", detail)
 			}
 			_ = handle.Close()

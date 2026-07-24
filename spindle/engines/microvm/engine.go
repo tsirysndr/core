@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -248,7 +249,7 @@ func (e *Engine) SetupWorkflow(ctx context.Context, wid models.WorkflowId, wf *m
 		if setupDone {
 			return
 		}
-		if detail := vmCrashLog(state.VM); detail != "" {
+		if detail := VMCrashLog(state.VM); detail != "" {
 			l.Error("microVM setup failed", "detail", detail)
 		}
 		if err := e.cleanupState(context.Background(), wid, state); err != nil {
@@ -416,7 +417,7 @@ func (e *Engine) classifyStepError(ctx context.Context, wid models.WorkflowId, s
 		if oom {
 			reason = "microVM killed by OOM (cgroup memory limit exceeded)"
 		}
-		if detail := vmCrashLog(state.VM); detail != "" {
+		if detail := VMCrashLog(state.VM); detail != "" {
 			fmt.Fprintf(stderr, "%s:\n%s\n", reason, detail)
 			l.Error(reason, "oom", oom, "detail", detail)
 		} else {
@@ -434,13 +435,24 @@ func (e *Engine) classifyStepError(ctx context.Context, wid models.WorkflowId, s
 	// the agent connection dropped while qemu stayed up (eg. the guest kernel
 	// OOM-killed the agent or a guest panic), so surface serial logs, those
 	// will be more helpful.
-	if detail := vmCrashLog(state.VM); detail != "" {
+	var crashErr error
+	if detail := VMCrashLog(state.VM); detail != "" {
 		fmt.Fprintf(stderr, "step failed (%v):\n%s\n", err, detail)
 		l.Error("step failed", "error", err, "detail", detail)
+		if parsedErr, ok := ParseCrashLog(detail); ok {
+			crashErr = parsedErr
+		} else {
+			if strings.Contains(err.Error(), "guest exec error:") {
+				crashErr = err
+			} else {
+				crashErr = fmt.Errorf("guest agent connection lost: %w", err)
+			}
+		}
 	} else {
 		l.Error("step failed", "error", err)
+		crashErr = err
 	}
-	return fmt.Errorf("%s:\n%w", category, err)
+	return fmt.Errorf("%s:\n%w", category, crashErr)
 }
 
 func (e *Engine) activateConfig(ctx context.Context, wid models.WorkflowId, state *workflowState, step Step, out io.Writer) error {

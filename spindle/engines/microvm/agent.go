@@ -186,13 +186,15 @@ func (s *AgentSession) Exec(ctx context.Context, exec AgentExec) (int, error) {
 		} else if p := msg.BuiltPaths; p != nil {
 			// s.l.Debug("guest built paths", "reason", p.Reason, "count", len(p.Paths))
 		} else if p := msg.ExecExit; p != nil {
+			var err error
 			if p.Error != "" {
 				s.l.Warn("guest exec error", "id", msg.Id, "error", p.Error)
+				err = fmt.Errorf("guest exec error: %s", p.Error)
 			}
 			if p.TimedOut {
 				return int(p.ExitCode), errGuestTimedOut
 			}
-			return int(p.ExitCode), nil
+			return int(p.ExitCode), err
 		}
 	}
 }
