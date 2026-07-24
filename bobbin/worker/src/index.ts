@@ -16,9 +16,10 @@ export class BobbinContainer extends Container {
   // onActivityExpired() to keep the container alive indefinitely.
   sleepAfter = "24h";
 
-  onActivityExpired(): boolean {
-    // Keep the container running; bobbin's in-memory index is expensive to rebuild.
-    return true;
+  async onActivityExpired(): Promise<void> {
+    // Keep the container running; bobbin's in-memory index is expensive to
+    // rebuild. Renew the timeout instead of stopping so we're pinged again later.
+    this.renewActivityTimeout();
   }
 
   onError(error: Error) {
@@ -28,28 +29,62 @@ export class BobbinContainer extends Container {
 
 const INDEX = `This is bobbin, Tangled's stateless XRPC API service: https://tangled.org/tangled.org/core/tree/master/bobbin`;
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Max-Age": "86400",
+};
+
+function withCors(response: Response): Response {
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(CORS_HEADERS)) {
+    headers.set(name, value);
+  }
+
+  // Responses with these statuses must not carry a body; a non-null body
+  // crashes workerd, so null it out.
+  const body = [101, 204, 205, 304].includes(response.status)
+    ? null
+    : response.body;
+
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
+
     const url = new URL(request.url);
     if (url.pathname === "/" || url.pathname === "") {
-      return new Response(INDEX, { headers: { "Content-Type": "text/plain" } });
+      return withCors(
+        new Response(INDEX, { headers: { "Content-Type": "text/plain" } }),
+      );
     }
 
     const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
     const { success } = await env.RATE_LIMITER.limit({ key: ip });
     if (!success) {
-      return new Response(
-        JSON.stringify({
-          error: "RateLimitExceeded",
-          message: "too many requests, slow down",
-        }),
-        {
-          status: 429,
-          headers: {
-            "Content-Type": "application/json",
-            "Retry-After": "60",
+      return withCors(
+        new Response(
+          JSON.stringify({
+            error: "RateLimitExceeded",
+            message: "too many requests, slow down",
+          }),
+          {
+            status: 429,
+            headers: {
+              "Content-Type": "application/json",
+              "Retry-After": "60",
+            },
           },
-        },
+        ),
       );
     }
 
@@ -64,6 +99,12 @@ export default {
         },
       },
     });
-    return container.fetch(request);
+    const response = await container.fetch(request);
+    // A 101 is a protocol switch (e.g. WebSocket upgrade); return it untouched
+    // so we don't strip the connection off the response.
+    if (response.status === 101) {
+      return response;
+    }
+    return withCors(response);
   },
 } satisfies ExportedHandler<Env>;
