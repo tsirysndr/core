@@ -1,12 +1,14 @@
 package microvm
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 
 	cgroups "github.com/containerd/cgroups/v3"
 	"github.com/containerd/cgroups/v3/cgroup2"
@@ -64,6 +66,14 @@ func initCgroupParent(parent string, supervisorMemoryMinMiB int64, logger *slog.
 	}
 
 	if group != "/" {
+		if err := moveParentProcesses(root, supervisorMemoryMinMiB, logger); err != nil {
+			return nil, err
+		}
+	} else if err := probeRootSubtreeControl(mountpoint); err != nil {
+		if !errors.Is(err, syscall.EBUSY) {
+			return nil, fmt.Errorf("enable controllers in subtree_control of cgroup root %q: %w", mountpoint, err)
+		}
+		// populated namespace root, not the real root: vacate it too
 		if err := moveParentProcesses(root, supervisorMemoryMinMiB, logger); err != nil {
 			return nil, err
 		}
@@ -162,6 +172,13 @@ func (h *CgroupHandle) OOMKilled() bool {
 		return false
 	}
 	return metrics.MemoryEvents.OomKill > 0
+}
+
+// probeRootSubtreeControl enables the domain controllers the engine needs
+// in the "/" parent's subtree. this fails EBUSY at a populated cgroup
+// namespace root (no-internal-process constraint); the real root is exempt.
+func probeRootSubtreeControl(mountpoint string) error {
+	return os.WriteFile(filepath.Join(mountpoint, "cgroup.subtree_control"), []byte("+memory +pids"), 0)
 }
 
 func resolveCgroupParent(parent string) (string, string, error) {
