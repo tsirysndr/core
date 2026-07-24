@@ -23,17 +23,17 @@
       <div id="pulls" class="error"></div>
       <div class="flex gap-2 items-stretch">
         <a
-          class="btn flex items-center gap-2 no-underline hover:no-underline"
+          class="btn-flat text-red-500 dark:text-red-400 flex items-center gap-2 no-underline hover:no-underline"
           type="button"
           href="/{{ .RepoInfo.FullName }}/pulls/{{ .Pull.PullId }}"
         >
           {{ i "x" "size-4" }}
           Cancel
         </a>
-        <button type="submit" class="btn-create group flex items-center gap-2">
-          {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
-          {{ i "pencil" "size-4 inline group-[.htmx-request]:hidden" }}
-          edit
+        <button type="submit" class="btn-create-flat group flex items-center gap-2">
+          {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
+          {{ i "check" "size-4 inline group-[.htmx-request]:hidden" }}
+          Save
         </button>
       </div>
     </div>

@@ -26,8 +26,8 @@
     <div class="flex justify-between">
       <div id="issues" class="error"></div>
       <div class="flex gap-2 items-stretch">
-        <a 
-          class="btn-flat flex items-center gap-2 no-underline hover:no-underline"
+        <a
+          class="btn-flat text-red-500 dark:text-red-400 flex items-center gap-2 no-underline hover:no-underline"
           type="button"
           {{ if .Issue }}
             href="/{{ .RepoInfo.FullName }}/issues/{{ .Issue.IssueId }}"
@@ -41,11 +41,12 @@
         <button type="submit" class="btn-create-flat flex items-center gap-2">
           {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
           {{ if eq .Action "edit" }}
-            {{ i "pencil" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
+            {{ i "check" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
+            Save
           {{ else }}
             {{ i "circle-plus" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
+            Create issue
           {{ end }}
-          {{ .Action | capitalize }}
         </button>
       </div>
     </div>

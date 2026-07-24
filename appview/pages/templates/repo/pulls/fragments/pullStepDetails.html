@@ -71,11 +71,11 @@
             class="btn-create flex items-center gap-2"
             hx-indicator="#create-pull-spinner"
         >
-            {{ i "git-pull-request-create" "w-4 h-4" }}
-            Create pull request
-            <span id="create-pull-spinner" class="group">
+            <span id="create-pull-spinner" class="group flex items-center">
                 {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
+                {{ i "git-pull-request-create" "w-4 h-4 inline group-[.htmx-request]:hidden" }}
             </span>
+            Create pull request
         </button>
     </div>
 {{ end }}

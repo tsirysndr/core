@@ -27,11 +27,11 @@
 {{ define "save" }}
   <button
     type="submit"
-    class="btn-create flex gap-1 items-center group text-sm"
+    class="btn-create-flat flex gap-1 items-center group text-sm"
   >
-    {{ i "check" "size-4" }}
+    {{ i "loader-circle" "size-4 animate-spin hidden group-[.htmx-request]:inline" }}
+    {{ i "check" "size-4 inline group-[.htmx-request]:hidden" }}
     Save
-    {{ i "loader-circle" "w-4 h-4 animate-spin hidden group-[.htmx-request]:inline" }}
   </button>
 {{ end }}
 
