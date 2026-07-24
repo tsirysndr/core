@@ -18,7 +18,8 @@
     const btnEnd = document.getElementById('line-quote-btn-end');
 
     const textarea = () =>
-      document.querySelector('form[hx-post="/comment"] textarea');
+      Array.from(document.querySelectorAll('form[hx-post="/comment"] textarea'))
+        .find(ta => ta.offsetParent !== null) || null;
 
     const lineOf = (el) =>
       el?.closest?.('span[id*="-O"]')
@@ -108,33 +109,21 @@
     let dragCurrent = null;
     let hoverTarget = null;
 
-    const commentBtn = () =>
-      document.querySelector('[hx-get$="/comment"]:not(form *)');
+    const commentToggle = () =>
+      document.querySelector('label[for^="comment-toggle-"]');
 
     const openCommentForm = () => {
       const ta = textarea();
       if (ta) return Promise.resolve(ta);
-      const trigger = commentBtn();
+      const trigger = commentToggle();
       if (!trigger) return Promise.resolve(null);
       trigger.click();
-      return new Promise(resolve => {
-        const handler = () => {
-          const ta = textarea();
-          if (!ta) return;
-          document.body.removeEventListener('htmx:afterSettle', handler);
-          clearTimeout(timer);
-          resolve(ta);
-        };
-        const timer = setTimeout(() => {
-          document.body.removeEventListener('htmx:afterSettle', handler);
-          resolve(null);
-        }, 5000);
-        document.body.addEventListener('htmx:afterSettle', handler);
-      });
+      return new Promise(resolve =>
+        requestAnimationFrame(() => resolve(textarea())));
     };
 
     const showBtn = (lineEl) => {
-      if ((!textarea() && !commentBtn()) || !anchorOf(lineEl)) return;
+      if ((!textarea() && !commentToggle()) || !anchorOf(lineEl)) return;
       const rect = lineEl.getBoundingClientRect();
       Object.assign(btn.style, {
         top: `${rect.top + rect.height / 2 - btn.offsetHeight / 2}px`,
