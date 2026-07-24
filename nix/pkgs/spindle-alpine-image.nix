@@ -102,7 +102,7 @@
   # mirror nix/microvm/base.nix and nix/modules/shuttle.nix
   nixConf = writeText "nix.conf" ''
     experimental-features = nix-command flakes
-    trusted-users = root
+    trusted-users = root spindle-workflow
     allowed-users = spindle-workflow
     post-build-hook = /usr/libexec/spindle-post-build-hook
     # keep build sandboxes on the /workspace disk, not the RAM-backed root tmpfs

@@ -214,7 +214,7 @@ in {
         "nix-command"
         "flakes"
       ];
-      trusted-users = ["root"];
+      trusted-users = ["root" "spindle-workflow"];
       allowed-users = ["spindle-workflow"];
     };
     registry.nixpkgs.to = {
