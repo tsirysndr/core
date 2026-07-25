@@ -355,6 +355,17 @@ func (s *Spindle) processPull(ctx context.Context, evt *tapc.RecordEventData) er
 			return nil
 		}
 
+		// check if pull record author has push access to target repo
+		allowed, err := s.e.IsPushAllowed(evt.Did.String(), rbac.ThisServer, repo.RepoDid.String())
+		if err != nil {
+			return fmt.Errorf("checking push access for pull record author: %w", err)
+		}
+		if !allowed {
+			l.Warn("rejecting pull-triggered pipeline. author has no push access",
+				"author", evt.Did, "repo", repo.RepoDid)
+			return nil
+		}
+
 		latestSubmission, err := s.fetchLatestSubmission(ctx, evt.Did.String(), evt.Rkey.String(), &record)
 		if err != nil {
 			return err
