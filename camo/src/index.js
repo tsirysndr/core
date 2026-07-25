@@ -22,14 +22,9 @@ export default {
     );
     const targetUrl = new TextDecoder().decode(urlBytes);
 
-    // check if we have an entry in the cache with the target url
-    let cacheKey = new Request(targetUrl);
-    let response = await cache.match(cacheKey);
-    if (response) {
-      return response;
-    }
-
-    // else compute the signature
+    // check signature before we lookup cache, if we do the other way
+    // then any random signature for the same url will be let through after
+    // a single successful request
     const key = await crypto.subtle.importKey(
       "raw",
       new TextEncoder().encode(env.CAMO_SHARED_SECRET),
@@ -58,6 +53,13 @@ export default {
 
     if (!valid) {
       return new Response("Invalid signature", { status: 403 });
+    }
+
+    // check if we have an entry in the cache with the target url
+    let cacheKey = new Request(targetUrl);
+    let response = await cache.match(cacheKey);
+    if (response) {
+      return response;
     }
 
     let parsedUrl;
