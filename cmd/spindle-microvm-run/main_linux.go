@@ -137,7 +137,7 @@ func runMicroVMRunDev(ctx context.Context, cmd *cli.Command) error {
 	if mib := cmd.Uint("memory-mib"); mib > 0 {
 		imageSpec.MemoryMiB = int(mib)
 	}
-	ln, err := vsock.Listen(port, nil)
+	ln, err := vsock.ListenContextID(vsock.Host, port, nil)
 	if err != nil {
 		return fmt.Errorf("listen on vsock port %d: %w", port, err)
 	}

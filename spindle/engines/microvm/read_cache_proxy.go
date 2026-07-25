@@ -195,7 +195,7 @@ func listenRandomVsockPort(ctx context.Context) (*vsock.Listener, uint32, error)
 		if err != nil {
 			return nil, 0, err
 		}
-		ln, err := vsock.Listen(port, nil)
+		ln, err := vsock.ListenContextID(vsock.Host, port, nil)
 		if err == nil {
 			return ln, port, nil
 		}

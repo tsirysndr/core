@@ -28,7 +28,10 @@ type agentHub struct {
 }
 
 func newAgentHub(port uint32, l *slog.Logger) (*agentHub, error) {
-	ln, err := vsock.Listen(port, nil)
+	// bind the host context explicitly. if the local CID resolves to the
+	// loopback CID (which happens on some systems when vsock_loopback is active),
+	// Listen() would bind loopback and never see guest VMs
+	ln, err := vsock.ListenContextID(vsock.Host, port, nil)
 	if err != nil {
 		return nil, fmt.Errorf("listen for agent on vsock port %d: %w", port, err)
 	}
