@@ -27,9 +27,13 @@ func (s *Spindle) ingest() Ingester {
 		switch e.Commit.Collection {
 		case tangled.SpindleMemberNSID:
 			err = s.ingestMember(ctx, e)
-		case tangled.RepoNSID, tangled.RepoCollaboratorNSID, tangled.RepoPullNSID:
+		case tangled.RepoNSID, tangled.RepoCollaboratorNSID:
 			if evt, ok := jetstreamToTapEvent(e); ok {
 				err = s.tap.processEvent(ctx, evt)
+			}
+		case tangled.RepoPullNSID:
+			if evt, ok := jetstreamToTapEvent(e); ok {
+				err = s.processPull(ctx, evt.Record)
 			}
 		}
 

@@ -82,8 +82,6 @@ func (t *Tap) processEvent(ctx context.Context, evt tapc.Event) error {
 		return t.processRepo(ctx, evt.Record)
 	case tangled.RepoCollaboratorNSID:
 		return t.processCollaborator(ctx, evt.Record)
-	case tangled.RepoPullNSID:
-		return t.processPull(ctx, evt.Record)
 	}
 	return nil
 }
@@ -315,8 +313,8 @@ func (t *Tap) processCollaborator(ctx context.Context, evt *tapc.RecordEventData
 	return nil
 }
 
-func (t *Tap) processPull(ctx context.Context, evt *tapc.RecordEventData) error {
-	l := t.logger.With("collection", evt.Collection, "did", evt.Did, "rkey", evt.Rkey)
+func (s *Spindle) processPull(ctx context.Context, evt *tapc.RecordEventData) error {
+	l := s.l.With("component", "ingester", "collection", evt.Collection, "did", evt.Did, "rkey", evt.Rkey)
 
 	// only listen to live events
 	if !evt.Live {
@@ -345,7 +343,7 @@ func (t *Tap) processPull(ctx context.Context, evt *tapc.RecordEventData) error 
 		}
 
 		// skip if target repo is unknown
-		repo, err := t.spindle.db.GetRepoByDid(syntax.DID(record.Target.Repo))
+		repo, err := s.db.GetRepoByDid(syntax.DID(record.Target.Repo))
 		if err != nil {
 			l.Warn("target repo is not ingested yet", "repo", record.Target.Repo, "err", err)
 			return fmt.Errorf("target repo is unknown")
@@ -357,14 +355,14 @@ func (t *Tap) processPull(ctx context.Context, evt *tapc.RecordEventData) error 
 			return nil
 		}
 
-		latestSubmission, err := t.fetchLatestSubmission(ctx, evt.Did.String(), evt.Rkey.String(), &record)
+		latestSubmission, err := s.fetchLatestSubmission(ctx, evt.Did.String(), evt.Rkey.String(), &record)
 		if err != nil {
 			return err
 		}
 		sourceSha := latestSubmission.SourceRev
 
 		scheme := "https"
-		if t.spindle.cfg.Server.Dev {
+		if s.cfg.Server.Dev {
 			scheme = "http"
 		}
 		client := &indigoxrpc.Client{Host: fmt.Sprintf("%s://%s", scheme, repo.Knot)}
@@ -396,11 +394,11 @@ func (t *Tap) processPull(ctx context.Context, evt *tapc.RecordEventData) error 
 			},
 		}
 
-		repoUri := t.spindle.newRepoCloneUrl(repo.Knot, repo.RepoDid)
-		repoPath := t.spindle.newRepoPath(repo.RepoDid)
+		repoUri := s.newRepoCloneUrl(repo.Knot, repo.RepoDid)
+		repoPath := s.newRepoPath(repo.RepoDid)
 
 		// load workflow definitions from rev (without spindle context)
-		rawPipeline, err := t.spindle.loadPipeline(ctx, repoUri, repoPath, sourceSha)
+		rawPipeline, err := s.loadPipeline(ctx, repoUri, repoPath, sourceSha)
 		if err != nil {
 			// don't retry
 			l.Error("failed loading pipeline", "err", err)
@@ -427,16 +425,16 @@ func (t *Tap) processPull(ctx context.Context, evt *tapc.RecordEventData) error 
 			Knot: tpl.TriggerMetadata.Repo.Knot,
 			Rkey: tid.TID(),
 		}
-		if err := t.spindle.db.CreatePipelineEvent(pipelineId.Rkey, tpl, t.spindle.n); err != nil {
+		if err := s.db.CreatePipelineEvent(pipelineId.Rkey, tpl, s.n); err != nil {
 			l.Error("failed to create pipeline event", "err", err)
 			return nil
 		}
-		sourceRepo, err := t.spindle.resolvePipelineSourceRepo(ctx, tpl.TriggerMetadata)
+		sourceRepo, err := s.resolvePipelineSourceRepo(ctx, tpl.TriggerMetadata)
 		if err != nil {
 			l.Error("failed resolving pipeline source repo", "err", err)
 			return nil
 		}
-		err = t.spindle.processPipeline(repo.RepoDid, tpl, pipelineId, sourceRepo)
+		err = s.processPipeline(repo.RepoDid, tpl, pipelineId, sourceRepo)
 		if err != nil {
 			// don't retry
 			l.Error("failed processing pipeline", "err", err)
@@ -516,9 +514,9 @@ func (t *Tap) purgeStalePendingCollabs() {
 	}
 }
 
-func (t *Tap) fetchLatestSubmission(ctx context.Context, did, rkey string, record *tangled.RepoPull) (*avmodels.PullSubmission, error) {
+func (s *Spindle) fetchLatestSubmission(ctx context.Context, did, rkey string, record *tangled.RepoPull) (*avmodels.PullSubmission, error) {
 	// resolve the PR owner's identity to fetch the blob from their PDS
-	prOwnerIdent, err := t.spindle.res.ResolveIdent(ctx, did)
+	prOwnerIdent, err := s.res.ResolveIdent(ctx, did)
 	if err != nil || prOwnerIdent.Handle.IsInvalidHandle() {
 		return nil, fmt.Errorf("failed to resolve PR owner handle: %w", err)
 	}

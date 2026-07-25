@@ -50,12 +50,8 @@ type embeddedTap struct {
 	closed atomic.Bool
 }
 
-func startEmbeddedTap(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*embeddedTap, error) {
-	if err := assertLoopbackBind(cfg.Server.Tap.Bind); err != nil {
-		return nil, err
-	}
-
-	tcfg := tap.Config{
+func newEmbeddedTapConfig(cfg *config.Config) tap.Config {
+	return tap.Config{
 		DatabaseURL:                "sqlite://" + cfg.Server.Tap.DBPath,
 		DBMaxConns:                 32,
 		PLCURL:                     cfg.Server.PlcUrl,
@@ -67,11 +63,18 @@ func startEmbeddedTap(ctx context.Context, cfg *config.Config, logger *slog.Logg
 		RepoFetchTimeout:           5 * time.Minute,
 		IdentityCacheSize:          50_000,
 		EventCacheSize:             10_000,
-		SignalCollection:           tangled.RepoPullNSID, // HACK: to ingest PRs from any users
-		CollectionFilters:          []string{tangled.RepoNSID, tangled.RepoCollaboratorNSID, tangled.RepoPullNSID},
+		CollectionFilters:          []string{tangled.RepoNSID, tangled.RepoCollaboratorNSID},
 		AdminPassword:              cfg.Server.Tap.AdminPassword,
 		RetryTimeout:               60 * time.Second,
 	}
+}
+
+func startEmbeddedTap(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*embeddedTap, error) {
+	if err := assertLoopbackBind(cfg.Server.Tap.Bind); err != nil {
+		return nil, err
+	}
+
+	tcfg := newEmbeddedTapConfig(cfg)
 
 	t, err := tap.New(tcfg)
 	if err != nil {
