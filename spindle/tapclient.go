@@ -122,6 +122,15 @@ func (t *Tap) processRepo(ctx context.Context, evt *tapc.RecordEventData) error 
 			return nil
 		}
 
+		isMember, err := t.spindle.e.IsSpindleMember(ownerDid.String(), rbac.ThisServer)
+		if err != nil {
+			return fmt.Errorf("checking spindle membership: %w", err)
+		}
+		if !isMember {
+			l.Warn("rejecting repo record: owner is not a spindle member", "owner", ownerDid)
+			return nil
+		}
+
 		if err := t.spindle.e.AddRepo(ownerDid.String(), rbac.ThisServer, repoDid.String()); err != nil {
 			l.Error("failed to add repo policy", "err", err)
 			return fmt.Errorf("add repo policy: %w", err)
