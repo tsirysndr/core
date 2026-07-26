@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"tangled.org/core/spindle/db"
 	"tangled.org/core/spindle/git"
 	"tangled.org/core/spindle/models"
+	"tangled.org/core/spindle/netguard"
 	"tangled.org/core/tapc"
 	"tangled.org/core/tid"
 	"tangled.org/core/workflow"
@@ -31,6 +33,23 @@ const (
 	maxPendingPerRepo = 64
 	pendingCollabTTL  = 10 * time.Minute
 )
+
+// blobs are fetched from user controlled PDSes so protect our transport
+// from dialing internal addresses
+var guardedBlobClient = &http.Client{
+	Transport: &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			Control:   netguard.RefuseSpecialPurposeAddrs,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	},
+}
 
 type pendingCollabEvent struct {
 	evt *tapc.RecordEventData
@@ -576,7 +595,7 @@ func (s *Spindle) fetchLatestSubmission(ctx context.Context, did, rkey string, r
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	blobResp, err := http.DefaultClient.Do(req)
+	blobResp, err := guardedBlobClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch blob: %w", err)
 	}

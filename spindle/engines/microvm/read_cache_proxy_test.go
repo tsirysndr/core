@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"tangled.org/core/spindle/netguard"
 )
 
 func TestCacheProxyFallsBackOnNotFound(t *testing.T) {
@@ -123,7 +125,7 @@ func TestCacheProxyJoinsSubpathQueryAndAuth(t *testing.T) {
 }
 
 func TestCacheProxyGuardAllowsPublicIPv4(t *testing.T) {
-	if err := refuseSpecialPurposeAddrs("tcp", "104.26.13.82:443", nil); err != nil {
+	if err := netguard.RefuseSpecialPurposeAddrs("tcp", "104.26.13.82:443", nil); err != nil {
 		t.Fatalf("public IPv4 address was blocked: %v", err)
 	}
 }

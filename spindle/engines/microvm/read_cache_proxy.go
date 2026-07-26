@@ -14,10 +14,11 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/mdlayher/vsock"
+
+	"tangled.org/core/spindle/netguard"
 )
 
 const (
@@ -233,40 +234,13 @@ var guardedProxyTransport = &http.Transport{
 	DialContext: (&net.Dialer{
 		Timeout:   30 * time.Second,
 		KeepAlive: 30 * time.Second,
-		Control:   refuseSpecialPurposeAddrs,
+		Control:   netguard.RefuseSpecialPurposeAddrs,
 	}).DialContext,
 	ForceAttemptHTTP2:     true,
 	MaxIdleConns:          100,
 	IdleConnTimeout:       90 * time.Second,
 	TLSHandshakeTimeout:   10 * time.Second,
 	ExpectContinueTimeout: 1 * time.Second,
-}
-
-// this should run after dns resolution, so it should cover any rebinding tricks
-func refuseSpecialPurposeAddrs(network, address string, _ syscall.RawConn) error {
-	host, _, err := net.SplitHostPort(address)
-	if err != nil {
-		return fmt.Errorf("split dial address %q: %w", address, err)
-	}
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return fmt.Errorf("refusing to dial non-IP address %q", host)
-	}
-	bits := 128
-	if ip4 := ip.To4(); ip4 != nil {
-		ip = ip4
-		bits = 32
-	}
-	for _, ipnet := range blockedNamespaceNets {
-		_, blockedBits := ipnet.Mask.Size()
-		if blockedBits != bits {
-			continue
-		}
-		if ipnet.Contains(ip) {
-			return fmt.Errorf("refusing to dial %s: %s is blocked for workflow caches", ip, ipnet)
-		}
-	}
-	return nil
 }
 
 // the proxy is the cache as far as the guest is concerned, so we answer
