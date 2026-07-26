@@ -56,11 +56,17 @@ func (x *Xrpc) GetEntry(w http.ResponseWriter, r *http.Request) {
 		writeJson(w, http.StatusNotFound, atclient.ErrorBody{Name: "EntryNotFound", Message: fmt.Sprintf("entry %q not found", path)})
 		return
 	}
-	size, err := gitea.GetBlobSize(ctx, repoPath, entry.Hash)
-	if err != nil {
-		l.Error("failed to read blob size", "err", err)
-		writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to read blob size"})
-		return
+	var size int64
+	switch entry.Mode {
+	case filemode.Empty, filemode.Dir, filemode.Submodule:
+		// no-op
+	default:
+		size, err = gitea.GetBlobSize(ctx, repoPath, entry.Hash)
+		if err != nil {
+			l.Error("failed to read blob size", "err", err)
+			writeJson(w, http.StatusInternalServerError, atclient.ErrorBody{Name: "InternalServerError", Message: "failed to read blob size"})
+			return
+		}
 	}
 
 	var outLastCommit *tangled.GitTempDefs_Commit
