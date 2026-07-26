@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	lexutil "github.com/bluesky-social/indigo/lex/util"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/pages/markup/sanitizer"
 )
@@ -24,6 +25,8 @@ type Issue struct {
 	Open       bool
 	Mentions   []syntax.DID
 	References []syntax.ATURI
+	// images embedded in Body; referenced on the record to pin them against GC
+	Blobs []*lexutil.LexBlob
 
 	// optionally, populate this when querying for reverse mappings
 	// like comment counts, parent repo etc.
@@ -52,6 +55,7 @@ func (i *Issue) AsRecord() tangled.RepoIssue {
 		Mentions:   mentions,
 		References: references,
 		CreatedAt:  i.Created.Format(time.RFC3339),
+		Blobs:      i.Blobs,
 	}
 	return rec
 }

@@ -10,7 +10,7 @@
     class="group/form "
   >
     <input name="subject-uri" type="hidden" value="{{ .Issue.AtUri }}">
-    <div class="bg-white dark:bg-gray-800 rounded drop-shadow-sm py-4 px-4 relative w-full border border-gray-200 dark:border-gray-700" hx-on:keyup="updateCommentForm()">
+    <div class="bg-white dark:bg-gray-800 rounded drop-shadow-sm py-4 px-4 relative w-full border border-gray-200 dark:border-gray-700" hx-on:input="updateCommentForm()">
       <div class="text-sm pb-2 text-gray-500 dark:text-gray-400">
         {{ template "user/fragments/picHandleLink" .LoggedInUser.Did }}
       </div>

@@ -262,6 +262,7 @@ func (s *State) StandardRouter(mw *middleware.Middleware) http.Handler {
 
 	r.With(middleware.AuthMiddleware(s.oauth)).Route("/markup", func(r chi.Router) {
 		r.Post("/preview", s.MarkdownPreview)
+		r.Post("/upload", s.MarkupUpload)
 	})
 	r.Get("/profile/popover", s.ProfilePopover)
 

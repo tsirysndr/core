@@ -284,6 +284,15 @@ func (rp *Issues) EditIssue(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// merge existing pins with new uploads, dropping any removed from body
+		var existingBlobs []*lexutil.LexBlob
+		if ex.Value != nil {
+			if prev, ok := ex.Value.Val.(*tangled.RepoIssue); ok {
+				existingBlobs = prev.Blobs
+			}
+		}
+		newRecord.Blobs = models.MergeBlobs(existingBlobs, r.PostForm["blobs"], newIssue.Body)
+
 		_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 			Collection: tangled.RepoIssueNSID,
 			Repo:       user.Did,
@@ -784,6 +793,8 @@ func (rp *Issues) NewIssue(w http.ResponseWriter, r *http.Request) {
 			rp.pages.Notice(w, "issues", fmt.Sprintf("Failed to create issue: %s", err))
 			return
 		}
+
+		issue.Blobs = models.ParseBlobs(r.PostForm["blobs"], body)
 
 		record := issue.AsRecord()
 

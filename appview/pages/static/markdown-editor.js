@@ -19,6 +19,9 @@ export default class TangledMarkdownEditor extends HTMLElement {
     }
 
     #dragHoverClass = "drag-hover";
+    #uploadCounter = 0;
+    // cid -> object URL, to preview an image before its blob is committed
+    #objectUrls = new Map();
 
     constructor() {
         super();
@@ -40,11 +43,30 @@ export default class TangledMarkdownEditor extends HTMLElement {
             });
         });
 
-        // TODO: blob upload support
-        // this.textarea.addEventListener("paste", (ev) => this.#onPaste(ev));
-        // this.textarea.addEventListener("dragover", (ev) => this.#onDragOver(ev));
-        // this.textarea.addEventListener("dragleave", (ev) => this.#onDragLeave(ev));
-        // this.textarea.addEventListener("drop", (ev) => this.#onDrop(ev));
+        this.textarea.addEventListener("paste", (ev) => this.#onPaste(ev));
+        this.textarea.addEventListener("dragover", (ev) => this.#onDragOver(ev));
+        this.textarea.addEventListener("dragleave", (ev) => this.#onDragLeave(ev));
+        this.textarea.addEventListener("drop", (ev) => this.#onDrop(ev));
+
+        // swap local object URLs into rendered previews (getBlob can't serve uncommitted blobs)
+        this.addEventListener("htmx:afterSwap", () => this.#hydratePreview());
+    }
+
+    disconnectedCallback() {
+        for (const url of this.#objectUrls.values()) URL.revokeObjectURL(url);
+        this.#objectUrls.clear();
+    }
+
+    #hydratePreview() {
+        this.querySelectorAll("[data-md-preview] img[data-blob-cid]").forEach(img => {
+            const url = this.#objectUrls.get(img.dataset.blobCid);
+            if (url) img.src = url;
+        });
+    }
+
+    // name of the hidden input carrying blob refs back to the form
+    get #blobName() {
+        return this.getAttribute("blob-name") || "blobs";
     }
 
     async insertFile() {
@@ -52,16 +74,13 @@ export default class TangledMarkdownEditor extends HTMLElement {
         input.type = "file";
         input.accept = "image/*";
         input.multiple = true;
-        input.style.display = "none";
         input.addEventListener("change", () => {
             if (!input.files) return;
             for (const file of input.files) {
                 this.#handleFile(file);
             }
         });
-        this.appendChild(input);
         input.click();
-        this.removeChild(input);
     }
 
     /** @param {ClipboardEvent} ev */
@@ -111,23 +130,47 @@ export default class TangledMarkdownEditor extends HTMLElement {
         const textarea = this.textarea;
         if (!textarea) return;
 
-        const placeholder = `<!-- Uploading "${file.name}"... -->`;
+        if (!file || !file.type.startsWith("image/")) {
+            console.warn("skipping non-image file", file && file.name);
+            return;
+        }
+
+        let bytes;
+        try {
+            bytes = await file.arrayBuffer();
+        } catch (e) {
+            console.error("failed to read file", e);
+            return;
+        }
+        if (bytes.byteLength === 0) {
+            console.error("skipping empty file", file.name);
+            return;
+        }
+
+        const token = ++this.#uploadCounter;
+        const placeholder = `<!-- Uploading "${file.name}" (#${token})... -->`;
 
         this.#insertTextAtCursor(placeholder);
 
-        let blob;
+        let result;
         try {
-            blob = await this.#upload(file);
+            result = await this.#upload(bytes, file.type);
         } catch (e) {
-            console.error("failed to upload blob", e)
-            textarea.value = textarea.value.replace(placeholder, `<!-- Failed to upload "${file.name}". -->`);
-            return
+            console.error("failed to upload blob", e);
+            this.#replaceInTextarea(placeholder, `<!-- Failed to upload "${file.name}": ${e.message} -->`);
+            return;
         }
 
-        // TODO: insert blob itself to form
+        this.#replaceInTextarea(placeholder, `![Image](${result.uri})`);
+        this.#addBlobInput(result.blob);
 
-        const cid = blob.ref["$link"]
-        textarea.value = textarea.value.replace(placeholder, `![Image](blob://${cid})`);
+        // stash a local object URL keyed by cid (echoed back as data-blob-cid) for Preview
+        const cid = result.uri.split("/").pop();
+        if (cid) {
+            const prev = this.#objectUrls.get(cid);
+            if (prev) URL.revokeObjectURL(prev);
+            this.#objectUrls.set(cid, URL.createObjectURL(new Blob([bytes], { type: file.type })));
+        }
     }
 
     /** @param {string} text */
@@ -149,26 +192,57 @@ export default class TangledMarkdownEditor extends HTMLElement {
         const newPos = start + text.length;
         textarea.selectionStart = textarea.selectionEnd = newPos;
 
+        this.#fireInput(text);
+    }
+
+    /** @param {string} needle @param {string} replacement */
+    #replaceInTextarea(needle, replacement) {
+        const textarea = this.textarea;
+        if (!textarea) return;
+        // function replacer so `$` in the filename isn't read as a substitution pattern
+        textarea.value = textarea.value.replace(needle, () => replacement);
+        this.#fireInput(replacement);
+    }
+
+    #fireInput(data = "") {
+        const textarea = this.textarea;
+        if (!textarea) return;
         textarea.dispatchEvent(
-            new InputEvent("input", { bubbles: true, inputType: "insertText", data: text })
+            new InputEvent("input", { bubbles: true, inputType: "insertText", data })
         );
-        // textarea.dispatchEvent(new Event("input", { bubbles: true }));
         textarea.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
-    /** @param {File} file */
-    async #upload(file) {
-        await new Promise(r => setTimeout(r, 500));
+    /** @param {object} blob */
+    #addBlobInput(blob) {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = this.#blobName;
+        input.value = JSON.stringify(blob);
+        this.appendChild(input);
+    }
 
+    /** @param {ArrayBuffer} bytes @param {string} contentType */
+    async #upload(bytes, contentType) {
         const host = this.getAttribute("host") ?? "";
-        const res = await fetch(host + "/xrpc/com.atproto.repo.uploadBlob", {
+        const res = await fetch(host + "/markup/upload", {
             method: "POST",
-            body: file,
+            body: bytes,
             headers: {
-                "Content-Type": file.type,
+                "Content-Type": contentType,
             },
         });
-        const output = await res.json();
-        return output.blob;
+        if (!res.ok) {
+            let msg = `upload failed (${res.status})`;
+            try {
+                const err = await res.json();
+                if (err && err.error) msg = err.error;
+            } catch {
+                // non-JSON error body; keep the status-based message
+            }
+            throw new Error(msg);
+        }
+        // { blob, did, uri }
+        return await res.json();
     }
 }

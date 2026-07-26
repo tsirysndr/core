@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
@@ -119,7 +120,7 @@ func (s *State) NewComment(w http.ResponseWriter, r *http.Request) {
 	markdownBody := tangled.MarkupMarkdown{
 		Text:     normalizedBody,
 		Original: &body,
-		Blobs:    nil,
+		Blobs:    models.ParseBlobs(r.PostForm["blobs"], normalizedBody),
 	}
 
 	subjectUri, err := syntax.ParseATURI(r.FormValue("subject-uri"))
@@ -369,6 +370,22 @@ func (s *State) EditComment(w http.ResponseWriter, r *http.Request) {
 		s.pages.Notice(w, noticeId, "Failed to create comment. try again later.")
 		return
 	}
+
+	var existingBlobs []*lexutil.LexBlob
+	if strings.Contains(normalizedBody, "blob+at://") {
+		ex, err := comatproto.RepoGetRecord(ctx, client, "", newComment.Collection.String(), newComment.Did.String(), newComment.Rkey.String())
+		if err != nil {
+			l.Error("failed to read existing comment record for blob pinning", "err", err)
+			s.pages.Notice(w, noticeId, "Failed to update comment, try again later.")
+			return
+		}
+		if ex.Value != nil {
+			if prev, ok := ex.Value.Val.(*tangled.FeedComment); ok && prev.Body != nil && prev.Body.MarkupMarkdown != nil {
+				existingBlobs = prev.Body.MarkupMarkdown.Blobs
+			}
+		}
+	}
+	newComment.Body.Blobs = models.MergeBlobs(existingBlobs, r.PostForm["blobs"], normalizedBody)
 
 	// update the record first
 	exCid := comment.Cid.String()

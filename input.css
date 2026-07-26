@@ -1270,6 +1270,15 @@ actor-typeahead::part(menu) {
     }
 }
 
+markdown-editor.drag-hover textarea {
+    outline: dashed 2px #ccc;
+    outline-offset: -0.5em;
+}
+markdown-editor:not(.drag-hover) button > .condensed,
+markdown-editor.drag-hover button > .spacious {
+    display: none;
+}
+
 @layer utilities {
     .hit-area {
         position: relative;
