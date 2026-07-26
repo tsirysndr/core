@@ -257,7 +257,7 @@ func runMicroVMRunDev(ctx context.Context, cmd *cli.Command) error {
 			}
 			defer configCacheDB.Close()
 
-			configKey, err = microvm.BuildConfigKey(imageSpec, cmd.String("activate-config"))
+			configKey, err = microvm.BuildConfigKey(imageSpec, cmd.String("activate-config"), "local")
 			if err != nil {
 				return fmt.Errorf("calculate config key: %w", err)
 			}

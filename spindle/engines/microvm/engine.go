@@ -160,8 +160,15 @@ func (e *Engine) InitWorkflow(twf tangled.Pipeline_Workflow, tpl tangled.Pipelin
 				imageName,
 			)
 		}
+		// the cached toplevel is guest-asserted, so the cache key has to
+		// be per-repo. a global key lets one tenant poison the activation
+		// of another tenant's identical config
+		repoDid := ""
+		if md := tpl.TriggerMetadata; md != nil && md.Repo != nil {
+			repoDid = md.Repo.Did
+		}
 		var err error
-		configKey, err = buildConfigKey(imageSpec, config)
+		configKey, err = buildConfigKey(imageSpec, config, repoDid)
 		if err != nil {
 			return nil, fmt.Errorf("build config key: %w", err)
 		}

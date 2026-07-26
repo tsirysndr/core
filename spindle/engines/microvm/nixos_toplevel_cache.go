@@ -12,7 +12,8 @@ import (
 	"tangled.org/core/spindle/db"
 )
 
-const nixosToplevelCacheSchemaVersion = 1
+// v2 keys are scoped by repo did in v1 keys were global
+const nixosToplevelCacheSchemaVersion = 2
 
 type nixosToplevelCacheRecord struct {
 	ConfigKey string    `json:"config_key"`
@@ -72,7 +73,7 @@ func userConfigHash(cfg manifestConfig) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func buildConfigKey(imageSpec ImageSpec, cfg manifestConfig) (string, error) {
+func buildConfigKey(imageSpec ImageSpec, cfg manifestConfig, repoDid string) (string, error) {
 	baseHash, err := BaseConfigHash(imageSpec)
 	if err != nil {
 		return "", err
@@ -81,20 +82,22 @@ func buildConfigKey(imageSpec ImageSpec, cfg manifestConfig) (string, error) {
 		Schema     int    `json:"schema"`
 		BaseConfig string `json:"base_config"`
 		UserConfig string `json:"user_config"`
+		RepoDid    string `json:"repo_did"`
 	}{
 		Schema:     nixosToplevelCacheSchemaVersion,
 		BaseConfig: baseHash,
 		UserConfig: userConfigHash(cfg),
+		RepoDid:    repoDid,
 	}
 	data, _ := json.Marshal(payload)
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func BuildConfigKey(imageSpec ImageSpec, userConfigJSON string) (string, error) {
+func BuildConfigKey(imageSpec ImageSpec, userConfigJSON string, repoDid string) (string, error) {
 	var cfg manifestConfig
 	if err := json.Unmarshal([]byte(userConfigJSON), &cfg); err != nil {
 		return "", err
 	}
-	return buildConfigKey(imageSpec, cfg)
+	return buildConfigKey(imageSpec, cfg, repoDid)
 }
