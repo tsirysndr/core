@@ -92,7 +92,7 @@ func NewPages(config *config.Config, res *idresolver.Resolver, database *db.DB, 
 		Hostname:   config.Core.AppviewHost,
 		CamoUrl:    config.Camo.Host,
 		CamoSecret: config.Camo.SharedSecret,
-		Files:      Files,
+		Directory:  res.Directory(),
 	}
 
 	p := &Pages{

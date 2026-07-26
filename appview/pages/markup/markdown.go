@@ -3,15 +3,18 @@ package markup
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
-	"io/fs"
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	chromahtml "github.com/alecthomas/chroma/v2/formatters/html"
 	"github.com/alecthomas/chroma/v2/styles"
+	"github.com/bluesky-social/indigo/atproto/identity"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/yuin/goldmark"
 	emoji "github.com/yuin/goldmark-emoji"
 	highlighting "github.com/yuin/goldmark-highlighting/v2"
@@ -48,7 +51,7 @@ type RenderContext struct {
 	IsDev        bool
 	Hostname     string
 	RendererType RendererType
-	Files        fs.FS
+	Directory    identity.Directory
 }
 
 func NewMarkdown(hostname string, extra ...goldmark.Extender) goldmark.Markdown {
@@ -179,8 +182,20 @@ func visitNode(ctx *RenderContext, node *htmlparse.Node) {
 		case "a":
 			// TODO: transform `./` or `/` links to tree link
 		case "img", "source":
+			var blobCid syntax.CID
 			for i, attr := range node.Attr {
 				if attr.Key != "src" {
+					continue
+				}
+
+				if strings.HasPrefix(attr.Val, blobURIScheme) {
+					if _, cid, ok := parseBlobURI(attr.Val); ok {
+						blobCid = cid
+					}
+					if blobUrl, ok := ctx.blobToGetBlobURL(attr.Val); ok {
+						attr.Val = ctx.camoImageLinkTransformer(blobUrl)
+						node.Attr[i] = attr
+					}
 					continue
 				}
 
@@ -195,6 +210,11 @@ func visitNode(ctx *RenderContext, node *htmlparse.Node) {
 					attr.Val = ctx.imageToRawTransformer(attr.Val)
 				}
 				node.Attr[i] = attr
+			}
+			// tag with the cid so the editor can preview an uncommitted blob
+			// (appended after the loop to avoid mutating node.Attr mid-range)
+			if blobCid != "" {
+				node.Attr = append(node.Attr, htmlparse.Attribute{Key: "data-blob-cid", Val: blobCid.String()})
 			}
 		}
 
@@ -247,6 +267,60 @@ func (rctx *RenderContext) relativeLinkTransformer(link *ast.Link) {
 
 	newPath := path.Join("/", rctx.RepoInfo.FullName(), "tree", rctx.RepoInfo.Ref, actualPath)
 	link.Destination = []byte(newPath)
+}
+
+// blobURIScheme embeds a PDS blob in markdown independent of the PDS hostname:
+// blob+at://<did>/<cid>.
+const blobURIScheme = "blob+at://"
+
+func parseBlobURI(src string) (syntax.DID, syntax.CID, bool) {
+	rest, ok := strings.CutPrefix(src, blobURIScheme)
+	if !ok {
+		return "", "", false
+	}
+	rawDid, rawCid, ok := strings.Cut(rest, "/")
+	if !ok || rawDid == "" || rawCid == "" {
+		return "", "", false
+	}
+	did, err := syntax.ParseDID(rawDid)
+	if err != nil {
+		return "", "", false
+	}
+	cid, err := syntax.ParseCID(rawCid)
+	if err != nil {
+		return "", "", false
+	}
+	return did, cid, true
+}
+
+func (rctx *RenderContext) blobToGetBlobURL(src string) (string, bool) {
+	did, cid, ok := parseBlobURI(src)
+	if !ok {
+		return src, false
+	}
+	if rctx.Directory == nil {
+		return src, false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	ident, err := rctx.Directory.LookupDID(ctx, did)
+	if err != nil {
+		return src, false
+	}
+	pds := ident.PDSEndpoint()
+	if pds == "" {
+		return src, false
+	}
+	// TODO: avoid directly fetching from PDS. use services like porxie instead.
+	u, err := url.Parse(fmt.Sprintf("%s/xrpc/com.atproto.sync.getBlob", pds))
+	if err != nil {
+		return src, false
+	}
+	q := u.Query()
+	q.Set("did", did.String())
+	q.Set("cid", cid.String())
+	u.RawQuery = q.Encode()
+	return u.String(), true
 }
 
 func (rctx *RenderContext) imageToRawTransformer(dst string) string {

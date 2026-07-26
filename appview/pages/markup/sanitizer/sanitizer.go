@@ -74,6 +74,9 @@ func buildDefaultPolicy() *bluemonday.Policy {
 	// picture/source for modern image formats (avif, webp, etc.)
 	policy.AllowAttrs("srcset", "type", "media").OnElements("source")
 
+	// marker the editor uses to preview an uncommitted blob image; see markdown.go
+	policy.AllowAttrs("data-blob-cid").OnElements("img", "source")
+
 	// checkboxes
 	policy.AllowAttrs("type").Matching(regexp.MustCompile(`^checkbox$`)).OnElements("input")
 	policy.AllowAttrs("checked", "disabled", "data-source-position").OnElements("input")
