@@ -8,6 +8,10 @@ import (
 // SecretMask replaces secret values in strings with "***".
 type SecretMask struct {
 	replacer *strings.Replacer
+	// length of the longest secret. writers keep the last window-1
+	// bytes unflushed so a secret split across writes can still match
+	// whole
+	window int
 }
 
 // NewSecretMask creates a mask for the given secret values.
@@ -37,9 +41,27 @@ func NewSecretMask(values []string) *SecretMask {
 		return nil
 	}
 
+	window := 0
+	for i := 0; i < len(pairs); i += 2 {
+		window = max(window, len(pairs[i]))
+	}
+
 	return &SecretMask{
 		replacer: strings.NewReplacer(pairs...),
+		window:   window,
 	}
+}
+
+// trailing bytes a streaming caller must keep unflushed so a secret
+// spanning a write boundary still matches
+func (m *SecretMask) Window() int {
+	if m == nil {
+		return 0
+	}
+	if m.window <= 1 {
+		return 0
+	}
+	return m.window - 1
 }
 
 // Mask replaces all registered secret values with "***".

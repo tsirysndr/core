@@ -24,9 +24,10 @@ func (l NullLogger) ControlWriter(idx int, step Step, stepStatus StepStatus) io.
 }
 
 type FileWorkflowLogger struct {
-	file    *os.File
-	encoder *json.Encoder
-	mask    *SecretMask
+	file        *os.File
+	encoder     *json.Encoder
+	mask        *SecretMask
+	dataWriters []*dataWriter
 }
 
 func NewFileWorkflowLogger(baseDir string, wid WorkflowId, secretValues []string) (WorkflowLogger, error) {
@@ -48,15 +49,22 @@ func LogFilePath(baseDir string, workflowID WorkflowId) string {
 }
 
 func (l *FileWorkflowLogger) Close() error {
+	for _, w := range l.dataWriters {
+		if err := w.flush(); err != nil {
+			return err
+		}
+	}
 	return l.file.Close()
 }
 
 func (l *FileWorkflowLogger) DataWriter(idx int, stream string) io.Writer {
-	return &dataWriter{
+	w := &dataWriter{
 		logger: l,
 		idx:    idx,
 		stream: stream,
 	}
+	l.dataWriters = append(l.dataWriters, w)
+	return w
 }
 
 func (l *FileWorkflowLogger) ControlWriter(idx int, step Step, stepStatus StepStatus) io.Writer {
@@ -72,18 +80,43 @@ type dataWriter struct {
 	logger *FileWorkflowLogger
 	idx    int
 	stream string
+	// trailing bytes held back so a secret split across writes still
+	// matches, flushed on Close or once enough data arrives
+	pending []byte
 }
 
 func (w *dataWriter) Write(p []byte) (int, error) {
+	w.pending = append(w.pending, p...)
+	window := w.logger.mask.Window()
+	// anything within window of the tail might be half a secret, keep
+	// it buffered
+	if len(w.pending) <= window {
+		return len(p), nil
+	}
+	emit := w.pending[:len(w.pending)-window]
+	// copy the tail out, emit still aliases the same backing array
+	w.pending = append([]byte(nil), w.pending[len(w.pending)-window:]...)
+	return len(p), w.emit(emit)
+}
+
+// the writer is done, so a buffered tail can no longer grow into a
+// full secret and goes out as-is
+func (w *dataWriter) flush() error {
+	if len(w.pending) == 0 {
+		return nil
+	}
+	pending := w.pending
+	w.pending = nil
+	return w.emit(pending)
+}
+
+func (w *dataWriter) emit(p []byte) error {
 	line := strings.TrimRight(string(p), "\r\n")
 	if w.logger.mask != nil {
 		line = w.logger.mask.Mask(line)
 	}
 	entry := NewDataLogLine(w.idx, line, w.stream)
-	if err := w.logger.encoder.Encode(entry); err != nil {
-		return 0, err
-	}
-	return len(p), nil
+	return w.logger.encoder.Encode(entry)
 }
 
 type controlWriter struct {
