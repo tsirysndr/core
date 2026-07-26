@@ -1495,6 +1495,12 @@ Optional cgroup enforcement:
   per workflow cgroup (default: `4096`).
 - `SPINDLE_MICROVM_PIPELINES_CGROUP_SWAP_MAX_MIB`: Max swap
   per workflow cgroup (default: `0`, no swap).
+- `SPINDLE_MICROVM_PIPELINES_CGROUP_CPU_MAX_PERCENT`: Max CPU
+  quota per workflow cgroup, as a percentage of one core
+  (default: `0`, which caps each VM at its configured vCPU
+  count, a negative value disables the CPU limit).
+- `SPINDLE_MICROVM_PIPELINES_CGROUP_IO_WEIGHT`: IO weight per
+  workflow cgroup, 1-10000 (default: `0`, IO unlimited).
 - `SPINDLE_MICROVM_PIPELINES_CGROUP_SUPERVISOR_MEMORY_MIN_MIB`:
   Memory protected for spindle itself so it isn't OOM-killed
   before the workflows (default: `512`).

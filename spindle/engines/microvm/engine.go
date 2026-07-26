@@ -608,12 +608,20 @@ func (e *Engine) drainCleanups(wid models.WorkflowId) []cleanupFunc {
 
 func (e *Engine) cgroupLimits(wid models.WorkflowId, spec ImageSpec) CgroupLimits {
 	cfg := e.cfg.MicroVMPipelines
+	cpuQuotaPercent := cfg.CgroupCPUMaxPercent
+	if cpuQuotaPercent == 0 {
+		// a vm can only use its vcpus anyway, but without a cap those
+		// threads still get full host cores and starve every other tenant
+		cpuQuotaPercent = int64(spec.VCPUs) * 100
+	}
 	return CgroupLimits{
-		Enabled:      cfg.EnableCgroups,
-		Parent:       e.cgroupParent,
-		Name:         "workflow-" + wid.String(),
-		MemoryMaxMiB: resourcesForImage(spec).MemoryMiB,
-		SwapMaxMiB:   cfg.CgroupSwapMaxMiB,
-		PidsMax:      cfg.CgroupPidsMax,
+		Enabled:         cfg.EnableCgroups,
+		Parent:          e.cgroupParent,
+		Name:            "workflow-" + wid.String(),
+		MemoryMaxMiB:    resourcesForImage(spec).MemoryMiB,
+		SwapMaxMiB:      cfg.CgroupSwapMaxMiB,
+		PidsMax:         cfg.CgroupPidsMax,
+		CPUQuotaPercent: cpuQuotaPercent,
+		IOWeight:        cfg.CgroupIOWeight,
 	}
 }

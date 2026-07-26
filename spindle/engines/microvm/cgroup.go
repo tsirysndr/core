@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -32,6 +33,12 @@ type CgroupLimits struct {
 	MemoryMaxMiB int64
 	SwapMaxMiB   *int64
 	PidsMax      int64
+	// cpu.max quota as a percentage of one core (100 = one core). <= 0
+	// leaves cpu unlimited
+	CPUQuotaPercent int64
+	// io.weight (1-10000). 0 leaves io unlimited, written directly since
+	// this cgroup2 lib only models io.bfq.weight/io.max
+	IOWeight uint64
 }
 
 type CgroupParent struct {
@@ -102,6 +109,18 @@ func prepareCgroup(limits CgroupLimits, logger *slog.Logger) (*CgroupHandle, err
 		return nil, fmt.Errorf("create cgroup %q: %w", name, err)
 	}
 
+	if limits.IOWeight > 0 {
+		if err := manager.ToggleControllers([]string{"io"}, cgroup2.Enable); err != nil {
+			_ = manager.Delete()
+			return nil, fmt.Errorf("enable io controller for cgroup %q: %w", name, err)
+		}
+		ioWeightPath := filepath.Join(limits.Parent.mountpoint, strings.TrimPrefix(limits.Parent.group, "/"), name, "io.weight")
+		if err := os.WriteFile(ioWeightPath, []byte(strconv.FormatUint(limits.IOWeight, 10)), 0); err != nil {
+			_ = manager.Delete()
+			return nil, fmt.Errorf("write io.weight for cgroup %q: %w", name, err)
+		}
+	}
+
 	if logger != nil {
 		logger.Info("created microVM cgroup", "name", name, "parentGroup", limits.Parent.group)
 	}
@@ -126,6 +145,10 @@ func cgroupResources(limits CgroupLimits) *cgroup2.Resources {
 	}
 	if limits.PidsMax > 0 {
 		resources.Pids = &cgroup2.Pids{Max: limits.PidsMax}
+	}
+	if limits.CPUQuotaPercent > 0 {
+		quota := limits.CPUQuotaPercent * 1000 // 100% of one 100000us period
+		resources.CPU = &cgroup2.CPU{Max: cgroup2.NewCPUMax(&quota, nil)}
 	}
 	return resources
 }
@@ -178,6 +201,11 @@ func (h *CgroupHandle) OOMKilled() bool {
 // in the "/" parent's subtree. this fails EBUSY at a populated cgroup
 // namespace root (no-internal-process constraint); the real root is exempt.
 func probeRootSubtreeControl(mountpoint string) error {
+	// cpu/io may be unavailable (eg. no CONFIG_BLK_CGROUP), memory/pids
+	// are the hard requirement
+	if err := os.WriteFile(filepath.Join(mountpoint, "cgroup.subtree_control"), []byte("+memory +pids +cpu +io"), 0); err == nil {
+		return nil
+	}
 	return os.WriteFile(filepath.Join(mountpoint, "cgroup.subtree_control"), []byte("+memory +pids"), 0)
 }
 

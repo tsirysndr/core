@@ -83,6 +83,12 @@ type MicroVMPipelines struct {
 	CgroupParent     string `env:"CGROUP_PARENT, default=self"`
 	CgroupPidsMax    int64  `env:"CGROUP_PIDS_MAX, default=4096"`
 	CgroupSwapMaxMiB *int64 `env:"CGROUP_SWAP_MAX_MIB"`
+	// cpu.max quota as a percentage of one core. 0 caps each vm at its
+	// configured vcpu count, negative disables the limit
+	CgroupCPUMaxPercent int64 `env:"CGROUP_CPU_MAX_PERCENT, default=0"`
+	// io.weight for workflow cgroups (1-10000, kernel default 100). 0 leaves
+	// io unlimited
+	CgroupIOWeight uint64 `env:"CGROUP_IO_WEIGHT, default=0"`
 	// memory.min that will get assigned to the supervisor (spindle itself) cgroup
 	CgroupSupervisorMemoryMinMiB int64 `env:"CGROUP_SUPERVISOR_MEMORY_MIN_MIB, default=512"`
 }
