@@ -23,16 +23,31 @@ func Fork(repoPath, source string, cfg *knotconfig.Config) error {
 // post-clone configure step in sb. The initial clone itself is not sandboxed
 // because the target directory doesn't exist yet when the ruleset is applied.
 func ForkWithSandbox(repoPath, source string, cfg *knotconfig.Config, sb sandbox.Backend) error {
+	if !(source == "" || source[0] != '-') {
+		return fmt.Errorf("invalid source: %q", source)
+	}
 	u, err := url.Parse(source)
 	if err != nil {
 		return fmt.Errorf("failed to parse source URL: %w", err)
+	}
+	if u.Scheme != "https" && u.Scheme != "http" {
+		return fmt.Errorf("invalid scheme: %q", u.Scheme)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("missing host: %q", source)
 	}
 
 	if o := optimizeClone(u, cfg); o != nil {
 		u = o
 	}
 
-	cloneCmd := exec.Command("git", "clone", "--bare", u.String(), repoPath)
+	cloneCmd := exec.Command(
+		"git",
+		"-c", "protocol.ext.allow=never",
+		"clone", "--bare", u.String(), repoPath,
+	)
+	cloneCmd.Env = append(cloneCmd.Env, "GIT_PROTOCOL_FROM_USER=0")
+	cloneCmd.Env = append(cloneCmd.Env, "GIT_TERMINAL_PROMPT=0")
 	if err := cloneCmd.Run(); err != nil {
 		return fmt.Errorf("failed to bare clone repository: %w", err)
 	}

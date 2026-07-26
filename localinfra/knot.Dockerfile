@@ -96,5 +96,7 @@ RUN chmod +x /usr/local/bin/knot-entrypoint.sh
 VOLUME /home/git
 EXPOSE 22 5555
 
+WORKDIR /home/git
+
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["/usr/local/bin/knot-entrypoint.sh"]
