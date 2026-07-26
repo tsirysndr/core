@@ -53,6 +53,15 @@ func (s *Pulls) EditPull(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// merge existing pins with new uploads, dropping any removed from body
+		var existingBlobs []*lexutil.LexBlob
+		if ex.Value != nil {
+			if prev, ok := ex.Value.Val.(*tangled.RepoPull); ok {
+				existingBlobs = prev.Blobs
+			}
+		}
+		newPull.Blobs = models.MergeBlobs(existingBlobs, r.PostForm["blobs"], newPull.Body)
+
 		newRecord := newPull.AsRecord()
 		_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 			Collection: tangled.RepoPullNSID,

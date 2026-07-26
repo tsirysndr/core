@@ -38,6 +38,7 @@ func (s *Pulls) handleBranchBasedPull(
 	sourceBranch string,
 	isStacked bool,
 	stackTitles, stackBodies map[string]string,
+	stackBlobs map[string][]string,
 ) {
 	l := s.logger.With("handler", "handleBranchBasedPull", "user", userDid, "target_branch", targetBranch, "source_branch", sourceBranch, "is_stacked", isStacked)
 
@@ -81,20 +82,20 @@ func (s *Pulls) handleBranchBasedPull(
 		Branch: sourceBranch,
 	}
 
-	s.createPullRequest(w, r, repo, userDid, title, body, targetBranch, patch, combined, sourceRev, pullSource, isStacked, stackTitles, stackBodies)
+	s.createPullRequest(w, r, repo, userDid, title, body, targetBranch, patch, combined, sourceRev, pullSource, isStacked, stackTitles, stackBodies, stackBlobs)
 }
 
-func (s *Pulls) handlePatchBasedPull(w http.ResponseWriter, r *http.Request, repo *models.Repo, userDid syntax.DID, title, body, targetBranch, patch string, isStacked bool, stackTitles, stackBodies map[string]string) {
+func (s *Pulls) handlePatchBasedPull(w http.ResponseWriter, r *http.Request, repo *models.Repo, userDid syntax.DID, title, body, targetBranch, patch string, isStacked bool, stackTitles, stackBodies map[string]string, stackBlobs map[string][]string) {
 	if err := validatePatch(&patch); err != nil {
 		s.logger.Error("patch validation failed", "err", err)
 		s.pages.Notice(w, "pull", "Invalid patch format. Please provide a valid diff.")
 		return
 	}
 
-	s.createPullRequest(w, r, repo, userDid, title, body, targetBranch, patch, "", "", nil, isStacked, stackTitles, stackBodies)
+	s.createPullRequest(w, r, repo, userDid, title, body, targetBranch, patch, "", "", nil, isStacked, stackTitles, stackBodies, stackBlobs)
 }
 
-func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo *models.Repo, userDid syntax.DID, forkRepoDid string, title, body, targetBranch, sourceBranch string, isStacked bool, stackTitles, stackBodies map[string]string) {
+func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo *models.Repo, userDid syntax.DID, forkRepoDid string, title, body, targetBranch, sourceBranch string, isStacked bool, stackTitles, stackBodies map[string]string, stackBlobs map[string][]string) {
 	l := s.logger.With("handler", "handleForkBasedPull", "user", userDid, "fork_repo_did", forkRepoDid, "target_branch", targetBranch, "source_branch", sourceBranch, "is_stacked", isStacked)
 
 	if forkRepoDid == "" {
@@ -190,7 +191,7 @@ func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo
 		RepoDid: &forkDid,
 	}
 
-	s.createPullRequest(w, r, repo, userDid, title, body, targetBranch, patch, combined, sourceRev, pullSource, isStacked, stackTitles, stackBodies)
+	s.createPullRequest(w, r, repo, userDid, title, body, targetBranch, patch, combined, sourceRev, pullSource, isStacked, stackTitles, stackBodies, stackBlobs)
 }
 
 func (s *Pulls) createPullRequest(
@@ -205,6 +206,7 @@ func (s *Pulls) createPullRequest(
 	pullSource *models.PullSource,
 	isStacked bool,
 	stackTitles, stackBodies map[string]string,
+	stackBlobs map[string][]string,
 ) {
 	l := s.logger.With("handler", "createPullRequest", "user", userDid, "target_branch", targetBranch, "is_stacked", isStacked)
 
@@ -221,6 +223,7 @@ func (s *Pulls) createPullRequest(
 			pullSource,
 			stackTitles,
 			stackBodies,
+			stackBlobs,
 		)
 		return
 	}
@@ -298,6 +301,8 @@ func (s *Pulls) createPullRequest(
 		Repo:       repo,
 	}
 
+	pull.Blobs = models.ParseBlobs(r.PostForm["blobs"], body)
+
 	record := pull.AsRecord()
 	_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 		Collection: tangled.RepoPullNSID,
@@ -348,6 +353,7 @@ func (s *Pulls) createStackedPullRequest(
 	sourceRev string,
 	pullSource *models.PullSource,
 	stackTitles, stackBodies map[string]string,
+	stackBlobs map[string][]string,
 ) {
 	l := s.logger.With("handler", "createStackedPullRequest", "user", userDid, "target_branch", targetBranch, "source_rev", sourceRev)
 
@@ -388,7 +394,7 @@ func (s *Pulls) createStackedPullRequest(
 	}
 
 	// build a stack out of this patch
-	stack, err := s.newStack(r.Context(), repo, userDid, targetBranch, pullSource, formatPatches, blobs, stackTitles, stackBodies)
+	stack, err := s.newStack(r.Context(), repo, userDid, targetBranch, pullSource, formatPatches, blobs, stackTitles, stackBodies, stackBlobs)
 	if err != nil {
 		l.Error("failed to create stack", "err", err)
 		s.pages.Notice(w, "pull", fmt.Sprintf("Failed to create stack: %v", err))
@@ -464,6 +470,7 @@ func (s *Pulls) newStack(
 	formatPatches []types.FormatPatch,
 	blobs []*lexutil.LexBlob,
 	stackTitles, stackBodies map[string]string,
+	stackBlobs map[string][]string,
 ) (models.Stack, error) {
 	var stack models.Stack
 	var parentAtUri *syntax.ATURI
@@ -513,6 +520,7 @@ func (s *Pulls) newStack(
 			DependentOn: parentAtUri,
 			Repo:        repo,
 		}
+		pull.Blobs = models.ParseBlobs(stackBlobs[cid], body)
 
 		stack = append(stack, &pull)
 

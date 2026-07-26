@@ -74,6 +74,7 @@ type Pull struct {
 	Submissions  []*PullSubmission
 	Mentions     []syntax.DID
 	References   []syntax.ATURI
+	Blobs        []*lexutil.LexBlob
 
 	// stacking
 	DependentOn *syntax.ATURI
@@ -115,6 +116,7 @@ func (p Pull) AsRecord() tangled.RepoPull {
 		Mentions:   mentions,
 		References: references,
 		CreatedAt:  p.Created.Format(time.RFC3339),
+		Blobs:      p.Blobs,
 		Target: &tangled.RepoPull_Target{
 			Repo:   string(p.RepoDid),
 			Branch: p.TargetBranch,

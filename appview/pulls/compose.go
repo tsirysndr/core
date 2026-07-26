@@ -130,6 +130,7 @@ func (s *Pulls) NewPull(w http.ResponseWriter, r *http.Request) {
 
 		stackTitles := parseBracketedForm(r.Form, "stackTitle")
 		stackBodies := parseBracketedForm(r.Form, "stackBody")
+		stackBlobs := parseStackBlobForms(r.Form)
 
 		// Handle the PR creation based on the type
 		if isBranchBased {
@@ -137,19 +138,19 @@ func (s *Pulls) NewPull(w http.ResponseWriter, r *http.Request) {
 				s.pages.Notice(w, "pull", "This knot doesn't support branch-based pull requests. Try another way?")
 				return
 			}
-			s.handleBranchBasedPull(w, r, f, userDid, title, body, targetBranch, sourceBranch, isStacked, stackTitles, stackBodies)
+			s.handleBranchBasedPull(w, r, f, userDid, title, body, targetBranch, sourceBranch, isStacked, stackTitles, stackBodies, stackBlobs)
 		} else if isForkBased {
 			if !caps.PullRequests.ForkSubmissions {
 				s.pages.Notice(w, "pull", "This knot doesn't support fork-based pull requests. Try another way?")
 				return
 			}
-			s.handleForkBasedPull(w, r, f, userDid, fromFork, title, body, targetBranch, sourceBranch, isStacked, stackTitles, stackBodies)
+			s.handleForkBasedPull(w, r, f, userDid, fromFork, title, body, targetBranch, sourceBranch, isStacked, stackTitles, stackBodies, stackBlobs)
 		} else if isPatchBased {
 			if !caps.PullRequests.PatchSubmissions {
 				s.pages.Notice(w, "pull", "This knot doesn't support patch-based pull requests. Send your patch over email.")
 				return
 			}
-			s.handlePatchBasedPull(w, r, f, userDid, title, body, targetBranch, patch, isStacked, stackTitles, stackBodies)
+			s.handlePatchBasedPull(w, r, f, userDid, title, body, targetBranch, patch, isStacked, stackTitles, stackBodies, stackBlobs)
 		}
 		return
 	}
@@ -506,6 +507,18 @@ func parseBracketedForm(form url.Values, prefix string) map[string]string {
 			continue
 		}
 		out[parts[0]] = vals[0]
+	}
+	return out
+}
+
+func parseStackBlobForms(form url.Values) map[string][]string {
+	out := make(map[string][]string)
+	for key, vals := range form {
+		parts, ok := bracketComponents(key, "stackBlobs")
+		if !ok || len(parts) != 1 || parts[0] == "" || len(vals) == 0 {
+			continue
+		}
+		out[parts[0]] = vals
 	}
 	return out
 }
