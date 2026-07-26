@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -123,6 +124,23 @@ func qmpSocketPath(workDir string) string {
 	return filepath.Join(base, hex.EncodeToString(sum[:8])+".qmp.sock")
 }
 
+// the child sees ExtraFiles at fd 3 and up (stdio owns 0-2), and the
+// qmp socket is our only entry
+const qemuExtraFD = 3
+
+func listenQMP(path string) (*net.UnixListener, error) {
+	_ = os.Remove(path)
+	l, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+	if err != nil {
+		return nil, fmt.Errorf("listen qmp socket: %w", err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		_ = l.Close()
+		return nil, fmt.Errorf("chmod qmp socket: %w", err)
+	}
+	return l, nil
+}
+
 func StartQEMU(ctx context.Context, cfg QEMUConfig, logger *slog.Logger) (VMHandle, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -186,6 +204,21 @@ func StartQEMU(ctx context.Context, cfg QEMUConfig, logger *slog.Logger) (VMHand
 	}
 	handle.QMPPath = qmpPath
 
+	// qmp is full control of a tenant vm, so we bind it at 0600 and hand
+	// qemu the inherited fd. a qemu-bound socket would sit at umask perms
+	// in a shared dir, so if a job ever escaped its vm it could read and
+	// drive every other job's vm too
+	qmpListener, err := listenQMP(qmpPath)
+	if err != nil {
+		return nil, err
+	}
+	defer qmpListener.Close()
+	qmpFile, err := qmpListener.File()
+	if err != nil {
+		return nil, fmt.Errorf("get qmp socket file: %w", err)
+	}
+	defer qmpFile.Close()
+
 	qemuCmd := cfg.Image.RunnerCmd()
 	qemuBinary, err := exec.LookPath(qemuCmd)
 	if err != nil {
@@ -196,7 +229,6 @@ func StartQEMU(ctx context.Context, cfg QEMUConfig, logger *slog.Logger) (VMHand
 		Image:         cfg.Image,
 		CID:           cid,
 		EnableKVM:     cfg.EnableKVM,
-		QMPPath:       qmpPath,
 		SerialLogPath: serialLogPath,
 		VolumePaths:   volumePaths,
 	})
@@ -204,7 +236,7 @@ func StartQEMU(ctx context.Context, cfg QEMUConfig, logger *slog.Logger) (VMHand
 		return nil, err
 	}
 
-	cmd, slirpNet, err := qemuCommand(ctx, qemuBinary, args, cfg.Image, workDir, cfg.Dev)
+	cmd, slirpNet, err := qemuCommand(ctx, qemuBinary, args, cfg.Image, workDir, cfg.Dev, qmpFile)
 	if err != nil {
 		return nil, err
 	}
@@ -512,9 +544,12 @@ func qemuCommand(
 	spec ImageSpec,
 	workDir string,
 	dev bool,
+	qmpFile *os.File,
 ) (*exec.Cmd, *slirpNamespace, error) {
 	if len(spec.NetworkInterfaces) == 0 {
-		return exec.CommandContext(ctx, qemuBinary, args...), nil, nil
+		cmd := exec.CommandContext(ctx, qemuBinary, args...)
+		cmd.ExtraFiles = []*os.File{qmpFile}
+		return cmd, nil, nil
 	}
 
 	ipPath, err := exec.LookPath("ip")
@@ -551,6 +586,7 @@ func qemuCommand(
 	}, args...)
 
 	cmd := exec.CommandContext(ctx, unsharePath, cmdArgs...)
+	cmd.ExtraFiles = []*os.File{qmpFile}
 
 	return cmd, &slirpNamespace{
 		spec:    spec,
@@ -582,7 +618,6 @@ type qemuArgsConfig struct {
 	Image         ImageSpec
 	CID           uint32
 	EnableKVM     bool
-	QMPPath       string
 	SerialLogPath string
 	VolumePaths   map[string]string
 }
@@ -650,7 +685,8 @@ func addQEMUMachineArgs(b *argBuilder, cfg qemuArgsConfig, uuid uuid.UUID) {
 	b.Opt("-append", cfg.Image.BootArgs)
 
 	b.Opt("-sandbox", "on")
-	b.Optf("-qmp", "unix:%s,server,nowait", cfg.QMPPath)
+	b.Optf("-chardev", "socket,id=qmp0,fd=%d,server=on,wait=off", qemuExtraFD)
+	b.Opt("-mon", "chardev=qmp0,mode=control")
 }
 
 func addQEMUStoreArgs(b *argBuilder, cfg qemuArgsConfig) {
