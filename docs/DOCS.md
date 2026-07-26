@@ -1456,8 +1456,8 @@ Spindle is configured using environment variables. The following environment var
 - `SPINDLE_SERVER_OWNER`: The DID of the owner (required).
 - `SPINDLE_SERVER_LOG_DIR`: The directory to store workflow logs (default: `"/var/log/spindle"`).
 - `SPINDLE_SERVER_DOCKER_SOCKET`: Path to Docker socket to expose to invoked Spindle containers (default: `""`).
-- `SPINDLE_PIPELINES_NIXERY`: The Nixery URL (default: `"nixery.tangled.sh"`).
-- `SPINDLE_PIPELINES_WORKFLOW_TIMEOUT`: The default workflow timeout (default: `"5m"`).
+- `SPINDLE_NIXERY_PIPELINES_NIXERY`: The Nixery URL (default: `"nixery.tangled.sh"`).
+- `SPINDLE_NIXERY_PIPELINES_WORKFLOW_TIMEOUT`: The default workflow timeout (default: `"5m"`).
 
 For the microVM engine, the following are also available
 (prefix `SPINDLE_MICROVM_PIPELINES_`):
