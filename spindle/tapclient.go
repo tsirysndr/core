@@ -131,6 +131,17 @@ func (t *Tap) processRepo(ctx context.Context, evt *tapc.RecordEventData) error 
 			return nil
 		}
 
+		// check if this repo DID is already owned by someone else
+		existingRepo, err := t.spindle.db.GetRepoByDid(repoDid)
+		if err == nil {
+			if existingRepo.Owner != ownerDid {
+				l.Warn("rejecting repo record: repoDid already registered by another owner", "repoDid", repoDid, "existingOwner", existingRepo.Owner, "newOwner", ownerDid)
+				return nil
+			}
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("lookup existing repo by DID: %w", err)
+		}
+
 		if err := t.spindle.e.AddRepo(ownerDid.String(), rbac.ThisServer, repoDid.String()); err != nil {
 			l.Error("failed to add repo policy", "err", err)
 			return fmt.Errorf("add repo policy: %w", err)
