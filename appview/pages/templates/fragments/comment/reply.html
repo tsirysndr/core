@@ -10,7 +10,6 @@
     {{ template "user/fragments/picHandleLink" .LoggedInUser.Did }}
     {{ template "fragments/markdownEditor"
       (dict "Name"        "body"
-            "BlobName"    "blob"
             "Rows"        3
             "AutoFocus"   true
             "Placeholder" "Leave a reply...") }}

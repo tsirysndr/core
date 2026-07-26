@@ -1,14 +1,15 @@
 {{ define "fragments/markdownEditor" }}
-    {{ $name        := .Name        }}
-    {{ $value       := .Value       }}
-    {{ $blobName    := .BlobName    }}
-    {{ $blobValues  := .BlobValues  }}
-    {{ $rows        := (or .Rows 5) }}
-    {{ $required    := .Required    }}
-    {{ $autofocus   := .AutoFocus   }}
-    {{ $placeholder := .Placeholder }}
+    {{ $name        := .Name                  }}
+    {{ $value       := .Value                 }}
+    {{ $blobName    := (or .BlobName "blobs") }}
+    {{ $blobValues  := .BlobValues            }}
+    {{ $rows        := (or .Rows 5)           }}
+    {{ $required    := .Required              }}
+    {{ $autofocus   := .AutoFocus             }}
+    {{ $placeholder := .Placeholder           }}
     <markdown-editor
         class="w-full flex flex-col gap-2"
+        blob-name="{{ $blobName }}"
         hx-disinherit="*"
         hx-include="this"
     >
@@ -30,6 +31,9 @@
                 Preview
             </button>
         </div>
+        {{ range $blobValues }}
+            <input type="hidden" name="{{ $blobName }}" value="{{ . }}" />
+        {{ end }}
         <div data-md-panel="write">
             <textarea
                 name="{{ $name }}"

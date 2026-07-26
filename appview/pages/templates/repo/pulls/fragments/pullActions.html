@@ -52,7 +52,6 @@
         <input name="pull-round-idx" type="hidden" value="{{ .RoundNumber }}">
         {{ template "fragments/markdownEditor"
           (dict "Name"        "body"
-                "BlobName"    "blob"
                 "Rows"        8
                 "Required"    true
                 "Placeholder" "Add to the discussion...") }}
