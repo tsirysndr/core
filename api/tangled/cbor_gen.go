@@ -11386,7 +11386,11 @@ func (t *RepoIssue) MarshalCBOR(w io.Writer) error {
 	}
 
 	cw := cbg.NewCborWriter(w)
-	fieldCount := 7
+	fieldCount := 8
+
+	if t.Blobs == nil {
+		fieldCount--
+	}
 
 	if t.Body == nil {
 		fieldCount--
@@ -11476,6 +11480,35 @@ func (t *RepoIssue) MarshalCBOR(w io.Writer) error {
 	}
 	if _, err := cw.WriteString(string("sh.tangled.repo.issue")); err != nil {
 		return err
+	}
+
+	// t.Blobs ([]*util.LexBlob) (slice)
+	if t.Blobs != nil {
+
+		if len("blobs") > 1000000 {
+			return xerrors.Errorf("Value in field \"blobs\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("blobs"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("blobs")); err != nil {
+			return err
+		}
+
+		if len(t.Blobs) > 8192 {
+			return xerrors.Errorf("Slice value in field t.Blobs was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajArray, uint64(len(t.Blobs))); err != nil {
+			return err
+		}
+		for _, v := range t.Blobs {
+			if err := v.MarshalCBOR(cw); err != nil {
+				return err
+			}
+
+		}
 	}
 
 	// t.Title (string) (string)
@@ -11681,6 +11714,55 @@ func (t *RepoIssue) UnmarshalCBOR(r io.Reader) (err error) {
 				}
 
 				t.LexiconTypeID = string(sval)
+			}
+			// t.Blobs ([]*util.LexBlob) (slice)
+		case "blobs":
+
+			maj, extra, err = cr.ReadHeader()
+			if err != nil {
+				return err
+			}
+
+			if extra > 8192 {
+				return fmt.Errorf("t.Blobs: array too large (%d)", extra)
+			}
+
+			if maj != cbg.MajArray {
+				return fmt.Errorf("expected cbor array")
+			}
+
+			if extra > 0 {
+				t.Blobs = make([]*util.LexBlob, extra)
+			}
+
+			for i := 0; i < int(extra); i++ {
+				{
+					var maj byte
+					var extra uint64
+					var err error
+					_ = maj
+					_ = extra
+					_ = err
+
+					{
+
+						b, err := cr.ReadByte()
+						if err != nil {
+							return err
+						}
+						if b != cbg.CborNull[0] {
+							if err := cr.UnreadByte(); err != nil {
+								return err
+							}
+							t.Blobs[i] = new(util.LexBlob)
+							if err := t.Blobs[i].UnmarshalCBOR(cr); err != nil {
+								return xerrors.Errorf("unmarshaling t.Blobs[i] pointer: %w", err)
+							}
+						}
+
+					}
+
+				}
 			}
 			// t.Title (string) (string)
 		case "title":
@@ -12416,7 +12498,11 @@ func (t *RepoPull) MarshalCBOR(w io.Writer) error {
 	}
 
 	cw := cbg.NewCborWriter(w)
-	fieldCount := 10
+	fieldCount := 11
+
+	if t.Blobs == nil {
+		fieldCount--
+	}
 
 	if t.Body == nil {
 		fieldCount--
@@ -12491,6 +12577,35 @@ func (t *RepoPull) MarshalCBOR(w io.Writer) error {
 	}
 	if _, err := cw.WriteString(string("sh.tangled.repo.pull")); err != nil {
 		return err
+	}
+
+	// t.Blobs ([]*util.LexBlob) (slice)
+	if t.Blobs != nil {
+
+		if len("blobs") > 1000000 {
+			return xerrors.Errorf("Value in field \"blobs\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("blobs"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("blobs")); err != nil {
+			return err
+		}
+
+		if len(t.Blobs) > 8192 {
+			return xerrors.Errorf("Slice value in field t.Blobs was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajArray, uint64(len(t.Blobs))); err != nil {
+			return err
+		}
+		for _, v := range t.Blobs {
+			if err := v.MarshalCBOR(cw); err != nil {
+				return err
+			}
+
+		}
 	}
 
 	// t.Title (string) (string)
@@ -12778,6 +12893,55 @@ func (t *RepoPull) UnmarshalCBOR(r io.Reader) (err error) {
 				}
 
 				t.LexiconTypeID = string(sval)
+			}
+			// t.Blobs ([]*util.LexBlob) (slice)
+		case "blobs":
+
+			maj, extra, err = cr.ReadHeader()
+			if err != nil {
+				return err
+			}
+
+			if extra > 8192 {
+				return fmt.Errorf("t.Blobs: array too large (%d)", extra)
+			}
+
+			if maj != cbg.MajArray {
+				return fmt.Errorf("expected cbor array")
+			}
+
+			if extra > 0 {
+				t.Blobs = make([]*util.LexBlob, extra)
+			}
+
+			for i := 0; i < int(extra); i++ {
+				{
+					var maj byte
+					var extra uint64
+					var err error
+					_ = maj
+					_ = extra
+					_ = err
+
+					{
+
+						b, err := cr.ReadByte()
+						if err != nil {
+							return err
+						}
+						if b != cbg.CborNull[0] {
+							if err := cr.UnreadByte(); err != nil {
+								return err
+							}
+							t.Blobs[i] = new(util.LexBlob)
+							if err := t.Blobs[i].UnmarshalCBOR(cr); err != nil {
+								return xerrors.Errorf("unmarshaling t.Blobs[i] pointer: %w", err)
+							}
+						}
+
+					}
+
+				}
 			}
 			// t.Title (string) (string)
 		case "title":

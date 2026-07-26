@@ -38,6 +38,14 @@
               "type": "string",
               "format": "at-uri"
             }
+          },
+          "blobs": {
+            "type": "array",
+            "items": {
+              "type": "blob",
+              "accept": ["image/*"],
+              "maxSize": 1000000
+            }
           }
         }
       }

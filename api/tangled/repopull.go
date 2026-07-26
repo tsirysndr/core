@@ -18,6 +18,7 @@ func init() {
 // RECORDTYPE: RepoPull
 type RepoPull struct {
 	LexiconTypeID string            `json:"$type,const=sh.tangled.repo.pull" cborgen:"$type,const=sh.tangled.repo.pull"`
+	Blobs         []*util.LexBlob   `json:"blobs,omitempty" cborgen:"blobs,omitempty"`
 	Body          *string           `json:"body,omitempty" cborgen:"body,omitempty"`
 	CreatedAt     string            `json:"createdAt" cborgen:"createdAt"`
 	DependentOn   *string           `json:"dependentOn,omitempty" cborgen:"dependentOn,omitempty"`
