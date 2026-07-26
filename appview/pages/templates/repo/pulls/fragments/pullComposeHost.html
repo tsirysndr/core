@@ -14,7 +14,7 @@
 
         <form
             hx-post="/{{ .RepoInfo.FullName }}/pulls/new"
-            hx-trigger="submit, keydown[(ctrlKey || metaKey) && key=='Enter'] from:(#patch,#title,#body)"
+            hx-trigger="submit, keydown[(ctrlKey || metaKey) && key=='Enter'] from:find textarea"
             hx-indicator="#create-pull-spinner"
             hx-target="body"
             hx-swap="innerHTML show:top"
