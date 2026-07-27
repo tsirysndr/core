@@ -1,0 +1,30 @@
+[package]
+name = "knot-atproto-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.knot-atproto]
+path = ".."
+
+[[bin]]
+name = "pubkey"
+path = "fuzz_targets/pubkey.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "did_document"
+path = "fuzz_targets/did_document.rs"
+test = false
+doc = false
+bench = false

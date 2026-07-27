@@ -122,8 +122,10 @@
               (fs.unions [
                 ./Cargo.toml
                 ./Cargo.lock
+                ./lexicons
                 ./shuttle
                 ./bobbin
+                ./knot2
               ]);
           };
         buildGoApplication =

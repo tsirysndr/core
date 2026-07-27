@@ -1,0 +1,27 @@
+[package]
+name = "knot-maintenance"
+version = "2.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+knot-types = { workspace = true }
+knot-resource = { workspace = true }
+knot-config = { workspace = true }
+knot-git = { workspace = true }
+knot-lfs = { workspace = true }
+knot-pack = { workspace = true }
+knot-runtime = { workspace = true }
+tracing = { workspace = true }
+gix = { workspace = true }
+gix-pack = { workspace = true }
+gix-hash = { workspace = true }
+walkdir = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+knot-fixtures = { workspace = true }
+tempfile = { workspace = true }
+sha2 = { workspace = true }

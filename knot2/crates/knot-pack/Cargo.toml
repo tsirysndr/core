@@ -1,0 +1,53 @@
+[package]
+name = "knot-pack"
+version = "2.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+knot-types = { workspace = true }
+knot-git = { workspace = true }
+knot-index = { workspace = true }
+knot-runtime = { workspace = true }
+knot-resource = { workspace = true }
+knot-cache = { workspace = true }
+knot-edge = { workspace = true }
+knot-cob = { workspace = true }
+knot-cobs = { workspace = true }
+knot-messages = { workspace = true }
+url = { workspace = true }
+gix = { workspace = true }
+gix-pack = { workspace = true }
+gix-hash = { workspace = true }
+scc = { workspace = true }
+gix-packetline = { workspace = true }
+flate2 = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+thiserror = { workspace = true }
+walkdir = { workspace = true }
+tempfile = { workspace = true }
+
+[dev-dependencies]
+knot-fixtures = { workspace = true }
+tempfile = { workspace = true }
+flate2 = { workspace = true }
+gix-hash = { workspace = true }
+tracing-subscriber = { workspace = true }
+tikv-jemallocator = { workspace = true }
+knot-resource = { workspace = true }
+proptest = { workspace = true }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+knot-bench = { workspace = true }
+knot-maintenance = { workspace = true }
+quinn = { workspace = true }
+h3 = { workspace = true }
+h3-quinn = { workspace = true }
+rustls = { workspace = true }
+rcgen = { workspace = true }
+tokio-util = { workspace = true }
+http = { workspace = true }
+bytes = { workspace = true }

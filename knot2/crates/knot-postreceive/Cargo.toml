@@ -1,0 +1,22 @@
+[package]
+name = "knot-postreceive"
+version = "2.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+knot-types = { workspace = true }
+knot-git = { workspace = true }
+knot-langs = { workspace = true }
+knot-events = { workspace = true }
+knot-workflow = { workspace = true }
+knot-messages = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+knot-runtime = { workspace = true }
+knot-fixtures = { workspace = true }
+tempfile = { workspace = true }
+serde_json = { workspace = true }

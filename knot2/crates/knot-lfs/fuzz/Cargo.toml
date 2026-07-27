@@ -1,0 +1,40 @@
+[package]
+name = "knot-lfs-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.knot-lfs]
+path = ".."
+
+[[bin]]
+name = "transfer"
+path = "fuzz_targets/transfer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "batch"
+path = "fuzz_targets/batch.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pointer"
+path = "fuzz_targets/pointer.rs"
+test = false
+doc = false
+bench = false
+
+[patch.crates-io]
+gix-pack = { path = "../../../third_party/gix-pack" }

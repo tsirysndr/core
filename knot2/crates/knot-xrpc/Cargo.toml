@@ -1,0 +1,54 @@
+[package]
+name = "knot-xrpc"
+version = "2.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+knot-types = { workspace = true }
+knot-git = { workspace = true }
+knot-lfs = { workspace = true }
+knot-cache = { workspace = true }
+knot-pack = { workspace = true }
+knot-resource = { workspace = true }
+knot-index = { workspace = true }
+knot-acl = { workspace = true }
+knot-atproto = { workspace = true }
+knot-cob = { workspace = true }
+knot-cobs = { workspace = true }
+knot-secrets = { workspace = true }
+knot-runtime = { workspace = true }
+knot-events = { workspace = true }
+knot-langs = { workspace = true }
+knot-postreceive = { workspace = true }
+knot-messages = { workspace = true }
+knot-receive = { workspace = true }
+knot-maintenance = { workspace = true }
+tracing = { workspace = true }
+axum = { workspace = true, features = ["ws"] }
+tower = { workspace = true }
+tower-http = { workspace = true, features = ["fs"] }
+http-body = { workspace = true }
+tokio-util = { workspace = true, features = ["io-util"] }
+tokio = { workspace = true }
+futures = { workspace = true }
+tokio-stream = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+http = { workspace = true }
+httpdate = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
+tempfile = { workspace = true }
+sha2 = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+knot-fixtures = { workspace = true }
+knot-config = { workspace = true }
+bytes = { workspace = true }
+k256 = { workspace = true }
+sha2 = { workspace = true }
+tokio-tungstenite = "0.29"

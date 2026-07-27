@@ -1,6 +1,6 @@
 [workspace]
-resolver = "2"
-members = ["bobbin/crates/*", "shuttle"]
+resolver = "3"
+members = ["bobbin/crates/*", "shuttle", "knot2/crates/*"]
 exclude = ["sites"]
 
 [workspace.package]
@@ -41,24 +41,63 @@ bobbin-search = { path = "bobbin/crates/search" }
 bobbin-sim = { path = "bobbin/crates/bobbin-sim" }
 bobbin-xrpc = { path = "bobbin/crates/xrpc" }
 
-jacquard-common = "0.12.0-beta.2"
-jacquard-derive = "0.12.0-beta.2"
-jacquard-lexicon = { version = "0.12.0-beta.2", default-features = false }
+knot-fixtures = { path = "knot2/crates/knot-fixtures" }
+knot-lexicons = { path = "knot2/crates/knot-lexicons" }
+knot-types = { path = "knot2/crates/knot-types" }
+knot-resource = { path = "knot2/crates/knot-resource" }
+knot-config = { path = "knot2/crates/knot-config" }
+knot-runtime = { path = "knot2/crates/knot-runtime" }
+knot-git = { path = "knot2/crates/knot-git" }
+knot-langs = { path = "knot2/crates/knot-langs" }
+knot-lfs = { path = "knot2/crates/knot-lfs" }
+knot-workflow = { path = "knot2/crates/knot-workflow" }
+knot-pack = { path = "knot2/crates/knot-pack" }
+knot-cob = { path = "knot2/crates/knot-cob" }
+knot-cobs = { path = "knot2/crates/knot-cobs" }
+knot-index = { path = "knot2/crates/knot-index" }
+knot-cache = { path = "knot2/crates/knot-cache" }
+knot-acl = { path = "knot2/crates/knot-acl" }
+knot-atproto = { path = "knot2/crates/knot-atproto" }
+knot-messages = { path = "knot2/crates/knot-messages" }
+knot-postreceive = { path = "knot2/crates/knot-postreceive" }
+knot-receive = { path = "knot2/crates/knot-receive" }
+knot-ssh = { path = "knot2/crates/knot-ssh" }
+knot-secrets = { path = "knot2/crates/knot-secrets" }
+knot-events = { path = "knot2/crates/knot-events" }
+knot-xrpc = { path = "knot2/crates/knot-xrpc" }
+knot-bench = { path = "knot2/crates/knot-bench" }
+knot-maintenance = { path = "knot2/crates/knot-maintenance" }
+knot-sim = { path = "knot2/crates/knot-sim" }
+knot-edge = { path = "knot2/crates/knot-edge" }
+
+jacquard-common = "0.12.1"
+jacquard-derive = "0.12.1"
+jacquard-lexicon = { version = "0.12.1", default-features = false }
+jacquard-repo = "0.12.1"
+
+gix = { version = "0.84", features = ["parallel", "revision", "blob-diff", "worktree-archive", "tree-editor", "sha1", "sha256"] }
+gix-pack = { version = "0.71", default-features = false, features = ["generate", "streaming-input", "sha1", "sha256"] }
+gix-packetline = { version = "0.21", features = ["blocking-io"] }
+gix-archive = "0.33"
+gix-hash = { version = "0.25", features = ["sha1", "sha256"] }
+flate2 = "1"
 
 anyhow = "1"
 miette = "7"
 walkdir = "2"
 
-tokio = { version = "1.52", features = ["macros", "rt-multi-thread", "time", "signal", "io-util", "sync"] }
-tokio-util = "0.7"
+tokio = { version = "1.52", features = ["macros", "rt-multi-thread", "time", "signal", "io-util", "net", "sync"] }
+tokio-util = { version = "0.7", features = ["rt"] }
 tokio-stream = "0.1"
 tokio-tungstenite = { version = "0.29", features = ["rustls-tls-webpki-roots"] }
 futures = "0.3"
 either = "1"
+async-trait = "0.1"
 
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 serde_ipld_dagcbor = "0.6"
+serde_norway = "0.9"
 
 chrono = { version = "0.4", features = ["serde"] }
 cid = "0.11"
@@ -69,18 +108,55 @@ scc = "3"
 roaring = "0.11"
 lasso = { version = "0.7", features = ["multi-threaded"] }
 quick_cache = "0.6"
-getrandom = "0.3"
+moka = { version = "0.12", features = ["sync", "future"] }
+getrandom = "0.4"
 ahash = { version = "0.8", default-features = false, features = ["std"] }
+arc-swap = "1"
 
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots", "http2", "json", "gzip", "stream"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "webpki-roots", "http2", "json", "gzip", "stream"] }
 axum = "0.8"
-tower = { version = "0.5", features = ["util"] }
-tower-http = { version = "0.6", features = ["trace"] }
+hyper = { version = "1", features = ["server", "http1", "http2"] }
+hyper-util = { version = "0.1", features = ["server", "server-auto", "tokio", "service"] }
+tower = { version = "0.5", features = ["util", "limit", "load-shed"] }
+tower-http = { version = "0.7", default-features = false }
+tower_governor = { version = "0.8", default-features = false, features = ["axum"] }
+governor = "0.10"
 http = "1"
+http-body = "1"
+httpdate = "1"
+
+rustls = { version = "0.23", features = ["aws_lc_rs", "prefer-post-quantum"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["aws_lc_rs", "tls12", "logging"] }
+rustls-pemfile = "2"
+rustls-acme = { version = "0.15.3", default-features = false, features = ["aws-lc-rs", "tls12", "webpki-roots"] }
+x509-parser = "0.18"
+quinn = { version = "0.11.9", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs", "log"] }
+h3 = "0.0.8"
+h3-quinn = "0.0.10"
+rcgen = { version = "0.14", default-features = false, features = ["aws_lc_rs", "pem"] }
+hickory-resolver = "0.24"
+
+k256 = { version = "0.13", features = ["ecdsa"] }
+aes-gcm = "0.11.0-rc.4"
+hkdf = "0.13"
+sha2 = "0.11"
+base32 = "0.5"
+base64 = "0.22"
+bs58 = "0.5"
+zeroize = { version = "1", features = ["derive"] }
 
 wiremock = "0.6"
+tempfile = "3"
+proptest = "1"
+divan = "0.1.21"
 
 tantivy = "0.26"
+gengo-language = "0.14"
+regex = "1"
+globset = "0.4"
+rustix = { version = "1.1", features = ["process"] }
+tikv-jemallocator = "0.7"
+tikv-jemalloc-ctl = "0.7"
 
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
@@ -91,11 +167,16 @@ confique = { version = "0.4", default-features = false, features = ["toml"] }
 clap = { version = "4", features = ["derive", "env"] }
 toml = { version = "0.9", default-features = false, features = ["parse"] }
 
+[patch.crates-io]
+gix-pack = { path = "knot2/third_party/gix-pack" }
+
+[profile.dev]
+opt-level = 1
+
 [profile.release]
 lto = "fat"
 strip = true
 codegen-units = 1
-panic = "abort"
 
 [profile.bench]
 debug = 1

@@ -1,0 +1,148 @@
+set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
+
+default:
+    @just --list
+
+gen-config:
+    cargo run -p knot-server -- config-template > example.toml
+
+fmt:
+    cargo fmt
+
+fmt-check:
+    cargo fmt --check
+
+clippy:
+    cargo clippy -p 'knot-*' --all-targets -- -D warnings
+
+test:
+    cargo test -p 'knot-*'
+
+fuzz crate='knot-pack' target='pack' time='60':
+    cd crates/{{crate}}/fuzz && RUSTUP_TOOLCHAIN=nightly cargo fuzz run {{target}} -- -max_total_time={{time}}
+
+fuzz-ci: (fuzz "knot-pack" "pkt" "30") (fuzz "knot-pack" "pack" "30") (fuzz "knot-pack" "receive_commands" "30") (fuzz "knot-pack" "upload_args" "30") (fuzz "knot-git" "patch" "30") (fuzz "knot-cobs" "cob_change" "30") (fuzz "knot-cobs" "cob_ref" "30") (fuzz "knot-atproto" "pubkey" "30") (fuzz "knot-atproto" "did_document" "30") (fuzz "knot-edge" "spki" "30") (fuzz "knot-edge" "spki_pin" "30") (fuzz "knot-lfs" "transfer" "30") (fuzz "knot-lfs" "batch" "30") (fuzz "knot-lfs" "pointer" "30")
+
+bench filter='':
+    cargo bench -p knot-bench --bench pack -- {{filter}}
+    cargo bench -p knot-bench --bench cob -- {{filter}}
+    cargo bench -p knot-bench --bench projection -- {{filter}}
+
+bench-scaling:
+    cargo bench -p knot-bench --bench coldstart
+
+bench-gate:
+    cargo test -p knot-bench --features instrument --test gate
+
+bench-gate-registry:
+    cargo test -p knot-bench --features instrument --test registry_gate
+
+differential:
+    cargo test -p knot-pack --test differential
+
+t55xx *tests:
+    internal_docs/t55xx/run.sh {{tests}}
+
+ci: fmt-check clippy test gates bench-gate fuzz-ci
+
+gates: gate-no-subprocess gate-no-sql gate-no-native-git gate-no-string-ids gate-no-unguarded-receive gate-fuzz-targets-enumerated
+
+gate-no-subprocess:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    hits=$(grep -rn "process::Command" crates/*/src --include="*.rs" | grep -v "/_lex/" || true)
+    if [ -n "$hits" ]; then
+        echo "no-subprocess gate failed: server source spawns processes" >&2
+        echo "$hits" >&2
+        exit 1
+    fi
+    echo "ok: no process spawning in server source"
+
+gate-no-sql:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    hits=$(grep -inE '^name = "(rusqlite|libsqlite3-sys|sqlx|sqlx-core|sled|fjall|redb)"' ../Cargo.lock || true)
+    if [ -n "$hits" ]; then
+        echo "no-sql gate failed: an embedded database is in the dependency tree" >&2
+        echo "$hits" >&2
+        exit 1
+    fi
+    echo "ok: no embedded database in the dependency tree"
+
+gate-no-native-git:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    hits=$(grep -inE '^name = "(git2|libgit2-sys|openssl-sys|zlib-ng|zlib-ng-sys)"' ../Cargo.lock || true)
+    if [ -n "$hits" ]; then
+        echo "no-native-git gate failed: a native git or TLS shim is in the dependency tree" >&2
+        echo "$hits" >&2
+        exit 1
+    fi
+    echo "ok: no native git or TLS shim in the dependency tree"
+
+gate-no-string-ids:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    hits=$(grep -nE 'pub fn .*(-> *String|: *String\b)' crates/knot-types/src/ids.rs | grep -v 'fn to_hex' || true)
+    if [ -n "$hits" ]; then
+        echo "no-string-ids gate failed: a String-typed id crosses the knot-types boundary" >&2
+        echo "$hits" >&2
+        exit 1
+    fi
+    echo "ok: no String-typed id crosses the knot-types boundary"
+
+gate-no-unguarded-receive:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    hits=$(grep -rn 'receive_pack(\|receive_pack_with_limits(' crates/*/src --include="*.rs" | grep -v 'pub fn ' || true)
+    if [ -n "$hits" ]; then
+        echo "no-unguarded-receive gate failed: server source calls the unguarded receive path, use receive_pack_guarded" >&2
+        echo "$hits" >&2
+        exit 1
+    fi
+    echo "ok: the unguarded receive path is reached only from tests"
+
+gate-fuzz-targets-enumerated:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    disk=$(mktemp)
+    recipe=$(mktemp)
+    triplet=$(mktemp)
+    trap 'rm -f "$disk" "$recipe" "$triplet"' EXIT
+    find crates -path '*/fuzz/fuzz_targets/*.rs' -not -path '*/target/*' | sed -E 's#crates/([^/]+)/fuzz/fuzz_targets/(.+)\.rs#\1 \2#' | sort -u > "$disk"
+    just --show fuzz-ci | grep -oE '\(fuzz "[^"]+" "[^"]+" "[^"]+"' | sed -E 's#\(fuzz "([^"]+)" "([^"]+)" "([^"]+)"#\1 \2 \3#' | sort -u > "$triplet"
+    cut -d' ' -f1,2 "$triplet" > "$recipe"
+    while read -r crate target secs; do
+        if ! [[ "$secs" =~ ^[1-9][0-9]*$ ]]; then
+            echo "fuzz-targets-enumerated gate failed: target '$crate $target' runs for '$secs', not a positive number of seconds" >&2
+            exit 1
+        fi
+    done < "$triplet"
+    missing=$(comm -23 "$disk" "$recipe" || true)
+    extra=$(comm -13 "$disk" "$recipe" || true)
+    if [ -n "$missing" ] || [ -n "$extra" ]; then
+        echo "fuzz-targets-enumerated gate failed: the fuzz-ci recipe and the targets on disk disagree" >&2
+        if [ -n "$missing" ]; then
+            echo "on disk but absent from fuzz-ci:" >&2
+            echo "$missing" >&2
+        fi
+        if [ -n "$extra" ]; then
+            echo "in fuzz-ci but no matching target on disk:" >&2
+            echo "$extra" >&2
+        fi
+        exit 1
+    fi
+    while read -r crate target; do
+        manifest="crates/$crate/fuzz/Cargo.toml"
+        if ! grep -qF "name = \"$target\"" "$manifest" || ! grep -qF "path = \"fuzz_targets/$target.rs\"" "$manifest"; then
+            echo "fuzz-targets-enumerated gate failed: $manifest has no [[bin]] declaring target '$target'" >&2
+            exit 1
+        fi
+        entry=$(grep -oE 'knot_[a-z0-9_]+::fuzz::[a-z0-9_]+' "crates/$crate/fuzz/fuzz_targets/$target.rs" | head -1 | sed -E 's#.*::fuzz::##' || true)
+        smoke="crates/$crate/tests/fuzz_smoke.rs"
+        if [ -z "$entry" ] || ! grep -qE "fuzz::${entry}\(" "$smoke"; then
+            echo "fuzz-targets-enumerated gate failed: target '$target' entry point $(echo "$crate" | tr - _)::fuzz::$entry has no smoke-test coverage in $smoke" >&2
+            exit 1
+        fi
+    done < "$disk"
+    echo "ok: every fuzz target is enumerated in fuzz-ci, declared in its fuzz manifest, and smoke-tested"

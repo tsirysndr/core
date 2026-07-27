@@ -1,0 +1,11 @@
+/target
+**/target
+
+crates/knot-lexicons/src/_lex/
+
+crates/knot-pack/fuzz/corpus/
+crates/knot-pack/fuzz/artifacts/
+
+config.toml
+
+*.swp

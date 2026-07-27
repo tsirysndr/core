@@ -1,0 +1,47 @@
+[package]
+name = "knot-pack-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.knot-pack]
+path = ".."
+
+[[bin]]
+name = "pkt"
+path = "fuzz_targets/pkt.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pack"
+path = "fuzz_targets/pack.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "receive_commands"
+path = "fuzz_targets/receive_commands.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "upload_args"
+path = "fuzz_targets/upload_args.rs"
+test = false
+doc = false
+bench = false
+
+[patch.crates-io]
+gix-pack = { path = "../../../third_party/gix-pack" }

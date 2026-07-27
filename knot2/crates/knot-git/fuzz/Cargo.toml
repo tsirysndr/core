@@ -1,0 +1,26 @@
+[package]
+name = "knot-git-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.knot-git]
+path = ".."
+
+[[bin]]
+name = "patch"
+path = "fuzz_targets/patch.rs"
+test = false
+doc = false
+bench = false
+
+[patch.crates-io]
+gix-pack = { path = "../../../third_party/gix-pack" }

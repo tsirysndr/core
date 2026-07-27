@@ -353,9 +353,11 @@ mod tests {
     fn unknown_variant_is_reported() {
         use bobbin_types::sh_tangled::repo::issue::state::State as IssueStateRec;
         use jacquard_common::deps::smol_str::SmolStr;
+        use jacquard_common::types::string::Datetime;
         let issue_idx = idx();
         let pull_idx = StateIndex::<PullStatusKind>::new(RuntimeHasher::default());
         let rec = Record::IssueState(IssueStateRec {
+            created_at: Datetime::raw_str("2026-06-11T00:00:00Z"),
             issue: at("at://did:plc:limpet/sh.tangled.repo.issue/i1"),
             state: StateState::Other(SmolStr::new_static("sh.tangled.repo.issue.state.reopened")),
             extra_data: None,

@@ -1,0 +1,33 @@
+[package]
+name = "knot-cobs-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.knot-cobs]
+path = ".."
+
+[[bin]]
+name = "cob_change"
+path = "fuzz_targets/cob_change.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "cob_ref"
+path = "fuzz_targets/cob_ref.rs"
+test = false
+doc = false
+bench = false
+
+[patch.crates-io]
+gix-pack = { path = "../../../third_party/gix-pack" }

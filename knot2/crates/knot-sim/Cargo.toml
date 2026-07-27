@@ -1,0 +1,52 @@
+[package]
+name = "knot-sim"
+version = "2.0.0"
+edition = { workspace = true }
+rust-version = { workspace = true }
+license = { workspace = true }
+publish = false
+
+[[bin]]
+name = "knot-sim"
+path = "src/main.rs"
+
+[dependencies]
+knot-types = { workspace = true }
+knot-config = { workspace = true }
+knot-runtime = { workspace = true }
+knot-git = { workspace = true }
+knot-index = { workspace = true }
+knot-pack = { workspace = true }
+knot-resource = { workspace = true }
+knot-atproto = { workspace = true }
+knot-secrets = { workspace = true }
+knot-xrpc = { workspace = true }
+knot-events = { workspace = true }
+knot-cob = { workspace = true }
+knot-cobs = { workspace = true }
+knot-maintenance = { workspace = true }
+knot-messages = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+http = { workspace = true }
+bytes = { workspace = true }
+tokio = { workspace = true }
+url = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+base64 = { workspace = true }
+futures = { workspace = true }
+tempfile = { workspace = true }
+
+[dev-dependencies]
+knot-fixtures = { workspace = true }
+knot-ssh = { workspace = true }
+knot-edge = { workspace = true }
+knot-lfs = { workspace = true }
+sha2 = { workspace = true }
+quinn = { workspace = true }
+h3 = { workspace = true }
+h3-quinn = { workspace = true }
+rustls = { workspace = true }
+rcgen = { workspace = true }
+tokio-util = { workspace = true }

@@ -1,0 +1,30 @@
+[package]
+name = "knot-edge-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.knot-edge]
+path = ".."
+
+[[bin]]
+name = "spki"
+path = "fuzz_targets/spki.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "spki_pin"
+path = "fuzz_targets/spki_pin.rs"
+test = false
+doc = false
+bench = false

@@ -1,0 +1,17 @@
+[package]
+name = "knot-acl"
+version = "2.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+knot-types = { workspace = true }
+knot-index = { workspace = true }
+
+[dev-dependencies]
+knot-cob = { workspace = true }
+knot-cobs = { workspace = true }
+knot-git = { workspace = true }
+knot-runtime = { workspace = true }
+tempfile = { workspace = true }

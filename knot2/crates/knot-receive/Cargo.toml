@@ -1,0 +1,22 @@
+[package]
+name = "knot-receive"
+version = "2.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+knot-types = { workspace = true }
+knot-git = { workspace = true }
+knot-pack = { workspace = true }
+knot-resource = { workspace = true }
+knot-cob = { workspace = true }
+knot-index = { workspace = true }
+knot-atproto = { workspace = true }
+knot-events = { workspace = true }
+knot-maintenance = { workspace = true }
+knot-postreceive = { workspace = true }
+knot-messages = { workspace = true }
+knot-runtime = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }

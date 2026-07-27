@@ -1,0 +1,29 @@
+[package]
+name = "knot-atproto"
+version = "2.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+knot-types = { workspace = true }
+knot-runtime = { workspace = true }
+knot-cache = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_ipld_dagcbor = { workspace = true }
+sha2 = { workspace = true }
+base32 = { workspace = true }
+bs58 = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+base64 = { workspace = true }
+bytes = { workspace = true }
+http = { workspace = true }
+
+[dev-dependencies]
+knot-lexicons = { workspace = true }
+tokio = { workspace = true }
+k256 = { workspace = true }
+proptest = { workspace = true }

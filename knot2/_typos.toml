@@ -1,0 +1,4 @@
+[files]
+extend-exclude = ["lexicons/", "**/_lex/", "Cargo.lock", "pack-spike/"]
+
+[default.extend-words]

@@ -1,0 +1,24 @@
+[package]
+name = "knot-runtime"
+version = "2.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+knot-types = { workspace = true }
+serde = { workspace = true }
+reqwest = { workspace = true }
+http = { workspace = true }
+url = { workspace = true }
+bytes = { workspace = true }
+getrandom = { workspace = true }
+k256 = { workspace = true }
+thiserror = { workspace = true }
+futures = { workspace = true }
+tokio = { workspace = true }
+hickory-resolver = { workspace = true }
+
+[dev-dependencies]
+futures = { workspace = true }
+tokio = { workspace = true }

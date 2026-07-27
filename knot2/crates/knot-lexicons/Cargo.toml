@@ -1,0 +1,29 @@
+[package]
+name = "knot-lexicons"
+version = "2.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+jacquard-common = { workspace = true }
+jacquard-derive = { workspace = true }
+jacquard-lexicon = { workspace = true, default-features = false }
+bytes = { workspace = true }
+cid = { workspace = true }
+miette = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+
+[build-dependencies]
+anyhow = { workspace = true }
+jacquard-lexicon = { workspace = true, features = ["codegen"] }
+walkdir = { workspace = true }
+
+[features]
+default = ["sh_tangled"]
+com_atproto = []
+sh_tangled = ["com_atproto"]
+streaming = []

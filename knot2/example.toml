@@ -1,0 +1,600 @@
+[server]
+# Can also be specified via environment variable `KNOT_HOSTNAME`.
+# Required! This value must be specified.
+#hostname =
+
+# Can also be specified via environment variable `KNOT_ADMINS`.
+# Required! This value must be specified.
+#admins =
+
+# Can also be specified via environment variable `KNOT_LISTEN_ADDR`.
+# Default value: "[::]:5555"
+#listen_addr = "[::]:5555"
+
+# Can also be specified via environment variable `KNOT_LISTEN_HEADER_TIMEOUT_MS`.
+# Default value: 10000
+#listen_header_timeout_ms = 10000
+
+# Can also be specified via environment variable `KNOT_LISTEN_IDLE_TIMEOUT_MS`.
+# Default value: 60000
+#listen_idle_timeout_ms = 60000
+
+# Can also be specified via environment variable `KNOT_LISTEN_MAX_CONNECTIONS`.
+# Default value: 1024
+#listen_max_connections = 1024
+
+# Can also be specified via environment variable `KNOT_LISTEN_RATE_LIMIT_PER_SECOND`.
+# Default value: 50
+#listen_rate_limit_per_second = 50
+
+# Can also be specified via environment variable `KNOT_LISTEN_RATE_LIMIT_BURST`.
+# Default value: 200
+#listen_rate_limit_burst = 200
+
+# Can also be specified via environment variable `KNOT_LISTEN_MAX_INFLIGHT_REQUESTS`.
+# Default value: 1024
+#listen_max_inflight_requests = 1024
+
+# Can also be specified via environment variable `KNOT_LISTEN_REQUEST_TIMEOUT_MS`.
+# Default value: 60000
+#listen_request_timeout_ms = 60000
+
+# Can also be specified via environment variable `KNOT_LISTEN_BODY_TIMEOUT_MS`.
+# Default value: 30000
+#listen_body_timeout_ms = 30000
+
+# Can also be specified via environment variable `KNOT_LISTEN_WRITE_REQUEST_TIMEOUT_MS`.
+# Default value: 1800000
+#listen_write_request_timeout_ms = 1800000
+
+# Can also be specified via environment variable `KNOT_INTERNAL_LISTEN_ADDR`.
+# Default value: "[::1]:5444"
+#internal_listen_addr = "[::1]:5444"
+
+# Can also be specified via environment variable `KNOT_SSH_LISTEN_ADDR`.
+# Default value: "[::]:2222"
+#ssh_listen_addr = "[::]:2222"
+
+# Can also be specified via environment variable `KNOT_SSH_HOST_KEY_FILE`.
+# Required! This value must be specified.
+#ssh_host_key_file =
+
+# Can also be specified via environment variable `KNOT_SSH_MAX_PACK_BYTES`.
+# Default value: 8589934592
+#ssh_max_pack_bytes = 8589934592
+
+# Can also be specified via environment variable `KNOT_APPVIEW_ENDPOINT`.
+# Default value: "https://tangled.org"
+#appview_endpoint = "https://tangled.org"
+
+[tls]
+# Can also be specified via environment variable `KNOT_TLS_CERT_PATH`.
+#cert_path =
+
+# Can also be specified via environment variable `KNOT_TLS_KEY_PATH`.
+#key_path =
+
+# Can also be specified via environment variable `KNOT_TLS_HTTP3`.
+# Default value: true
+#http3 = true
+
+# Can also be specified via environment variable `KNOT_TLS_ACME_ENABLED`.
+# Default value: false
+#acme_enabled = false
+
+# Can also be specified via environment variable `KNOT_TLS_ACME_CACHE_DIR`.
+#acme_cache_dir =
+
+# Can also be specified via environment variable `KNOT_TLS_ACME_CONTACT`.
+#acme_contact =
+
+# Can also be specified via environment variable `KNOT_TLS_ACME_STAGING`.
+# Default value: false
+#acme_staging = false
+
+# Can also be specified via environment variable `KNOT_TLS_MTLS_ENABLED`.
+# Default value: false
+#mtls_enabled = false
+
+# Can also be specified via environment variable `KNOT_TLS_MTLS_CLIENT_CA_PATH`.
+#mtls_client_ca_path =
+
+# Can also be specified via environment variable `KNOT_TLS_MTLS_ADMIN_SPKI_PIN`.
+#mtls_admin_spki_pin =
+
+[acl]
+# Can also be specified via environment variable `KNOT_ADMISSION`.
+# Default value: "closed"
+#admission = "closed"
+
+[repo]
+# Can also be specified via environment variable `KNOT_SCAN_PATH`.
+# Required! This value must be specified.
+#scan_path =
+
+# Can also be specified via environment variable `KNOT_DEFAULT_BRANCH`.
+# Default value: "main"
+#default_branch = "main"
+
+[git]
+# Committer identity stamped on merge commits the knot creates.
+#
+# Can also be specified via environment variable `KNOT_GIT_USER_NAME`.
+#
+# Default value: "Tangled"
+#user_name = "Tangled"
+
+# Can also be specified via environment variable `KNOT_GIT_USER_EMAIL`.
+# Default value: "noreply@tangled.sh"
+#user_email = "noreply@tangled.sh"
+
+# Can also be specified via environment variable `KNOT_GIT_OBJECT_FORMAT`.
+# Default value: "sha256"
+#object_format = "sha256"
+
+[secrets]
+# Can also be specified via environment variable `KNOT_SEALED_KEY_FILE`.
+# Required! This value must be specified.
+#sealed_key_file =
+
+# Can also be specified via environment variable `KNOT_MASTER_KEY_ENV`.
+# Required! This value must be specified.
+#master_key_env =
+
+[http]
+# Can also be specified via environment variable `KNOT_HTTP_CONNECT_TIMEOUT_MS`.
+# Default value: 5000
+#connect_timeout_ms = 5000
+
+# Can also be specified via environment variable `KNOT_HTTP_READ_TIMEOUT_MS`.
+# Default value: 30000
+#read_timeout_ms = 30000
+
+# Can also be specified via environment variable `KNOT_HTTP_REQUEST_TIMEOUT_MS`.
+# Default value: 60000
+#request_timeout_ms = 60000
+
+# Can also be specified via environment variable `KNOT_HTTP_MAX_RESPONSE_BYTES`.
+# Default value: 16777216
+#max_response_bytes = 16777216
+
+[atproto]
+# Can also be specified via environment variable `KNOT_PLC_DIRECTORY`.
+# Required! This value must be specified.
+#plc_directory =
+
+[xrpc]
+# Can also be specified via environment variable `KNOT_XRPC_MAX_BODY_BYTES`.
+# Default value: 65536
+#max_body_bytes = 65536
+
+# Can also be specified via environment variable `KNOT_XRPC_MAX_RESPONSE_BYTES`.
+# Default value: 5242880
+#max_response_bytes = 5242880
+
+# Can also be specified via environment variable `KNOT_XRPC_MAX_ARCHIVE_BYTES`.
+# Default value: 1073741824
+#max_archive_bytes = 1073741824
+
+# Can also be specified via environment variable `KNOT_XRPC_TREE_LAST_COMMIT_BUDGET_MS`.
+# Default value: 300
+#tree_last_commit_budget_ms = 300
+
+# Can also be specified via environment variable `KNOT_XRPC_BLOB_LAST_COMMIT_BUDGET_MS`.
+# Default value: 2000
+#blob_last_commit_budget_ms = 2000
+
+# Can also be specified via environment variable `KNOT_XRPC_LANGUAGES_BUDGET_MS`.
+# Default value: 1000
+#languages_budget_ms = 1000
+
+# Can also be specified via environment variable `KNOT_XRPC_LANGUAGES_PUSH_BUDGET_MS`.
+# Default value: 2000
+#languages_push_budget_ms = 2000
+
+# Body limit for the merge and mergeCheck procedures, whose patch payloads
+# routinely exceed the general XRPC body limit.
+#
+# Can also be specified via environment variable `KNOT_XRPC_MAX_PATCH_BYTES`.
+#
+# Default value: 16777216
+#max_patch_bytes = 16777216
+
+# Limit on the total decompressed size of a patch the merge procedures parse,
+# bounding binary-delta inflation and hunk expansion apart from the
+# compressed body limit above.
+#
+# Can also be specified via environment variable `KNOT_XRPC_MAX_PATCH_DECOMPRESSED_BYTES`.
+#
+# Default value: 134217728
+#max_patch_decompressed_bytes = 134217728
+
+# Can also be specified via environment variable `KNOT_XRPC_PREAUTH_BURST`.
+# Default value: 20
+#preauth_burst = 20
+
+# Can also be specified via environment variable `KNOT_XRPC_PREAUTH_REFILL_MS`.
+# Default value: 100
+#preauth_refill_ms = 100
+
+# Can also be specified via environment variable `KNOT_XRPC_PER_PEER_INFLIGHT`.
+# Default value: 8
+#per_peer_inflight = 8
+
+# Can also be specified via environment variable `KNOT_XRPC_GLOBAL_INFLIGHT`.
+# Default value: 64
+#global_inflight = 64
+
+# Can also be specified via environment variable `KNOT_XRPC_MAX_PENDING_RESERVATIONS`.
+# Default value: 256
+#max_pending_reservations = 256
+
+# Per-account limit on reserved repository keys awaiting creation, so one
+# account cannot consume the whole pending-reservation budget.
+#
+# Can also be specified via environment variable `KNOT_XRPC_PER_ACTOR_RESERVATIONS`.
+#
+# Default value: 32
+#per_actor_reservations = 32
+
+# How long a reserved repository key is held before it lapses and its
+# sealed key is reclaimed, in seconds.
+#
+# Can also be specified via environment variable `KNOT_XRPC_RESERVATION_TTL_SECS`.
+#
+# Default value: 3600
+#reservation_ttl_secs = 3600
+
+# Can also be specified via environment variable `KNOT_XRPC_FORK_MAX_PACK_BYTES`.
+# Default value: 1073741824
+#fork_max_pack_bytes = 1073741824
+
+# Can also be specified via environment variable `KNOT_XRPC_FORK_FETCH_TIMEOUT_MS`.
+# Default value: 600000
+#fork_fetch_timeout_ms = 600000
+
+# When the knot runs behind a trusted reverse proxy that terminates TLS,
+# set this to the header the proxy appends the client address to, for
+# example x-forwarded-for. The rightmost entry is used. Leave unset when
+# the knot is directly exposed so the socket peer address is used. Only set
+# this when a trusted proxy overwrites or appends the header, since a client
+# can forge it otherwise.
+#
+# Can also be specified via environment variable `KNOT_XRPC_TRUSTED_PROXY_HEADER`.
+#trusted_proxy_header =
+
+# Can also be specified via environment variable `KNOT_XRPC_EVENTS_REPLAY_BUFFER`.
+# Default value: 4096
+#events_replay_buffer = 4096
+
+# Can also be specified via environment variable `KNOT_XRPC_EVENTS_REPLAY_BYTES`.
+# Default value: 67108864
+#events_replay_bytes = 67108864
+
+# Can also be specified via environment variable `KNOT_XRPC_EVENTS_MAX_SUBSCRIBERS`.
+# Default value: 256
+#events_max_subscribers = 256
+
+# Can also be specified via environment variable `KNOT_XRPC_EVENTS_MAX_PER_PEER`.
+# Default value: 8
+#events_max_per_peer = 8
+
+[maintenance]
+# Can also be specified via environment variable `KNOT_MAINTENANCE_ENABLED`.
+# Default value: true
+#enabled = true
+
+# Can also be specified via environment variable `KNOT_MAINTENANCE_COMMIT_GRAPH`.
+# Default value: true
+#commit_graph = true
+
+# Can also be specified via environment variable `KNOT_MAINTENANCE_MULTI_PACK_INDEX`.
+# Default value: true
+#multi_pack_index = true
+
+# Can also be specified via environment variable `KNOT_MAINTENANCE_BITMAP`.
+# Default value: true
+#bitmap = true
+
+# Can also be specified via environment variable `KNOT_MAINTENANCE_INTERVAL_SECS`.
+# Default value: 21600
+#interval_secs = 21600
+
+# Can also be specified via environment variable `KNOT_MAINTENANCE_REPACK_MAX_OBJECTS`.
+# Default value: 16000000
+#repack_max_objects = 16000000
+
+# Can also be specified via environment variable `KNOT_MAINTENANCE_REPACK_GEOMETRIC_FACTOR`.
+# Default value: 2
+#repack_geometric_factor = 2
+
+# Can also be specified via environment variable `KNOT_MAINTENANCE_PRUNE_GRACE_SECS`.
+# Default value: 1209600
+#prune_grace_secs = 1209600
+
+# Can also be specified via environment variable `KNOT_MAINTENANCE_REFLOG_EXPIRE_SECS`.
+# Default value: 7776000
+#reflog_expire_secs = 7776000
+
+# Can also be specified via environment variable `KNOT_MAINTENANCE_LARGE_PUSH_BYTES`.
+# Default value: 52428800
+#large_push_bytes = 52428800
+
+[pack_cache]
+# Can also be specified via environment variable `KNOT_PACK_CACHE_ENABLED`.
+# Default value: true
+#enabled = true
+
+# Can also be specified via environment variable `KNOT_PACK_CACHE_TTL_SECS`.
+# Default value: 60
+#ttl_secs = 60
+
+# Can also be specified via environment variable `KNOT_PACK_CACHE_MAX_ENTRY_BYTES`.
+# Default value: 67108864
+#max_entry_bytes = 67108864
+
+# Can also be specified via environment variable `KNOT_PACK_CACHE_MAX_TOTAL_BYTES`.
+# Default value: 2147483648
+#max_total_bytes = 2147483648
+
+[pack]
+# Can also be specified via environment variable `KNOT_PACK_MAX_OBJECTS`.
+# Default value: 16000000
+#max_objects = 16000000
+
+# Can also be specified via environment variable `KNOT_PACK_MAX_TOTAL_BYTES`.
+# Default value: 68719476736
+#max_total_bytes = 68719476736
+
+# Can also be specified via environment variable `KNOT_PACK_SELECTION_MAX_OBJECTS`.
+# Default value: 16000000
+#selection_max_objects = 16000000
+
+# Can also be specified via environment variable `KNOT_PACK_SELECTION_TIME_BUDGET_SECS`.
+# Default value: 600
+#selection_time_budget_secs = 600
+
+[lfs]
+# Can also be specified via environment variable `KNOT_LFS_STORE_PATH`.
+#store_path =
+
+# Can also be specified via environment variable `KNOT_LFS_MAX_OBJECT_BYTES`.
+# Default value: 5368709120
+#max_object_bytes = 5368709120
+
+# Can also be specified via environment variable `KNOT_LFS_FREE_SPACE_FLOOR_BYTES`.
+# Default value: 1073741824
+#free_space_floor_bytes = 1073741824
+
+# Can also be specified via environment variable `KNOT_LFS_GC_GRACE_SECS`.
+# Default value: 1209600
+#gc_grace_secs = 1209600
+
+# Can also be specified via environment variable `KNOT_LFS_GC_INTERVAL_SECS`.
+# Default value: 21600
+#gc_interval_secs = 21600
+
+# Can also be specified via environment variable `KNOT_LFS_MAX_SSH_TRANSFERS`.
+# Default value: 16
+#max_ssh_transfers = 16
+
+# Can also be specified via environment variable `KNOT_LFS_MAX_HTTP_DOWNLOADS`.
+# Default value: 64
+#max_http_downloads = 64
+
+[resources]
+# Can also be specified via environment variable `KNOT_MAX_THREADS`.
+# Default value: 0
+#max_threads = 0
+
+# Can also be specified via environment variable `KNOT_MAX_MEMORY_BYTES`.
+# Default value: 0
+#max_memory_bytes = 0
+
+[homepage]
+# Can also be specified via environment variable `KNOT_HOMEPAGE_ENABLED`.
+# Default value: true
+#enabled = true
+
+# Can also be specified via environment variable `KNOT_HOMEPAGE_PATH`.
+#path =
+
+[ci]
+# Can also be specified via environment variable `KNOT_CI_LOGS_ADDR`.
+#logs_addr =
+
+[messages]
+[messages.push]
+# Default value: ["{knot} received {refs}."]
+#ack = ["{knot} received {refs}."]
+
+# Default value: ["", "-> Open stinky pull request for this branch:", " {url}", ""]
+#pull_request = ["", "-> Open stinky pull request for this branch:", " {url}", ""]
+
+# Default value: ["pipeline compiled with no diagnostics"]
+#pipeline_clean = ["pipeline compiled with no diagnostics"]
+
+# Default value: ["no pipelines to compile"]
+#pipeline_none = ["no pipelines to compile"]
+
+# Default value: ["-> Browse CI logs in your terminal:", "   ssh -t -p {port} {host} {repo} {sha}"]
+#ci_logs = ["-> Browse CI logs in your terminal:", "   ssh -t -p {port} {host} {repo} {sha}"]
+
+[messages.fetch]
+# Default value: ["Thanks for using {knot}!"]
+#motd = ["Thanks for using {knot}!"]
+
+# Default value: ["Enumerating objects: {count}, done."]
+#enumerating = ["Enumerating objects: {count}, done."]
+
+# Default value: ["Total {count}, done."]
+#total = ["Total {count}, done."]
+
+# Default value: "knot: {error}"
+#fatal = "knot: {error}"
+
+[messages.reject]
+# Default value: "refs/cobs/* and refs/hidden/* are reserved and cannot be pushed"
+#reserved_refs = "refs/cobs/* and refs/hidden/* are reserved and cannot be pushed"
+
+# Default value: "existing refs/cobs/* object cannot be modified or deleted over the wire"
+#cob_create_only = "existing refs/cobs/* object cannot be modified or deleted over the wire"
+
+# Default value: "refs/cobs/* stores append-only collaborative objects and cannot be deleted"
+#cob_delete = "refs/cobs/* stores append-only collaborative objects and cannot be deleted"
+
+# Default value: "refs/hidden/* is reserved for server-side fork staging and cannot be pushed"
+#hidden_reserved = "refs/hidden/* is reserved for server-side fork staging and cannot be pushed"
+
+# Default value: "collaborative-object verification failed: {error}"
+#cob_verification = "collaborative-object verification failed: {error}"
+
+# Default value: "reference already exists"
+#ref_exists = "reference already exists"
+
+# Default value: "stale info: old value doesn't match"
+#stale_old_value = "stale info: old value doesn't match"
+
+# Default value: "missing necessary objects"
+#missing_objects = "missing necessary objects"
+
+# Default value: "missing necessary objects for {ref}"
+#missing_objects_for = "missing necessary objects for {ref}"
+
+# Default value: "atomic transaction failed"
+#atomic_failed = "atomic transaction failed"
+
+# Default value: "atomic push aborted"
+#atomic_aborted = "atomic push aborted"
+
+# Default value: "authorization unavailable"
+#authorization_unavailable = "authorization unavailable"
+
+# Default value: "unpacker error"
+#unpacker_error = "unpacker error"
+
+# Default value: "ref snapshot unavailable"
+#ref_snapshot_unavailable = "ref snapshot unavailable"
+
+# Default value: "object migration failed"
+#object_migration_failed = "object migration failed"
+
+[messages.ssh]
+# Default value: ["Hi {user}! You're authenticated to {knot} knot.", "This knot serves git over ssh, so there's no shell here. :P", "Clone repo with: git clone {knot}:<repoDID>"]
+#greeting = ["Hi {user}! You're authenticated to {knot} knot.", "This knot serves git over ssh, so there's no shell here. :P", "Clone repo with: git clone {knot}:<repoDID>"]
+
+# Default value: "knot: unsupported command"
+#unsupported_command = "knot: unsupported command"
+
+# Default value: "knot: too many concurrent operations from your address, try again shortly"
+#too_many_operations = "knot: too many concurrent operations from your address, try again shortly"
+
+# Default value: "knot: repository not found"
+#repo_not_found = "knot: repository not found"
+
+# Default value: "knot: repository index is warming, retry shortly"
+#index_warming = "knot: repository index is warming, retry shortly"
+
+# Default value: "knot: LFS isn't enabled on this knot"
+#lfs_disabled = "knot: LFS isn't enabled on this knot"
+
+# Default value: "knot: your ssh key isn't registered to a user authorized to push here. If you offer several keys, make sure the registered one is offered first."
+#key_not_registered = "knot: your ssh key isn't registered to a user authorized to push here. If you offer several keys, make sure the registered one is offered first."
+
+# Default value: "knot: you aren't authorized to push to this repository."
+#push_denied = "knot: you aren't authorized to push to this repository."
+
+# Default value: "knot: server is shutting down"
+#shutting_down = "knot: server is shutting down"
+
+# Default value: "knot: malformed upload-archive request"
+#archive_malformed = "knot: malformed upload-archive request"
+
+# Default value: "knot: upload-archive request timed out"
+#archive_timeout = "knot: upload-archive request timed out"
+
+# Default value: "knot: upload-archive failed"
+#archive_failed = "knot: upload-archive failed"
+
+# Default value: "knot: cannot advertise refs"
+#advertise_failed = "knot: cannot advertise refs"
+
+# Default value: "knot: push exceeds configured size limit"
+#push_too_large = "knot: push exceeds configured size limit"
+
+# Default value: "knot: receive exceeded its time budget"
+#receive_deadline = "knot: receive exceeded its time budget"
+
+# Default value: "knot: malformed pack stream"
+#malformed_pack = "knot: malformed pack stream"
+
+# Default value: "knot: receive read error"
+#receive_read_error = "knot: receive read error"
+
+# Default value: "knot: receive stream ended early"
+#receive_ended_early = "knot: receive stream ended early"
+
+# Default value: "knot: receive-pack failed"
+#receive_failed = "knot: receive-pack failed"
+
+[messages.http]
+# Default value: "you aren't authorized to push to this repository"
+#push_denied = "you aren't authorized to push to this repository"
+
+# Default value: "repository not found"
+#repo_not_found = "repository not found"
+
+# Default value: "push exceeds the configured size limit"
+#push_too_large = "push exceeds the configured size limit"
+
+# Default value: "malformed pack stream: {error}"
+#malformed_pack = "malformed pack stream: {error}"
+
+# Default value: "receive stream ended early"
+#receive_ended_early = "receive stream ended early"
+
+[messages.lfs]
+# Default value: "invalid LFS oid {value}"
+#invalid_oid = "invalid LFS oid {value}"
+
+# Default value: "oid mismatch, declared {declared}, computed {computed}"
+#hash_mismatch = "oid mismatch, declared {declared}, computed {computed}"
+
+# Default value: "size mismatch, declared {declared}, received {received}"
+#size_mismatch = "size mismatch, declared {declared}, received {received}"
+
+# Default value: "object size {declared} exceeds limit {limit}"
+#size_limit_exceeded = "object size {declared} exceeds limit {limit}"
+
+# Default value: "free space {free} below floor {floor}"
+#free_space_denied = "free space {free} below floor {floor}"
+
+# Default value: "object {oid} not found"
+#not_found = "object {oid} not found"
+
+# Default value: "protocol framing fault: {detail}"
+#framing = "protocol framing fault: {detail}"
+
+# Default value: "too many {what} in one message, limit {limit}"
+#too_many = "too many {what} in one message, limit {limit}"
+
+# Default value: "unknown command {command}"
+#unknown_command = "unknown command {command}"
+
+# Default value: "unsupported version {version}"
+#unsupported_version = "unsupported version {version}"
+
+# Default value: "unsupported hash algorithm {algorithm}"
+#unsupported_hash = "unsupported hash algorithm {algorithm}"
+
+# Default value: "put-object isn't allowed on a download channel"
+#put_on_download = "put-object isn't allowed on a download channel"
+
+# Default value: "verify-object isn't allowed on a download channel"
+#verify_on_download = "verify-object isn't allowed on a download channel"
+
+# Default value: "get-object isn't allowed on an upload channel"
+#get_on_upload = "get-object isn't allowed on an upload channel"
+
+# Default value: "put-object is missing its object body"
+#put_no_body = "put-object is missing its object body"
