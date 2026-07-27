@@ -10,7 +10,7 @@ pub static malloc_conf: &[u8] =
 
 use std::collections::BTreeSet;
 use std::num::{NonZeroU32, NonZeroU64};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -74,22 +74,59 @@ fn init_tracing() {
         .init();
 }
 
+const VALIDATE_CONFIG_ONLY: &str = "--config-only";
+
+enum ValidateScope {
+    ConfigOnly,
+    Environment,
+}
+
+impl ValidateScope {
+    fn verify(self, config: &knot_config::Validated) -> anyhow::Result<()> {
+        match self {
+            Self::ConfigOnly => Ok(()),
+            Self::Environment => config
+                .verify_environment()
+                .context("verify runtime environment"),
+        }
+    }
+}
+
+fn validate(args: impl Iterator<Item = String>) -> anyhow::Result<()> {
+    let (flags, paths): (Vec<String>, Vec<String>) = args.partition(|arg| arg.starts_with("--"));
+    flags
+        .iter()
+        .find(|flag| flag.as_str() != VALIDATE_CONFIG_ONLY)
+        .map_or(Ok(()), |unknown| {
+            Err(anyhow::anyhow!(
+                "unrecognized flag {unknown}, expected {VALIDATE_CONFIG_ONLY}"
+            ))
+        })?;
+    let scope = match flags.is_empty() {
+        true => ValidateScope::Environment,
+        false => ValidateScope::ConfigOnly,
+    };
+    let path = match paths.as_slice() {
+        [] => None,
+        [path] => Some(Path::new(path)),
+        extra => anyhow::bail!(
+            "expected at most one configuration path, got {}",
+            extra.len()
+        ),
+    };
+    let config = knot_config::load(path).context("load configuration")?;
+    scope.verify(&config)?;
+    println!("configuration is valid");
+    Ok(())
+}
+
 fn subcommand(name: &str) -> Option<anyhow::Result<()>> {
     match name {
         "config-template" => {
             print!("{}", knot_config::template());
             Some(Ok(()))
         }
-        "validate" => Some(
-            knot_config::load(std::env::args().nth(2).map(PathBuf::from).as_deref())
-                .context("load configuration")
-                .and_then(|config| {
-                    config
-                        .verify_environment()
-                        .context("verify runtime environment")
-                })
-                .map(|()| println!("configuration is valid")),
-        ),
+        "validate" => Some(validate(std::env::args().skip(2))),
         _ => None,
     }
 }

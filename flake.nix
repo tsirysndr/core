@@ -173,6 +173,14 @@
         };
         knot-unwrapped = self.callPackage ./nix/pkgs/knot-unwrapped.nix {};
         knot = self.callPackage ./nix/pkgs/knot.nix {};
+        knot-rs = self.callPackage ./nix/pkgs/knot-crate.nix {
+          src = self.rustSrc;
+          crate = "knot-server";
+        };
+        knot-migrate = self.callPackage ./nix/pkgs/knot-crate.nix {
+          src = self.rustSrc;
+          crate = "knot-migrate";
+        };
         dolly = self.callPackage ./nix/pkgs/dolly.nix {};
         tap = self.callPackage ./nix/pkgs/tap.nix {};
         knotmirror = self.callPackage ./nix/pkgs/knotmirror.nix {};
@@ -191,6 +199,8 @@
         shuttle
         knot-unwrapped
         knot
+        knot-rs
+        knot-migrate
         appview
         docs
         dolly
@@ -219,6 +229,8 @@
         spindle
         knot
         knot-unwrapped
+        knot-rs
+        knot-migrate
         sqlite-lib
         docs
         shuttle
@@ -595,6 +607,16 @@
       imports = [./nix/modules/knot.nix];
 
       services.tangled.knot.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.knot;
+    };
+    nixosModules.knot-rs = {
+      lib,
+      pkgs,
+      ...
+    }: {
+      imports = [./nix/modules/knot-rs.nix];
+
+      services.tangled.knot-rs.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.knot-rs;
+      services.tangled.knot-rs.migratePackage = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.knot-migrate;
     };
     nixosModules.spindle = {
       lib,
