@@ -53,6 +53,9 @@ pub struct KnotConfig {
 pub struct AclConfig {
     #[config(env = "KNOT_ADMISSION", default = "closed")]
     pub admission: AdmissionPolicy,
+
+    #[config(env = "KNOT_LEGACY_ADMIN_SECRET_ENV")]
+    pub legacy_admin_secret_env: Option<String>,
 }
 
 #[derive(Debug, Config)]
@@ -800,6 +803,14 @@ impl KnotConfig {
                 .as_ref()
                 .filter(|header| !is_http_token(header))
                 .map(|_| "xrpc.trusted_proxy_header isn't valid HTTP header name".to_string()),
+            self.acl
+                .legacy_admin_secret_env
+                .as_deref()
+                .filter(|name| !is_env_var_name(name))
+                .map(|_| {
+                    "acl.legacy_admin_secret_env must be valid environment variable name"
+                        .to_string()
+                }),
             match self.homepage.source() {
                 HomepageSource::File(path) if !path.is_absolute() => {
                     Some("homepage.path must be absolute path".to_string())
@@ -1094,7 +1105,7 @@ mod tests {
         assert_eq!(
             template(),
             include_str!("../../../example.toml"),
-            "regenerate example.toml from knot_config::template() after changing config"
+            "regenerate example.toml with `just gen-config` after changing config"
         );
     }
 
@@ -1133,6 +1144,7 @@ mod tests {
             },
             acl: AclConfig {
                 admission: AdmissionPolicy::Closed,
+                legacy_admin_secret_env: None,
             },
             repo: RepoConfig {
                 scan_path: PathBuf::from("/srv/git"),
@@ -1266,6 +1278,15 @@ mod tests {
                 false,
                 false,
             ),
+            (
+                "a_legacy_admin_secret_env_var",
+                |config| {
+                    config.acl.legacy_admin_secret_env =
+                        Some("KNOT_LEGACY_ADMIN_SECRET".to_string())
+                },
+                false,
+                false,
+            ),
         ];
         cases
             .iter()
@@ -1346,6 +1367,11 @@ mod tests {
                 "empty_admin_list",
                 |config| config.server.admins = Vec::new(),
                 "admins",
+            ),
+            (
+                "a_malformed_legacy_admin_secret_env_var_name",
+                |config| config.acl.legacy_admin_secret_env = Some("9_NOT_A_VAR".to_string()),
+                "acl.legacy_admin_secret_env",
             ),
             (
                 "a_zero_maintenance_interval",

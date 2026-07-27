@@ -7,10 +7,10 @@ gen-config:
     cargo run -p knot-server -- config-template > example.toml
 
 fmt:
-    cargo fmt
+    cargo fmt --all
 
 fmt-check:
-    cargo fmt --check
+    cargo fmt --all --check
 
 clippy:
     cargo clippy -p 'knot-*' --all-targets -- -D warnings
@@ -45,7 +45,7 @@ t55xx *tests:
 
 ci: fmt-check clippy test gates bench-gate fuzz-ci
 
-gates: gate-no-subprocess gate-no-sql gate-no-native-git gate-no-string-ids gate-no-unguarded-receive gate-fuzz-targets-enumerated
+gates: gate-no-subprocess (gate-no-banned-deps "no-sql" "an embedded database" "rusqlite|libsqlite3-sys|sqlx|sqlx-core|sled|fjall|redb") (gate-no-banned-deps "no-native-git" "a native git or TLS shim" "git2|libgit2-sys|openssl-sys|zlib-ng|zlib-ng-sys") gate-no-string-ids gate-no-unguarded-receive gate-fuzz-targets-enumerated
 
 gate-no-subprocess:
     #!/usr/bin/env bash
@@ -58,27 +58,16 @@ gate-no-subprocess:
     fi
     echo "ok: no process spawning in server source"
 
-gate-no-sql:
+gate-no-banned-deps name subject pattern:
     #!/usr/bin/env bash
     set -euo pipefail
-    hits=$(grep -inE '^name = "(rusqlite|libsqlite3-sys|sqlx|sqlx-core|sled|fjall|redb)"' ../Cargo.lock || true)
+    hits=$(cargo tree -p knot-server --edges normal,build --prefix none | sort -u | grep -iE '^({{pattern}}) v' || true)
     if [ -n "$hits" ]; then
-        echo "no-sql gate failed: an embedded database is in the dependency tree" >&2
+        echo "{{name}} gate failed: {{subject}} is in the knot-server dependency tree" >&2
         echo "$hits" >&2
         exit 1
     fi
-    echo "ok: no embedded database in the dependency tree"
-
-gate-no-native-git:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    hits=$(grep -inE '^name = "(git2|libgit2-sys|openssl-sys|zlib-ng|zlib-ng-sys)"' ../Cargo.lock || true)
-    if [ -n "$hits" ]; then
-        echo "no-native-git gate failed: a native git or TLS shim is in the dependency tree" >&2
-        echo "$hits" >&2
-        exit 1
-    fi
-    echo "ok: no native git or TLS shim in the dependency tree"
+    echo "ok: {{subject}} isn't in the knot-server dependency tree"
 
 gate-no-string-ids:
     #!/usr/bin/env bash

@@ -4967,6 +4967,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.0",
+ "subtle",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -4977,6 +4978,7 @@ dependencies = [
  "tower-http 0.7.0",
  "tracing",
  "url",
+ "zeroize",
 ]
 
 [[package]]

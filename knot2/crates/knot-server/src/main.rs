@@ -74,15 +74,34 @@ fn init_tracing() {
         .init();
 }
 
+fn subcommand(name: &str) -> Option<anyhow::Result<()>> {
+    match name {
+        "config-template" => {
+            print!("{}", knot_config::template());
+            Some(Ok(()))
+        }
+        "validate" => Some(
+            knot_config::load(std::env::args().nth(2).map(PathBuf::from).as_deref())
+                .context("load configuration")
+                .and_then(|config| {
+                    config
+                        .verify_environment()
+                        .context("verify runtime environment")
+                })
+                .map(|()| println!("configuration is valid")),
+        ),
+        _ => None,
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     #[cfg(target_os = "linux")]
     rustix::process::set_dumpable_behavior(rustix::process::DumpableBehavior::NotDumpable)
         .context("disable core dumps and ptrace attachment")?;
 
-    if std::env::args().nth(1).as_deref() == Some("config-template") {
-        print!("{}", knot_config::template());
-        return Ok(());
+    if let Some(result) = std::env::args().nth(1).as_deref().and_then(subcommand) {
+        return result;
     }
 
     init_tracing();
@@ -414,6 +433,7 @@ async fn main() -> anyhow::Result<()> {
     let catalog = Arc::new(
         knot_messages::Catalog::parse(&config.messages).context("parse message templates")?,
     );
+    let legacy_admin = legacy_admin_secret(&config);
 
     knot_config::init(config);
 
@@ -526,6 +546,13 @@ async fn main() -> anyhow::Result<()> {
         xrpc_state.knot_hostname.clone(),
         Arc::new(SystemClock),
     );
+    let legacy_admin_routes = legacy_admin.map(|secret| {
+        tracing::warn!(
+            route = knot_xrpc::legacy_admin::ADD_MEMBER_ROUTE,
+            "serving the legacy basic-auth admin route"
+        );
+        knot_xrpc::legacy_admin::router(Arc::clone(&xrpc_state), secret)
+    });
     let base_router = write_routes.merge(knot_xrpc::router(xrpc_state)).route(
         "/.well-known/did.json",
         get(move || {
@@ -533,6 +560,10 @@ async fn main() -> anyhow::Result<()> {
             async move { Json(document) }
         }),
     );
+    let base_router = match legacy_admin_routes {
+        Some(routes) => base_router.merge(routes),
+        None => base_router,
+    };
     let base_router = match homepage {
         HomepageSource::Disabled => base_router,
         HomepageSource::Default => base_router.route("/", get(|| async { Html(DEFAULT_HOMEPAGE) })),
@@ -622,6 +653,23 @@ enum FirstExit {
     Edge(Result<Result<(), knot_edge::EdgeError>, tokio::task::JoinError>),
     Ssh(Result<Result<(), knot_ssh::SshError>, tokio::task::JoinError>),
     Signal,
+}
+
+fn legacy_admin_secret(
+    config: &knot_config::Validated,
+) -> Option<knot_xrpc::legacy_admin::LegacyAdminSecret> {
+    let name = config.acl.legacy_admin_secret_env.as_deref()?;
+    let value = zeroize::Zeroizing::new(std::env::var(name).unwrap_or_default());
+    match knot_xrpc::legacy_admin::LegacyAdminSecret::new(&value) {
+        Ok(secret) => Some(secret),
+        Err(_) => {
+            tracing::warn!(
+                secret_env = name,
+                "the environment variable in acl.legacy_admin_secret_env is unset or empty, so we won't serve the admin route"
+            );
+            None
+        }
+    }
 }
 
 fn build_tls_setup(

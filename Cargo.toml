@@ -144,6 +144,7 @@ base32 = "0.5"
 base64 = "0.22"
 bs58 = "0.5"
 zeroize = { version = "1", features = ["derive"] }
+subtle = "2.6"
 
 wiremock = "0.6"
 tempfile = "3"

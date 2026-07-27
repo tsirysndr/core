@@ -2,16 +2,7 @@ extern crate alloc;
 
 #[path = "_lex/lib.rs"]
 #[allow(non_snake_case, unused_imports, unused_extern_crates)]
-#[allow(
-    clippy::absurd_extreme_comparisons,
-    clippy::collapsible_if,
-    clippy::manual_strip,
-    clippy::needless_update,
-    clippy::new_ret_no_self,
-    clippy::new_without_default,
-    clippy::should_implement_trait,
-    clippy::type_complexity
-)]
+#[allow(clippy::all)]
 #[rustfmt::skip]
 mod _lex;
 

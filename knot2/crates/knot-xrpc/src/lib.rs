@@ -6,6 +6,7 @@ mod collaborators;
 mod error;
 mod events;
 mod forks;
+pub mod legacy_admin;
 mod lfs;
 mod lists;
 mod locks;
@@ -329,7 +330,7 @@ pub fn router<H: HttpTransport, C: Clock>(state: Arc<XrpcState<H, C>>) -> Router
         .with_state(state)
 }
 
-async fn enforce_pre_auth_limit<H: HttpTransport, C: Clock>(
+pub(crate) async fn enforce_pre_auth_limit<H: HttpTransport, C: Clock>(
     State(state): State<Arc<XrpcState<H, C>>>,
     socket: SocketPeer,
     request: Request,
@@ -392,7 +393,28 @@ fn bearer(headers: &HeaderMap) -> Result<ServiceJwt, XrpcError> {
         .ok_or_else(|| XrpcError::auth_required("missing or malformed Bearer authorization header"))
 }
 
-fn strip_basic(value: &str) -> Option<String> {
+pub(crate) struct BasicUser(String);
+
+impl BasicUser {
+    pub(crate) fn matches(&self, expected: &str) -> bool {
+        self.0 == expected
+    }
+}
+
+pub(crate) struct BasicPassword(String);
+
+impl BasicPassword {
+    pub(crate) fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+
+pub(crate) struct BasicCredentials {
+    pub(crate) user: BasicUser,
+    pub(crate) password: BasicPassword,
+}
+
+pub(crate) fn basic_credentials(value: &str) -> Option<BasicCredentials> {
     let (scheme, rest) = value.split_once(' ')?;
     if !scheme.eq_ignore_ascii_case("Basic") {
         return None;
@@ -401,8 +423,17 @@ fn strip_basic(value: &str) -> Option<String> {
         .decode(rest.trim())
         .ok()?;
     let text = String::from_utf8(decoded).ok()?;
-    let (_user, password) = text.split_once(':')?;
-    (!password.is_empty()).then(|| password.to_string())
+    let (user, password) = text.split_once(':')?;
+    Some(BasicCredentials {
+        user: BasicUser(user.to_string()),
+        password: BasicPassword(password.to_string()),
+    })
+}
+
+fn strip_basic(value: &str) -> Option<String> {
+    basic_credentials(value)
+        .map(|credentials| credentials.password.0)
+        .filter(|password| !password.is_empty())
 }
 
 fn push_credential(headers: &HeaderMap) -> Result<ServiceJwt, XrpcError> {

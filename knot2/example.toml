@@ -107,6 +107,9 @@
 # Default value: "closed"
 #admission = "closed"
 
+# Can also be specified via environment variable `KNOT_LEGACY_ADMIN_SECRET_ENV`.
+#legacy_admin_secret_env =
+
 [repo]
 # Can also be specified via environment variable `KNOT_SCAN_PATH`.
 # Required! This value must be specified.

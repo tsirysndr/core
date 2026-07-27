@@ -3042,3 +3042,152 @@ mod fork_endpoints {
         assert_eq!(fork.find_ref(&main_ref()).unwrap(), Some(new_tip));
     }
 }
+
+mod legacy_admin_route {
+    use super::*;
+    use crate::legacy_admin::{ADD_MEMBER_ROUTE, LegacyAdminSecret};
+    use tower::ServiceExt;
+
+    const SECRET: &str = "nekomilk2";
+
+    async fn call(router: &axum::Router, user: &str, password: &str, subject: &str) -> StatusCode {
+        let encoded = base64::engine::general_purpose::STANDARD
+            .encode(format!("{user}:{password}").as_bytes());
+        let request = http::Request::builder()
+            .method("POST")
+            .uri(ADD_MEMBER_ROUTE)
+            .header(AUTHORIZATION, format!("Basic {encoded}"))
+            .header(http::header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(
+                json!({ "subject": subject }).to_string(),
+            ))
+            .unwrap();
+        router.clone().oneshot(request).await.unwrap().status()
+    }
+
+    #[tokio::test]
+    async fn the_legacy_route_admits_a_member_only_with_the_configured_credentials() {
+        let world = World::new();
+        let router = crate::router(Arc::clone(&world.state)).merge(crate::legacy_admin::router(
+            Arc::clone(&world.state),
+            LegacyAdminSecret::new(SECRET).unwrap(),
+        ));
+        let subject = format!("did:web:{MEMBER_HOST}");
+
+        let version = http::Request::builder()
+            .method("GET")
+            .uri(crate::service::VERSION_ROUTE)
+            .body(axum::body::Body::empty())
+            .unwrap();
+        assert_eq!(
+            router.clone().oneshot(version).await.unwrap().status(),
+            StatusCode::OK,
+            "merging the legacy route leaves the xrpc routes reachable"
+        );
+
+        let refused = futures::future::join_all(
+            [("admin", "nope"), ("root", SECRET), ("admin", "")]
+                .map(|(user, password)| call(&router, user, password, &subject)),
+        )
+        .await;
+        assert!(
+            refused
+                .iter()
+                .all(|status| *status == StatusCode::UNAUTHORIZED),
+            "the knot refuses a wrong user or secret, got {refused:?}"
+        );
+        assert_eq!(
+            call(
+                &router,
+                "admin",
+                SECRET,
+                &"n".repeat(world.state.byte_limits.body.get() + 1)
+            )
+            .await,
+            StatusCode::PAYLOAD_TOO_LARGE
+        );
+        assert_eq!(
+            world.state.index.is_member(&account(MEMBER_HOST)),
+            Resolved::Ready(false),
+            "a refused call grants nothing"
+        );
+
+        assert_eq!(
+            call(&router, "admin", SECRET, &subject).await,
+            StatusCode::OK
+        );
+        assert_eq!(
+            world.state.index.is_member(&account(MEMBER_HOST)),
+            Resolved::Ready(true)
+        );
+        let added = last_event(&world, "sh.tangled.knot.memberUpdate");
+        assert_eq!(added.payload["op"], "add");
+        assert_eq!(added.payload["subject"], account(MEMBER_HOST).to_string());
+        let Resolved::Ready(members) = world.state.index.member_entries() else {
+            panic!("the member roster is warm in this test");
+        };
+        assert_eq!(
+            members
+                .iter()
+                .find(|grant| grant.subject == account(MEMBER_HOST))
+                .expect("the member is in the roster")
+                .added_by,
+            world.state.service_owner,
+            "the legacy grant records the service owner as the granter"
+        );
+
+        let baseline = event_count(&world);
+        assert_eq!(
+            call(&router, "admin", SECRET, &subject).await,
+            StatusCode::OK,
+            "the legacy route is idempotent, matching the Go knot"
+        );
+        assert_eq!(
+            event_count(&world),
+            baseline,
+            "re-adding an existing member emits no event"
+        );
+    }
+
+    #[tokio::test]
+    async fn the_legacy_route_sheds_a_pre_auth_flood_from_one_peer() {
+        use axum::extract::ConnectInfo;
+        use std::net::SocketAddr;
+
+        let world = World::new();
+        let router = crate::legacy_admin::router(
+            Arc::clone(&world.state),
+            LegacyAdminSecret::new(SECRET).unwrap(),
+        );
+        let peer = SocketAddr::from(([203, 0, 113, 9], 5555));
+
+        let statuses: Vec<StatusCode> = futures::stream::iter(0..22)
+            .then(|_| {
+                let router = router.clone();
+                async move {
+                    let mut request = http::Request::builder()
+                        .method("POST")
+                        .uri(ADD_MEMBER_ROUTE)
+                        .body(axum::body::Body::empty())
+                        .unwrap();
+                    request.extensions_mut().insert(ConnectInfo(peer));
+                    router.oneshot(request).await.unwrap().status()
+                }
+            })
+            .collect()
+            .await;
+
+        assert!(
+            statuses[..20]
+                .iter()
+                .all(|status| *status == StatusCode::UNAUTHORIZED),
+            "the knot admits the per-peer burst and then fails it on the missing credentials, got {statuses:?}"
+        );
+        assert!(
+            statuses[20..]
+                .iter()
+                .all(|status| *status == StatusCode::TOO_MANY_REQUESTS),
+            "past the burst the knot sheds the guess flood before it reaches the secret comparison, got {statuses:?}"
+        );
+    }
+}

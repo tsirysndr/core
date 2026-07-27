@@ -23,8 +23,8 @@ pub(crate) const ADD_ROUTE: &str = "/xrpc/sh.tangled.knot.addMember";
 pub(crate) const REMOVE_ROUTE: &str = "/xrpc/sh.tangled.knot.removeMember";
 
 #[derive(Deserialize)]
-struct SubjectInput {
-    subject: AccountDid,
+pub(crate) struct SubjectInput {
+    pub(crate) subject: AccountDid,
 }
 
 pub(crate) async fn add_member<H: HttpTransport, C: Clock>(
@@ -40,19 +40,29 @@ pub(crate) async fn add_member<H: HttpTransport, C: Clock>(
     }
 
     let SubjectInput { subject } = decode(&body)?;
-    if state.admins.contains(&subject)
-        || matches!(state.index.is_member(&subject), Resolved::Ready(true))
+    grant_membership(
+        &state,
+        Grant {
+            subject,
+            added_by: actor,
+            created_at: state.now(),
+        },
+    )
+    .await
+}
+
+pub(crate) async fn grant_membership<H: HttpTransport, C: Clock>(
+    state: &Arc<XrpcState<H, C>>,
+    grant: Grant,
+) -> Result<Response, XrpcError> {
+    if state.admins.contains(&grant.subject)
+        || matches!(state.index.is_member(&grant.subject), Resolved::Ready(true))
     {
         return Ok(ok_empty());
     }
 
-    let now = state.now();
-    let event_subject = subject.clone();
-    let grant = Grant {
-        subject,
-        added_by: actor,
-        created_at: now,
-    };
+    let now = grant.created_at;
+    let event_subject = grant.subject.clone();
     let signer = state.secrets.signer(&state.knot_did)?;
     let meta_path = state.meta_path.clone();
     let index = Arc::clone(&state.index);
