@@ -267,11 +267,18 @@ fn only_git_event(world: &World) -> std::sync::Arc<knot_events::Event> {
     events.remove(0)
 }
 
-fn bootstrap(dir: &TempDir, rebuild: bool) -> (Layout, Arc<Index>, PathBuf) {
+fn bootstrap(
+    dir: &TempDir,
+    rebuild: bool,
+    object_format: knot_types::ObjectFormat,
+) -> (Layout, Arc<Index>, PathBuf) {
     let scan_path = dir.path().join("repos");
     std::fs::create_dir_all(&scan_path).unwrap();
     let knot = knot_did();
-    let layout = Layout::new(&scan_path).reserving_meta(&knot).unwrap();
+    let layout = Layout::new(&scan_path)
+        .with_object_format(object_format)
+        .reserving_meta(&knot)
+        .unwrap();
     layout.bootstrap_meta(&knot).unwrap();
     let meta_path = layout.meta_path(&knot).unwrap();
     let index = Arc::new(Index::new(meta_path.clone(), layout.clone()));
@@ -425,23 +432,56 @@ struct World {
 
 impl World {
     fn new() -> Self {
-        Self::build(256, 256, AdmissionPolicy::Closed, None)
+        Self::build(
+            256,
+            256,
+            AdmissionPolicy::Closed,
+            None,
+            knot_types::ObjectFormat::SHA1,
+        )
     }
 
     fn open() -> Self {
-        Self::build(256, 256, AdmissionPolicy::Open, None)
+        Self::build(
+            256,
+            256,
+            AdmissionPolicy::Open,
+            None,
+            knot_types::ObjectFormat::SHA1,
+        )
     }
 
     fn with_pending_limit(limit: usize) -> Self {
-        Self::build(limit, limit, AdmissionPolicy::Closed, None)
+        Self::build(
+            limit,
+            limit,
+            AdmissionPolicy::Closed,
+            None,
+            knot_types::ObjectFormat::SHA1,
+        )
     }
 
     fn with_limits(global: usize, per_actor: usize) -> Self {
-        Self::build(global, per_actor, AdmissionPolicy::Closed, None)
+        Self::build(
+            global,
+            per_actor,
+            AdmissionPolicy::Closed,
+            None,
+            knot_types::ObjectFormat::SHA1,
+        )
     }
 
-    fn with_git_http(git_http: Arc<dyn HttpTransport>) -> Self {
-        Self::build(256, 256, AdmissionPolicy::Closed, Some(git_http))
+    fn with_git_http(
+        git_http: Arc<dyn HttpTransport>,
+        object_format: knot_types::ObjectFormat,
+    ) -> Self {
+        Self::build(
+            256,
+            256,
+            AdmissionPolicy::Closed,
+            Some(git_http),
+            object_format,
+        )
     }
 
     fn build(
@@ -449,9 +489,10 @@ impl World {
         per_actor: usize,
         admission: AdmissionPolicy,
         git_http: Option<Arc<dyn HttpTransport>>,
+        object_format: knot_types::ObjectFormat,
     ) -> Self {
         let dir = tempfile::tempdir().unwrap();
-        let (layout, index, meta_path) = bootstrap(&dir, true);
+        let (layout, index, meta_path) = bootstrap(&dir, true, object_format);
         let admin = signer(1);
         let member = signer(2);
         let stranger = signer(3);
@@ -514,7 +555,7 @@ impl World {
 
 fn build_state(responder: Responder, rebuild: bool) -> (TempDir, SharedState) {
     let dir = tempfile::tempdir().unwrap();
-    let (layout, index, meta_path) = bootstrap(&dir, rebuild);
+    let (layout, index, meta_path) = bootstrap(&dir, rebuild, knot_types::ObjectFormat::SHA1);
     let state = state_from(
         &dir,
         (layout, index, meta_path),
@@ -2634,7 +2675,17 @@ mod fork_endpoints {
     use knot_runtime::HttpTransport;
     use knot_types::{Oid, RefName, UnixSeconds};
 
-    const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+    const EMPTY_TREE_SHA1: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+    const EMPTY_TREE_SHA256: &str =
+        "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
+
+    fn empty_tree(repo: &Repo) -> Oid {
+        let hex = match repo.object_format() {
+            knot_types::ObjectFormat::SHA256 => EMPTY_TREE_SHA256,
+            _ => EMPTY_TREE_SHA1,
+        };
+        Oid::from_hex(hex).unwrap()
+    }
 
     fn ident(time: i64) -> Identity {
         Identity {
@@ -2648,7 +2699,7 @@ mod fork_endpoints {
     fn put_commit(repo: &Repo, parent: Option<Oid>, path: &str, content: &str, time: i64) -> Oid {
         let base_tree = match parent {
             Some(parent) => repo.find_commit(parent).unwrap().tree,
-            None => Oid::from_hex(EMPTY_TREE).unwrap(),
+            None => empty_tree(repo),
         };
         let staged = vec![StagedChange {
             path: knot_types::RepoPath::new(path).unwrap(),
@@ -2991,21 +3042,20 @@ mod fork_endpoints {
     }
 
     #[tokio::test]
-    async fn a_fork_from_a_remote_knot_fetches_over_http() {
+    async fn a_fork_over_http_takes_the_upstream_object_format_and_conflicts_when_it_changes() {
         let upstream_dir = tempfile::tempdir().unwrap();
         let upstream_path = upstream_dir.path().join("uni.git");
-        let upstream = Repo::create(&upstream_path).unwrap();
-        upstream
-            .set_head(&RefName::new("refs/heads/main").unwrap())
-            .unwrap();
+        let upstream =
+            Repo::create_with_format(&upstream_path, knot_types::ObjectFormat::SHA1).unwrap();
+        upstream.set_head(&main_ref()).unwrap();
         advance(&upstream, &main_ref(), "reef.txt", "kelp forest\n", 1_000);
         let tip = advance(&upstream, &main_ref(), "tide.txt", "rock pool\n", 1_001);
 
-        let served = upstream_path.clone();
+        let served = Arc::new(std::sync::RwLock::new(upstream_path.clone()));
+        let path = Arc::clone(&served);
         let git_http: Arc<dyn HttpTransport> =
             Arc::new(FakeHttp::new(move |request: &HttpRequest| {
-                let _keep = &upstream_dir;
-                let repo = Repo::open(&served).unwrap();
+                let repo = Repo::open(path.read().unwrap().clone()).unwrap();
                 let body = if request.url.path().ends_with("/info/refs") {
                     knot_pack::advertise_upload(&repo).unwrap()
                 } else {
@@ -3019,13 +3069,35 @@ mod fork_endpoints {
                 })
             }));
 
-        let world = World::with_git_http(git_http);
+        let world = World::with_git_http(git_http, knot_types::ObjectFormat::SHA256);
         add_member_helper(&world).await;
+        let plain = create_repo_helper(&world, "kelp").await;
+        assert_eq!(
+            world.layout.open(&plain).unwrap().object_format(),
+            knot_types::ObjectFormat::SHA256,
+            "a repo with no upstream still uses this knot's configured format"
+        );
+
         let remote = "https://barnacle.nel.pet/did:plc:squid/uni";
         let fork_did = fork_repo(&world, remote, "uni").await;
         let fork = world.layout.open(&fork_did).unwrap();
+        assert_eq!(
+            fork.object_format(),
+            knot_types::ObjectFormat::SHA1,
+            "a fork of a sha1 upstream must be sha1 so the upstream's objects ingest"
+        );
         assert_eq!(fork.find_ref(&main_ref()).unwrap(), Some(tip));
         assert_eq!(fork.origin_url().as_deref(), Some(remote));
+        assert_eq!(
+            fork.read_blob(
+                fork.entry_at(tip, &knot_types::RepoPath::new("tide.txt").unwrap())
+                    .unwrap()
+                    .unwrap()
+                    .oid
+            )
+            .unwrap(),
+            b"rock pool\n"
+        );
 
         let new_tip = advance(
             &Repo::open(&upstream_path).unwrap(),
@@ -3038,8 +3110,26 @@ mod fork_endpoints {
             sync_fork(&world, &world.member, MEMBER_HOST, "main").await,
             StatusCode::OK
         );
-        let fork = world.layout.open(&fork_did).unwrap();
-        assert_eq!(fork.find_ref(&main_ref()).unwrap(), Some(new_tip));
+        assert_eq!(
+            world
+                .layout
+                .open(&fork_did)
+                .unwrap()
+                .find_ref(&main_ref())
+                .unwrap(),
+            Some(new_tip)
+        );
+
+        let replaced = upstream_dir.path().join("replaced.git");
+        let sha256 = Repo::create_with_format(&replaced, knot_types::ObjectFormat::SHA256).unwrap();
+        sha256.set_head(&main_ref()).unwrap();
+        advance(&sha256, &main_ref(), "reef.txt", "kelp forest\n", 1_000);
+        *served.write().unwrap() = replaced;
+        assert_eq!(
+            sync_fork(&world, &world.member, MEMBER_HOST, "main").await,
+            StatusCode::CONFLICT,
+            "the fork reports a format mismatch as a conflict"
+        );
     }
 }
 

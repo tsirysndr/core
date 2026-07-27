@@ -14,7 +14,7 @@ use knot_index::Resolved;
 use knot_pack::{FetchError, HaveOids, PackLimits, UpstreamRefs, WantOids};
 use knot_postreceive::{Actor, Ci};
 use knot_runtime::{Clock, HttpTransport};
-use knot_types::{BranchName, Oid, OwnerDid, RefName, RepoDid};
+use knot_types::{BranchName, ObjectFormat, Oid, OwnerDid, RefName, RepoDid};
 
 use crate::body::{ForkRef, RemoteRef, RepoAtUri, RepoNameArg, Revspec, SourceUrl};
 use crate::branches::resolve_at_uri;
@@ -82,6 +82,31 @@ pub(crate) fn resolve_upstream<H: HttpTransport, C: Clock>(
         return resolve_local_path(state, url).map(Upstream::Local);
     }
     Ok(Upstream::Remote(url.clone()))
+}
+
+pub(crate) struct ForkSource {
+    pub(crate) origin: SourceUrl,
+    pub(crate) upstream: Upstream,
+    pub(crate) refs: UpstreamRefs,
+}
+
+impl ForkSource {
+    pub(crate) async fn resolve<H: HttpTransport, C: Clock>(
+        state: &XrpcState<H, C>,
+        origin: &SourceUrl,
+    ) -> Result<Self, XrpcError> {
+        let upstream = resolve_upstream(state, origin)?;
+        let prefixes = ["HEAD", "refs/heads/", "refs/tags/"]
+            .iter()
+            .map(|prefix| prefix.to_string())
+            .collect();
+        let refs = upstream_refs(state, &upstream, prefixes).await?;
+        Ok(Self {
+            origin: origin.clone(),
+            upstream,
+            refs,
+        })
+    }
 }
 
 fn map_fetch(error: FetchError) -> XrpcError {
@@ -272,6 +297,7 @@ const FORK_DENIED: &str = "only repository owner or a collaborator may operate o
 struct ForkState {
     origin: SourceUrl,
     haves: Vec<Oid>,
+    object_format: ObjectFormat,
 }
 
 fn load_fork_state(repo: &Repo) -> Result<ForkState, XrpcError> {
@@ -285,7 +311,11 @@ fn load_fork_state(repo: &Repo) -> Result<ForkState, XrpcError> {
         .into_iter()
         .map(|record| record.target)
         .collect();
-    Ok(ForkState { origin, haves })
+    Ok(ForkState {
+        origin,
+        haves,
+        object_format: repo.object_format(),
+    })
 }
 
 pub(crate) struct SyncResult {
@@ -339,6 +369,13 @@ async fn pull_upstream_branch<H: HttpTransport, C: Clock>(
 
     let upstream = resolve_upstream(state, &fork.origin)?;
     let refs = upstream_refs(state, &upstream, vec![branch.as_str().to_string()]).await?;
+    if refs.object_format != fork.object_format {
+        return Err(XrpcError::conflict(format!(
+            "upstream stores {} objects but this fork stores {}",
+            refs.object_format.capability(),
+            fork.object_format.capability()
+        )));
+    }
     let tip = refs
         .find(branch)
         .ok_or_else(|| XrpcError::not_found("upstream repository doesn't have that branch"))?;

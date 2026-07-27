@@ -167,13 +167,6 @@ pub(crate) async fn create_repo<H: HttpTransport, C: Clock>(
     }
 
     let input: CreateInput = decode(&body)?;
-    let source = input
-        .source
-        .as_ref()
-        .map(|source| {
-            crate::forks::resolve_upstream(&state, source).map(|upstream| (source, upstream))
-        })
-        .transpose()?;
     let head = input.default_branch.map(|branch| branch.head_ref());
 
     let owner = OwnerDid::new(actor.as_str()).expect("account DID is always a valid owner DID");
@@ -195,6 +188,12 @@ pub(crate) async fn create_repo<H: HttpTransport, C: Clock>(
         Resolved::Ready(None) => {}
     }
 
+    let fork = match &input.source {
+        Some(origin) => Some(crate::forks::ForkSource::resolve(&state, origin).await?),
+        None => None,
+    };
+    let object_format = fork.as_ref().map(|fork| fork.refs.object_format);
+
     let (repo_did, provisioning) =
         provision_repo_did(&state, &actor, &input.rkey, input.repo_did).await?;
     let now = state.now();
@@ -214,7 +213,11 @@ pub(crate) async fn create_repo<H: HttpTransport, C: Clock>(
     let placed = repo_did.clone();
     let lfs = lfs_store.clone();
     let provisioning = run_blocking(move || {
-        let repo = layout.create(&placed).map_err(|error| match error {
+        let repo = match object_format {
+            Some(format) => layout.create_with_format(&placed, format),
+            None => layout.create(&placed),
+        }
+        .map_err(|error| match error {
             GitError::AlreadyExists(_) => XrpcError::conflict("repository already exists on disk"),
             GitError::ReservedDid(_) => {
                 XrpcError::invalid_request("repoDid mustn't be knot's own identity")
@@ -229,23 +232,21 @@ pub(crate) async fn create_repo<H: HttpTransport, C: Clock>(
     })
     .await?;
 
-    let lfs_missing = match &source {
-        Some((source_url, upstream)) => {
-            match populate(&state, &repo_did, source_url, upstream).await {
-                Ok(missing) => missing,
-                Err(error) => {
-                    let layout = state.layout.clone();
-                    let placed = repo_did.clone();
-                    let lfs = lfs_store.clone();
-                    let _ = run_blocking(move || {
-                        rollback_local(&layout, lfs.as_deref(), &placed);
-                        Ok(())
-                    })
-                    .await;
-                    return Err(error);
-                }
+    let lfs_missing = match &fork {
+        Some(fork) => match populate(&state, &repo_did, fork).await {
+            Ok(missing) => missing,
+            Err(error) => {
+                let layout = state.layout.clone();
+                let placed = repo_did.clone();
+                let lfs = lfs_store.clone();
+                let _ = run_blocking(move || {
+                    rollback_local(&layout, lfs.as_deref(), &placed);
+                    Ok(())
+                })
+                .await;
+                return Err(error);
             }
-        }
+        },
         None => Vec::new(),
     };
 
@@ -333,26 +334,20 @@ pub(crate) async fn create_repo<H: HttpTransport, C: Clock>(
 async fn populate<H: HttpTransport, C: Clock>(
     state: &Arc<XrpcState<H, C>>,
     repo_did: &RepoDid,
-    source: &SourceUrl,
-    upstream: &crate::forks::Upstream,
+    fork: &crate::forks::ForkSource,
 ) -> Result<Vec<knot_lfs::LfsOid>, XrpcError> {
-    let prefixes = vec![
-        "HEAD".to_string(),
-        "refs/heads/".to_string(),
-        "refs/tags/".to_string(),
-    ];
-    let refs = crate::forks::upstream_refs(state, upstream, prefixes).await?;
-    let tips = refs.tips();
+    let tips = fork.refs.tips();
     let pack = crate::forks::upstream_pack(
         state,
-        upstream,
-        knot_pack::WantOids::new(refs.tips()),
+        &fork.upstream,
+        knot_pack::WantOids::new(tips.clone()),
         knot_pack::HaveOids::default(),
     )
     .await?;
     let layout = state.layout.clone();
     let placed = repo_did.clone();
-    let origin = source.clone();
+    let origin = fork.origin.clone();
+    let refs = fork.refs.clone();
     run_blocking(move || {
         let repo = layout.open(&placed)?;
         crate::forks::populate_fork(&repo, &refs, &pack, &origin)
@@ -360,7 +355,7 @@ async fn populate<H: HttpTransport, C: Clock>(
     .await?;
     crate::lfs::mirror_fork_objects(
         Arc::clone(state),
-        upstream.clone(),
+        fork.upstream.clone(),
         repo_did.clone(),
         knot_pack::WantOids::new(tips),
         knot_pack::HaveOids::default(),

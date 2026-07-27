@@ -3,7 +3,7 @@ use std::io::Write;
 use axum::http::{HeaderMap, HeaderValue, Method, header};
 use knot_git::{Filter, RefRecord, Repo};
 use knot_runtime::{HttpRequest, HttpResponse, HttpTransport, NetworkError};
-use knot_types::{HttpStatus, Oid, RefName};
+use knot_types::{HttpStatus, ObjectFormat, Oid, RefName};
 use url::Url;
 
 use crate::error::PackError;
@@ -30,6 +30,7 @@ pub enum FetchError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpstreamRefs {
+    pub object_format: ObjectFormat,
     pub head_symref: Option<RefName>,
     pub refs: Vec<RefRecord>,
 }
@@ -81,7 +82,7 @@ async fn execute(
     Ok(response)
 }
 
-pub fn parse_advertisement(body: &[u8]) -> Result<(), FetchError> {
+pub fn parse_advertisement(body: &[u8]) -> Result<ObjectFormat, FetchError> {
     let lines = pkt::data_payloads_all(body).map_err(|error| protocol(error.to_string()))?;
     let lines: Vec<&str> = lines
         .iter()
@@ -98,7 +99,14 @@ pub fn parse_advertisement(body: &[u8]) -> Result<(), FetchError> {
     if !has("ls-refs") || !has("fetch") {
         return Err(protocol("upstream is missing ls-refs or fetch v2 command"));
     }
-    Ok(())
+    lines
+        .iter()
+        .find_map(|line| line.strip_prefix("object-format="))
+        .map_or(Ok(ObjectFormat::SHA1), |token| {
+            ObjectFormat::from_capability(token).ok_or_else(|| {
+                protocol(format!("upstream advertises unknown object format {token}"))
+            })
+        })
 }
 
 pub fn ls_refs_request(prefixes: &[&str]) -> Result<Vec<u8>, PackError> {
@@ -114,10 +122,11 @@ pub fn ls_refs_request(prefixes: &[&str]) -> Result<Vec<u8>, PackError> {
     Ok(buf)
 }
 
-pub fn parse_ls_refs(body: &[u8]) -> Result<UpstreamRefs, FetchError> {
+pub fn parse_ls_refs(body: &[u8], object_format: ObjectFormat) -> Result<UpstreamRefs, FetchError> {
     let lines = pkt::data_payloads(body).map_err(|error| protocol(error.to_string()))?;
     lines.iter().try_fold(
         UpstreamRefs {
+            object_format,
             head_symref: None,
             refs: Vec::new(),
         },
@@ -133,6 +142,12 @@ pub fn parse_ls_refs(body: &[u8]) -> Result<UpstreamRefs, FetchError> {
                 .ok_or_else(|| protocol(format!("malformed ref line: {text}")))?;
             let target =
                 Oid::from_hex(oid).map_err(|_| protocol(format!("malformed ref oid: {oid}")))?;
+            if target.object_id().kind() != object_format.kind() {
+                return Err(protocol(format!(
+                    "ref oid {oid} doesn't match advertised object format {}",
+                    object_format.capability()
+                )));
+            }
             let mut attributes = rest.split(' ');
             match attributes.next() {
                 Some("HEAD") => {
@@ -228,7 +243,7 @@ pub async fn remote_refs(
         },
     )
     .await?;
-    parse_advertisement(&response.body)?;
+    let object_format = parse_advertisement(&response.body)?;
 
     let upload = endpoint(base, "git-upload-pack")?;
     let response = execute(
@@ -241,7 +256,7 @@ pub async fn remote_refs(
         },
     )
     .await?;
-    parse_ls_refs(&response.body)
+    parse_ls_refs(&response.body, object_format)
 }
 
 pub async fn remote_pack(
@@ -277,6 +292,7 @@ pub fn local_refs(source: &Repo, prefixes: &[&str]) -> Result<UpstreamRefs, Fetc
         .cloned()
         .collect();
     Ok(UpstreamRefs {
+        object_format: source.object_format(),
         head_symref: source.head().map(|head| head.name),
         refs,
     })
@@ -350,13 +366,38 @@ mod tests {
     }
 
     #[test]
-    fn the_v2_advertisement_is_accepted_and_v0_is_refused() {
+    fn the_v2_advertisement_parses_to_its_object_format_and_v0_is_refused() {
         let scan = tempfile::tempdir().unwrap();
         let repo = knot_git::Layout::new(scan.path())
             .create(&knot_types::RepoDid::new("did:plc:squid").unwrap())
             .unwrap();
         let v2 = crate::upload::advertise(&repo).unwrap();
-        assert!(parse_advertisement(&v2).is_ok());
+        assert_eq!(parse_advertisement(&v2).unwrap(), ObjectFormat::SHA1);
+
+        let advertise = |extra: Option<&str>| {
+            let mut buf = Vec::new();
+            data(&mut buf, b"version 2\n");
+            data(&mut buf, b"ls-refs\n");
+            data(&mut buf, b"fetch\n");
+            if let Some(extra) = extra {
+                data(&mut buf, format!("{extra}\n").as_bytes());
+            }
+            pkt::write_flush(&mut buf).unwrap();
+            parse_advertisement(&buf)
+        };
+        assert_eq!(
+            advertise(Some("object-format=sha256")).unwrap(),
+            ObjectFormat::SHA256
+        );
+        assert_eq!(
+            advertise(None).unwrap(),
+            ObjectFormat::SHA1,
+            "protocol v2 treats an absent object-format as sha1"
+        );
+        assert!(matches!(
+            advertise(Some("object-format=sha3")),
+            Err(FetchError::Protocol(_))
+        ));
 
         let mut v0 = Vec::new();
         data(&mut v0, b"# service=git-upload-pack\n");
@@ -373,7 +414,7 @@ mod tests {
     }
 
     #[test]
-    fn ls_refs_lines_parse_with_symref_and_skip_head() {
+    fn ls_refs_lines_parse_with_symref_skip_head_and_enforce_the_object_format() {
         let mut body = Vec::new();
         data(
             &mut body,
@@ -384,7 +425,7 @@ mod tests {
             b"95d09f2b10159347eece71399a7e2e907ea3df4f refs/heads/main\n",
         );
         pkt::write_flush(&mut body).unwrap();
-        let refs = parse_ls_refs(&body).unwrap();
+        let refs = parse_ls_refs(&body, ObjectFormat::SHA1).unwrap();
         assert_eq!(
             refs.head_symref.as_ref().map(RefName::as_str),
             Some("refs/heads/main")
@@ -392,6 +433,24 @@ mod tests {
         assert_eq!(refs.refs.len(), 1);
         assert_eq!(refs.refs[0].name.as_str(), "refs/heads/main");
         assert_eq!(refs.tips().len(), 1);
+
+        let single = |oid: &str| {
+            let mut buf = Vec::new();
+            data(&mut buf, format!("{oid} refs/heads/main\n").as_bytes());
+            pkt::write_flush(&mut buf).unwrap();
+            buf
+        };
+        let sha1 = "95d09f2b10159347eece71399a7e2e907ea3df4f";
+        let sha256 = "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
+        assert!(parse_ls_refs(&single(sha256), ObjectFormat::SHA256).is_ok());
+        assert!(matches!(
+            parse_ls_refs(&single(sha256), ObjectFormat::SHA1),
+            Err(FetchError::Protocol(_))
+        ));
+        assert!(matches!(
+            parse_ls_refs(&single(sha1), ObjectFormat::SHA256),
+            Err(FetchError::Protocol(_))
+        ));
     }
 
     #[test]
@@ -399,7 +458,10 @@ mod tests {
         let mut body = Vec::new();
         data(&mut body, b"zzzz refs/heads/main\n");
         pkt::write_flush(&mut body).unwrap();
-        assert!(matches!(parse_ls_refs(&body), Err(FetchError::Protocol(_))));
+        assert!(matches!(
+            parse_ls_refs(&body, ObjectFormat::SHA1),
+            Err(FetchError::Protocol(_))
+        ));
     }
 
     #[test]
@@ -408,7 +470,7 @@ mod tests {
         data(&mut body, b"ERR access denied\n");
         pkt::write_flush(&mut body).unwrap();
         assert!(matches!(
-            parse_ls_refs(&body),
+            parse_ls_refs(&body, ObjectFormat::SHA1),
             Err(FetchError::Remote(message)) if message == "access denied"
         ));
     }

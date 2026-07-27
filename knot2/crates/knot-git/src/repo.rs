@@ -212,7 +212,17 @@ impl Layout {
     }
 
     pub fn create(&self, did: &RepoDid) -> Result<Repo, GitError> {
-        self.init_repo(self.guarded_path(did)?)
+        self.create_with_format(did, self.object_format)
+    }
+
+    pub fn create_with_format(
+        &self,
+        did: &RepoDid,
+        format: ObjectFormat,
+    ) -> Result<Repo, GitError> {
+        let repo = Repo::create_with_format(self.guarded_path(did)?, format)?;
+        repo.set_head(&self.head)?;
+        Ok(repo)
     }
 
     pub fn remove(&self, did: &RepoDid) -> Result<(), GitError> {
@@ -232,12 +242,6 @@ impl Layout {
 
     pub fn bootstrap_meta(&self, knot: &KnotId) -> Result<Repo, GitError> {
         init_bare_idempotent(self.meta_path(knot)?)
-    }
-
-    fn init_repo(&self, path: PathBuf) -> Result<Repo, GitError> {
-        let repo = Repo::create_with_format(path, self.object_format)?;
-        repo.set_head(&self.head)?;
-        Ok(repo)
     }
 }
 
