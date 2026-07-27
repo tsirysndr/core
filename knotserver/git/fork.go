@@ -41,12 +41,7 @@ func ForkWithSandbox(repoPath, source string, cfg *knotconfig.Config, sb sandbox
 		u = o
 	}
 
-	cloneCmd := exec.Command(
-		"git",
-		"-c", "protocol.ext.allow=never",
-		"clone", "--bare", u.String(), repoPath,
-	)
-	cloneCmd.Env = append(cloneCmd.Env, "GIT_PROTOCOL_FROM_USER=0")
+	cloneCmd := exec.Command("git", "clone", "--bare", u.String(), repoPath)
 	cloneCmd.Env = append(cloneCmd.Env, "GIT_TERMINAL_PROMPT=0")
 	if err := cloneCmd.Run(); err != nil {
 		return fmt.Errorf("failed to bare clone repository: %w", err)
