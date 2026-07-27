@@ -306,7 +306,13 @@ func (h *QEMUVMHandle) Shutdown(ctx context.Context) error {
 	}
 	if h.QMPMon != nil {
 		if err := h.QMPSystemPowerdown(); err != nil {
-			return err
+			// dead qmp socket means qemu exited concurrently so we wait
+			select {
+			case <-h.done:
+				return nil
+			case <-ctx.Done():
+				return err
+			}
 		}
 	}
 	if h.done == nil {

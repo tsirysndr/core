@@ -205,29 +205,44 @@ func (e *Engine) shutdownVM(ctx context.Context, wid models.WorkflowId, state *w
 	if state.VM == nil {
 		return nil
 	}
+	if vmExited(state.VM) {
+		return closeIO(&state.VM)
+	}
 
-	var err error
+	var poweroffErr error
 
 	if state.Agent != nil {
 		gracefulCtx, cancel := context.WithTimeout(ctx, vmShutdownTimeout)
-		poweredOff, poweroffErr := e.poweroffViaAgent(gracefulCtx, wid, state)
+		var poweredOff bool
+		poweredOff, poweroffErr = e.poweroffViaAgent(gracefulCtx, wid, state)
 		cancel()
 
-		err = errors.Join(err, poweroffErr)
 		if poweredOff {
-			return errors.Join(err, closeIO(&state.VM))
+			return closeIO(&state.VM)
+		}
+		if vmExited(state.VM) {
+			return closeIO(&state.VM)
 		}
 	}
 
 	fallbackCtx, cancel := context.WithTimeout(ctx, vmShutdownTimeout)
 	defer cancel()
 
-	if shutdownErr := state.VM.Shutdown(fallbackCtx); shutdownErr != nil {
+	shutdownErr := state.VM.Shutdown(fallbackCtx)
+	if shutdownErr != nil && !vmExited(state.VM) {
 		e.l.Warn("microVM shutdown fallback failed", "workflow", wid, "error", shutdownErr)
-		err = errors.Join(err, shutdownErr)
+		return errors.Join(poweroffErr, shutdownErr, closeIO(&state.VM))
 	}
 
-	return errors.Join(err, closeIO(&state.VM))
+	return closeIO(&state.VM)
+}
+
+func vmExited(vm VMHandle) bool {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	// a cancelled wait means the process is still live
+	// any other result means it exited
+	return !errors.Is(vm.WaitContext(ctx), context.Canceled)
 }
 
 func (e *Engine) poweroffViaAgent(ctx context.Context, wid models.WorkflowId, state *workflowState) (bool, error) {
