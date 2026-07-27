@@ -68,7 +68,8 @@ impl crate::Bundle {
         options: Options,
     ) -> Result<Outcome, Error> {
         let _span = gix_features::trace::coarse!("gix_pack::Bundle::write_to_directory()");
-        let mut read_progress = progress.add_child_with_id("read pack".into(), ProgressId::ReadPackBytes.into());
+        let mut read_progress =
+            progress.add_child_with_id("read pack".into(), ProgressId::ReadPackBytes.into());
         read_progress.init(None, progress::bytes());
         let pack = progress::Read {
             inner: pack,
@@ -79,8 +80,14 @@ impl crate::Bundle {
         let data_file = Arc::new(parking_lot::Mutex::new(io::BufWriter::with_capacity(
             64 * 1024,
             match directory.as_ref() {
-                Some(directory) => gix_tempfile::new(directory, ContainingDirectory::Exists, AutoRemove::Tempfile)?,
-                None => gix_tempfile::new(std::env::temp_dir(), ContainingDirectory::Exists, AutoRemove::Tempfile)?,
+                Some(directory) => {
+                    gix_tempfile::new(directory, ContainingDirectory::Exists, AutoRemove::Tempfile)?
+                }
+                None => gix_tempfile::new(
+                    std::env::temp_dir(),
+                    ContainingDirectory::Exists,
+                    AutoRemove::Tempfile,
+                )?,
             },
         )));
         let (pack_entries_iter, pack_version): (
@@ -178,21 +185,34 @@ impl crate::Bundle {
         options: Options,
     ) -> Result<Outcome, Error> {
         let _span = gix_features::trace::coarse!("gix_pack::Bundle::write_to_directory_eagerly()");
-        let mut read_progress = progress.add_child_with_id("read pack".into(), ProgressId::ReadPackBytes.into()); /* Bundle Write Read pack Bytes*/
+        let mut read_progress =
+            progress.add_child_with_id("read pack".into(), ProgressId::ReadPackBytes.into()); /* Bundle Write Read pack Bytes*/
         read_progress.init(pack_size.map(|s| s as usize), progress::bytes());
         let pack = progress::Read {
             inner: pack,
             progress: progress::ThroughputOnDrop::new(read_progress),
         };
 
-        let data_file = Arc::new(parking_lot::Mutex::new(io::BufWriter::new(match directory.as_ref() {
-            Some(directory) => gix_tempfile::new(directory, ContainingDirectory::Exists, AutoRemove::Tempfile)?,
-            None => gix_tempfile::new(std::env::temp_dir(), ContainingDirectory::Exists, AutoRemove::Tempfile)?,
-        })));
+        let data_file = Arc::new(parking_lot::Mutex::new(io::BufWriter::new(
+            match directory.as_ref() {
+                Some(directory) => {
+                    gix_tempfile::new(directory, ContainingDirectory::Exists, AutoRemove::Tempfile)?
+                }
+                None => gix_tempfile::new(
+                    std::env::temp_dir(),
+                    ContainingDirectory::Exists,
+                    AutoRemove::Tempfile,
+                )?,
+            },
+        )));
         let object_hash = options.object_hash;
         let eight_pages = 4096 * 8;
         let (pack_entries_iter, pack_version): (
-            Box<dyn Iterator<Item = Result<data::input::Entry, data::input::Error>> + Send + 'static>,
+            Box<
+                dyn Iterator<Item = Result<data::input::Entry, data::input::Error>>
+                    + Send
+                    + 'static,
+            >,
             _,
         ) = match thin_pack_base_object_lookup {
             Some(thin_pack_lookup) => {
@@ -233,8 +253,12 @@ impl crate::Bundle {
             }
         };
         let num_objects = pack_entries_iter.size_hint().0;
-        let pack_entries_iter =
-            gix_features::parallel::EagerIterIf::new(move || num_objects > 25_000, pack_entries_iter, 5_000, 5);
+        let pack_entries_iter = gix_features::parallel::EagerIterIf::new(
+            move || num_objects > 25_000,
+            pack_entries_iter,
+            5_000,
+            5,
+        );
 
         let WriteOutcome {
             outcome,
@@ -271,7 +295,9 @@ impl crate::Bundle {
             object_hash,
         }: Options,
         data_file: SharedTempFile,
-        mut pack_entries_iter: Box<dyn Iterator<Item = Result<data::input::Entry, data::input::Error>> + 'a>,
+        mut pack_entries_iter: Box<
+            dyn Iterator<Item = Result<data::input::Entry, data::input::Error>> + 'a,
+        >,
         should_interrupt: &AtomicBool,
         pack_version: data::Version,
     ) -> Result<WriteOutcome, Error> {
@@ -282,7 +308,11 @@ impl crate::Bundle {
         Ok(match directory {
             Some(directory) => {
                 let directory = directory.as_ref();
-                let mut index_file = gix_tempfile::new(directory, ContainingDirectory::Exists, AutoRemove::Tempfile)?;
+                let mut index_file = gix_tempfile::new(
+                    directory,
+                    ContainingDirectory::Exists,
+                    AutoRemove::Tempfile,
+                )?;
 
                 let outcome = crate::index::write_data_iter_to_stream(
                     index_kind,
@@ -308,7 +338,8 @@ impl crate::Bundle {
                         keep_path: None,
                     }
                 } else {
-                    let data_path = directory.join(format!("pack-{}.pack", outcome.data_hash.to_hex()));
+                    let data_path =
+                        directory.join(format!("pack-{}.pack", outcome.data_hash.to_hex()));
                     let index_path = data_path.with_extension("idx");
                     let keep_path = if data_path.is_file() {
                         // avoid trying to overwrite existing files, we know they have the same content

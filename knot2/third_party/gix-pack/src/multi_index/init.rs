@@ -29,7 +29,10 @@ mod error {
         #[error(transparent)]
         PackNames(#[from] chunk::index_names::decode::Error),
         #[error("multi-index chunk {:?} has invalid size: {message}", String::from_utf8_lossy(.id))]
-        InvalidChunkSize { id: gix_chunk::Id, message: &'static str },
+        InvalidChunkSize {
+            id: gix_chunk::Id,
+            message: &'static str,
+        },
     }
 }
 
@@ -65,11 +68,17 @@ where
     ///
     ///  It is used to reject reserving the output `Vec<PathBuf>` if its capacity estimate exceeds the limit,
     ///  and to reject any single path entry whose byte length exceeds the limit before turning it into a `PathBuf`.
-    pub fn from_data(data: T, path: PathBuf, alloc_limit_bytes: Option<usize>) -> Result<Self, Error> {
+    pub fn from_data(
+        data: T,
+        path: PathBuf,
+        alloc_limit_bytes: Option<usize>,
+    ) -> Result<Self, Error> {
         const TRAILER_LEN: usize = gix_hash::Kind::shortest().len_in_bytes(); /* trailing hash */
         if data.len()
             < Self::HEADER_LEN
-                + gix_chunk::file::Index::size_for_entries(4 /*index names, fan, offsets, oids*/)
+                + gix_chunk::file::Index::size_for_entries(
+                    4, /*index names, fan, offsets, oids*/
+                )
                 + chunk::fanout::SIZE
                 + TRAILER_LEN
         {
@@ -105,10 +114,12 @@ where
             (version, object_hash, num_chunks, num_indices)
         };
 
-        let chunks = gix_chunk::file::Index::from_bytes(&data, Self::HEADER_LEN, u32::from(num_chunks))?;
+        let chunks =
+            gix_chunk::file::Index::from_bytes(&data, Self::HEADER_LEN, u32::from(num_chunks))?;
 
         let index_names = chunks.data_by_id(&data, chunk::index_names::ID)?;
-        let index_names = chunk::index_names::from_bytes(index_names, num_indices, alloc_limit_bytes)?;
+        let index_names =
+            chunk::index_names::from_bytes(index_names, num_indices, alloc_limit_bytes)?;
 
         let fan = chunks.data_by_id(&data, chunk::fanout::ID)?;
         let fan = chunk::fanout::from_bytes(fan).ok_or(Error::MultiPackFanSize)?;

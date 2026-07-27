@@ -25,7 +25,10 @@ pub trait Find {
         &self,
         id: &gix_hash::oid,
         buffer: &'a mut Vec<u8>,
-    ) -> Result<Option<(gix_object::Data<'a>, Option<data::entry::Location>)>, gix_object::find::Error> {
+    ) -> Result<
+        Option<(gix_object::Data<'a>, Option<data::entry::Location>)>,
+        gix_object::find::Error,
+    > {
         self.try_find_cached(id, buffer, &mut crate::cache::Never)
     }
 
@@ -40,16 +43,24 @@ pub trait Find {
         id: &gix_hash::oid,
         buffer: &'a mut Vec<u8>,
         pack_cache: &mut dyn crate::cache::DecodeEntry,
-    ) -> Result<Option<(gix_object::Data<'a>, Option<data::entry::Location>)>, gix_object::find::Error>;
+    ) -> Result<
+        Option<(gix_object::Data<'a>, Option<data::entry::Location>)>,
+        gix_object::find::Error,
+    >;
 
     /// Find the packs location where an object with `id` can be found in the database, or `None` if there is no pack
     /// holding the object.
     ///
     /// _Note_ that this is always None if the object isn't packed even though it exists as loose object.
-    fn location_by_oid(&self, id: &gix_hash::oid, buf: &mut Vec<u8>) -> Option<data::entry::Location>;
+    fn location_by_oid(
+        &self,
+        id: &gix_hash::oid,
+        buf: &mut Vec<u8>,
+    ) -> Option<data::entry::Location>;
 
     /// Obtain a vector of all offsets, in index order, along with their object id.
-    fn pack_offsets_and_oid(&self, pack_id: u32) -> Option<Vec<(data::Offset, gix_hash::ObjectId)>>;
+    fn pack_offsets_and_oid(&self, pack_id: u32)
+    -> Option<Vec<(data::Offset, gix_hash::ObjectId)>>;
 
     /// Return the [`find::Entry`] for `location` if it is backed by a pack.
     ///
@@ -64,7 +75,10 @@ pub trait Find {
 }
 
 mod ext {
-    use gix_object::{BlobRef, CommitRef, CommitRefIter, Kind, ObjectRef, TagRef, TagRefIter, TreeRef, TreeRefIter};
+    use gix_object::{
+        BlobRef, CommitRef, CommitRefIter, Kind, ObjectRef, TagRef, TagRefIter, TreeRef,
+        TreeRefIter,
+    };
 
     macro_rules! make_obj_lookup {
         ($method:ident, $object_variant:path, $object_kind:path, $object_type:ty) => {
@@ -74,8 +88,10 @@ mod ext {
                 &self,
                 id: &gix_hash::oid,
                 buffer: &'a mut Vec<u8>,
-            ) -> Result<($object_type, Option<crate::data::entry::Location>), gix_object::find::existing_object::Error>
-            {
+            ) -> Result<
+                ($object_type, Option<crate::data::entry::Location>),
+                gix_object::find::existing_object::Error,
+            > {
                 let id = id.as_ref();
                 self.try_find(id, buffer)
                     .map_err(gix_object::find::existing_object::Error::Find)?
@@ -110,7 +126,10 @@ mod ext {
                 &self,
                 id: &gix_hash::oid,
                 buffer: &'a mut Vec<u8>,
-            ) -> Result<($object_type, Option<crate::data::entry::Location>), gix_object::find::existing_iter::Error> {
+            ) -> Result<
+                ($object_type, Option<crate::data::entry::Location>),
+                gix_object::find::existing_iter::Error,
+            > {
                 let id = id.as_ref();
                 self.try_find(id, buffer)
                     .map_err(gix_object::find::existing_iter::Error::Find)?
@@ -137,8 +156,10 @@ mod ext {
             &self,
             id: &gix_hash::oid,
             buffer: &'a mut Vec<u8>,
-        ) -> Result<(gix_object::Data<'a>, Option<crate::data::entry::Location>), gix_object::find::existing::Error>
-        {
+        ) -> Result<
+            (gix_object::Data<'a>, Option<crate::data::entry::Location>),
+            gix_object::find::existing::Error,
+        > {
             self.try_find(id, buffer)
                 .map_err(gix_object::find::existing::Error::Find)?
                 .ok_or_else(|| gix_object::find::existing::Error::NotFound {
@@ -150,8 +171,18 @@ mod ext {
         make_obj_lookup!(find_tree, ObjectRef::Tree, Kind::Tree, TreeRef<'a>);
         make_obj_lookup!(find_tag, ObjectRef::Tag, Kind::Tag, TagRef<'a>);
         make_obj_lookup!(find_blob, ObjectRef::Blob, Kind::Blob, BlobRef<'a>);
-        make_iter_lookup!(find_commit_iter, Kind::Blob, CommitRefIter<'a>, try_into_commit_iter);
-        make_iter_lookup!(find_tree_iter, Kind::Tree, TreeRefIter<'a>, try_into_tree_iter);
+        make_iter_lookup!(
+            find_commit_iter,
+            Kind::Blob,
+            CommitRefIter<'a>,
+            try_into_commit_iter
+        );
+        make_iter_lookup!(
+            find_tree_iter,
+            Kind::Tree,
+            TreeRefIter<'a>,
+            try_into_tree_iter
+        );
         make_iter_lookup!(find_tag_iter, Kind::Tag, TagRefIter<'a>, try_into_tag_iter);
     }
 
@@ -179,7 +210,10 @@ mod find_impls {
             id: &oid,
             buffer: &'a mut Vec<u8>,
             pack_cache: &mut dyn crate::cache::DecodeEntry,
-        ) -> Result<Option<(gix_object::Data<'a>, Option<data::entry::Location>)>, gix_object::find::Error> {
+        ) -> Result<
+            Option<(gix_object::Data<'a>, Option<data::entry::Location>)>,
+            gix_object::find::Error,
+        > {
             (*self).try_find_cached(id, buffer, pack_cache)
         }
 
@@ -187,7 +221,10 @@ mod find_impls {
             (*self).location_by_oid(id, buf)
         }
 
-        fn pack_offsets_and_oid(&self, pack_id: u32) -> Option<Vec<(data::Offset, gix_hash::ObjectId)>> {
+        fn pack_offsets_and_oid(
+            &self,
+            pack_id: u32,
+        ) -> Option<Vec<(data::Offset, gix_hash::ObjectId)>> {
             (*self).pack_offsets_and_oid(pack_id)
         }
 
@@ -209,7 +246,10 @@ mod find_impls {
             id: &oid,
             buffer: &'a mut Vec<u8>,
             pack_cache: &mut dyn crate::cache::DecodeEntry,
-        ) -> Result<Option<(gix_object::Data<'a>, Option<data::entry::Location>)>, gix_object::find::Error> {
+        ) -> Result<
+            Option<(gix_object::Data<'a>, Option<data::entry::Location>)>,
+            gix_object::find::Error,
+        > {
             self.deref().try_find_cached(id, buffer, pack_cache)
         }
 
@@ -217,7 +257,10 @@ mod find_impls {
             self.deref().location_by_oid(id, buf)
         }
 
-        fn pack_offsets_and_oid(&self, pack_id: u32) -> Option<Vec<(data::Offset, gix_hash::ObjectId)>> {
+        fn pack_offsets_and_oid(
+            &self,
+            pack_id: u32,
+        ) -> Option<Vec<(data::Offset, gix_hash::ObjectId)>> {
             self.deref().pack_offsets_and_oid(pack_id)
         }
 
@@ -239,7 +282,10 @@ mod find_impls {
             id: &oid,
             buffer: &'a mut Vec<u8>,
             pack_cache: &mut dyn crate::cache::DecodeEntry,
-        ) -> Result<Option<(gix_object::Data<'a>, Option<data::entry::Location>)>, gix_object::find::Error> {
+        ) -> Result<
+            Option<(gix_object::Data<'a>, Option<data::entry::Location>)>,
+            gix_object::find::Error,
+        > {
             self.deref().try_find_cached(id, buffer, pack_cache)
         }
 
@@ -247,7 +293,10 @@ mod find_impls {
             self.deref().location_by_oid(id, buf)
         }
 
-        fn pack_offsets_and_oid(&self, pack_id: u32) -> Option<Vec<(data::Offset, gix_hash::ObjectId)>> {
+        fn pack_offsets_and_oid(
+            &self,
+            pack_id: u32,
+        ) -> Option<Vec<(data::Offset, gix_hash::ObjectId)>> {
             self.deref().pack_offsets_and_oid(pack_id)
         }
 
@@ -269,7 +318,10 @@ mod find_impls {
             id: &oid,
             buffer: &'a mut Vec<u8>,
             pack_cache: &mut dyn crate::cache::DecodeEntry,
-        ) -> Result<Option<(gix_object::Data<'a>, Option<data::entry::Location>)>, gix_object::find::Error> {
+        ) -> Result<
+            Option<(gix_object::Data<'a>, Option<data::entry::Location>)>,
+            gix_object::find::Error,
+        > {
             self.deref().try_find_cached(id, buffer, pack_cache)
         }
 
@@ -277,7 +329,10 @@ mod find_impls {
             self.deref().location_by_oid(id, buf)
         }
 
-        fn pack_offsets_and_oid(&self, pack_id: u32) -> Option<Vec<(data::Offset, gix_hash::ObjectId)>> {
+        fn pack_offsets_and_oid(
+            &self,
+            pack_id: u32,
+        ) -> Option<Vec<(data::Offset, gix_hash::ObjectId)>> {
             self.deref().pack_offsets_and_oid(pack_id)
         }
 

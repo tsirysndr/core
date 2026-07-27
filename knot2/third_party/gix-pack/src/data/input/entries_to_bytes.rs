@@ -38,7 +38,12 @@ where
     /// # Panics
     ///
     /// Only [Version::V2](crate::data::Version::V2) is allowed for `version.
-    pub fn new(input: I, output: W, version: crate::data::Version, object_hash: gix_hash::Kind) -> Self {
+    pub fn new(
+        input: I,
+        output: W,
+        version: crate::data::Version,
+        object_hash: gix_hash::Kind,
+    ) -> Self {
         assert!(
             matches!(version, crate::data::Version::V2),
             "currently only pack version 2 can be written",
@@ -66,7 +71,9 @@ where
             self.output.write_all(&header_bytes[..])?;
         }
         self.num_entries += 1;
-        entry.header.write_to(entry.decompressed_size, &mut self.output)?;
+        entry
+            .header
+            .write_to(entry.decompressed_size, &mut self.output)?;
         self.output.write_all(
             entry
                 .compressed
@@ -76,7 +83,10 @@ where
         Ok(entry)
     }
 
-    fn write_header_and_digest(&mut self, last_entry: Option<&mut input::Entry>) -> Result<(), gix_hash::io::Error> {
+    fn write_header_and_digest(
+        &mut self,
+        last_entry: Option<&mut input::Entry>,
+    ) -> Result<(), gix_hash::io::Error> {
         let header_bytes = crate::data::header::encode(self.data_version, self.num_entries);
         let num_bytes_written = if last_entry.is_some() {
             self.output.stream_position()?
@@ -127,7 +137,8 @@ where
                     .next_inner(entry)
                     .and_then(|mut entry| {
                         if self.input.peek().is_none() {
-                            self.write_header_and_digest(Some(&mut entry)).map(|_| entry)
+                            self.write_header_and_digest(Some(&mut entry))
+                                .map(|_| entry)
                         } else {
                             Ok(entry)
                         }

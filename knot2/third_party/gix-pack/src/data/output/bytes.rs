@@ -117,7 +117,8 @@ where
                     });
                     self.written += header
                         .write_to(entry.decompressed_size as u64, &mut self.output)
-                        .map_err(gix_hash::io::Error::from)? as u64;
+                        .map_err(gix_hash::io::Error::from)?
+                        as u64;
                     self.written += std::io::copy(&mut &*entry.compressed_data, &mut self.output)
                         .map_err(gix_hash::io::Error::from)?;
                 }
@@ -134,7 +135,10 @@ where
                     .write_all(digest.as_slice())
                     .map_err(gix_hash::io::Error::from)?;
                 self.written += digest.as_slice().len() as u64;
-                self.output.inner.flush().map_err(gix_hash::io::Error::from)?;
+                self.output
+                    .inner
+                    .flush()
+                    .map_err(gix_hash::io::Error::from)?;
                 self.is_done = true;
                 self.trailer = Some(digest);
             }

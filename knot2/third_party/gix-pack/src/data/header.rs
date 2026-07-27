@@ -6,7 +6,9 @@ pub(crate) const N32_SIZE: usize = std::mem::size_of::<u32>();
 pub fn decode(data: &[u8; 12]) -> Result<(data::Version, u32), decode::Error> {
     let mut ofs = 0;
     if &data[ofs..ofs + b"PACK".len()] != b"PACK" {
-        return Err(decode::Error::Corrupt("Pack data type not recognized".into()));
+        return Err(decode::Error::Corrupt(
+            "Pack data type not recognized".into(),
+        ));
     }
     ofs += N32_SIZE;
     let kind = match crate::read_u32(&data[ofs..ofs + N32_SIZE]) {

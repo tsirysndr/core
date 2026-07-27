@@ -62,13 +62,19 @@ pub(crate) mod function {
             matches!(version, crate::data::Version::V2),
             "currently we can only write version 2"
         );
-        let (chunk_size, thread_limit, _) =
-            parallel::optimize_chunk_size_and_thread_limit(chunk_size, Some(counts.len()), thread_limit, None);
+        let (chunk_size, thread_limit, _) = parallel::optimize_chunk_size_and_thread_limit(
+            chunk_size,
+            Some(counts.len()),
+            thread_limit,
+            None,
+        );
         {
             let progress = Arc::new(parking_lot::Mutex::new(
                 progress.add_child_with_id("resolving".into(), ProgressId::ResolveCounts.into()),
             ));
-            progress.lock().init(None, gix_features::progress::count("counts"));
+            progress
+                .lock()
+                .init(None, gix_features::progress::count("counts"));
             let enough_counts_present = counts.len() > 4_000;
             let start = std::time::Instant::now();
             parallel::in_parallel_if(
@@ -85,7 +91,10 @@ pub(crate) mod function {
                             use crate::data::output::count::PackLocation::*;
                             match count.entry_pack_location {
                                 LookedUp(_) => continue,
-                                NotLookedUp => count.entry_pack_location = LookedUp(db.location_by_oid(&count.id, buf)),
+                                NotLookedUp => {
+                                    count.entry_pack_location =
+                                        LookedUp(db.location_by_oid(&count.id, buf))
+                                }
                             }
                         }
                         progress.lock().inc_by(chunk_size);
@@ -99,31 +108,46 @@ pub(crate) mod function {
         }
         let counts_range_by_pack_id = match mode {
             Mode::PackCopyAndBaseObjects => {
-                let mut progress = progress.add_child_with_id("sorting".into(), ProgressId::SortEntries.into());
+                let mut progress =
+                    progress.add_child_with_id("sorting".into(), ProgressId::SortEntries.into());
                 progress.init(Some(counts.len()), gix_features::progress::count("counts"));
                 let start = std::time::Instant::now();
 
                 use crate::data::output::count::PackLocation::*;
-                counts.sort_by(|lhs, rhs| match (&lhs.entry_pack_location, &rhs.entry_pack_location) {
-                    (LookedUp(None), LookedUp(None)) => Ordering::Equal,
-                    (LookedUp(Some(_)), LookedUp(None)) => Ordering::Greater,
-                    (LookedUp(None), LookedUp(Some(_))) => Ordering::Less,
-                    (LookedUp(Some(lhs)), LookedUp(Some(rhs))) => lhs
-                        .pack_id
-                        .cmp(&rhs.pack_id)
-                        .then(lhs.pack_offset.cmp(&rhs.pack_offset)),
-                    (_, _) => unreachable!("counts were resolved beforehand"),
+                counts.sort_by(|lhs, rhs| {
+                    match (&lhs.entry_pack_location, &rhs.entry_pack_location) {
+                        (LookedUp(None), LookedUp(None)) => Ordering::Equal,
+                        (LookedUp(Some(_)), LookedUp(None)) => Ordering::Greater,
+                        (LookedUp(None), LookedUp(Some(_))) => Ordering::Less,
+                        (LookedUp(Some(lhs)), LookedUp(Some(rhs))) => lhs
+                            .pack_id
+                            .cmp(&rhs.pack_id)
+                            .then(lhs.pack_offset.cmp(&rhs.pack_offset)),
+                        (_, _) => unreachable!("counts were resolved beforehand"),
+                    }
                 });
 
                 let mut index: Vec<(u32, std::ops::Range<usize>)> = Vec::new();
-                let mut chunks_pack_start = counts.partition_point(|e| e.entry_pack_location.is_none());
+                let mut chunks_pack_start =
+                    counts.partition_point(|e| e.entry_pack_location.is_none());
                 let mut slice = &counts[chunks_pack_start..];
                 while !slice.is_empty() {
-                    let current_pack_id = slice[0].entry_pack_location.as_ref().expect("packed object").pack_id;
+                    let current_pack_id = slice[0]
+                        .entry_pack_location
+                        .as_ref()
+                        .expect("packed object")
+                        .pack_id;
                     let pack_end = slice.partition_point(|e| {
-                        e.entry_pack_location.as_ref().expect("packed object").pack_id == current_pack_id
+                        e.entry_pack_location
+                            .as_ref()
+                            .expect("packed object")
+                            .pack_id
+                            == current_pack_id
                     });
-                    index.push((current_pack_id, chunks_pack_start..chunks_pack_start + pack_end));
+                    index.push((
+                        current_pack_id,
+                        chunks_pack_start..chunks_pack_start + pack_end,
+                    ));
                     slice = &slice[pack_end..];
                     chunks_pack_start += pack_end;
                 }
@@ -147,15 +171,17 @@ pub(crate) mod function {
                 move |n| {
                     (
                         Vec::new(), // object data buffer
-                        progress
-                            .lock()
-                            .add_child_with_id(format!("thread {n}"), gix_features::progress::UNKNOWN),
+                        progress.lock().add_child_with_id(
+                            format!("thread {n}"),
+                            gix_features::progress::UNKNOWN,
+                        ),
                     )
                 }
             },
             {
                 let counts = Arc::clone(&counts);
-                move |(chunk_id, chunk_range): (SequenceId, std::ops::Range<usize>), (buf, progress)| {
+                move |(chunk_id, chunk_range): (SequenceId, std::ops::Range<usize>),
+                      (buf, progress)| {
                     let mut out = Vec::new();
                     let chunk = &counts[chunk_range];
                     let mut stats = Outcome::default();

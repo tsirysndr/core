@@ -108,7 +108,10 @@ pub(super) mod function {
                 "Collecting entries".into(),
                 ProgressId::FromPathsCollectingEntries.into(),
             );
-            progress.init(Some(index_paths_sorted.len()), gix_features::progress::count("indices"));
+            progress.init(
+                Some(index_paths_sorted.len()),
+                gix_features::progress::count("indices"),
+            );
 
             // This could be parallelized… but it's probably not worth it unless you have 500mio objects.
             for (index_id, index) in index_paths_sorted.iter().enumerate() {
@@ -134,7 +137,10 @@ pub(super) mod function {
 
             let start = Instant::now();
             progress.set_name("Deduplicate".into());
-            progress.init(Some(entries.len()), gix_features::progress::count("entries"));
+            progress.init(
+                Some(entries.len()),
+                gix_features::progress::count("entries"),
+            );
             entries.sort_by(|l, r| {
                 l.id.cmp(&r.id)
                     .then_with(|| l.index_mtime.cmp(&r.index_mtime).reverse())
@@ -154,7 +160,10 @@ pub(super) mod function {
             multi_index::chunk::index_names::ID,
             multi_index::chunk::index_names::storage_size(&index_filenames_sorted),
         );
-        cf.plan_chunk(multi_index::chunk::fanout::ID, multi_index::chunk::fanout::SIZE as u64);
+        cf.plan_chunk(
+            multi_index::chunk::fanout::ID,
+            multi_index::chunk::fanout::SIZE as u64,
+        );
         cf.plan_chunk(
             multi_index::chunk::lookup::ID,
             multi_index::chunk::lookup::storage_size(entries.len(), object_hash),
@@ -172,8 +181,10 @@ pub(super) mod function {
             );
         }
 
-        let mut write_progress =
-            progress.add_child_with_id("Writing multi-index".into(), ProgressId::BytesWritten.into());
+        let mut write_progress = progress.add_child_with_id(
+            "Writing multi-index".into(),
+            ProgressId::BytesWritten.into(),
+        );
         let write_start = Instant::now();
         write_progress.init(
             Some(cf.planned_storage_size() as usize + multi_index::File::<MMap>::HEADER_LEN),
@@ -186,7 +197,9 @@ pub(super) mod function {
 
         let bytes_written = multi_index::File::<MMap>::write_header(
             &mut out,
-            cf.num_chunks().try_into().expect("BUG: wrote more than 256 chunks"),
+            cf.num_chunks()
+                .try_into()
+                .expect("BUG: wrote more than 256 chunks"),
             index_paths_sorted.len() as u32,
             object_hash,
         )
@@ -194,27 +207,42 @@ pub(super) mod function {
 
         {
             progress.set_name("Writing chunks".into());
-            progress.init(Some(cf.num_chunks()), gix_features::progress::count("chunks"));
+            progress.init(
+                Some(cf.num_chunks()),
+                gix_features::progress::count("chunks"),
+            );
 
             let mut chunk_write = cf
                 .into_write(&mut out, bytes_written)
                 .map_err(gix_hash::io::Error::from)?;
             while let Some(chunk_to_write) = chunk_write.next_chunk() {
                 match chunk_to_write {
-                    multi_index::chunk::index_names::ID => {
-                        multi_index::chunk::index_names::write(&index_filenames_sorted, &mut chunk_write)
-                    }
-                    multi_index::chunk::fanout::ID => multi_index::chunk::fanout::write(&entries, &mut chunk_write),
-                    multi_index::chunk::lookup::ID => multi_index::chunk::lookup::write(&entries, &mut chunk_write),
-                    multi_index::chunk::offsets::ID => {
-                        multi_index::chunk::offsets::write(&entries, num_large_offsets.is_some(), &mut chunk_write)
-                    }
-                    multi_index::chunk::large_offsets::ID => multi_index::chunk::large_offsets::write(
-                        &entries,
-                        num_large_offsets.expect("available if planned"),
+                    multi_index::chunk::index_names::ID => multi_index::chunk::index_names::write(
+                        &index_filenames_sorted,
                         &mut chunk_write,
                     ),
-                    unknown => unreachable!("BUG: forgot to implement chunk {:?}", std::str::from_utf8(&unknown)),
+                    multi_index::chunk::fanout::ID => {
+                        multi_index::chunk::fanout::write(&entries, &mut chunk_write)
+                    }
+                    multi_index::chunk::lookup::ID => {
+                        multi_index::chunk::lookup::write(&entries, &mut chunk_write)
+                    }
+                    multi_index::chunk::offsets::ID => multi_index::chunk::offsets::write(
+                        &entries,
+                        num_large_offsets.is_some(),
+                        &mut chunk_write,
+                    ),
+                    multi_index::chunk::large_offsets::ID => {
+                        multi_index::chunk::large_offsets::write(
+                            &entries,
+                            num_large_offsets.expect("available if planned"),
+                            &mut chunk_write,
+                        )
+                    }
+                    unknown => unreachable!(
+                        "BUG: forgot to implement chunk {:?}",
+                        std::str::from_utf8(&unknown)
+                    ),
                 }
                 .map_err(gix_hash::io::Error::from)?;
                 progress.inc();
@@ -225,14 +253,20 @@ pub(super) mod function {
         }
 
         // write trailing checksum
-        let multi_index_checksum = out.inner.hash.try_finalize().map_err(gix_hash::io::Error::from)?;
+        let multi_index_checksum = out
+            .inner
+            .hash
+            .try_finalize()
+            .map_err(gix_hash::io::Error::from)?;
         out.inner
             .inner
             .write_all(multi_index_checksum.as_slice())
             .map_err(gix_hash::io::Error::from)?;
         out.progress.show_throughput(write_start);
 
-        Ok(Outcome { multi_index_checksum })
+        Ok(Outcome {
+            multi_index_checksum,
+        })
     }
 }
 

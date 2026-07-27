@@ -63,14 +63,16 @@ impl File {
                 Tree | Blob | Commit | Tag => {
                     return Ok(Outcome {
                         kind: entry.header.as_kind().expect("always valid for non-refs"),
-                        object_size: first_delta_decompressed_size.unwrap_or(entry.decompressed_size),
+                        object_size: first_delta_decompressed_size
+                            .unwrap_or(entry.decompressed_size),
                         num_deltas,
                     });
                 }
                 OfsDelta { base_distance } => {
                     num_deltas += 1;
                     if first_delta_decompressed_size.is_none() {
-                        first_delta_decompressed_size = Some(self.decode_delta_object_size(inflate, &entry)?);
+                        first_delta_decompressed_size =
+                            Some(self.decode_delta_object_size(inflate, &entry)?);
                     }
                     entry = self.entry(entry.checked_base_pack_offset(base_distance).ok_or(
                         crate::data::entry::decode::Error::Corrupt {
@@ -81,7 +83,8 @@ impl File {
                 RefDelta { base_id } => {
                     num_deltas += 1;
                     if first_delta_decompressed_size.is_none() {
-                        first_delta_decompressed_size = Some(self.decode_delta_object_size(inflate, &entry)?);
+                        first_delta_decompressed_size =
+                            Some(self.decode_delta_object_size(inflate, &entry)?);
                     }
                     match resolve(base_id.as_ref()) {
                         Some(ResolvedBase::InPack(base_entry)) => entry = base_entry,
@@ -91,7 +94,8 @@ impl File {
                         }) => {
                             return Ok(Outcome {
                                 kind,
-                                object_size: first_delta_decompressed_size.unwrap_or(entry.decompressed_size),
+                                object_size: first_delta_decompressed_size
+                                    .unwrap_or(entry.decompressed_size),
                                 num_deltas: origin_num_deltas.unwrap_or_default() + num_deltas,
                             });
                         }
@@ -112,11 +116,19 @@ impl File {
     /// decompression through `decode_entry()` must still validate that the stream length matches
     /// the pack entry header.
     #[inline]
-    fn decode_delta_object_size(&self, inflate: &mut zlib::Inflate, entry: &data::Entry) -> Result<u64, Error> {
+    fn decode_delta_object_size(
+        &self,
+        inflate: &mut zlib::Inflate,
+        entry: &data::Entry,
+    ) -> Result<u64, Error> {
         let mut buf = [0_u8; 20];
         let max_size = entry.decompressed_size.min(buf.len() as u64) as usize;
-        let (status, _consumed_in, consumed_out) =
-            self.decompress_entry_from_data_offset_unchecked(entry.data_offset, inflate, &mut buf[..max_size])?;
+        let (status, _consumed_in, consumed_out) = self
+            .decompress_entry_from_data_offset_unchecked(
+                entry.data_offset,
+                inflate,
+                &mut buf[..max_size],
+            )?;
         if status == zlib::Status::StreamEnd {
             if consumed_out as u64 != entry.decompressed_size {
                 return Err(data::entry::decode::Error::Corrupt {

@@ -79,9 +79,11 @@ pub(crate) fn apply(base: &[u8], mut target: &mut [u8], data: &[u8]) -> Result<(
                     size = 0x10000; // 65536
                 }
                 let ofs = ofs as usize;
-                let end = ofs.checked_add(size as usize).ok_or(apply::Error::Corrupt {
-                    message: "delta copy range overflows",
-                })?;
+                let end = ofs
+                    .checked_add(size as usize)
+                    .ok_or(apply::Error::Corrupt {
+                        message: "delta copy range overflows",
+                    })?;
                 std::io::Write::write(
                     &mut target,
                     base.get(ofs..end).ok_or(apply::Error::Corrupt {

@@ -40,12 +40,20 @@ where
 
     fn shifted_pack_offset(&self, pack_offset: u64) -> u64 {
         let new_ofs = pack_offset as i64 + self.inserted_entries_length_in_bytes;
-        new_ofs.try_into().expect("offset value is never becomes negative")
+        new_ofs
+            .try_into()
+            .expect("offset value is never becomes negative")
     }
 
     /// positive `size_change` values mean an object grew or was more commonly, was inserted. Negative values
     /// mean the object shrunk, usually because there header changed from ref-deltas to ofs deltas.
-    fn track_change(&mut self, shifted_pack_offset: u64, pack_offset: u64, size_change: i64, oid: Option<ObjectId>) {
+    fn track_change(
+        &mut self,
+        shifted_pack_offset: u64,
+        pack_offset: u64,
+        size_change: i64,
+        oid: Option<ObjectId>,
+    ) {
         if size_change == 0 {
             return;
         }
@@ -60,7 +68,11 @@ where
         self.inserted_entries_length_in_bytes += size_change;
     }
 
-    fn shift_entry_and_point_to_base_by_offset(&mut self, entry: &mut input::Entry, base_distance: u64) {
+    fn shift_entry_and_point_to_base_by_offset(
+        &mut self,
+        entry: &mut input::Entry,
+        base_distance: u64,
+    ) {
         let pack_offset = entry.pack_offset;
         entry.pack_offset = self.shifted_pack_offset(pack_offset);
         entry.header = Header::OfsDelta { base_distance };
@@ -90,39 +102,50 @@ where
         match self.inner.next() {
             Some(Ok(mut entry)) => match entry.header {
                 Header::RefDelta { base_id } => {
-                    match self.inserted_entry_length_at_offset.iter().rfind(|e| e.oid == base_id) {
+                    match self
+                        .inserted_entry_length_at_offset
+                        .iter()
+                        .rfind(|e| e.oid == base_id)
+                    {
                         None => {
-                            let base_entry = match self.lookup.try_find(&base_id, &mut self.buf).ok()? {
-                                Some(obj) => {
-                                    let current_pack_offset = entry.pack_offset;
-                                    let mut entry = match input::Entry::from_data_obj(&obj, 0) {
-                                        Ok(e) => e,
-                                        Err(err) => return Some(Err(err)),
-                                    };
-                                    entry.pack_offset = self.shifted_pack_offset(current_pack_offset);
-                                    self.track_change(
-                                        entry.pack_offset,
-                                        current_pack_offset,
-                                        entry.bytes_in_pack() as i64,
-                                        Some(base_id),
-                                    );
-                                    entry
-                                }
-                                None => {
-                                    self.error = true;
-                                    return Some(Err(input::Error::NotFound { object_id: base_id }));
-                                }
-                            };
+                            let base_entry =
+                                match self.lookup.try_find(&base_id, &mut self.buf).ok()? {
+                                    Some(obj) => {
+                                        let current_pack_offset = entry.pack_offset;
+                                        let mut entry = match input::Entry::from_data_obj(&obj, 0) {
+                                            Ok(e) => e,
+                                            Err(err) => return Some(Err(err)),
+                                        };
+                                        entry.pack_offset =
+                                            self.shifted_pack_offset(current_pack_offset);
+                                        self.track_change(
+                                            entry.pack_offset,
+                                            current_pack_offset,
+                                            entry.bytes_in_pack() as i64,
+                                            Some(base_id),
+                                        );
+                                        entry
+                                    }
+                                    None => {
+                                        self.error = true;
+                                        return Some(Err(input::Error::NotFound {
+                                            object_id: base_id,
+                                        }));
+                                    }
+                                };
 
                             {
-                                self.shift_entry_and_point_to_base_by_offset(&mut entry, base_entry.bytes_in_pack());
+                                self.shift_entry_and_point_to_base_by_offset(
+                                    &mut entry,
+                                    base_entry.bytes_in_pack(),
+                                );
                                 self.next_delta = Some(entry);
                             }
                             Some(Ok(base_entry))
                         }
                         Some(base_entry) => {
-                            let base_distance =
-                                self.shifted_pack_offset(entry.pack_offset) - base_entry.shifted_pack_offset;
+                            let base_distance = self.shifted_pack_offset(entry.pack_offset)
+                                - base_entry.shifted_pack_offset;
                             self.shift_entry_and_point_to_base_by_offset(&mut entry, base_distance);
                             Some(Ok(entry))
                         }
@@ -154,12 +177,19 @@ where
                                     };
                                     let new_distance = self
                                         .shifted_pack_offset(entry.pack_offset)
-                                        .checked_sub(self.inserted_entry_length_at_offset[index].shifted_pack_offset)
+                                        .checked_sub(
+                                            self.inserted_entry_length_at_offset[index]
+                                                .shifted_pack_offset,
+                                        )
                                         .expect("a base that is behind us in the pack");
-                                    self.shift_entry_and_point_to_base_by_offset(&mut entry, new_distance);
+                                    self.shift_entry_and_point_to_base_by_offset(
+                                        &mut entry,
+                                        new_distance,
+                                    );
                                 }
                                 Err(index) => {
-                                    let change_since_offset = self.inserted_entry_length_at_offset[index..]
+                                    let change_since_offset = self.inserted_entry_length_at_offset
+                                        [index..]
                                         .iter()
                                         .map(|c| c.size_change_in_bytes)
                                         .sum::<i64>();
@@ -168,7 +198,10 @@ where
                                             .try_into()
                                             .expect("it still points behind us")
                                     };
-                                    self.shift_entry_and_point_to_base_by_offset(&mut entry, new_distance);
+                                    self.shift_entry_and_point_to_base_by_offset(
+                                        &mut entry,
+                                        new_distance,
+                                    );
                                 }
                             }
                         } else {

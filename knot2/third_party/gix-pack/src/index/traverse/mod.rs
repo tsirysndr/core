@@ -92,7 +92,9 @@ where
     where
         C: crate::cache::DecodeEntry,
         E: std::error::Error + Send + Sync + 'static,
-        Processor: FnMut(gix_object::Kind, &[u8], &index::Entry, &dyn Progress) -> Result<(), E> + Send + Clone,
+        Processor: FnMut(gix_object::Kind, &[u8], &index::Entry, &dyn Progress) -> Result<(), E>
+            + Send
+            + Clone,
         F: Fn() -> C + Send + Clone,
     {
         match traversal {
@@ -112,7 +114,10 @@ where
                 processor,
                 progress,
                 should_interrupt,
-                with_index::Options { check, thread_limit },
+                with_index::Options {
+                    check,
+                    thread_limit,
+                },
             ),
         }
     }
@@ -153,7 +158,12 @@ where
         inflate: &mut zlib::Inflate,
         progress: &mut dyn Progress,
         index_entry: &index::Entry,
-        processor: &mut impl FnMut(gix_object::Kind, &[u8], &index::Entry, &dyn Progress) -> Result<(), E>,
+        processor: &mut impl FnMut(
+            gix_object::Kind,
+            &[u8],
+            &index::Entry,
+            &dyn Progress,
+        ) -> Result<(), E>,
     ) -> Result<crate::data::decode::entry::Outcome, Error<E>>
     where
         C: crate::cache::DecodeEntry,

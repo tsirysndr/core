@@ -47,7 +47,9 @@ pub mod changes {
                     entry_mode,
                     relation: _,
                 }
-                | Change::Modification { oid, entry_mode, .. } => {
+                | Change::Modification {
+                    oid, entry_mode, ..
+                } => {
                     if entry_mode.is_commit() {
                         return std::ops::ControlFlow::Continue(());
                     }

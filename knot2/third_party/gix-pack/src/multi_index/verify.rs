@@ -12,7 +12,9 @@ pub mod integrity {
     #[derive(thiserror::Error, Debug)]
     #[allow(missing_docs)]
     pub enum Error {
-        #[error("Object {id} should be at pack-offset {expected_pack_offset} but was found at {actual_pack_offset}")]
+        #[error(
+            "Object {id} should be at pack-offset {expected_pack_offset} but was found at {actual_pack_offset}"
+        )]
         PackOffsetMismatch {
             id: gix_hash::ObjectId,
             expected_pack_offset: u64,
@@ -30,7 +32,9 @@ pub mod integrity {
         OidNotFound { id: gix_hash::ObjectId },
         #[error("The object id at multi-index entry {index} wasn't in order")]
         OutOfOrder { index: EntryIndex },
-        #[error("The fan at index {index} is out of order as it's larger then the following value.")]
+        #[error(
+            "The fan at index {index} is out of order as it's larger then the following value."
+        )]
         Fan { index: usize },
         #[error("The multi-index claims to have no objects")]
         Empty,
@@ -178,7 +182,8 @@ where
         let mut pack_ids_and_offsets = exact_vec(self.num_objects as usize);
         {
             let order_start = Instant::now();
-            let mut progress = progress.add_child_with_id("checking oid order".into(), gix_features::progress::UNKNOWN);
+            let mut progress = progress
+                .add_child_with_id("checking oid order".into(), gix_features::progress::UNKNOWN);
             progress.init(
                 Some(self.num_objects as usize),
                 gix_features::progress::count("objects"),
@@ -189,9 +194,9 @@ where
                 let rhs = self.oid_at_index(entry_index + 1);
 
                 if rhs.cmp(lhs) != Ordering::Greater {
-                    return Err(index::traverse::Error::Processor(integrity::Error::OutOfOrder {
-                        index: entry_index,
-                    }));
+                    return Err(index::traverse::Error::Processor(
+                        integrity::Error::OutOfOrder { index: entry_index },
+                    ));
                 }
                 let (pack_id, _) = self.pack_id_and_pack_offset_at_index(entry_index);
                 pack_ids_and_offsets.push((pack_id, entry_index));
@@ -230,7 +235,9 @@ where
             } else {
                 index = Some(
                     index::File::at(index_path, self.object_hash)
-                        .map_err(|err| integrity::Error::BundleInit(crate::bundle::init::Error::Index(err)))
+                        .map_err(|err| {
+                            integrity::Error::BundleInit(crate::bundle::init::Error::Index(err))
+                        })
                         .map_err(index::traverse::Error::Processor)?,
                 );
                 index.as_ref().expect("just set")
@@ -254,7 +261,9 @@ where
                     let oid = self.oid_at_index(entry_id);
                     let (_, expected_pack_offset) = self.pack_id_and_pack_offset_at_index(entry_id);
                     let entry_in_bundle_index = index.lookup(oid).ok_or_else(|| {
-                        index::traverse::Error::Processor(integrity::Error::OidNotFound { id: oid.to_owned() })
+                        index::traverse::Error::Processor(integrity::Error::OidNotFound {
+                            id: oid.to_owned(),
+                        })
                     })?;
                     let actual_pack_offset = index.pack_offset_at_index(entry_in_bundle_index);
                     if actual_pack_offset != expected_pack_offset {
@@ -270,7 +279,9 @@ where
                 }
 
                 if should_interrupt.load(std::sync::atomic::Ordering::Relaxed) {
-                    return Err(index::traverse::Error::Processor(integrity::Error::Interrupted));
+                    return Err(index::traverse::Error::Processor(
+                        integrity::Error::Interrupted,
+                    ));
                 }
                 offsets_progress.show_throughput(offset_start);
             }
@@ -295,7 +306,9 @@ where
                             PackDecode { id, offset, source } => PackDecode { id, offset, source },
                             PackMismatch(err) => PackMismatch(err),
                             EntryType(err) => EntryType(err),
-                            PackObjectVerify { offset, source } => PackObjectVerify { offset, source },
+                            PackObjectVerify { offset, source } => {
+                                PackObjectVerify { offset, source }
+                            }
                             Crc32Mismatch {
                                 expected,
                                 actual,

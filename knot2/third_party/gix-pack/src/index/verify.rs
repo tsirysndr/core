@@ -17,7 +17,9 @@ pub mod integrity {
     pub enum Error {
         #[error("Reserialization of an object failed")]
         Io(#[from] std::io::Error),
-        #[error("The fan at index {index} is out of order as it's larger then the following value.")]
+        #[error(
+            "The fan at index {index} is out of order as it's larger then the following value."
+        )]
         Fan { index: usize },
         #[error("{kind} object {id} could not be decoded")]
         ObjectDecode {
@@ -25,7 +27,9 @@ pub mod integrity {
             kind: gix_object::Kind,
             id: gix_hash::ObjectId,
         },
-        #[error("{kind} object {id} wasn't re-encoded without change, wanted\n{expected}\n\nGOT\n\n{actual}")]
+        #[error(
+            "{kind} object {id} wasn't re-encoded without change, wanted\n{expected}\n\nGOT\n\n{actual}"
+        )]
         ObjectEncodeMismatch {
             kind: gix_object::Kind,
             id: gix_hash::ObjectId,
@@ -203,7 +207,14 @@ where
                     {
                         let mut encode_buf = Vec::with_capacity(2048);
                         move |kind, data, index_entry, progress| {
-                            Self::verify_entry(verify_mode, &mut encode_buf, kind, data, index_entry, progress)
+                            Self::verify_entry(
+                                verify_mode,
+                                &mut encode_buf,
+                                kind,
+                                data,
+                                index_entry,
+                                progress,
+                            )
                         }
                     },
                     index::traverse::Options {
@@ -219,8 +230,10 @@ where
                 }),
             None => self
                 .verify_checksum(
-                    &mut progress
-                        .add_child_with_id("Sha1 of index".into(), integrity::ProgressId::ChecksumBytes.into()),
+                    &mut progress.add_child_with_id(
+                        "Sha1 of index".into(),
+                        integrity::ProgressId::ChecksumBytes.into(),
+                    ),
                     should_interrupt,
                 )
                 .map_err(index::traverse::Error::IndexVerify)
@@ -245,13 +258,12 @@ where
             match object_kind {
                 Tree | Commit | Tag => {
                     let object =
-                        gix_object::ObjectRef::from_bytes(buf, object_kind, index_entry.oid.kind()).map_err(|err| {
-                            integrity::Error::ObjectDecode {
+                        gix_object::ObjectRef::from_bytes(buf, object_kind, index_entry.oid.kind())
+                            .map_err(|err| integrity::Error::ObjectDecode {
                                 source: err,
                                 kind: object_kind,
                                 id: index_entry.oid,
-                            }
-                        })?;
+                            })?;
                     if let Mode::HashCrc32DecodeEncode = verify_mode {
                         encode_buf.clear();
                         object.write_to(&mut *encode_buf)?;

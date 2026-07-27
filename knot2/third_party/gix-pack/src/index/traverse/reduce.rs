@@ -86,7 +86,11 @@ where
         let chunk_total = chunk_stats.into_iter().fold(
             data::decode::entry::Outcome::default_from_kind(gix_object::Kind::Tree),
             |mut total, stats| {
-                *self.stats.objects_per_chain_length.entry(stats.num_deltas).or_insert(0) += 1;
+                *self
+                    .stats
+                    .objects_per_chain_length
+                    .entry(stats.num_deltas)
+                    .or_insert(0) += 1;
                 self.stats.total_decompressed_entries_size += stats.decompressed_size;
                 self.stats.total_compressed_entries_size += stats.compressed_size as u64;
                 self.stats.total_object_size += stats.object_size;
@@ -122,7 +126,9 @@ where
             self.entries_seen,
             elapsed_s,
             objects_per_second,
-            gix_features::progress::bytesize::ByteSize(self.stats.average.object_size * u64::from(objects_per_second))
+            gix_features::progress::bytesize::ByteSize(
+                self.stats.average.object_size * u64::from(objects_per_second)
+            )
         ));
         Ok(self.stats)
     }

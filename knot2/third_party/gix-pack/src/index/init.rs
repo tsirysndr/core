@@ -53,7 +53,9 @@ where
         let footer_size = hash_len * 2;
         if idx_len < FAN_LEN * N32_SIZE + footer_size {
             return Err(Error::Corrupt {
-                message: format!("Pack index of size {idx_len} is too small for even an empty index"),
+                message: format!(
+                    "Pack index of size {idx_len} is too small for even an empty index"
+                ),
             });
         }
         let (kind, fan, num_objects) = {
@@ -116,7 +118,12 @@ fn validate_fan(fan: &[u32; FAN_LEN]) -> Result<(), Error> {
     Ok(())
 }
 
-fn validate_size(data: &[u8], kind: Version, num_objects: u32, hash_len: usize) -> Result<(), Error> {
+fn validate_size(
+    data: &[u8],
+    kind: Version,
+    num_objects: u32,
+    hash_len: usize,
+) -> Result<(), Error> {
     let num_objects = num_objects as usize;
     let footer_size = hash_len * 2;
     let expected_size = match kind {
@@ -129,21 +136,28 @@ fn validate_size(data: &[u8], kind: Version, num_objects: u32, hash_len: usize) 
             })?,
         Version::V2 => {
             let v2_header_size = V2_SIGNATURE.len() + N32_SIZE + FAN_LEN * N32_SIZE;
-            let oid_bytes = num_objects.checked_mul(hash_len).ok_or_else(|| Error::Corrupt {
-                message: "Pack index size overflowed while validating object ids".into(),
-            })?;
-            let table_bytes = num_objects.checked_mul(N32_SIZE).ok_or_else(|| Error::Corrupt {
-                message: "Pack index size overflowed while validating 32-bit tables".into(),
-            })?;
+            let oid_bytes = num_objects
+                .checked_mul(hash_len)
+                .ok_or_else(|| Error::Corrupt {
+                    message: "Pack index size overflowed while validating object ids".into(),
+                })?;
+            let table_bytes = num_objects
+                .checked_mul(N32_SIZE)
+                .ok_or_else(|| Error::Corrupt {
+                    message: "Pack index size overflowed while validating 32-bit tables".into(),
+                })?;
             let offset32_start = v2_header_size
                 .checked_add(oid_bytes)
                 .and_then(|size| size.checked_add(table_bytes))
                 .ok_or_else(|| Error::Corrupt {
                     message: "Pack index size overflowed while locating 32-bit offsets".into(),
                 })?;
-            let offset32_end = offset32_start.checked_add(table_bytes).ok_or_else(|| Error::Corrupt {
-                message: "Pack index size overflowed while locating 32-bit offsets".into(),
-            })?;
+            let offset32_end =
+                offset32_start
+                    .checked_add(table_bytes)
+                    .ok_or_else(|| Error::Corrupt {
+                        message: "Pack index size overflowed while locating 32-bit offsets".into(),
+                    })?;
             if offset32_end > data.len() {
                 return Err(Error::Corrupt {
                     message: format!(

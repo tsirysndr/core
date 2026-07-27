@@ -61,7 +61,11 @@ impl Outcome {
             object_size: 0,
         }
     }
-    fn from_object_entry(kind: gix_object::Kind, entry: &data::Entry, compressed_size: usize) -> Self {
+    fn from_object_entry(
+        kind: gix_object::Kind,
+        entry: &data::Entry,
+        compressed_size: usize,
+    ) -> Self {
         Self {
             kind,
             num_deltas: 0,
@@ -89,7 +93,10 @@ impl File {
         inflate: &mut zlib::Inflate,
         out: &mut [u8],
     ) -> Result<usize, Error> {
-        let size: usize = entry.decompressed_size.try_into().map_err(|_| Error::OutOfMemory)?;
+        let size: usize = entry
+            .decompressed_size
+            .try_into()
+            .map_err(|_| Error::OutOfMemory)?;
         if out.len() < size {
             return Err(Error::OutOfMemory);
         }
@@ -109,10 +116,11 @@ impl File {
 
         let window = (self.data_len() - pack_offset).min(self.hash_len + 32);
         let mut header = vec![0u8; window];
-        self.read_exact_at(pack_offset, &mut header)
-            .map_err(|_| data::entry::decode::Error::Corrupt {
+        self.read_exact_at(pack_offset, &mut header).map_err(|_| {
+            data::entry::decode::Error::Corrupt {
                 message: "failed to read entry header from pack data",
-            })?;
+            }
+        })?;
         data::Entry::from_bytes(&header, offset, self.hash_len)
     }
 
@@ -166,7 +174,9 @@ impl File {
         inflate: &mut zlib::Inflate,
         out: &mut [u8],
     ) -> Result<(zlib::Status, usize, usize), Error> {
-        let offset: usize = data_offset.try_into().expect("offset representable by machine");
+        let offset: usize = data_offset
+            .try_into()
+            .expect("offset representable by machine");
         if offset >= self.data_len() {
             return Err(data::entry::decode::Error::Corrupt {
                 message: "an entry data offset pointing beyond pack data",
@@ -179,16 +189,21 @@ impl File {
         let mut in_pos = offset;
         let status = loop {
             let avail = (self.data_len() - in_pos).min(chunk.len());
-            self.read_exact_at(in_pos, &mut chunk[..avail]).map_err(|_| {
-                Error::from(data::entry::decode::Error::Corrupt {
-                    message: "failed to read pack entry data",
-                })
-            })?;
+            self.read_exact_at(in_pos, &mut chunk[..avail])
+                .map_err(|_| {
+                    Error::from(data::entry::decode::Error::Corrupt {
+                        message: "failed to read pack entry data",
+                    })
+                })?;
             let out_pos = inflate.state.total_out() as usize;
             let before_in = inflate.state.total_in();
             let status = inflate
                 .state
-                .decompress(&chunk[..avail], &mut out[out_pos..], zlib::FlushDecompress::None)
+                .decompress(
+                    &chunk[..avail],
+                    &mut out[out_pos..],
+                    zlib::FlushDecompress::None,
+                )
                 .map_err(|err| Error::from(zlib::inflate::Error::from(err)))?;
             let advanced_in = inflate.state.total_in() != before_in;
             let advanced_out = inflate.state.total_out() as usize != out_pos;
@@ -245,7 +260,9 @@ impl File {
                         )
                     })
             }
-            OfsDelta { .. } | RefDelta { .. } => self.resolve_deltas(entry, resolve, inflate, out, delta_cache),
+            OfsDelta { .. } | RefDelta { .. } => {
+                self.resolve_deltas(entry, resolve, inflate, out, delta_cache)
+            }
         }
     }
 
@@ -332,7 +349,9 @@ impl File {
         // First pass will decompress all delta data and keep it in our output buffer
         // [<possibly resolved base object>]<delta-1..delta-n>...
         // so that we can find the biggest result size.
-        let total_delta_data_size: usize = total_delta_data_size.try_into().map_err(|_| Error::OutOfMemory)?;
+        let total_delta_data_size: usize = total_delta_data_size
+            .try_into()
+            .map_err(|_| Error::OutOfMemory)?;
 
         let chain_len = chain.len();
         let (first_buffer_end, second_buffer_end) = {
@@ -351,11 +370,12 @@ impl File {
             let mut relative_delta_start = 0;
             let mut biggest_result_size = 0;
             for (delta_idx, delta) in chain.iter_mut().rev().enumerate() {
-                let (consumed_from_data_offset, consumed_out) = self.decompress_complete_entry_from_data_offset(
-                    delta.data_offset,
-                    inflate,
-                    &mut instructions[..delta.decompressed_size],
-                )?;
+                let (consumed_from_data_offset, consumed_out) = self
+                    .decompress_complete_entry_from_data_offset(
+                        delta.data_offset,
+                        inflate,
+                        &mut instructions[..delta.decompressed_size],
+                    )?;
                 let is_last_delta_to_be_applied = delta_idx + 1 == chain_len;
                 if is_last_delta_to_be_applied {
                     consumed_input = Some(consumed_from_data_offset);
@@ -445,7 +465,11 @@ impl File {
             if delta_idx + 1 == chain_len {
                 last_result_size = Some(result_size);
             }
-            delta::apply(&source_buf[..base_size], &mut target_buf[..result_size], data)?;
+            delta::apply(
+                &source_buf[..base_size],
+                &mut target_buf[..result_size],
+                data,
+            )?;
             // use the target as source for the next delta
             std::mem::swap(&mut source_buf, &mut target_buf);
         }
@@ -466,7 +490,8 @@ impl File {
         debug_assert!(out.len() >= last_result_size);
         out.truncate(last_result_size);
 
-        let object_kind = object_kind.expect("a base object as root of any delta chain that we are here to resolve");
+        let object_kind = object_kind
+            .expect("a base object as root of any delta chain that we are here to resolve");
         let consumed_input = consumed_input.expect("at least one decompressed delta object");
         cache.put(
             self.id,

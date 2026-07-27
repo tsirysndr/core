@@ -8,7 +8,11 @@ pub struct Item<T> {
 }
 
 impl<T> Item<T> {
-    pub(crate) fn new(offset: crate::data::Offset, next_offset: crate::data::Offset, data: T) -> Self {
+    pub(crate) fn new(
+        offset: crate::data::Offset,
+        next_offset: crate::data::Offset,
+        data: T,
+    ) -> Self {
         Item {
             offset,
             next_offset,

@@ -1,6 +1,6 @@
 use std::os::unix::fs::FileExt;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use gix_features::{
     parallel::in_parallel_with_slice,
@@ -67,7 +67,10 @@ impl BaseSpill {
     fn spill(&self, bytes: &[u8]) -> std::io::Result<SpillRef> {
         let len = bytes.len();
         let offset = {
-            let mut cursor = self.write_cursor.lock().expect("base spill cursor poisoned");
+            let mut cursor = self
+                .write_cursor
+                .lock()
+                .expect("base spill cursor poisoned");
             let offset = *cursor;
             *cursor += len as u64;
             offset

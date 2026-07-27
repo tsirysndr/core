@@ -130,7 +130,8 @@ impl File {
 
     #[allow(missing_docs)]
     pub fn read_into(&self, slice: EntryRange, buf: &mut Vec<u8>) -> bool {
-        let (Ok(start), Ok(end)) = (usize::try_from(slice.start), usize::try_from(slice.end)) else {
+        let (Ok(start), Ok(end)) = (usize::try_from(slice.start), usize::try_from(slice.end))
+        else {
             return false;
         };
         if start > end || end > self.len {

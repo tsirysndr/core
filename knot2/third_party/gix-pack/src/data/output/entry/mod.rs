@@ -75,8 +75,11 @@ impl output::Entry {
         }
 
         let pack_offset_must_be_zero = 0;
-        let pack_entry = match data::Entry::from_bytes(&entry.data, pack_offset_must_be_zero, count.id.as_slice().len())
-        {
+        let pack_entry = match data::Entry::from_bytes(
+            &entry.data,
+            pack_offset_must_be_zero,
+            count.id.as_slice().len(),
+        ) {
             Ok(e) => e,
             Err(err) => return Some(Err(err.into())),
         };
@@ -122,7 +125,8 @@ impl output::Entry {
                     entry.data.copy_within(pack_entry.data_offset as usize.., 0);
                     entry.data.resize(
                         entry.data.len()
-                            - usize::try_from(pack_entry.data_offset).expect("offset representable as usize"),
+                            - usize::try_from(pack_entry.data_offset)
+                                .expect("offset representable as usize"),
                         0,
                     );
                     entry.data
@@ -142,7 +146,10 @@ impl output::Entry {
                 if let Err(err) = std::io::copy(&mut &*obj.data, &mut out) {
                     match err.kind() {
                         std::io::ErrorKind::Other => return Err(Error::ZlibDeflate(err)),
-                        err => unreachable!("Should never see other errors than zlib, but got {:?}", err),
+                        err => unreachable!(
+                            "Should never see other errors than zlib, but got {:?}",
+                            err
+                        ),
                     }
                 }
                 out.flush()?;
@@ -177,7 +184,9 @@ impl output::Entry {
                     Tag => data::entry::Header::Tag,
                 }
             }
-            DeltaOid { id } => data::entry::Header::RefDelta { base_id: id.to_owned() },
+            DeltaOid { id } => data::entry::Header::RefDelta {
+                base_id: id.to_owned(),
+            },
             DeltaRef { object_index } => data::entry::Header::OfsDelta {
                 base_distance: index_to_base_distance(object_index),
             },

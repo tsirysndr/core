@@ -15,7 +15,9 @@ impl File {
     /// The checksum in the trailer of this pack data file
     pub fn checksum(&self) -> gix_hash::ObjectId {
         let trailer = self
-            .read_span((self.data_len() - self.object_hash.len_in_bytes()) as u64..self.data_len() as u64)
+            .read_span(
+                (self.data_len() - self.object_hash.len_in_bytes()) as u64..self.data_len() as u64,
+            )
             .expect("pack trailer is within the pack data");
         gix_hash::ObjectId::from_bytes_or_panic(&trailer)
     }

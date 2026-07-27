@@ -39,7 +39,10 @@ pub enum Header {
 
 impl Header {
     /// Subtract `distance` from `pack_offset` safely without the chance for overflow or no-ops if `distance` is 0.
-    pub fn verified_base_pack_offset(pack_offset: data::Offset, distance: u64) -> Option<data::Offset> {
+    pub fn verified_base_pack_offset(
+        pack_offset: data::Offset,
+        distance: u64,
+    ) -> Option<data::Offset> {
         if distance == 0 {
             return None;
         }
@@ -83,7 +86,11 @@ impl Header {
     ///
     /// Returns the amount of bytes written to `out`.
     /// `decompressed_size_in_bytes` is the full size in bytes of the object that this header represents
-    pub fn write_to(&self, decompressed_size_in_bytes: u64, out: &mut dyn io::Write) -> io::Result<usize> {
+    pub fn write_to(
+        &self,
+        decompressed_size_in_bytes: u64,
+        out: &mut dyn io::Write,
+    ) -> io::Result<usize> {
         let mut size = decompressed_size_in_bytes;
         let mut written = 1;
         let mut c: u8 = (self.as_type_id() << 4) | (size as u8 & 0b0000_1111);
@@ -133,7 +140,10 @@ fn leb64_encode(mut n: u64, buf: &mut [u8; 10]) -> &[u8] {
         *out = 0b1000_0000 | (n as u8 & 0b0111_1111);
         bytes_written += 1;
     }
-    debug_assert_eq!(n, 0, "BUG: buffer must be large enough to hold a 64 bit integer");
+    debug_assert_eq!(
+        n, 0,
+        "BUG: buffer must be large enough to hold a 64 bit integer"
+    );
     &buf[buf.len() - bytes_written..]
 }
 
@@ -145,6 +155,10 @@ mod tests {
     fn leb64_encode_max_int() {
         let mut buf = [0u8; 10];
         let buf = leb64_encode(u64::MAX, &mut buf);
-        assert_eq!(buf.len(), 10, "10 bytes should be used when 64bits are encoded");
+        assert_eq!(
+            buf.len(),
+            10,
+            "10 bytes should be used when 64bits are encoded"
+        );
     }
 }

@@ -13,14 +13,18 @@ pub(crate) fn fanout(iter: &mut dyn ExactSizeIterator<Item = u8>) -> [u32; 256] 
     for (offset_be, byte) in fan_out.iter_mut().zip(0u8..=255) {
         *offset_be = match idx_and_entry.as_ref() {
             Some((_idx, first_byte)) => match first_byte.cmp(&byte) {
-                Ordering::Less => unreachable!("ids should be ordered, and we make sure to keep ahead with them"),
+                Ordering::Less => {
+                    unreachable!("ids should be ordered, and we make sure to keep ahead with them")
+                }
                 Ordering::Greater => upper_bound,
                 Ordering::Equal => {
                     if byte == 255 {
                         entries_len
                     } else {
                         idx_and_entry = iter.find(|(_, first_byte)| *first_byte != byte);
-                        upper_bound = idx_and_entry.as_ref().map_or(entries_len, |(idx, _)| *idx as u32);
+                        upper_bound = idx_and_entry
+                            .as_ref()
+                            .map_or(entries_len, |(idx, _)| *idx as u32);
                         upper_bound
                     }
                 }
@@ -76,7 +80,11 @@ mod function {
         progress: &mut dyn DynNestedProgress,
     ) -> Result<gix_hash::ObjectId, gix_hash::io::Error> {
         use io::Write;
-        assert_eq!(kind, crate::index::Version::V2, "Can only write V2 packs right now");
+        assert_eq!(
+            kind,
+            crate::index::Version::V2,
+            "Can only write V2 packs right now"
+        );
         assert!(
             entries_sorted_by_oid.len() <= u32::MAX as usize,
             "a pack cannot have more than u32::MAX objects"
@@ -92,7 +100,10 @@ mod function {
 
         progress.init(Some(4), progress::steps());
         let start = std::time::Instant::now();
-        let _info = progress.add_child_with_id("writing fan-out table".into(), gix_features::progress::UNKNOWN);
+        let _info = progress.add_child_with_id(
+            "writing fan-out table".into(),
+            gix_features::progress::UNKNOWN,
+        );
         let fan_out = fanout(&mut entries_sorted_by_oid.iter().map(|e| e.data.id.first_byte()));
 
         for value in fan_out.iter() {
@@ -100,19 +111,22 @@ mod function {
         }
 
         progress.inc();
-        let _info = progress.add_child_with_id("writing ids".into(), gix_features::progress::UNKNOWN);
+        let _info =
+            progress.add_child_with_id("writing ids".into(), gix_features::progress::UNKNOWN);
         for entry in &entries_sorted_by_oid {
             out.write_all(entry.data.id.as_slice())?;
         }
 
         progress.inc();
-        let _info = progress.add_child_with_id("writing crc32".into(), gix_features::progress::UNKNOWN);
+        let _info =
+            progress.add_child_with_id("writing crc32".into(), gix_features::progress::UNKNOWN);
         for entry in &entries_sorted_by_oid {
             out.write_all(&entry.data.crc32.to_be_bytes())?;
         }
 
         progress.inc();
-        let _info = progress.add_child_with_id("writing offsets".into(), gix_features::progress::UNKNOWN);
+        let _info =
+            progress.add_child_with_id("writing offsets".into(), gix_features::progress::UNKNOWN);
         {
             let mut offsets64 = Vec::<u64>::new();
             for entry in &entries_sorted_by_oid {

@@ -72,7 +72,10 @@ impl SafetyCheck {
         matches!(self, SafetyCheck::All)
     }
     pub(crate) fn object_checksum(&self) -> bool {
-        matches!(self, SafetyCheck::All | SafetyCheck::SkipFileChecksumVerification)
+        matches!(
+            self,
+            SafetyCheck::All | SafetyCheck::SkipFileChecksumVerification
+        )
     }
     pub(crate) fn fatal_decode_error(&self) -> bool {
         match self {

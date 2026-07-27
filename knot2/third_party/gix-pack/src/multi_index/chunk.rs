@@ -66,7 +66,9 @@ pub mod index_names {
         out.try_reserve(num_packs)?;
 
         for _ in 0..num_packs {
-            let null_byte_pos = chunk.find_byte(b'\0').ok_or(decode::Error::MissingNullByte)?;
+            let null_byte_pos = chunk
+                .find_byte(b'\0')
+                .ok_or(decode::Error::MissingNullByte)?;
 
             let path = &chunk[..null_byte_pos];
             if alloc_limit_bytes.is_some_and(|limit| path.len() > limit) {
@@ -168,7 +170,8 @@ pub mod fanout {
         sorted_entries: &[multi_index::write::Entry],
         out: &mut dyn std::io::Write,
     ) -> std::io::Result<()> {
-        let fanout = crate::index::encode::fanout(&mut sorted_entries.iter().map(|e| e.id.first_byte()));
+        let fanout =
+            crate::index::encode::fanout(&mut sorted_entries.iter().map(|e| e.id.first_byte()));
 
         for value in fanout.iter() {
             out.write_all(&value.to_be_bytes())?;
@@ -301,7 +304,10 @@ pub mod large_offsets {
                 .checked_sub(1)
                 .expect("BUG: wrote more offsets the previously found");
         }
-        assert_eq!(num_large_offsets, 0, "BUG: wrote less offsets than initially counted");
+        assert_eq!(
+            num_large_offsets, 0,
+            "BUG: wrote less offsets than initially counted"
+        );
         Ok(())
     }
 

@@ -6,7 +6,10 @@ impl input::Entry {
     /// Create a new input entry from a given data `obj` set to be placed at the given `pack_offset`.
     ///
     /// This method is useful when arbitrary base entries are created
-    pub fn from_data_obj(obj: &gix_object::Data<'_>, pack_offset: u64) -> Result<Self, input::Error> {
+    pub fn from_data_obj(
+        obj: &gix_object::Data<'_>,
+        pack_offset: u64,
+    ) -> Result<Self, input::Error> {
         let header = to_header(obj.kind);
         let compressed = compress_data(obj)?;
         let compressed_size = compressed.len() as u64;

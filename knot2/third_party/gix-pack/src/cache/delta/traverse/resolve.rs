@@ -24,17 +24,24 @@ struct Pending {
 
 fn enforce_budget(spill: &super::BaseSpill, stack: &mut [Pending]) -> Result<(), Error> {
     (0..stack.len()).try_for_each(|index| -> Result<(), Error> {
-        if spill.over_budget() && stack[index].spill_ref.is_none() && !stack[index].base_bytes.is_empty()
+        if spill.over_budget()
+            && stack[index].spill_ref.is_none()
+            && !stack[index].base_bytes.is_empty()
         {
             let bytes = std::mem::take(&mut stack[index].base_bytes);
-            let sref = spill.spill(&bytes).map_err(|source| Error::BaseSpill { source })?;
+            let sref = spill
+                .spill(&bytes)
+                .map_err(|source| Error::BaseSpill { source })?;
             stack[index].spill_ref = Some(sref);
         }
         Ok(())
     })
 }
 
-fn restore_base_bytes(spill: Option<&super::BaseSpill>, pending: &mut Pending) -> Result<(), Error> {
+fn restore_base_bytes(
+    spill: Option<&super::BaseSpill>,
+    pending: &mut Pending,
+) -> Result<(), Error> {
     if let Some(spill) = spill {
         match pending.spill_ref.take() {
             Some(sref) => spill

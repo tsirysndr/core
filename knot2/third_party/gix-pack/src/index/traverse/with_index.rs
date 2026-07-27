@@ -126,9 +126,9 @@ where
                     self.object_hash,
                 )?;
                 let mut outcome = digest_statistics(tree.traverse(
-                    |slice: crate::data::EntryRange, source: &crate::data::File, buf: &mut Vec<u8>| {
-                        source.read_into(slice, buf)
-                    },
+                    |slice: crate::data::EntryRange,
+                     source: &crate::data::File,
+                     buf: &mut Vec<u8>| { source.read_into(slice, buf) },
                     pack,
                     pack.pack_end() as u64,
                     move |data,
@@ -171,11 +171,15 @@ where
                         }
                     },
                     traverse::Options {
-                        object_progress: Box::new(
-                            progress.add_child_with_id("Resolving".into(), ProgressId::DecodedObjects.into()),
-                        ),
+                        object_progress: Box::new(progress.add_child_with_id(
+                            "Resolving".into(),
+                            ProgressId::DecodedObjects.into(),
+                        )),
                         size_progress:
-                            &mut progress.add_child_with_id("Decoding".into(), ProgressId::DecodedBytes.into()),
+                            &mut progress.add_child_with_id(
+                                "Decoding".into(),
+                                ProgressId::DecodedBytes.into(),
+                            ),
                         thread_limit,
                         should_interrupt,
                         object_hash: self.object_hash,

@@ -84,7 +84,9 @@ where
     where
         C: crate::cache::DecodeEntry,
         E: std::error::Error + Send + Sync + 'static,
-        Processor: FnMut(gix_object::Kind, &[u8], &index::Entry, &dyn Progress) -> Result<(), E> + Send + Clone,
+        Processor: FnMut(gix_object::Kind, &[u8], &index::Entry, &dyn Progress) -> Result<(), E>
+            + Send
+            + Clone,
         F: Fn() -> C + Send + Clone,
     {
         let (verify_result, traversal_result) = parallel::join(
@@ -98,8 +100,13 @@ where
                     ProgressId::HashPackIndexBytes.into(),
                 );
                 move || {
-                    let res =
-                        self.possibly_verify(pack, check, &mut pack_progress, &mut index_progress, should_interrupt);
+                    let res = self.possibly_verify(
+                        pack,
+                        check,
+                        &mut pack_progress,
+                        &mut index_progress,
+                        should_interrupt,
+                    );
                     if res.is_err() {
                         should_interrupt.store(true, Ordering::SeqCst);
                     }
@@ -116,12 +123,22 @@ where
                 );
 
                 let (chunk_size, thread_limit, available_cores) =
-                    parallel::optimize_chunk_size_and_thread_limit(1000, Some(index_entries.len()), thread_limit, None);
-                let there_are_enough_entries_to_process = || index_entries.len() > chunk_size * available_cores;
+                    parallel::optimize_chunk_size_and_thread_limit(
+                        1000,
+                        Some(index_entries.len()),
+                        thread_limit,
+                        None,
+                    );
+                let there_are_enough_entries_to_process =
+                    || index_entries.len() > chunk_size * available_cores;
                 let input_chunks = index_entries.chunks(chunk_size);
                 let reduce_progress = OwnShared::new(Mutable::new({
-                    let mut p = progress.add_child_with_id("Traversing".into(), ProgressId::DecodedObjects.into());
-                    p.init(Some(self.num_objects() as usize), progress::count("objects"));
+                    let mut p = progress
+                        .add_child_with_id("Traversing".into(), ProgressId::DecodedObjects.into());
+                    p.init(
+                        Some(self.num_objects() as usize),
+                        progress::count("objects"),
+                    );
                     p
                 }));
                 let state_per_thread = {
@@ -131,8 +148,10 @@ where
                             make_pack_lookup_cache(),
                             Vec::with_capacity(2048), // decode buffer
                             zlib::Inflate::default(),
-                            lock(&reduce_progress)
-                                .add_child_with_id(format!("thread {index}"), gix_features::progress::UNKNOWN), // per thread progress
+                            lock(&reduce_progress).add_child_with_id(
+                                format!("thread {index}"),
+                                gix_features::progress::UNKNOWN,
+                            ), // per thread progress
                         )
                     }
                 };

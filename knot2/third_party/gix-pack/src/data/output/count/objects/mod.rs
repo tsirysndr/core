@@ -31,7 +31,10 @@ mod tree;
 ///   * more configuration
 pub fn objects<Find>(
     db: Find,
-    objects_ids: Box<dyn Iterator<Item = Result<ObjectId, Box<dyn std::error::Error + Send + Sync + 'static>>> + Send>,
+    objects_ids: Box<
+        dyn Iterator<Item = Result<ObjectId, Box<dyn std::error::Error + Send + Sync + 'static>>>
+            + Send,
+    >,
     objects: &dyn gix_features::progress::Count,
     should_interrupt: &AtomicBool,
     Options {
@@ -46,7 +49,11 @@ where
     let lower_bound = objects_ids.size_hint().0;
     let (chunk_size, thread_limit, _) = parallel::optimize_chunk_size_and_thread_limit(
         chunk_size,
-        if lower_bound == 0 { None } else { Some(lower_bound) },
+        if lower_bound == 0 {
+            None
+        } else {
+            Some(lower_bound)
+        },
         thread_limit,
         None,
     );
@@ -92,7 +99,9 @@ where
 /// Like [`objects()`] but using a single thread only to mostly save on the otherwise required overhead.
 pub fn objects_unthreaded(
     db: &dyn crate::Find,
-    object_ids: &mut dyn Iterator<Item = Result<ObjectId, Box<dyn std::error::Error + Send + Sync + 'static>>>,
+    object_ids: &mut dyn Iterator<
+        Item = Result<ObjectId, Box<dyn std::error::Error + Send + Sync + 'static>>,
+    >,
     objects: &dyn gix_features::progress::Count,
     should_interrupt: &AtomicBool,
     input_object_expansion: ObjectExpansion,
@@ -137,7 +146,9 @@ mod expand {
         db: &dyn crate::Find,
         input_object_expansion: ObjectExpansion,
         seen_objs: &impl util::InsertImmutable,
-        oids: &mut dyn Iterator<Item = Result<ObjectId, Box<dyn std::error::Error + Send + Sync + 'static>>>,
+        oids: &mut dyn Iterator<
+            Item = Result<ObjectId, Box<dyn std::error::Error + Send + Sync + 'static>>,
+        >,
         buf1: &mut Vec<u8>,
         #[allow(clippy::ptr_arg)] buf2: &mut Vec<u8>,
         objects: &gix_features::progress::AtomicStep,
@@ -171,7 +182,9 @@ mod expand {
                     let mut id = id.to_owned();
 
                     loop {
-                        push_obj_count_unique(&mut out, seen_objs, &id, location, objects, stats, false);
+                        push_obj_count_unique(
+                            &mut out, seen_objs, &id, location, objects, stats, false,
+                        );
                         match obj.kind {
                             Tree | Blob => break,
                             Tag => {
@@ -188,12 +201,16 @@ mod expand {
                             }
                             Commit => {
                                 let current_tree_iter = {
-                                    let mut commit_iter = CommitRefIter::from_bytes(obj.data, obj.object_hash);
-                                    let tree_id = commit_iter.tree_id().expect("every commit has a tree");
+                                    let mut commit_iter =
+                                        CommitRefIter::from_bytes(obj.data, obj.object_hash);
+                                    let tree_id =
+                                        commit_iter.tree_id().expect("every commit has a tree");
                                     parent_commit_ids.clear();
                                     for token in commit_iter {
                                         match token {
-                                            Ok(gix_object::commit::ref_iter::Token::Parent { id }) => {
+                                            Ok(gix_object::commit::ref_iter::Token::Parent {
+                                                id,
+                                            }) => {
                                                 parent_commit_ids.push(id);
                                             }
                                             Ok(_) => break,
@@ -202,7 +219,8 @@ mod expand {
                                     }
                                     let (obj, location) = db.find(&tree_id, buf1)?;
                                     push_obj_count_unique(
-                                        &mut out, seen_objs, &tree_id, location, objects, stats, true,
+                                        &mut out, seen_objs, &tree_id, location, objects, stats,
+                                        true,
                                     );
                                     gix_object::TreeRefIter::from_bytes(obj.data, obj.object_hash)
                                 };
@@ -222,10 +240,12 @@ mod expand {
                                 } else {
                                     for commit_id in &parent_commit_ids {
                                         let parent_tree_id = {
-                                            let (parent_commit_obj, location) = db.find(commit_id, buf2)?;
+                                            let (parent_commit_obj, location) =
+                                                db.find(commit_id, buf2)?;
 
                                             push_obj_count_unique(
-                                                &mut out, seen_objs, commit_id, location, objects, stats, true,
+                                                &mut out, seen_objs, commit_id, location, objects,
+                                                stats, true,
                                             );
                                             CommitRefIter::from_bytes(
                                                 parent_commit_obj.data,
@@ -235,7 +255,8 @@ mod expand {
                                             .expect("every commit has a tree")
                                         };
                                         let parent_tree = {
-                                            let (parent_tree_obj, location) = db.find(&parent_tree_id, buf2)?;
+                                            let (parent_tree_obj, location) =
+                                                db.find(&parent_tree_id, buf2)?;
                                             push_obj_count_unique(
                                                 &mut out,
                                                 seen_objs,
@@ -266,7 +287,14 @@ mod expand {
                                     &changes_delegate.objects
                                 };
                                 for id in objects_ref.iter() {
-                                    out.push(id_to_count(db, buf2, id, objects, stats, allow_pack_lookups));
+                                    out.push(id_to_count(
+                                        db,
+                                        buf2,
+                                        id,
+                                        objects,
+                                        stats,
+                                        allow_pack_lookups,
+                                    ));
                                 }
                                 break;
                             }
@@ -278,14 +306,25 @@ mod expand {
                     let mut id = id;
                     let mut obj = (obj, location);
                     loop {
-                        push_obj_count_unique(&mut out, seen_objs, &id, obj.1.clone(), objects, stats, false);
+                        push_obj_count_unique(
+                            &mut out,
+                            seen_objs,
+                            &id,
+                            obj.1.clone(),
+                            objects,
+                            stats,
+                            false,
+                        );
                         match obj.0.kind {
                             Tree => {
                                 traverse_delegate.clear();
                                 {
                                     let objects = ExpandedCountingObjects::new(db, out, objects);
                                     gix_traverse::tree::breadthfirst(
-                                        gix_object::TreeRefIter::from_bytes(obj.0.data, obj.0.object_hash),
+                                        gix_object::TreeRefIter::from_bytes(
+                                            obj.0.data,
+                                            obj.0.object_hash,
+                                        ),
                                         &mut tree_traversal_state,
                                         &objects,
                                         &mut traverse_delegate,
@@ -294,7 +333,14 @@ mod expand {
                                     out = objects.dissolve(stats);
                                 }
                                 for id in &traverse_delegate.non_trees {
-                                    out.push(id_to_count(db, buf1, id, objects, stats, allow_pack_lookups));
+                                    out.push(id_to_count(
+                                        db,
+                                        buf1,
+                                        id,
+                                        objects,
+                                        stats,
+                                        allow_pack_lookups,
+                                    ));
                                 }
                                 break;
                             }
@@ -318,7 +364,9 @@ mod expand {
                         }
                     }
                 }
-                AsIs => push_obj_count_unique(&mut out, seen_objs, &id, location, objects, stats, false),
+                AsIs => {
+                    push_obj_count_unique(&mut out, seen_objs, &id, location, objects, stats, false)
+                }
             }
         }
         outcome.total_objects = out.len();
@@ -386,7 +434,11 @@ mod expand {
     }
 
     impl gix_object::Find for CountingObjects<'_> {
-        fn try_find<'a>(&self, id: &oid, buffer: &'a mut Vec<u8>) -> Result<Option<Data<'a>>, gix_object::find::Error> {
+        fn try_find<'a>(
+            &self,
+            id: &oid,
+            buffer: &'a mut Vec<u8>,
+        ) -> Result<Option<Data<'a>>, gix_object::find::Error> {
             let res = Ok(self.objects.try_find(id, buffer)?.map(|t| t.0));
             *self.decoded_objects.borrow_mut() += 1;
             res
@@ -424,7 +476,11 @@ mod expand {
     }
 
     impl gix_object::Find for ExpandedCountingObjects<'_> {
-        fn try_find<'a>(&self, id: &oid, buffer: &'a mut Vec<u8>) -> Result<Option<Data<'a>>, gix_object::find::Error> {
+        fn try_find<'a>(
+            &self,
+            id: &oid,
+            buffer: &'a mut Vec<u8>,
+        ) -> Result<Option<Data<'a>>, gix_object::find::Error> {
             let maybe_obj = self.objects.try_find(id, buffer)?;
             *self.decoded_objects.borrow_mut() += 1;
             match maybe_obj {
@@ -432,7 +488,9 @@ mod expand {
                 Some((obj, location)) => {
                     self.objects_count.fetch_add(1, Ordering::Relaxed);
                     *self.expanded_objects.borrow_mut() += 1;
-                    self.out.borrow_mut().push(output::Count::from_data(id, location));
+                    self.out
+                        .borrow_mut()
+                        .push(output::Count::from_data(id, location));
                     Ok(Some(obj))
                 }
             }

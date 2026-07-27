@@ -42,12 +42,16 @@ mod memory {
         pub fn new(memory_cap_in_bytes: usize) -> MemoryCappedHashmap {
             MemoryCappedHashmap {
                 inner: clru::CLruCache::with_config(
-                    clru::CLruCacheConfig::new(NonZeroUsize::new(memory_cap_in_bytes).expect("non zero"))
-                        .with_hasher(gix_hashtable::hash::Builder)
-                        .with_scale(CustomScale),
+                    clru::CLruCacheConfig::new(
+                        NonZeroUsize::new(memory_cap_in_bytes).expect("non zero"),
+                    )
+                    .with_hasher(gix_hashtable::hash::Builder)
+                    .with_scale(CustomScale),
                 ),
                 free_list: Vec::new(),
-                debug: gix_features::cache::Debug::new(format!("MemoryCappedObjectHashmap({memory_cap_in_bytes}B)")),
+                debug: gix_features::cache::Debug::new(format!(
+                    "MemoryCappedObjectHashmap({memory_cap_in_bytes}B)"
+                )),
             }
         }
     }
@@ -56,7 +60,8 @@ mod memory {
         /// Put the object going by `id` of `kind` with `data` into the cache.
         fn put(&mut self, id: gix_hash::ObjectId, kind: gix_object::Kind, data: &[u8]) {
             self.debug.put();
-            let Some(data) = set_vec_to_slice(self.free_list.pop().unwrap_or_default(), data) else {
+            let Some(data) = set_vec_to_slice(self.free_list.pop().unwrap_or_default(), data)
+            else {
                 return;
             };
             let res = self.inner.put_with_weight(id, Entry { data, kind });

@@ -11,11 +11,17 @@ impl data::File {
     ///
     /// This constructor leaves allocation limiting disabled, allowing allocations of any size dictated by pack data.
     /// Call [`File::with_alloc_limit_bytes()`][crate::data::File::with_alloc_limit_bytes()] before decoding entries from untrusted input.
-    pub fn at(path: impl AsRef<Path>, object_hash: gix_hash::Kind) -> Result<Self, data::header::decode::Error> {
+    pub fn at(
+        path: impl AsRef<Path>,
+        object_hash: gix_hash::Kind,
+    ) -> Result<Self, data::header::decode::Error> {
         Self::at_inner(path.as_ref(), object_hash)
     }
 
-    fn at_inner(path: &Path, object_hash: gix_hash::Kind) -> Result<Self, data::header::decode::Error> {
+    fn at_inner(
+        path: &Path,
+        object_hash: gix_hash::Kind,
+    ) -> Result<Self, data::header::decode::Error> {
         use std::os::unix::fs::FileExt;
 
         use crate::data::header::N32_SIZE;
@@ -32,7 +38,9 @@ impl data::File {
             })?
             .len();
         let pack_len = usize::try_from(pack_len).map_err(|_| {
-            data::header::decode::Error::Corrupt(format!("Pack data of size {pack_len} is too large for this machine"))
+            data::header::decode::Error::Corrupt(format!(
+                "Pack data of size {pack_len} is too large for this machine"
+            ))
         })?;
         if pack_len < N32_SIZE * 3 + hash_len {
             return Err(data::header::decode::Error::Corrupt(format!(
@@ -40,10 +48,11 @@ impl data::File {
             )));
         }
         let mut header = [0u8; 12];
-        file.read_exact_at(&mut header, 0).map_err(|e| data::header::decode::Error::Io {
-            source: e,
-            path: path.to_owned(),
-        })?;
+        file.read_exact_at(&mut header, 0)
+            .map_err(|e| data::header::decode::Error::Io {
+                source: e,
+                path: path.to_owned(),
+            })?;
         let (version, num_objects) = data::header::decode(&header)?;
         let id = gix_features::hash::crc32(path.as_os_str().to_string_lossy().as_bytes());
         Ok(Self {

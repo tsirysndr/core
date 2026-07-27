@@ -62,11 +62,13 @@ where
         assert_eq!(oids.len(), crcs.len());
         assert_eq!(crcs.len(), offsets.len());
         match self.version {
-            index::Version::V2 => izip!(oids, crcs, offsets).map(move |(oid, crc32, ofs32)| Entry {
-                oid: gix_hash::ObjectId::from_bytes_or_panic(oid),
-                pack_offset: self.pack_offset_from_offset_v2(ofs32, pack64_offset),
-                crc32: Some(crate::read_u32(crc32)),
-            }),
+            index::Version::V2 => {
+                izip!(oids, crcs, offsets).map(move |(oid, crc32, ofs32)| Entry {
+                    oid: gix_hash::ObjectId::from_bytes_or_panic(oid),
+                    pack_offset: self.pack_offset_from_offset_v2(ofs32, pack64_offset),
+                    crc32: Some(crate::read_u32(crc32)),
+                })
+            }
             _ => panic!("Cannot use iter_v2() on index of type {:?}", self.version),
         }
     }
@@ -96,7 +98,10 @@ where
         match self.version {
             index::Version::V2 => {
                 let start = self.offset_pack_offset_v2() + index * N32_SIZE;
-                self.pack_offset_from_offset_v2(&self.data[start..][..N32_SIZE], self.offset_pack_offset64_v2())
+                self.pack_offset_from_offset_v2(
+                    &self.data[start..][..N32_SIZE],
+                    self.offset_pack_offset64_v2(),
+                )
             }
             index::Version::V1 => {
                 let start = V1_HEADER_SIZE + index * (N32_SIZE + self.hash_len);
@@ -170,7 +175,9 @@ where
             index::Version::V1 => self.iter().map(|e| e.pack_offset).collect(),
             index::Version::V2 => {
                 let offset32_start = &self.data[self.offset_pack_offset_v2()..];
-                let offsets32 = offset32_start.chunks_exact(N32_SIZE).take(self.num_objects as usize);
+                let offsets32 = offset32_start
+                    .chunks_exact(N32_SIZE)
+                    .take(self.num_objects as usize);
                 assert_eq!(self.num_objects as usize, offsets32.len());
                 let pack_offset_64_start = self.offset_pack_offset64_v2();
                 offsets32
@@ -219,7 +226,11 @@ pub(crate) fn lookup_prefix<'a>(
 ) -> Option<PrefixLookupResult> {
     let first_byte = prefix.as_oid().first_byte() as usize;
     let mut upper_bound = fan[first_byte];
-    let mut lower_bound = if first_byte != 0 { fan[first_byte - 1] } else { 0 };
+    let mut lower_bound = if first_byte != 0 {
+        fan[first_byte - 1]
+    } else {
+        0
+    };
 
     // Bisect using indices
     while lower_bound < upper_bound {
@@ -280,7 +291,11 @@ pub(crate) fn lookup<'a>(
 ) -> Option<EntryIndex> {
     let first_byte = id.first_byte() as usize;
     let mut upper_bound = fan[first_byte];
-    let mut lower_bound = if first_byte != 0 { fan[first_byte - 1] } else { 0 };
+    let mut lower_bound = if first_byte != 0 {
+        fan[first_byte - 1]
+    } else {
+        0
+    };
 
     while lower_bound < upper_bound {
         let mid = u32::midpoint(lower_bound, upper_bound);

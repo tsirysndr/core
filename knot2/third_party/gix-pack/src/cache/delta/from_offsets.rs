@@ -14,7 +14,10 @@ use crate::{cache::delta::Tree, data};
 #[allow(missing_docs)]
 pub enum Error {
     #[error("{message}")]
-    Io { source: io::Error, message: &'static str },
+    Io {
+        source: io::Error,
+        message: &'static str,
+    },
     #[error(transparent)]
     Header(#[from] crate::data::header::decode::Error),
     #[error("Could find object with id {id} in this pack. Thin packs are not supported")]
@@ -86,10 +89,13 @@ impl<T> Tree<T> {
             if let Some(previous_offset) = previous_cursor_position {
                 Self::advance_cursor_to_pack_offset(&mut r, pack_offset, previous_offset)?;
             }
-            let entry = crate::data::Entry::from_read(&mut r, pack_offset, hash_len).map_err(|err| Error::Io {
-                source: err,
-                message: "EOF while parsing header",
-            })?;
+            let entry =
+                crate::data::Entry::from_read(&mut r, pack_offset, hash_len).map_err(|err| {
+                    Error::Io {
+                        source: err,
+                        message: "EOF while parsing header",
+                    }
+                })?;
             previous_cursor_position = Some(pack_offset + entry.header_size() as u64);
 
             use crate::data::entry::Header::*;
@@ -101,7 +107,8 @@ impl<T> Tree<T> {
                     resolve_in_pack_id(base_id.as_ref())
                         .ok_or(Error::UnresolvedRefDelta { id: base_id })
                         .and_then(|base_pack_offset| {
-                            tree.add_child(base_pack_offset, pack_offset, data).map_err(Into::into)
+                            tree.add_child(base_pack_offset, pack_offset, data)
+                                .map_err(Into::into)
                         })?;
                 }
                 OfsDelta { base_distance } => {
@@ -151,10 +158,11 @@ impl<T> Tree<T> {
             // SAFETY: bytes_to_skip <= buf.len() <= usize::MAX
             r.consume(bytes_to_skip as usize);
         } else {
-            r.seek(SeekFrom::Start(pack_offset)).map_err(|err| Error::Io {
-                source: err,
-                message: "seek to next entry",
-            })?;
+            r.seek(SeekFrom::Start(pack_offset))
+                .map_err(|err| Error::Io {
+                    source: err,
+                    message: "seek to next entry",
+                })?;
         }
         Ok(())
     }

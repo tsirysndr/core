@@ -52,7 +52,8 @@ where
         object_hash: gix_hash::Kind,
     ) -> Result<BytesToEntriesIter<BR>, input::Error> {
         let mut header_data = [0u8; 12];
-        read.read_exact(&mut header_data).map_err(gix_hash::io::Error::from)?;
+        read.read_exact(&mut header_data)
+            .map_err(gix_hash::io::Error::from)?;
 
         let (version, num_objects) = crate::data::header::decode(&header_data)?;
         match version {
@@ -101,7 +102,10 @@ where
         .map_err(gix_hash::io::Error::from)?;
 
         // Decompress object to learn its compressed bytes
-        let compressed_buf = self.compressed_buf.take().unwrap_or_else(|| Vec::with_capacity(4096));
+        let compressed_buf = self
+            .compressed_buf
+            .take()
+            .unwrap_or_else(|| Vec::with_capacity(4096));
         self.decompressor.reset();
         let mut decompressed_reader = DecompressRead {
             inner: read_and_pass_to(
@@ -115,7 +119,8 @@ where
             decompressor: &mut self.decompressor,
         };
 
-        let bytes_copied = io::copy(&mut decompressed_reader, &mut io::sink()).map_err(gix_hash::io::Error::from)?;
+        let bytes_copied = io::copy(&mut decompressed_reader, &mut io::sink())
+            .map_err(gix_hash::io::Error::from)?;
         if bytes_copied != entry.decompressed_size {
             return Err(input::Error::IncompletePack {
                 actual: bytes_copied,
@@ -273,8 +278,10 @@ where
 impl crate::data::File {
     /// Returns an iterator over [`Entries`][crate::data::input::Entry], without making use of the memory mapping.
     pub fn streaming_iter(&self) -> Result<BytesToEntriesIter<impl io::BufRead>, input::Error> {
-        let reader =
-            io::BufReader::with_capacity(4096 * 8, fs::File::open(&self.path).map_err(gix_hash::io::Error::from)?);
+        let reader = io::BufReader::with_capacity(
+            4096 * 8,
+            fs::File::open(&self.path).map_err(gix_hash::io::Error::from)?,
+        );
         BytesToEntriesIter::new_from_header(
             reader,
             input::Mode::Verify,

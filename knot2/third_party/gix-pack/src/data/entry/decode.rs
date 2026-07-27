@@ -24,7 +24,11 @@ impl data::Entry {
     /// # Panics
     ///
     /// If we cannot understand the header, garbage data is likely to trigger this.
-    pub fn from_bytes(d: &[u8], pack_offset: data::Offset, hash_len: usize) -> Result<data::Entry, Error> {
+    pub fn from_bytes(
+        d: &[u8],
+        pack_offset: data::Offset,
+        hash_len: usize,
+    ) -> Result<data::Entry, Error> {
         let (type_id, size, mut consumed) = parse_header_info(d)?;
 
         use crate::data::entry::Header::*;
@@ -39,11 +43,11 @@ impl data::Entry {
             }
             REF_DELTA => {
                 let delta = RefDelta {
-                    base_id: gix_hash::ObjectId::from_bytes_or_panic(d.get(consumed..consumed + hash_len).ok_or(
-                        Error::Corrupt {
+                    base_id: gix_hash::ObjectId::from_bytes_or_panic(
+                        d.get(consumed..consumed + hash_len).ok_or(Error::Corrupt {
                             message: "ref-delta base object id",
-                        },
-                    )?),
+                        })?,
+                    ),
                 };
                 consumed += hash_len;
                 delta
@@ -62,7 +66,11 @@ impl data::Entry {
     }
 
     /// Instantiate an `Entry` from the reader `r`, providing the `pack_offset` to allow tracking the start of the entry data section.
-    pub fn from_read(r: &mut dyn io::Read, pack_offset: data::Offset, hash_len: usize) -> io::Result<data::Entry> {
+    pub fn from_read(
+        r: &mut dyn io::Read,
+        pack_offset: data::Offset,
+        hash_len: usize,
+    ) -> io::Result<data::Entry> {
         let (type_id, size, mut consumed) = streaming_parse_header_info(r)?;
 
         use crate::data::entry::Header::*;
@@ -90,7 +98,11 @@ impl data::Entry {
             TREE => Tree,
             COMMIT => Commit,
             TAG => Tag,
-            other => return Err(io::Error::other(format!("Object type {other} is unsupported"))),
+            other => {
+                return Err(io::Error::other(format!(
+                    "Object type {other} is unsupported"
+                )));
+            }
         };
         Ok(data::Entry {
             header: object,
@@ -115,10 +127,12 @@ fn streaming_parse_header_info(read: &mut dyn io::Read) -> Result<(u8, u64, usiz
         i += 1;
         let component = u64::from(c & 0b0111_1111)
             .checked_shl(shift)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "pack entry header overflowed"))?;
-        size = size
-            .checked_add(component)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "pack entry header overflowed"))?;
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "pack entry header overflowed")
+            })?;
+        size = size.checked_add(component).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "pack entry header overflowed")
+        })?;
         shift += 7;
     }
     if i != encoded_pack_entry_header_size(size) {
@@ -145,7 +159,9 @@ fn parse_header_info(data: &[u8]) -> Result<(u8, u64, usize), Error> {
             message: "pack entry header continuation byte",
         })?;
         i += 1;
-        let component = u64::from(c & 0b0111_1111).checked_shl(shift).ok_or(Error::Overflow)?;
+        let component = u64::from(c & 0b0111_1111)
+            .checked_shl(shift)
+            .ok_or(Error::Overflow)?;
         size = size.checked_add(component).ok_or(Error::Overflow)?;
         shift += 7;
     }
