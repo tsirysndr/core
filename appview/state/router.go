@@ -18,6 +18,7 @@ import (
 	"tangled.org/core/appview/middleware"
 	"tangled.org/core/appview/migration"
 	"tangled.org/core/appview/notifications"
+	whnotify "tangled.org/core/appview/notify/webhook"
 	"tangled.org/core/appview/pipelines"
 	"tangled.org/core/appview/pulls"
 	"tangled.org/core/appview/repo"
@@ -25,7 +26,6 @@ import (
 	"tangled.org/core/appview/signup"
 	"tangled.org/core/appview/spindles"
 	"tangled.org/core/appview/state/userutil"
-	whnotify "tangled.org/core/appview/notify/webhook"
 	avstrings "tangled.org/core/appview/strings"
 	avtimeline "tangled.org/core/appview/timeline"
 	avxrpc "tangled.org/core/appview/xrpc"
@@ -299,7 +299,9 @@ func (s *State) StandardRouter(mw *middleware.Middleware) http.Handler {
 	r.Mount("/focus", s.FocusRouter(mw))
 
 	r.Mount("/signup", s.SignupRouter())
-	r.Mount("/xrpc", s.XrpcRouter())
+	if s.config.Core.XrpcEnabled {
+		r.Mount("/xrpc", s.XrpcRouter())
+	}
 	r.Mount("/", s.oauth.Router())
 
 	r.Get("/terms", s.TermsOfService)
