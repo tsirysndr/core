@@ -4,6 +4,10 @@
 package gitea
 
 import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -12,6 +16,31 @@ import (
 	"github.com/stretchr/testify/require"
 	"tangled.org/core/types"
 )
+
+func TestGetCommitDereferencesAnnotatedTag(t *testing.T) {
+	repo := t.TempDir()
+	runGit := func(args ...string) []byte {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, string(out))
+		return out
+	}
+
+	runGit("init")
+	runGit("config", "user.name", "test")
+	runGit("config", "user.email", "test@example.com")
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "file.txt"), []byte("hello\n"), 0o644))
+	runGit("add", "file.txt")
+	runGit("commit", "-m", "initial")
+	runGit("tag", "-a", "v0.1.0", "-m", "release")
+
+	want := strings.TrimSpace(string(runGit("rev-parse", "v0.1.0^{commit}")))
+	commit, err := GetCommit(context.Background(), repo, "v0.1.0")
+	require.NoError(t, err)
+	assert.Equal(t, want, commit.Hash.String())
+}
 
 func TestCommitFromReader(t *testing.T) {
 	commitString := `tree f1a6cb52b2d16773290cefe49ad0684b50a4f930

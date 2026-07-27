@@ -25,7 +25,7 @@ func GetCommit(ctx context.Context, repoPath, rev string) (*object.Commit, error
 	wr, rd, cancel := CatFileBatch(ctx, repoPath)
 	defer cancel()
 
-	if _, err := wr.Write([]byte(rev + "\n")); err != nil {
+	if _, err := wr.Write([]byte(rev + "^{commit}\n")); err != nil {
 		return nil, fmt.Errorf("write rev: %w", err)
 	}
 	sha, typ, size, err := ReadBatchLine(rd)
