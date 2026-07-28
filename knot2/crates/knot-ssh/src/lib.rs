@@ -2,6 +2,7 @@ mod exec;
 mod roster;
 mod server;
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::net::SocketAddr;
 use std::path::Path;
@@ -20,7 +21,7 @@ use knot_types::{AccountDid, ActorId, AdmissionPolicy, AppviewEndpoint, CiLogsAd
 use russh::keys::ssh_key::rand_core;
 use russh::keys::{Algorithm, PrivateKey, ssh_key};
 use russh::server::{Config, Server as _};
-use russh::{MethodKind, MethodSet};
+use russh::{MethodKind, MethodSet, Preferred, compression};
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
@@ -153,6 +154,10 @@ fn server_config(host_key: PrivateKey) -> Arc<Config> {
         inactivity_timeout: Some(INACTIVITY_TIMEOUT),
         keepalive_interval: Some(KEEPALIVE_INTERVAL),
         auth_rejection_time: AUTH_REJECTION_TIME,
+        preferred: Preferred {
+            compression: Cow::Borrowed(&[compression::NONE]),
+            ..Preferred::DEFAULT
+        },
         ..Config::default()
     })
 }

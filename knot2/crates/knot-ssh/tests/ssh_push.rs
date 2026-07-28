@@ -653,6 +653,48 @@ async fn an_authorized_push_emits_a_ref_update_event() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_client_requesting_ssh_compression_clones_an_incompressible_pack() {
+    let fx = fixture().await;
+    std::fs::create_dir_all(&fx.work).unwrap();
+    git(&fx.work, &[], &["init", "-q", "-b", "main"]);
+    let mut state = 0x9e3779b97f4a7c15u64;
+    let payload: Vec<u8> = std::iter::repeat_with(|| {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state.to_le_bytes()
+    })
+    .take(32 * 1024)
+    .flatten()
+    .collect();
+    std::fs::write(fx.work.join("noise.bin"), &payload).unwrap();
+    git(&fx.work, &[], &["add", "-A"]);
+    git(&fx.work, &[], &["commit", "-q", "-m", "noise"]);
+
+    let (ok, out) = push(&fx.work, &fx.url, &fx.key_path, &["main"]).await;
+    assert!(ok, "push must succeed:\n{out}");
+
+    let dest = fx.scratch.path().join("compressed-clone");
+    let ssh = format!("{} -o Compression=yes", ssh_command(&fx.key_path));
+    let url = fx.url.clone();
+    let dest_arg = dest.to_str().unwrap().to_string();
+    let (ok, out) = tokio::task::spawn_blocking(move || {
+        git(
+            Path::new("/tmp"),
+            &[("GIT_SSH_COMMAND", &ssh)],
+            &["clone", "-q", &url, &dest_arg],
+        )
+    })
+    .await
+    .unwrap();
+    assert!(
+        ok,
+        "clone with ssh compression requested must succeed:\n{out}"
+    );
+    assert_eq!(std::fs::read(dest.join("noise.bin")).unwrap(), payload);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn an_oversized_push_is_refused_at_the_ssh_boundary() {
     let scratch = tempfile::tempdir().unwrap();
     let (key_path, public_line) = keygen(scratch.path(), "client");
