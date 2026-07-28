@@ -10,13 +10,14 @@ import (
 	"tangled.org/core/appview/config"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pages/repoinfo"
+	"tangled.org/core/idresolver"
 	"tangled.org/core/patchutil"
 	"tangled.org/core/types"
 )
 
 func TestPullComposeTemplatesParse(t *testing.T) {
 	cfg := &config.Config{}
-	p := NewPages(cfg, nil, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	p := NewPages(cfg, idresolver.DefaultResolver(""), nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	cases := []struct {
 		name  string
@@ -45,7 +46,7 @@ func TestPullComposeTemplatesParse(t *testing.T) {
 
 func TestPullComposeHostRender(t *testing.T) {
 	cfg := &config.Config{}
-	p := NewPages(cfg, nil, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	p := NewPages(cfg, idresolver.DefaultResolver(""), nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	base := RepoNewPullParams{
 		RepoInfo: repoinfo.RepoInfo{
@@ -80,7 +81,7 @@ func TestPullComposeHostRender(t *testing.T) {
 
 func TestPullComposeHostRenderWithData(t *testing.T) {
 	cfg := &config.Config{}
-	p := NewPages(cfg, nil, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	p := NewPages(cfg, idresolver.DefaultResolver(""), nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	sampleBranches := []types.Branch{
 		{Reference: types.Reference{Name: "feature"}},
@@ -209,7 +210,7 @@ index 0000000..1111111 100644
 
 func TestPullComposeLabelStateRoundTrip(t *testing.T) {
 	cfg := &config.Config{}
-	p := NewPages(cfg, nil, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	p := NewPages(cfg, idresolver.DefaultResolver(""), nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	sampleBranches := []types.Branch{
 		{Reference: types.Reference{Name: "feature"}},
