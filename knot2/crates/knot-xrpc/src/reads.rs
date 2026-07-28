@@ -137,11 +137,19 @@ fn commit_for(repo: &Repo, refspec: &Revspec) -> Result<Oid, XrpcError> {
     }
     .ok_or_else(ref_not_found)?;
     let commit = repo.peel_to_commit(oid).map_err(|_| ref_not_found())?;
+    if hidden_staging_commit(repo, refspec) == Some(commit) {
+        return Ok(commit);
+    }
     match repo.reachable_from_public(commit) {
         Ok(true) => Ok(commit),
         Ok(false) => Err(ref_not_found()),
         Err(error) => Err(error.into()),
     }
+}
+
+fn hidden_staging_commit(repo: &Repo, refspec: &str) -> Option<Oid> {
+    repo.hidden_ref_commit(refspec)
+        .and_then(|oid| repo.peel_to_commit(oid).ok())
 }
 
 struct LimitWriter {
@@ -989,6 +997,9 @@ pub(crate) async fn repo_compare<H: HttpTransport, C: Clock>(
                 .resolve_revision(rev)
                 .and_then(|oid| repo.peel_to_commit(oid).ok())
                 .ok_or_else(revision_not_found)?;
+            if hidden_staging_commit(&repo, rev) == Some(commit) {
+                return Ok(commit);
+            }
             match repo.reachable_from_public(commit) {
                 Ok(true) => Ok(commit),
                 Ok(false) => Err(revision_not_found()),

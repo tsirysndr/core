@@ -566,6 +566,16 @@ impl Repo {
         }
     }
 
+    pub fn hidden_ref_commit(&self, spec: &str) -> Option<Oid> {
+        let name = match spec.starts_with("refs/") {
+            true => RefName::new(spec.to_string()),
+            false => RefName::new(format!("refs/{spec}")),
+        }
+        .ok()
+        .filter(is_hidden)?;
+        self.find_ref(&name).ok().flatten()
+    }
+
     fn direct_target(&self, reference: &gix::Reference<'_>, depth: usize) -> Option<gix::ObjectId> {
         match (depth, reference.follow()) {
             (_, None) => reference.try_id().map(|id| id.detach()),

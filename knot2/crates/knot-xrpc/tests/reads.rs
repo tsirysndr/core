@@ -894,6 +894,77 @@ async fn list_refs_reports_paginates_and_drains() {
 }
 
 #[tokio::test]
+async fn a_hidden_staging_ref_resolves_for_fork_comparison_reads() {
+    let world = World::new();
+    let (did, work) = seeded(&world, "limpet");
+    let bare = world.layout.repo_path(&did).unwrap();
+
+    sh_git(work.path(), &["checkout", "-q", "-b", "upstream"]);
+    commit_file(
+        work.path(),
+        "upstream.txt",
+        b"upstream\n",
+        "upstream moved",
+        "2026-06-01T12:50:00+02:00",
+    );
+    let upstream = sh_git(work.path(), &["rev-parse", "HEAD"]);
+    sh_git(
+        work.path(),
+        &[
+            "push",
+            "-q",
+            bare.to_str().unwrap(),
+            "HEAD:refs/hidden/main/main",
+        ],
+    );
+    sh_git(work.path(), &["checkout", "-q", "main"]);
+    commit_file(
+        work.path(),
+        "ours.txt",
+        b"ours\n",
+        "fork work",
+        "2026-06-01T12:55:00+02:00",
+    );
+    sh_git(
+        work.path(),
+        &["push", "-q", bare.to_str().unwrap(), "HEAD:refs/heads/main"],
+    );
+
+    let comparison = get_json(
+        &world,
+        &format!("/xrpc/sh.tangled.repo.compare?repo={did}&rev1=hidden/main/main&rev2=main"),
+    )
+    .await;
+    assert_eq!(comparison["rev1"].as_str().unwrap(), upstream);
+    assert!(!comparison["format_patch"].as_array().unwrap().is_empty());
+
+    let log = get_json(
+        &world,
+        &format!("/xrpc/sh.tangled.repo.log?repo={did}&ref=refs/hidden/main/main"),
+    )
+    .await;
+    assert!(!log["commits"].as_array().unwrap().is_empty());
+
+    let (status, _) = get_error(
+        &world,
+        &format!("/xrpc/sh.tangled.repo.log?repo={did}&ref={upstream}"),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "a raw oid reachable only through the hidden ref mustn't resolve"
+    );
+    let (status, error) = get_error(
+        &world,
+        &format!("/xrpc/sh.tangled.repo.compare?repo={did}&rev1={upstream}&rev2=main"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(error, "RevisionNotFound");
+}
+
+#[tokio::test]
 async fn the_cob_ref_namespace_is_invisible_across_every_read() {
     let world = World::new();
     let (did, work) = seeded(&world, "anemone");
