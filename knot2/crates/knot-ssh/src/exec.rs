@@ -9,7 +9,7 @@ use knot_index::Resolved;
 use knot_lfs::TransferOp;
 use knot_pack::{PackError, PackLimits, RepoLookup};
 use knot_runtime::{Clock, HttpTransport};
-use knot_types::{AccountDid, ObjectFormat, OfferedKey, OwnerDid, RepoDid, RepoRkey};
+use knot_types::{AccountDid, ClonePath, ObjectFormat, OfferedKey, OwnerDid, RepoDid};
 use russh::Channel;
 use russh::server::Msg;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -49,13 +49,13 @@ enum ReadError {
 
 enum RepoRef {
     Did(RepoDid),
-    OwnerRkey(OwnerDid, Vec<RepoRkey>),
-    HandleRkey(knot_types::Handle, Vec<RepoRkey>),
+    OwnerPath(OwnerDid, ClonePath),
+    HandlePath(knot_types::Handle, ClonePath),
 }
 
 enum ResolvedRef {
     Did(RepoDid),
-    OwnerRkey(OwnerDid, Vec<RepoRkey>),
+    OwnerPath(OwnerDid, ClonePath),
 }
 
 fn parse_exec(command: &[u8]) -> Option<(Service, RepoRef)> {
@@ -86,14 +86,11 @@ fn parse_repo_path(raw: &str) -> Option<RepoRef> {
         .trim_start_matches('/');
     match path.split_once('/') {
         Some((owner, name)) => {
-            let candidates: Vec<RepoRkey> = RepoRkey::clone_path_candidates(name).collect();
-            if candidates.is_empty() {
-                return None;
-            }
+            let candidates = ClonePath::parse(name)?;
             match knot_types::OwnerRef::parse(owner)? {
-                knot_types::OwnerRef::Did(owner) => Some(RepoRef::OwnerRkey(owner, candidates)),
+                knot_types::OwnerRef::Did(owner) => Some(RepoRef::OwnerPath(owner, candidates)),
                 knot_types::OwnerRef::Handle(handle) => {
-                    Some(RepoRef::HandleRkey(handle, candidates))
+                    Some(RepoRef::HandlePath(handle, candidates))
                 }
             }
         }
@@ -107,9 +104,10 @@ fn resolve_repo_ref<H: HttpTransport, C: Clock>(
 ) -> RepoLookup {
     let candidate = match repo_ref {
         ResolvedRef::Did(did) => RepoLookup::Hosted(did),
-        ResolvedRef::OwnerRkey(owner, candidates) => RepoLookup::first(candidates, |rkey| {
-            RepoLookup::from_resolved(state.index.resolve_repo(&owner, &rkey), |found| found)
-        }),
+        ResolvedRef::OwnerPath(owner, candidates) => RepoLookup::from_resolved(
+            state.index.resolve_clone_path(&owner, &candidates),
+            |found| found,
+        ),
     };
     match candidate {
         RepoLookup::Hosted(did) => {
@@ -151,15 +149,15 @@ pub(crate) async fn run_exec<H: HttpTransport, C: Clock>(
     };
     let resolved_ref = match repo_ref {
         RepoRef::Did(did) => ResolvedRef::Did(did),
-        RepoRef::OwnerRkey(owner, candidates) => ResolvedRef::OwnerRkey(owner, candidates),
-        RepoRef::HandleRkey(owner_handle, candidates) => {
+        RepoRef::OwnerPath(owner, candidates) => ResolvedRef::OwnerPath(owner, candidates),
+        RepoRef::HandlePath(owner_handle, candidates) => {
             match state
                 .atproto
                 .resolve_handle_to_did(&owner_handle)
                 .await
                 .ok()
             {
-                Some(did) => ResolvedRef::OwnerRkey(did.into(), candidates),
+                Some(did) => ResolvedRef::OwnerPath(did.into(), candidates),
                 None => {
                     fail(channel, &state.catalog.ssh.repo_not_found.text()).await;
                     return;
@@ -949,11 +947,11 @@ mod tests {
     fn the_repo_path_parser_separates_dids_from_handles() {
         assert!(matches!(
             parse_repo_path("did:plc:nel/squid"),
-            Some(RepoRef::OwnerRkey(..))
+            Some(RepoRef::OwnerPath(..))
         ));
         assert!(matches!(
             parse_repo_path("nel.pet/squid"),
-            Some(RepoRef::HandleRkey(..))
+            Some(RepoRef::HandlePath(..))
         ));
         assert!(matches!(
             parse_repo_path("did:plc:barnacle"),

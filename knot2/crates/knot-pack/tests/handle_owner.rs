@@ -27,7 +27,9 @@ fn repo_resolver() -> Arc<dyn RepoResolver> {
     let owner = OwnerDid::new("did:plc:nel").unwrap();
     let repo = RepoDid::new("did:plc:whelk").unwrap();
     Arc::new(move |target: &RepoTarget| match target {
-        RepoTarget::OwnerRkey(o, n) if *o == owner && n.as_str() == "squid" => {
+        RepoTarget::OwnerPath(o, p)
+            if *o == owner && p.rkeys().any(|rkey| rkey.as_str() == "squid") =>
+        {
             RepoLookup::Hosted(repo.clone())
         }
         RepoTarget::Did(d) if *d == repo => RepoLookup::Hosted(d.clone()),

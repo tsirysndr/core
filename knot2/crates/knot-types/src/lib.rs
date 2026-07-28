@@ -6,9 +6,9 @@ pub use changes::{ChangedFiles, ChangedFilesBudget, Listing};
 
 mod ids;
 pub use ids::{
-    AccountDid, ActorId, AppviewEndpoint, AuthorName, BranchName, ChangeId, CiLogsAddr, CobId,
-    Email, HttpStatus, KnotHostname, KnotId, KnotServiceUrl, LanguageBytes, LanguageName, LogsHost,
-    LogsPort, ObjectCount, ObjectFormat, OfferedKey, Oid, OwnerDid, OwnerRef, ParseError,
+    AccountDid, ActorId, AppviewEndpoint, AuthorName, BranchName, ChangeId, CiLogsAddr, ClonePath,
+    CobId, Email, HttpStatus, KnotHostname, KnotId, KnotServiceUrl, LanguageBytes, LanguageName,
+    LogsHost, LogsPort, ObjectCount, ObjectFormat, OfferedKey, Oid, OwnerDid, OwnerRef, ParseError,
     PushOption, PushOptions, RefName, RefTransition, RepoDid, RepoName, RepoPath, RepoRkey,
     ServiceDid, TagName, TypeName, UnixMicros, UnixSeconds,
 };

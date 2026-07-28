@@ -563,9 +563,10 @@ async fn main() -> anyhow::Result<()> {
             knot_pack::RepoTarget::Did(did) => {
                 knot_pack::RepoLookup::from_resolved(index.owner_of(did), |_| did.clone())
             }
-            knot_pack::RepoTarget::OwnerRkey(owner, rkey) => {
-                knot_pack::RepoLookup::from_resolved(index.resolve_repo(owner, rkey), |found| found)
-            }
+            knot_pack::RepoTarget::OwnerPath(owner, path) => knot_pack::RepoLookup::from_resolved(
+                index.resolve_clone_path(owner, path),
+                |found| found,
+            ),
         })
     };
     let receive_advertiser = knot_xrpc::receive_advertiser(Arc::clone(&xrpc_state));

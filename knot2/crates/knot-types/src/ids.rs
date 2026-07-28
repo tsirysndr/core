@@ -542,11 +542,30 @@ impl From<RepoDid> for AccountDid {
     }
 }
 
-impl RepoRkey {
-    pub fn clone_path_candidates(raw: &str) -> impl Iterator<Item = RepoRkey> + '_ {
-        std::iter::once(raw)
-            .chain(raw.strip_suffix(".git"))
-            .filter_map(|candidate| Self::new(candidate).ok())
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClonePath {
+    rkeys: Vec<RepoRkey>,
+    names: Vec<RepoName>,
+}
+
+impl ClonePath {
+    pub fn parse(raw: &str) -> Option<Self> {
+        let segments = || std::iter::once(raw).chain(raw.strip_suffix(".git"));
+        let rkeys: Vec<RepoRkey> = segments()
+            .filter_map(|segment| RepoRkey::new(segment).ok())
+            .collect();
+        let names: Vec<RepoName> = segments()
+            .filter_map(|segment| RepoName::new(segment).ok())
+            .collect();
+        (!rkeys.is_empty() || !names.is_empty()).then_some(Self { rkeys, names })
+    }
+
+    pub fn rkeys(&self) -> impl Iterator<Item = &RepoRkey> {
+        self.rkeys.iter()
+    }
+
+    pub fn names(&self) -> impl Iterator<Item = &RepoName> {
+        self.names.iter()
     }
 }
 
@@ -1020,28 +1039,61 @@ mod tests {
     }
 
     #[test]
-    fn clone_path_candidates_try_the_exact_rkey_before_the_stripped_one() {
-        let suffixed: Vec<RepoRkey> = RepoRkey::clone_path_candidates("anemone.git").collect();
+    fn clone_paths_try_the_exact_segment_before_the_stripped_one() {
+        let suffixed = ClonePath::parse("anemone.git").unwrap();
         assert_eq!(
-            suffixed,
+            suffixed.rkeys().cloned().collect::<Vec<_>>(),
             vec![
                 RepoRkey::new("anemone.git").unwrap(),
                 RepoRkey::new("anemone").unwrap()
             ],
             "literal .git rkey wins over conventional suffix interpretation"
         );
-
-        let plain: Vec<RepoRkey> = RepoRkey::clone_path_candidates("anemone").collect();
-        assert_eq!(plain, vec![RepoRkey::new("anemone").unwrap()]);
-
-        let bare: Vec<RepoRkey> = RepoRkey::clone_path_candidates(".git").collect();
         assert_eq!(
-            bare,
+            suffixed.names().cloned().collect::<Vec<_>>(),
+            vec![
+                RepoName::new("anemone.git").unwrap(),
+                RepoName::new("anemone").unwrap()
+            ]
+        );
+
+        let plain = ClonePath::parse("anemone").unwrap();
+        assert_eq!(
+            plain.rkeys().cloned().collect::<Vec<_>>(),
+            vec![RepoRkey::new("anemone").unwrap()]
+        );
+
+        let bare = ClonePath::parse(".git").unwrap();
+        assert_eq!(
+            bare.rkeys().cloned().collect::<Vec<_>>(),
             vec![RepoRkey::new(".git").unwrap()],
             "stripping .git from bare suffix leaves nothing valid to try"
         );
 
-        assert_eq!(RepoRkey::clone_path_candidates("a/b.git").count(), 0);
+        assert!(ClonePath::parse("a/b.git").is_none());
+    }
+
+    #[test]
+    fn clone_paths_keep_segments_only_valid_as_one_of_the_two_kinds() {
+        let plus = ClonePath::parse("c++").unwrap();
+        assert_eq!(
+            plus.rkeys().count(),
+            0,
+            "a record key allows only [A-Za-z0-9._~:-]"
+        );
+        assert_eq!(
+            plus.names().cloned().collect::<Vec<_>>(),
+            vec![RepoName::new("c++").unwrap()],
+            "a repo name accepts the wider charset, so the segment resolves by name"
+        );
+
+        let long = "x".repeat(200);
+        let overlong = ClonePath::parse(&long).unwrap();
+        assert_eq!(overlong.names().count(), 0, "a repo name is at most 100");
+        assert_eq!(
+            overlong.rkeys().cloned().collect::<Vec<_>>(),
+            vec![RepoRkey::new(&long).unwrap()]
+        );
     }
 
     #[test]

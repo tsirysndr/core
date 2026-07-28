@@ -53,7 +53,7 @@ fn object_set(dir: &Path) -> BTreeSet<String> {
 fn serve_dids() -> Arc<dyn RepoResolver> {
     Arc::new(|target: &RepoTarget| match target {
         RepoTarget::Did(did) => RepoLookup::Hosted(did.clone()),
-        RepoTarget::OwnerRkey(_, _) => RepoLookup::Unhosted,
+        RepoTarget::OwnerPath(_, _) => RepoLookup::Unhosted,
     })
 }
 

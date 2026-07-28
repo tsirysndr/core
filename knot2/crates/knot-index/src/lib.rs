@@ -16,7 +16,7 @@ use knot_cobs::{
     MembersCob, RegistryChange, RepoRegistryCob,
 };
 use knot_git::{Layout, Repo};
-use knot_types::{AccountDid, OwnerDid, RepoDid, RepoRkey};
+use knot_types::{AccountDid, ClonePath, OwnerDid, RepoDid, RepoRkey};
 
 use intern::Interner;
 use projections::{CollaboratorsProjection, GrantSetProjection, KeyProjection, RegistryProjection};
@@ -197,6 +197,15 @@ impl Index {
 
     pub fn resolve_repo(&self, owner: &OwnerDid, rkey: &RepoRkey) -> Resolved<Option<RepoDid>> {
         self.registry.resolve(&self.interner, owner, rkey)
+    }
+
+    pub fn resolve_clone_path(
+        &self,
+        owner: &OwnerDid,
+        path: &ClonePath,
+    ) -> Resolved<Option<RepoDid>> {
+        self.registry
+            .resolve_clone_path(&self.interner, owner, path)
     }
 
     pub fn owner_of(&self, repo: &RepoDid) -> Resolved<Option<OwnerDid>> {

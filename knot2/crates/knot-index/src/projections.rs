@@ -9,11 +9,11 @@ use knot_cobs::{
     CollaboratorsChange, CollaboratorsCob, Grant, GrantChange, Registration, Registry,
     RegistryChange, Rename, RepoRef, RepoRegistryCob, Roster,
 };
-use knot_types::{AccountDid, OfferedKey, OwnerDid, RepoDid, RepoRkey, UnixSeconds};
+use knot_types::{AccountDid, ClonePath, OfferedKey, OwnerDid, RepoDid, RepoRkey, UnixSeconds};
 
 use crate::coverage::{Coverage, CoverageCell, Resolved};
 use crate::error::IndexError;
-use crate::intern::{AccountKey, Interner, OwnerKey, RepoKey, RkeyKey};
+use crate::intern::{AccountKey, Interner, NameKey, OwnerKey, RepoKey, RkeyKey};
 
 const KEY_CACHE_CAPACITY: usize = 16_384;
 
@@ -414,10 +414,13 @@ fn apply(
 struct RecordSlot {
     owner: OwnerKey,
     rkey: RkeyKey,
+    name: NameKey,
+    created_at: UnixSeconds,
 }
 
 pub(crate) struct RegistryProjection {
     aliases: scc::HashMap<(OwnerKey, RkeyKey), RepoKey>,
+    names: scc::HashMap<(OwnerKey, NameKey), BTreeSet<(UnixSeconds, RepoKey)>>,
     records: scc::HashMap<RepoKey, RecordSlot>,
     coverage: CoverageCell,
     tip: Mutex<Option<ChangeId>>,
@@ -427,6 +430,7 @@ impl RegistryProjection {
     pub(crate) fn new() -> Self {
         Self {
             aliases: scc::HashMap::new(),
+            names: scc::HashMap::new(),
             records: scc::HashMap::new(),
             coverage: CoverageCell::new(Coverage::Warming),
             tip: Mutex::new(None),
@@ -444,6 +448,7 @@ impl RegistryProjection {
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let evacuated = self.hosted_repos(interner);
         self.aliases.clear_sync();
+        self.names.clear_sync();
         self.records.clear_sync();
         *tip = None;
         self.coverage.set(Coverage::Ready);
@@ -466,6 +471,54 @@ impl RegistryProjection {
                     .map(|repo| interner.resolve_repo(repo)),
             ),
         }
+    }
+
+    pub(crate) fn resolve_clone_path(
+        &self,
+        interner: &Interner,
+        owner: &OwnerDid,
+        path: &ClonePath,
+    ) -> Resolved<Option<RepoDid>> {
+        if self.coverage.get() == Coverage::Warming {
+            return Resolved::Warming;
+        }
+        let Some(owner) = interner.owner(owner) else {
+            return Resolved::Ready(None);
+        };
+        let by_rkey = path
+            .rkeys()
+            .filter_map(|rkey| interner.rkey(rkey))
+            .find_map(|rkey| self.aliases.read_sync(&(owner, rkey), |_, repo| *repo));
+        if let Some(repo) = by_rkey {
+            return Resolved::Ready(Some(interner.resolve_repo(repo)));
+        }
+        Resolved::Ready(
+            path.names()
+                .filter_map(|name| interner.name(name))
+                .find_map(|name| self.oldest_registration_for_name(interner, owner, name)),
+        )
+    }
+
+    fn oldest_registration_for_name(
+        &self,
+        interner: &Interner,
+        owner: OwnerKey,
+        name: NameKey,
+    ) -> Option<RepoDid> {
+        // Notice how set keys sort by whichever string the interner saw first,
+        // and a cold rebuild will see them in a different order than live replay,
+        // so 2 entries with the same timestamp will settle by comparing
+        // DIDs instead.
+        self.names
+            .read_sync(&(owner, name), |_, registered| {
+                let earliest = registered.first()?.0;
+                registered
+                    .iter()
+                    .take_while(|(created_at, _)| *created_at == earliest)
+                    .map(|(_, repo)| interner.resolve_repo(*repo))
+                    .min()
+            })
+            .flatten()
     }
 
     pub(crate) fn owner_of(
@@ -549,13 +602,20 @@ impl RegistryProjection {
 
     fn seed(&self, interner: &Interner, registry: &Registry) {
         self.aliases.clear_sync();
+        self.names.clear_sync();
         self.records.clear_sync();
         registry.records().for_each(|(repo, record)| {
+            let repo = interner.intern_repo(repo);
+            let owner = interner.intern_owner(&record.owner);
+            let name = interner.intern_name(&record.name);
             self.upsert_record(
-                interner.intern_repo(repo),
-                interner.intern_owner(&record.owner),
+                repo,
+                owner,
                 interner.intern_rkey(&record.rkey),
+                name,
+                record.created_at,
             );
+            self.bind_name(owner, name, record.created_at, repo);
         });
         registry.aliases().for_each(|(owner, rkey, repo)| {
             self.upsert_alias(
@@ -612,13 +672,15 @@ impl RegistryProjection {
         let repo = interner.intern_repo(&registration.repo);
         let owner = interner.intern_owner(&registration.owner);
         let rkey = interner.intern_rkey(&registration.rkey);
+        let name = interner.intern_name(&registration.name);
         if self.records.contains_sync(&repo) {
             self.drop_record(repo);
             displaced.push(repo);
         }
         displaced.extend(self.steal_alias(owner, rkey, repo));
-        self.upsert_record(repo, owner, rkey);
+        self.upsert_record(repo, owner, rkey, name, registration.created_at);
         self.upsert_alias(owner, rkey, repo);
+        self.bind_name(owner, name, registration.created_at, repo);
         displaced
     }
 
@@ -631,16 +693,23 @@ impl RegistryProjection {
         let repo = interner.intern_repo(&rename.repo);
         let owner = interner.intern_owner(&rename.owner);
         let rkey = interner.intern_rkey(&rename.rkey);
+        let name = interner.intern_name(&rename.name);
         let held = self
             .records
-            .read_sync(&repo, |_, slot| slot.owner == owner)
-            .unwrap_or(false);
-        if !held {
+            .read_sync(&repo, |_, slot| {
+                (slot.owner == owner).then_some((slot.created_at, slot.name))
+            })
+            .flatten();
+        let Some((created_at, previous)) = held else {
             return displaced;
-        }
+        };
         displaced.extend(self.steal_alias(owner, rkey, repo));
-        self.upsert_record(repo, owner, rkey);
+        self.upsert_record(repo, owner, rkey, name, created_at);
         self.upsert_alias(owner, rkey, repo);
+        self.bind_name(owner, name, created_at, repo);
+        if previous != name {
+            self.unbind_name(owner, previous, created_at, repo);
+        }
         displaced
     }
 
@@ -683,20 +752,57 @@ impl RegistryProjection {
     }
 
     fn drop_record(&self, repo: RepoKey) {
-        let _ = self.records.remove_sync(&repo);
+        if let Some((_, slot)) = self.records.remove_sync(&repo) {
+            self.unbind_name(slot.owner, slot.name, slot.created_at, repo);
+        }
         self.aliases.retain_sync(|_, holder| *holder != repo);
     }
 
-    fn upsert_record(&self, repo: RepoKey, owner: OwnerKey, rkey: RkeyKey) {
+    fn bind_name(&self, owner: OwnerKey, name: NameKey, created_at: UnixSeconds, repo: RepoKey) {
+        match self.names.entry_sync((owner, name)) {
+            scc::hash_map::Entry::Occupied(mut occupied) => {
+                occupied.get_mut().insert((created_at, repo));
+            }
+            scc::hash_map::Entry::Vacant(vacant) => {
+                vacant.insert_entry(BTreeSet::from([(created_at, repo)]));
+            }
+        }
+    }
+
+    fn unbind_name(&self, owner: OwnerKey, name: NameKey, created_at: UnixSeconds, repo: RepoKey) {
+        let _ = self.names.remove_if_sync(&(owner, name), |registered| {
+            registered.remove(&(created_at, repo));
+            registered.is_empty()
+        });
+    }
+
+    fn upsert_record(
+        &self,
+        repo: RepoKey,
+        owner: OwnerKey,
+        rkey: RkeyKey,
+        name: NameKey,
+        created_at: UnixSeconds,
+    ) {
         if self
             .records
             .update_sync(&repo, |_, slot| {
                 slot.owner = owner;
                 slot.rkey = rkey;
+                slot.name = name;
+                slot.created_at = created_at;
             })
             .is_none()
         {
-            let _ = self.records.insert_sync(repo, RecordSlot { owner, rkey });
+            let _ = self.records.insert_sync(
+                repo,
+                RecordSlot {
+                    owner,
+                    rkey,
+                    name,
+                    created_at,
+                },
+            );
         }
     }
 

@@ -120,11 +120,15 @@ async fn http_routing_resolves_owner_rkey_and_dot_git_and_404s_the_unhosted() {
         let plain_did = plain_did.clone();
         let literal_did = literal_did.clone();
         Arc::new(move |target: &RepoTarget| match target {
-            RepoTarget::OwnerRkey(o, n) if *o == owner && n.as_str() == "anemone" => {
-                RepoLookup::Hosted(plain_did.clone())
-            }
-            RepoTarget::OwnerRkey(o, n) if *o == owner && n.as_str() == "barnacle.git" => {
+            RepoTarget::OwnerPath(o, p)
+                if *o == owner && p.rkeys().any(|rkey| rkey.as_str() == "barnacle.git") =>
+            {
                 RepoLookup::Hosted(literal_did.clone())
+            }
+            RepoTarget::OwnerPath(o, p)
+                if *o == owner && p.rkeys().any(|rkey| rkey.as_str() == "anemone") =>
+            {
+                RepoLookup::Hosted(plain_did.clone())
             }
             _ => RepoLookup::Unhosted,
         })

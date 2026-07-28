@@ -393,8 +393,8 @@ async fn spawn(published_line: String, with_h3: bool) -> World {
                 knot_index::Resolved::Ready(None) => knot_pack::RepoLookup::Unhosted,
                 knot_index::Resolved::Warming => knot_pack::RepoLookup::Unavailable,
             },
-            knot_pack::RepoTarget::OwnerRkey(owner, rkey) => {
-                match index.resolve_repo(owner, rkey) {
+            knot_pack::RepoTarget::OwnerPath(owner, path) => {
+                match index.resolve_clone_path(owner, path) {
                     knot_index::Resolved::Ready(Some(found)) => {
                         knot_pack::RepoLookup::Hosted(found)
                     }

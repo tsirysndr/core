@@ -30,7 +30,7 @@ use knot_messages::{Catalog, ErrorKey, FetchMessages};
 use knot_resource::{PackSlots, SlotPermit};
 use knot_runtime::Clock;
 use knot_types::{
-    AccountDid, Handle, KnotHostname, OwnerDid, OwnerRef, ParseError, RepoDid, RepoRkey,
+    AccountDid, ClonePath, Handle, KnotHostname, OwnerDid, OwnerRef, ParseError, RepoDid,
 };
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -276,7 +276,7 @@ const MAX_REQUEST_BYTES: usize = 16 * 1024 * 1024;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RepoTarget {
     Did(RepoDid),
-    OwnerRkey(OwnerDid, RepoRkey),
+    OwnerPath(OwnerDid, ClonePath),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -287,24 +287,6 @@ pub enum RepoLookup {
 }
 
 impl RepoLookup {
-    pub fn or_else(self, next: impl FnOnce() -> RepoLookup) -> RepoLookup {
-        match self {
-            RepoLookup::Unhosted => next(),
-            decided => decided,
-        }
-    }
-
-    pub fn first(
-        candidates: impl IntoIterator<Item = RepoRkey>,
-        resolve: impl Fn(RepoRkey) -> RepoLookup,
-    ) -> RepoLookup {
-        candidates
-            .into_iter()
-            .fold(RepoLookup::Unhosted, |acc, rkey| {
-                acc.or_else(|| resolve(rkey))
-            })
-    }
-
     pub fn from_resolved<T>(
         resolved: knot_index::Resolved<Option<T>>,
         found: impl FnOnce(T) -> RepoDid,
@@ -531,14 +513,12 @@ fn resolve_named_did(
     owner: &OwnerDid,
     name: &str,
 ) -> Result<RepoDid, PackError> {
-    lookup_did(RepoLookup::first(
-        RepoRkey::clone_path_candidates(name),
-        |rkey| {
-            state
-                .resolver
-                .resolve(&RepoTarget::OwnerRkey(owner.clone(), rkey))
-        },
-    ))
+    let path = ClonePath::parse(name).ok_or(PackError::NotFound)?;
+    lookup_did(
+        state
+            .resolver
+            .resolve(&RepoTarget::OwnerPath(owner.clone(), path)),
+    )
 }
 
 fn resolve_did_did(state: &PackState, did: &str) -> Result<RepoDid, PackError> {

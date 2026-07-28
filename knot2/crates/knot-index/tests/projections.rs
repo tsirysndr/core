@@ -5,11 +5,13 @@ use knot_cob::{ChangePayload, CobHome, CobId, CobStore};
 use knot_cobs::{CollaboratorsChange, MembersChange, RegistryChange, Removal, Rename, RepoRef};
 use knot_git::{RefUpdate, Repo};
 use knot_index::{Coverage, IndexError, OfferedKey, Resolved};
-use knot_types::{RefName, RepoName};
+use knot_types::{ClonePath, RefName, RepoName};
 use serde::{Deserialize, Serialize};
 
 mod common;
-use common::{World, acc, at, grant, meta_home, own, registration, repo_did, rkey};
+use common::{
+    World, acc, at, grant, meta_home, named_registration, own, registration, repo_did, rkey,
+};
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "op", content = "data", rename_all = "snake_case")]
@@ -563,5 +565,509 @@ fn key_cache_evicts_least_recently_used() {
     assert_eq!(
         index.owner_of_key(&key(CAP)),
         Resolved::Ready(Some(acc("nel")))
+    );
+}
+
+fn path(raw: &str) -> ClonePath {
+    ClonePath::parse(raw).unwrap()
+}
+
+#[test]
+fn a_clone_path_resolves_by_name_when_the_record_key_is_a_tid() {
+    let world = World::new();
+    let repo = repo_did("squid");
+
+    let meta = Repo::open(&world.meta_path).unwrap();
+    let store = CobStore::new(&meta);
+    store
+        .create(
+            &meta_home(),
+            &RegistryChange::Register(named_registration(
+                "nel",
+                "3mizfnpxii522",
+                "substratum.cloud",
+                &repo,
+                1,
+            )),
+            &world.signer,
+            at(1),
+        )
+        .unwrap();
+
+    let index = world.index();
+    index.rebuild().unwrap();
+
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("substratum.cloud")),
+        Resolved::Ready(Some(repo.clone())),
+        "a PDS-native record key leaves the display name as the only human clone path"
+    );
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("3mizfnpxii522")),
+        Resolved::Ready(Some(repo.clone())),
+        "the record key still resolves"
+    );
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("substratum.cloud.git")),
+        Resolved::Ready(Some(repo)),
+        "the conventional .git suffix strips before the name lookup"
+    );
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("periwinkle")),
+        Resolved::Ready(None)
+    );
+}
+
+#[test]
+fn a_record_key_outranks_another_repos_name() {
+    let world = World::new();
+    let by_name = repo_did("limpet");
+    let by_rkey = repo_did("mussel");
+
+    let meta = Repo::open(&world.meta_path).unwrap();
+    let store = CobStore::new(&meta);
+    let object = store
+        .create(
+            &meta_home(),
+            &RegistryChange::Register(named_registration("nel", "limpet", "mussel", &by_name, 1)),
+            &world.signer,
+            at(1),
+        )
+        .unwrap()
+        .object;
+    store
+        .update(
+            &meta_home(),
+            object,
+            &RegistryChange::Register(named_registration("nel", "mussel", "scallop", &by_rkey, 2)),
+            &world.signer,
+            at(2),
+        )
+        .unwrap();
+
+    let index = world.index();
+    index.rebuild().unwrap();
+
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("mussel")),
+        Resolved::Ready(Some(by_rkey)),
+        "a record key match wins over another repo holding that string as its name"
+    );
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("scallop")),
+        Resolved::Ready(Some(repo_did("mussel")))
+    );
+}
+
+#[test]
+fn a_name_two_repos_share_resolves_to_the_older_registration() {
+    let world = World::new();
+    let first = repo_did("whelk");
+    let second = repo_did("conch");
+
+    let meta = Repo::open(&world.meta_path).unwrap();
+    let store = CobStore::new(&meta);
+    let object = store
+        .create(
+            &meta_home(),
+            &RegistryChange::Register(named_registration(
+                "nel",
+                "3lubrptx57d22",
+                "kelp",
+                &first,
+                1,
+            )),
+            &world.signer,
+            at(1),
+        )
+        .unwrap()
+        .object;
+    store
+        .update(
+            &meta_home(),
+            object,
+            &RegistryChange::Register(named_registration(
+                "nel",
+                "3mqydma3re27z",
+                "kelp",
+                &second,
+                2,
+            )),
+            &world.signer,
+            at(2),
+        )
+        .unwrap();
+
+    let index = world.index();
+    index.rebuild().unwrap();
+
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("kelp")),
+        Resolved::Ready(Some(first.clone())),
+        "a contested name resolves to whichever repo registered first, ordered by \
+         created_at so a cold seed and an incremental replay agree"
+    );
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("3lubrptx57d22")),
+        Resolved::Ready(Some(first)),
+        "each record key stays unambiguous"
+    );
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("3mqydma3re27z")),
+        Resolved::Ready(Some(second)),
+        "the repo that lost the name is still reachable by its record key"
+    );
+}
+
+#[test]
+fn a_repo_registered_later_never_takes_a_contested_name_by_renaming_onto_it() {
+    let world = World::new();
+    let holder = repo_did("whelk");
+    let latecomer = repo_did("conch");
+
+    let meta = Repo::open(&world.meta_path).unwrap();
+    let store = CobStore::new(&meta);
+    let object = store
+        .create(
+            &meta_home(),
+            &RegistryChange::Register(named_registration(
+                "nel",
+                "3lubrptx57d22",
+                "kelp",
+                &holder,
+                1,
+            )),
+            &world.signer,
+            at(1),
+        )
+        .unwrap()
+        .object;
+    store
+        .update(
+            &meta_home(),
+            object,
+            &RegistryChange::Register(named_registration(
+                "nel",
+                "3mqydma3re27z",
+                "uni",
+                &latecomer,
+                2,
+            )),
+            &world.signer,
+            at(2),
+        )
+        .unwrap();
+
+    let index = world.index();
+    index.rebuild().unwrap();
+
+    store
+        .update(
+            &meta_home(),
+            object,
+            &RegistryChange::Rename(Rename {
+                owner: own("nel"),
+                rkey: rkey("3mqydma3re27z"),
+                name: RepoName::new("kelp").unwrap(),
+                repo: latecomer.clone(),
+            }),
+            &world.signer,
+            at(3),
+        )
+        .unwrap();
+    index.refresh_registry().unwrap();
+
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("kelp")),
+        Resolved::Ready(Some(holder)),
+        "a rename keeps the repo's original created_at, so renaming onto a name \
+         another repo registered earlier cannot take it"
+    );
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("uni")),
+        Resolved::Ready(None),
+        "the renamed repo's previous name stops resolving"
+    );
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("3mqydma3re27z")),
+        Resolved::Ready(Some(latecomer))
+    );
+}
+
+#[test]
+fn deregistering_the_older_registration_moves_a_shared_name_to_the_survivor() {
+    let world = World::new();
+    let first = repo_did("whelk");
+    let survivor = repo_did("conch");
+
+    let meta = Repo::open(&world.meta_path).unwrap();
+    let store = CobStore::new(&meta);
+    let object = store
+        .create(
+            &meta_home(),
+            &RegistryChange::Register(named_registration(
+                "nel",
+                "3lubrptx57d22",
+                "kelp",
+                &first,
+                1,
+            )),
+            &world.signer,
+            at(1),
+        )
+        .unwrap()
+        .object;
+    store
+        .update(
+            &meta_home(),
+            object,
+            &RegistryChange::Register(named_registration(
+                "nel",
+                "3mqydma3re27z",
+                "kelp",
+                &survivor,
+                2,
+            )),
+            &world.signer,
+            at(2),
+        )
+        .unwrap();
+
+    let index = world.index();
+    index.rebuild().unwrap();
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("kelp")),
+        Resolved::Ready(Some(first)),
+        "the name resolves to the older registration while both exist"
+    );
+
+    store
+        .update(
+            &meta_home(),
+            object,
+            &RegistryChange::Deregister(RepoRef {
+                owner: own("nel"),
+                rkey: rkey("3lubrptx57d22"),
+            }),
+            &world.signer,
+            at(3),
+        )
+        .unwrap();
+    index.refresh_registry().unwrap();
+
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("kelp")),
+        Resolved::Ready(Some(survivor)),
+        "the name resolves to the remaining repo once the older one is deregistered"
+    );
+}
+
+#[test]
+fn a_rename_moves_name_resolution_off_the_old_name() {
+    let world = World::new();
+    let repo = repo_did("squid");
+
+    let meta = Repo::open(&world.meta_path).unwrap();
+    let store = CobStore::new(&meta);
+    let object = store
+        .create(
+            &meta_home(),
+            &RegistryChange::Register(named_registration(
+                "nel",
+                "3mizfnpxii522",
+                "anemone",
+                &repo,
+                1,
+            )),
+            &world.signer,
+            at(1),
+        )
+        .unwrap()
+        .object;
+
+    let index = world.index();
+    index.rebuild().unwrap();
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("anemone")),
+        Resolved::Ready(Some(repo.clone()))
+    );
+
+    store
+        .update(
+            &meta_home(),
+            object,
+            &RegistryChange::Rename(Rename {
+                owner: own("nel"),
+                rkey: rkey("3mizfnpxii522"),
+                name: RepoName::new("barnacle").unwrap(),
+                repo: repo.clone(),
+            }),
+            &world.signer,
+            at(2),
+        )
+        .unwrap();
+    index.refresh_registry().unwrap();
+
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("barnacle")),
+        Resolved::Ready(Some(repo.clone())),
+        "the new name resolves after a rename that keeps the record key"
+    );
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("anemone")),
+        Resolved::Ready(None),
+        "the superseded name stops resolving"
+    );
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("3mizfnpxii522")),
+        Resolved::Ready(Some(repo))
+    );
+}
+
+#[test]
+fn a_rename_that_changes_only_the_record_key_keeps_the_name_resolving() {
+    let world = World::new();
+    let repo = repo_did("squid");
+
+    let meta = Repo::open(&world.meta_path).unwrap();
+    let store = CobStore::new(&meta);
+    let object = store
+        .create(
+            &meta_home(),
+            &RegistryChange::Register(named_registration("nel", "3lubrptx57d22", "kelp", &repo, 1)),
+            &world.signer,
+            at(1),
+        )
+        .unwrap()
+        .object;
+
+    let index = world.index();
+    index.rebuild().unwrap();
+
+    store
+        .update(
+            &meta_home(),
+            object,
+            &RegistryChange::Rename(Rename {
+                owner: own("nel"),
+                rkey: rkey("3mqydma3re27z"),
+                name: RepoName::new("kelp").unwrap(),
+                repo: repo.clone(),
+            }),
+            &world.signer,
+            at(2),
+        )
+        .unwrap();
+    index.refresh_registry().unwrap();
+
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("kelp")),
+        Resolved::Ready(Some(repo.clone())),
+        "the unchanged name survives a rename that swaps the record key"
+    );
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("3mqydma3re27z")),
+        Resolved::Ready(Some(repo.clone()))
+    );
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("3lubrptx57d22")),
+        Resolved::Ready(Some(repo)),
+        "the superseded record key keeps resolving through its retained alias"
+    );
+}
+
+#[test]
+fn seeding_and_replaying_agree_on_name_resolution() {
+    let world = World::new();
+    let first = repo_did("whelk");
+    let second = repo_did("conch");
+
+    let meta = Repo::open(&world.meta_path).unwrap();
+    let store = CobStore::new(&meta);
+    let object = store
+        .create(
+            &meta_home(),
+            &RegistryChange::Register(named_registration(
+                "nel",
+                "3lubrptx57d22",
+                "kelp",
+                &first,
+                1,
+            )),
+            &world.signer,
+            at(1),
+        )
+        .unwrap()
+        .object;
+
+    let replayed = world.index();
+    replayed.rebuild().unwrap();
+
+    store
+        .update(
+            &meta_home(),
+            object,
+            &RegistryChange::Register(named_registration(
+                "nel",
+                "3mqydma3re27z",
+                "uni",
+                &second,
+                2,
+            )),
+            &world.signer,
+            at(2),
+        )
+        .unwrap();
+    replayed.refresh_registry().unwrap();
+
+    let seeded = world.index();
+    seeded.rebuild().unwrap();
+
+    ["kelp", "uni", "3lubrptx57d22", "3mqydma3re27z", "nautilus"]
+        .into_iter()
+        .for_each(|segment| {
+            assert_eq!(
+                replayed.resolve_clone_path(&own("nel"), &path(segment)),
+                seeded.resolve_clone_path(&own("nel"), &path(segment)),
+                "incremental replay and a cold seed disagree on {segment}"
+            );
+        });
+}
+
+#[test]
+fn a_name_differing_from_its_record_key_only_by_case_resolves() {
+    let world = World::new();
+    let repo = repo_did("squid");
+
+    let meta = Repo::open(&world.meta_path).unwrap();
+    let store = CobStore::new(&meta);
+    store
+        .create(
+            &meta_home(),
+            &RegistryChange::Register(named_registration(
+                "nel",
+                "runic_lang",
+                "Runic_lang",
+                &repo,
+                1,
+            )),
+            &world.signer,
+            at(1),
+        )
+        .unwrap();
+
+    let index = world.index();
+    index.rebuild().unwrap();
+
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("Runic_lang")),
+        Resolved::Ready(Some(repo.clone())),
+        "the appview lowercases the record key but keeps the display name's case, \
+         so the mixed-case path resolves by name"
+    );
+    assert_eq!(
+        index.resolve_clone_path(&own("nel"), &path("runic_lang")),
+        Resolved::Ready(Some(repo)),
+        "the lowercased record key still resolves"
     );
 }

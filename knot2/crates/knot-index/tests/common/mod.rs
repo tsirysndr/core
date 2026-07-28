@@ -52,6 +52,22 @@ pub fn registration(owner_id: &str, key: &str, repo: &RepoDid, seconds: i64) -> 
     }
 }
 
+pub fn named_registration(
+    owner_id: &str,
+    key: &str,
+    display: &str,
+    repo: &RepoDid,
+    seconds: i64,
+) -> Registration {
+    Registration {
+        owner: own(owner_id),
+        rkey: rkey(key),
+        name: RepoName::new(display).unwrap(),
+        repo: repo.clone(),
+        created_at: at(seconds),
+    }
+}
+
 pub struct World {
     _dir: TempDir,
     pub meta_path: PathBuf,

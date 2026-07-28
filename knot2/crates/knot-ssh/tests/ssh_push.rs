@@ -24,6 +24,9 @@ use url::Url;
 const REPO_DID: &str = "did:plc:squid";
 const REPO_NAME: &str = "anemone";
 const OWNER_DID: &str = "did:plc:nel";
+const TID_REPO_DID: &str = "did:plc:limpet";
+const TID_RKEY: &str = "3mizfnpxii522";
+const TID_REPO_NAME: &str = "periwinkle.cloud";
 const PDS_HOST: &str = "pds.oyster.cafe";
 
 fn git(cwd: &Path, env: &[(&str, &str)], args: &[&str]) -> (bool, String) {
@@ -140,6 +143,8 @@ fn fake_http(published_line: String) -> impl knot_runtime::HttpTransport {
             list_records_body(&[&published_line])
         } else if path.ends_with(REPO_DID) {
             did_document(&signer, REPO_DID, &pds)
+        } else if path.ends_with(TID_REPO_DID) {
+            did_document(&signer, TID_REPO_DID, &pds)
         } else if path.ends_with(OWNER_DID) {
             did_document(&signer, OWNER_DID, &pds)
         } else {
@@ -225,9 +230,10 @@ async fn spawn_server_core(
     let signer = K256Signer::generate(&SeededEntropy::new(2));
     let meta = Repo::open(&meta_path).unwrap();
     let store = CobStore::new(&meta);
-    store
+    let home = CobHome::from(&KnotId::new("did:web:nel.pet").unwrap());
+    let registry = store
         .create(
-            &CobHome::from(&KnotId::new("did:web:nel.pet").unwrap()),
+            &home,
             &RegistryChange::Register(Registration {
                 owner: OwnerDid::new(OWNER_DID).unwrap(),
                 rkey: RepoRkey::new(REPO_NAME).unwrap(),
@@ -237,6 +243,25 @@ async fn spawn_server_core(
             }),
             &signer,
             UnixSeconds::new(1),
+        )
+        .unwrap()
+        .object;
+
+    let tid_repo_did = RepoDid::new(TID_REPO_DID).unwrap();
+    layout.create(&tid_repo_did).unwrap();
+    store
+        .update(
+            &home,
+            registry,
+            &RegistryChange::Register(Registration {
+                owner: OwnerDid::new(OWNER_DID).unwrap(),
+                rkey: RepoRkey::new(TID_RKEY).unwrap(),
+                name: RepoName::new(TID_REPO_NAME).unwrap(),
+                repo: tid_repo_did,
+                created_at: UnixSeconds::new(2),
+            }),
+            &signer,
+            UnixSeconds::new(2),
         )
         .unwrap();
 
@@ -536,6 +561,50 @@ async fn incremental_fetch_over_ssh_completes() {
             );
         })
         .await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_display_name_addresses_a_repo_whose_record_key_is_a_tid() {
+    let fx = fixture().await;
+    let head = seed_work(&fx.work);
+    let head_oid = Oid::from_hex(&head).unwrap();
+    let port = fx.server.port;
+    let target = RepoDid::new(TID_REPO_DID).unwrap();
+    let variants = [
+        format!("ssh://git@127.0.0.1:{port}/{OWNER_DID}/{TID_REPO_NAME}"),
+        format!("ssh://git@127.0.0.1:{port}/{OWNER_DID}/{TID_REPO_NAME}.git"),
+        format!("ssh://git@127.0.0.1:{port}/nel.pet/{TID_REPO_NAME}"),
+        format!("ssh://git@127.0.0.1:{port}/{OWNER_DID}/{TID_RKEY}"),
+    ];
+    let fx = &fx;
+    let target = &target;
+    futures::stream::iter(variants)
+        .for_each(|url| async move {
+            let (ok, out) = push(&fx.work, &url, &fx.key_path, &["main"]).await;
+            assert!(
+                ok,
+                "a PDS-minted record key leaves the display name as the only human \
+                 path, so {url} must resolve and push:\n{out}"
+            );
+            assert_eq!(
+                main_tip(&fx.server.layout, target),
+                Some(head_oid),
+                "{url}: pushed commit must be the named repository's main tip"
+            );
+        })
+        .await;
+
+    let (ok, out) = push(
+        &fx.work,
+        &format!("ssh://git@127.0.0.1:{port}/{OWNER_DID}/whelk"),
+        &fx.key_path,
+        &["main"],
+    )
+    .await;
+    assert!(
+        !ok,
+        "a segment matching neither a record key nor a name stays unresolvable:\n{out}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

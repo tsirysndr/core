@@ -15,7 +15,7 @@ use common::must;
 fn serve_dids() -> std::sync::Arc<dyn RepoResolver> {
     std::sync::Arc::new(|target: &RepoTarget| match target {
         RepoTarget::Did(did) => RepoLookup::Hosted(did.clone()),
-        RepoTarget::OwnerRkey(_, _) => RepoLookup::Unhosted,
+        RepoTarget::OwnerPath(_, _) => RepoLookup::Unhosted,
     })
 }
 

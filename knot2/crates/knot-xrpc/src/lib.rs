@@ -64,8 +64,8 @@ use knot_resource::Slots;
 use knot_runtime::{Clock, Entropy, HttpTransport};
 use knot_secrets::SealedStore;
 use knot_types::{
-    AccountDid, AdmissionPolicy, AppviewEndpoint, CiLogsAddr, KnotHostname, KnotId, KnotServiceUrl,
-    Nsid, OwnerDid, OwnerRef, RepoDid, RepoRkey, UnixSeconds,
+    AccountDid, AdmissionPolicy, AppviewEndpoint, CiLogsAddr, ClonePath, KnotHostname, KnotId,
+    KnotServiceUrl, Nsid, OwnerDid, OwnerRef, RepoDid, UnixSeconds,
 };
 
 use base64::Engine;
@@ -578,15 +578,15 @@ pub(crate) async fn resolve_repo_named<H: HttpTransport, C: Clock>(
     name: &RepoNameSegment,
 ) -> Result<RepoDid, XrpcError> {
     let owner = resolve_owner_segment(state, owner).await?;
-    RepoRkey::clone_path_candidates(name.as_str())
-        .find_map(|rkey| match state.index.resolve_repo(&owner, &rkey) {
-            Resolved::Ready(Some(did)) => Some(Ok(did)),
-            Resolved::Ready(None) => None,
-            Resolved::Warming => Some(Err(XrpcError::warming(
-                "registry projection is still warming, retry shortly",
-            ))),
-        })
-        .unwrap_or_else(|| Err(XrpcError::not_found("repository not found")))
+    let path = ClonePath::parse(name.as_str())
+        .ok_or_else(|| XrpcError::not_found("repository not found"))?;
+    match state.index.resolve_clone_path(&owner, &path) {
+        Resolved::Ready(Some(did)) => Ok(did),
+        Resolved::Ready(None) => Err(XrpcError::not_found("repository not found")),
+        Resolved::Warming => Err(XrpcError::warming(
+            "registry projection is still warming, retry shortly",
+        )),
+    }
 }
 
 async fn resolve_owner_segment<H: HttpTransport, C: Clock>(
