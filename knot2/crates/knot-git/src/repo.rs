@@ -7,7 +7,7 @@ use gix::refs::transaction::{Change, LogChange, PreviousValue, RefEdit, RefLog};
 use gix::refs::{FullName, Target};
 use knot_cache::{Cache, Moka, Weight};
 use knot_types::{
-    BranchName, KnotId, ObjectFormat, Oid, RefName, RefTransition, RepoDid, UnixSeconds,
+    BranchName, KnotId, ObjectFormat, Oid, OriginUrl, RefName, RefTransition, RepoDid, UnixSeconds,
 };
 
 use crate::error::GitError;
@@ -689,14 +689,14 @@ impl Repo {
         dirs.iter().try_for_each(|dir| fsync_if_present(dir))
     }
 
-    pub fn origin_url(&self) -> Option<String> {
+    pub fn origin_url(&self) -> Option<OriginUrl> {
         self.git
             .config_snapshot()
             .string("remote.origin.url")
-            .map(|value| value.to_string())
+            .map(|value| OriginUrl::new(value.to_string()))
     }
 
-    pub fn set_origin_url(&self, url: &str) -> Result<(), GitError> {
+    pub fn set_origin_url(&self, url: &OriginUrl) -> Result<(), GitError> {
         let path = self.git.git_dir().join("config");
         let report = |message: String| GitError::Config {
             path: path.clone(),
@@ -709,7 +709,7 @@ impl Repo {
             "remote",
             Some(gix::bstr::BStr::new("origin")),
             "url",
-            gix::bstr::BStr::new(url),
+            gix::bstr::BStr::new(url.as_str()),
         )
         .map_err(|error| report(error.to_string()))?;
         knot_resource::atomic_write(&path, knot_resource::FileMode::Inherited, |out| {

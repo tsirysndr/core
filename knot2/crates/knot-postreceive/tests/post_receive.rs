@@ -6,8 +6,8 @@ use knot_git::{Layout, RefUpdate, Repo};
 use knot_postreceive::{Actor, Ci, LanguagesPushBudget, OwnerLabel, PullLink, post_receive};
 use knot_runtime::{ManualClock, UnixMicros};
 use knot_types::{
-    AccountDid, AppviewEndpoint, BranchName, CiLogsAddr, Handle, Oid, OwnerDid, PushOption,
-    PushOptions, RefName, RepoDid, RepoRkey,
+    AccountDid, AppviewEndpoint, BranchName, CiLogsAddr, Handle, Oid, OriginUrl, OwnerDid,
+    PushOption, PushOptions, RefName, RepoDid, RepoRkey,
 };
 
 const DID: &str = "did:plc:limpet";
@@ -636,7 +636,7 @@ fn no_pull_request_link_for_default_existing_forked_or_rootless_branches() {
         ("new branch on a fork with an origin remote", |w| {
             let head = create_feature(w);
             w.repo
-                .set_origin_url("https://oyster.cafe/did:plc:squid/anemone")
+                .set_origin_url(&OriginUrl::new("https://oyster.cafe/did:plc:squid/anemone"))
                 .unwrap();
             created("feature", head)
         }),

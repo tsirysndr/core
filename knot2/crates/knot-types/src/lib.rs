@@ -8,9 +8,9 @@ mod ids;
 pub use ids::{
     AccountDid, ActorId, AppviewEndpoint, AuthorName, BranchName, ChangeId, CiLogsAddr, ClonePath,
     CobId, Email, HttpStatus, KnotHostname, KnotId, KnotServiceUrl, LanguageBytes, LanguageName,
-    LogsHost, LogsPort, ObjectCount, ObjectFormat, OfferedKey, Oid, OwnerDid, OwnerRef, ParseError,
-    PushOption, PushOptions, RefName, RefTransition, RepoDid, RepoName, RepoPath, RepoRkey,
-    ServiceDid, TagName, TypeName, UnixMicros, UnixSeconds,
+    LogsHost, LogsPort, ObjectCount, ObjectFormat, OfferedKey, Oid, OriginUrl, OwnerDid, OwnerRef,
+    ParseError, PushOption, PushOptions, RefName, RefTransition, RepoDid, RepoName, RepoPath,
+    RepoRkey, ServiceDid, TagName, TypeName, UnixMicros, UnixSeconds,
 };
 
 mod policy;

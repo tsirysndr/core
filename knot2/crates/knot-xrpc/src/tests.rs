@@ -22,8 +22,8 @@ use knot_runtime::{
 };
 use knot_secrets::{MasterKey, SealedStore};
 use knot_types::{
-    AccountDid, AdmissionPolicy, AuthorName, Email, KnotHostname, KnotId, OwnerDid, RepoDid,
-    RepoRkey,
+    AccountDid, AdmissionPolicy, AuthorName, Email, KnotHostname, KnotId, OriginUrl, OwnerDid,
+    RepoDid, RepoName, RepoRkey,
 };
 
 use crate::XrpcState;
@@ -1475,11 +1475,11 @@ async fn resolve_by_name_matches_the_rkey_case_sensitively() {
     );
 
     assert!(
-        crate::merge::resolve_by_name(&*state, &owner, "anemone").is_ok(),
+        crate::merge::resolve_by_name(&*state, &owner, &RepoName::new("anemone").unwrap()).is_ok(),
         "the exact rkey resolves"
     );
     assert!(
-        crate::merge::resolve_by_name(&*state, &owner, "Anemone").is_err(),
+        crate::merge::resolve_by_name(&*state, &owner, &RepoName::new("Anemone").unwrap()).is_err(),
         "a differently-cased name must not resolve to a distinct rkey, atproto record keys are case-sensitive"
     );
 }
@@ -2878,10 +2878,7 @@ mod fork_endpoints {
             Some(setup.tip)
         );
         assert_eq!(fork.default_branch().unwrap().as_str(), "refs/heads/main");
-        assert_eq!(
-            fork.origin_url().as_deref(),
-            Some(source_url("kelp").as_str())
-        );
+        assert_eq!(fork.origin_url(), Some(OriginUrl::new(source_url("kelp"))));
         assert!(
             fork.references().unwrap().iter().all(|record| {
                 !record.name.as_str().starts_with("refs/cobs/")
@@ -2990,6 +2987,134 @@ mod fork_endpoints {
     }
 
     #[tokio::test]
+    async fn hidden_ref_resolves_a_file_origin_by_trailing_segments() {
+        let setup = forked_world().await;
+        let source = setup.world.layout.open(&setup.source_did).unwrap();
+        let hidden = RefName::new("refs/hidden/feature/main").unwrap();
+
+        setup
+            .world
+            .layout
+            .open(&setup.fork_did)
+            .unwrap()
+            .set_origin_url(&OriginUrl::new(format!(
+                "file:///home/git/{}",
+                setup.source_did.as_str()
+            )))
+            .unwrap();
+        let did_tip = advance(&source, &main_ref(), "spray.txt", "salt\n", 1_002);
+        assert_eq!(
+            track_hidden(&setup.world, "feature", "main").await,
+            StatusCode::OK
+        );
+        assert_eq!(
+            setup
+                .world
+                .layout
+                .open(&setup.fork_did)
+                .unwrap()
+                .find_ref(&hidden)
+                .unwrap(),
+            Some(did_tip),
+            "a trailing repo did resolves to the source repo"
+        );
+
+        setup
+            .world
+            .layout
+            .open(&setup.fork_did)
+            .unwrap()
+            .set_origin_url(&OriginUrl::new(format!(
+                "file:///home/git/did:web:{MEMBER_HOST}/kelp"
+            )))
+            .unwrap();
+        let named_tip = advance(&source, &main_ref(), "swell.txt", "tide\n", 1_003);
+        assert_eq!(
+            track_hidden(&setup.world, "feature", "main").await,
+            StatusCode::OK
+        );
+        assert_eq!(
+            setup
+                .world
+                .layout
+                .open(&setup.fork_did)
+                .unwrap()
+                .find_ref(&hidden)
+                .unwrap(),
+            Some(named_tip),
+            "a trailing owner and name resolves to the source repo"
+        );
+    }
+
+    #[tokio::test]
+    async fn hidden_ref_rejects_a_stale_or_non_http_stored_origin() {
+        let setup = forked_world().await;
+        let fork = setup.world.layout.open(&setup.fork_did).unwrap();
+
+        fork.set_origin_url(&OriginUrl::new("file:///home/git/did:plc:whelk"))
+            .unwrap();
+        assert_eq!(
+            track_hidden(&setup.world, "feature", "main").await,
+            StatusCode::NOT_FOUND,
+            "the knot reports not found for a file origin with an unknown repo did"
+        );
+
+        fork.set_origin_url(&OriginUrl::new("ssh://knot.nel.pet/did:plc:whelk/ghost"))
+            .unwrap();
+        assert_eq!(
+            track_hidden(&setup.world, "feature", "main").await,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "the knot reports an internal error for a stored origin scheme other than http, https, or file"
+        );
+
+        fork.set_origin_url(&OriginUrl::new("file:///kelp"))
+            .unwrap();
+        assert_eq!(
+            track_hidden(&setup.world, "feature", "main").await,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "the knot reports an internal error for a file origin whose only path segment isn't a DID"
+        );
+    }
+
+    #[test]
+    fn parse_trailing_resolves_each_stored_path_shape() {
+        let shape = |raw: &str| {
+            let url = url::Url::parse(raw).unwrap();
+            match crate::forks::LocalPath::parse_trailing(&url) {
+                Ok(crate::forks::LocalPath::Did(did)) => format!("did {did}"),
+                Ok(crate::forks::LocalPath::Named { owner, name }) => {
+                    format!("named {owner} {name}")
+                }
+                Err(reason) => format!("err {reason}"),
+            }
+        };
+        [
+            (
+                "file:///home/git/did:web:oyster.cafe/kelp",
+                "named did:web:oyster.cafe kelp",
+            ),
+            (
+                "file:///home/git/did:web:oyster.cafe/kelp.git",
+                "named did:web:oyster.cafe kelp",
+            ),
+            (
+                "file:///home/git/did:web:oyster.cafe/did:plc:squid",
+                "named did:web:oyster.cafe did:plc:squid",
+            ),
+            ("file:///data/repos/did:plc:squid", "did did:plc:squid"),
+            ("file:///did:plc:squid", "did did:plc:squid"),
+            (
+                "file:///home/git/kelp",
+                "err path ends in neither /owner-did/name or /repo-did",
+            ),
+            ("file:///kelp", "err path isn't a DID"),
+            ("file:///", "err path must be /did or /owner/name"),
+        ]
+        .into_iter()
+        .for_each(|(raw, expected)| assert_eq!(shape(raw), expected, "{raw}"));
+    }
+
+    #[tokio::test]
     async fn fork_status_reports_up_to_date_fast_forwardable_and_conflict() {
         let setup = forked_world().await;
         assert_eq!(
@@ -3087,7 +3212,7 @@ mod fork_endpoints {
             "a fork of a sha1 upstream must be sha1 so the upstream's objects ingest"
         );
         assert_eq!(fork.find_ref(&main_ref()).unwrap(), Some(tip));
-        assert_eq!(fork.origin_url().as_deref(), Some(remote));
+        assert_eq!(fork.origin_url(), Some(OriginUrl::new(remote)));
         assert_eq!(
             fork.read_blob(
                 fork.entry_at(tip, &knot_types::RepoPath::new("tide.txt").unwrap())

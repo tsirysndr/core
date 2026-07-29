@@ -17,10 +17,10 @@ use knot_index::Resolved;
 use knot_postreceive::{Actor, Ci};
 use knot_runtime::{Clock, HttpTransport};
 use knot_types::{
-    AuthorName, BranchName, Email, Oid, OwnerDid, RefName, RepoDid, RepoRkey, UnixSeconds,
+    AuthorName, BranchName, Email, Oid, OwnerDid, RefName, RepoDid, RepoName, RepoRkey, UnixSeconds,
 };
 
-use crate::body::{CommitBody, CommitMessage, Patch, RepoNameArg};
+use crate::body::{CommitBody, CommitMessage, Patch};
 use crate::error::XrpcError;
 use crate::reads::{open, repo_not_found, warming};
 use crate::{XrpcState, decode, ok_empty, run_blocking};
@@ -40,7 +40,7 @@ pub struct Committer {
 #[serde(rename_all = "camelCase")]
 struct MergeInput {
     did: OwnerDid,
-    name: RepoNameArg,
+    name: RepoName,
     patch: Patch,
     branch: BranchName,
     author_name: Option<AuthorName>,
@@ -52,7 +52,7 @@ struct MergeInput {
 #[derive(Deserialize)]
 struct MergeCheckInput {
     did: OwnerDid,
-    name: RepoNameArg,
+    name: RepoName,
     patch: Patch,
     branch: BranchName,
 }
@@ -156,9 +156,9 @@ fn parse_specs(
 pub(crate) fn resolve_by_name<H: HttpTransport, C: Clock>(
     state: &XrpcState<H, C>,
     owner: &OwnerDid,
-    name: &str,
+    name: &RepoName,
 ) -> Result<RepoDid, XrpcError> {
-    let rkey = RepoRkey::new(name).map_err(|_| repo_not_found())?;
+    let rkey = RepoRkey::new(name.as_str()).map_err(|_| repo_not_found())?;
     match state.index.resolve_repo(owner, &rkey) {
         Resolved::Ready(found) => found.ok_or_else(repo_not_found),
         Resolved::Warming => Err(warming()),
@@ -383,7 +383,7 @@ pub(crate) async fn merge<H: HttpTransport, C: Clock>(
 ) -> Result<Response, XrpcError> {
     let actor = state.authenticate(&headers, &method).await?;
     let input: MergeInput = decode(&body)?;
-    let repo_did = resolve_by_name(&state, &input.did, input.name.as_str())?;
+    let repo_did = resolve_by_name(&state, &input.did, &input.name)?;
     crate::authorize_push(
         &state,
         &actor,
@@ -502,7 +502,7 @@ pub(crate) async fn merge_check<H: HttpTransport, C: Clock>(
     body: Bytes,
 ) -> Result<Response, XrpcError> {
     let input: MergeCheckInput = decode(&body)?;
-    let repo_did = resolve_by_name(&state, &input.did, input.name.as_str())?;
+    let repo_did = resolve_by_name(&state, &input.did, &input.name)?;
     let refname = input.branch.head_ref();
     let layout = state.layout.clone();
     let max_patch_bytes = state.byte_limits.patch_decompressed.get();

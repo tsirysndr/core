@@ -14,9 +14,9 @@ use knot_index::Resolved;
 use knot_pack::{FetchError, HaveOids, PackLimits, UpstreamRefs, WantOids};
 use knot_postreceive::{Actor, Ci};
 use knot_runtime::{Clock, HttpTransport};
-use knot_types::{BranchName, ObjectFormat, Oid, OwnerDid, RefName, RepoDid};
+use knot_types::{BranchName, ObjectFormat, Oid, OriginUrl, OwnerDid, RefName, RepoDid, RepoName};
 
-use crate::body::{ForkRef, RemoteRef, RepoAtUri, RepoNameArg, Revspec, SourceUrl};
+use crate::body::{ForkRef, RemoteRef, RepoAtUri, Revspec, SourceUrl};
 use crate::branches::resolve_at_uri;
 use crate::error::XrpcError;
 use crate::{XrpcState, decode, ok_empty, run_blocking};
@@ -39,37 +39,70 @@ fn url_authority(url: &Url) -> String {
     }
 }
 
-fn resolve_local_path<H: HttpTransport, C: Clock>(
-    state: &XrpcState<H, C>,
-    url: &Url,
-) -> Result<RepoDid, XrpcError> {
-    let segments: Vec<&str> = url
-        .path_segments()
+fn path_segments(url: &Url) -> Vec<&str> {
+    url.path_segments()
         .map(|segments| segments.filter(|segment| !segment.is_empty()).collect())
-        .unwrap_or_default();
-    match segments.as_slice() {
-        [did] => {
-            let did = RepoDid::new(*did)
-                .map_err(|_| XrpcError::invalid_request("fork source path isn't a DID"))?;
-            match state.index.owner_of(&did) {
-                Resolved::Ready(Some(_)) => Ok(did),
-                Resolved::Ready(None) => Err(XrpcError::not_found(
-                    "fork source isn't hosted on this knot",
-                )),
-                Resolved::Warming => {
-                    Err(XrpcError::warming("registry projection is still warming"))
-                }
-            }
+        .unwrap_or_default()
+}
+
+pub(crate) enum LocalPath {
+    Did(RepoDid),
+    Named { owner: OwnerDid, name: RepoName },
+}
+
+impl LocalPath {
+    // The go knot at one point cloned same-host forks like
+    // `file:///home/git/<owner-did>/<name>` URLs,
+    // so over here in the future what we're gonna do
+    // instead of rewriting them all is take the trailing
+    // segments, pretend /home/git doesn't exist, and voila,
+    // we somewhat know which repo.
+    pub(crate) fn parse_trailing(url: &Url) -> Result<Self, &'static str> {
+        let segments = path_segments(url);
+        match segments.as_slice() {
+            [.., owner, name] => match OwnerDid::new(*owner) {
+                Ok(owner) => Self::named(owner, name),
+                Err(_) => RepoDid::new(*name)
+                    .map(Self::Did)
+                    .map_err(|_| "path ends in neither /owner-did/name or /repo-did"),
+            },
+            other => Self::from_segments(other),
         }
-        [owner, name] => {
-            let owner = OwnerDid::new(*owner)
-                .map_err(|_| XrpcError::invalid_request("fork source owner segment isn't a DID"))?;
-            let name = name.strip_suffix(".git").unwrap_or(name);
-            crate::merge::resolve_by_name(state, &owner, name)
+    }
+
+    fn from_segments(segments: &[&str]) -> Result<Self, &'static str> {
+        match segments {
+            [did] => RepoDid::new(*did)
+                .map(Self::Did)
+                .map_err(|_| "path isn't a DID"),
+            [owner, name] => OwnerDid::new(*owner)
+                .map_err(|_| "owner segment isn't a DID")
+                .and_then(|owner| Self::named(owner, name)),
+            _ => Err("path must be /did or /owner/name"),
         }
-        _ => Err(XrpcError::invalid_request(
-            "fork source path must be /did or /owner/name",
-        )),
+    }
+
+    fn named(owner: OwnerDid, name: &str) -> Result<Self, &'static str> {
+        let name = name.strip_suffix(".git").unwrap_or(name);
+        RepoName::new(name)
+            .map(|name| Self::Named { owner, name })
+            .map_err(|_| "name segment isn't a valid repo name")
+    }
+}
+
+fn resolve_local<H: HttpTransport, C: Clock>(
+    state: &XrpcState<H, C>,
+    path: &LocalPath,
+) -> Result<RepoDid, XrpcError> {
+    match path {
+        LocalPath::Did(did) => match state.index.owner_of(did) {
+            Resolved::Ready(Some(_)) => Ok(did.clone()),
+            Resolved::Ready(None) => Err(XrpcError::not_found(
+                "fork source isn't hosted on this knot",
+            )),
+            Resolved::Warming => Err(XrpcError::warming("registry projection is still warming")),
+        },
+        LocalPath::Named { owner, name } => crate::merge::resolve_by_name(state, owner, name),
     }
 }
 
@@ -79,9 +112,43 @@ pub(crate) fn resolve_upstream<H: HttpTransport, C: Clock>(
 ) -> Result<Upstream, XrpcError> {
     let url = source.as_url();
     if url_authority(url) == state.knot_authority() {
-        return resolve_local_path(state, url).map(Upstream::Local);
+        return LocalPath::from_segments(&path_segments(url))
+            .map_err(|reason| XrpcError::invalid_request(format!("fork source {reason}")))
+            .and_then(|path| resolve_local(state, &path))
+            .map(Upstream::Local);
     }
     Ok(Upstream::Remote(url.clone()))
+}
+
+enum ForkOrigin {
+    Source(SourceUrl),
+    File(Url),
+}
+
+impl ForkOrigin {
+    fn parse(origin: &OriginUrl) -> Result<Self, &'static str> {
+        let url = Url::parse(origin.as_str()).map_err(|_| "isn't a valid url")?;
+        match url.scheme() {
+            "file" => Ok(Self::File(url)),
+            "http" | "https" => SourceUrl::from_url(url)
+                .map(Self::Source)
+                .map_err(|_| "has no host"),
+            _ => Err("scheme isn't http, https, or file"),
+        }
+    }
+}
+
+fn resolve_origin<H: HttpTransport, C: Clock>(
+    state: &XrpcState<H, C>,
+    origin: &ForkOrigin,
+) -> Result<Upstream, XrpcError> {
+    match origin {
+        ForkOrigin::Source(source) => resolve_upstream(state, source),
+        ForkOrigin::File(url) => LocalPath::parse_trailing(url)
+            .map_err(|reason| XrpcError::internal(format!("stored fork origin {reason}")))
+            .and_then(|path| resolve_local(state, &path))
+            .map(Upstream::Local),
+    }
 }
 
 pub(crate) struct ForkSource {
@@ -222,7 +289,7 @@ pub(crate) fn populate_fork(
     {
         repo.set_head(head)?;
     }
-    repo.set_origin_url(origin.as_str())
+    repo.set_origin_url(&OriginUrl::new(origin.as_str()))
         .map_err(XrpcError::from)
 }
 
@@ -295,7 +362,7 @@ fn force_ref(
 const FORK_DENIED: &str = "only repository owner or a collaborator may operate on this fork";
 
 struct ForkState {
-    origin: SourceUrl,
+    origin: ForkOrigin,
     haves: Vec<Oid>,
     object_format: ObjectFormat,
 }
@@ -304,8 +371,8 @@ fn load_fork_state(repo: &Repo) -> Result<ForkState, XrpcError> {
     let origin = repo.origin_url().ok_or_else(|| {
         XrpcError::invalid_request("this repository isn't a fork and has no upstream")
     })?;
-    let origin = SourceUrl::parse(&origin)
-        .map_err(|reason| XrpcError::internal(format!("stored fork origin: {reason}")))?;
+    let origin = ForkOrigin::parse(&origin)
+        .map_err(|reason| XrpcError::internal(format!("stored fork origin {reason}")))?;
     let haves = repo
         .references()?
         .into_iter()
@@ -367,7 +434,7 @@ async fn pull_upstream_branch<H: HttpTransport, C: Clock>(
     })
     .await?;
 
-    let upstream = resolve_upstream(state, &fork.origin)?;
+    let upstream = resolve_origin(state, &fork.origin)?;
     let refs = upstream_refs(state, &upstream, vec![branch.as_str().to_string()]).await?;
     if refs.object_format != fork.object_format {
         return Err(XrpcError::conflict(format!(
@@ -426,7 +493,7 @@ async fn pull_upstream_branch<H: HttpTransport, C: Clock>(
 #[derive(Deserialize)]
 struct ForkSyncInput {
     did: OwnerDid,
-    name: RepoNameArg,
+    name: RepoName,
     branch: BranchName,
 }
 
@@ -438,7 +505,7 @@ pub(crate) async fn fork_sync<H: HttpTransport, C: Clock>(
 ) -> Result<Response, XrpcError> {
     let actor = state.authenticate(&headers, &method).await?;
     let input: ForkSyncInput = decode(&body)?;
-    let repo_did = crate::merge::resolve_by_name(&state, &input.did, input.name.as_str())?;
+    let repo_did = crate::merge::resolve_by_name(&state, &input.did, &input.name)?;
     crate::authorize_push(&state, &actor, &repo_did, FORK_DENIED).await?;
     let branch = input.branch.head_ref();
     let sync = pull_upstream_branch(
@@ -572,7 +639,7 @@ impl ForkStatus {
 #[derive(Deserialize)]
 struct ForkStatusInput {
     did: OwnerDid,
-    name: Option<RepoNameArg>,
+    name: Option<RepoName>,
     #[serde(default, deserialize_with = "crate::body::optional_source_url")]
     source: Option<SourceUrl>,
     branch: Revspec,
@@ -585,11 +652,11 @@ struct ForkStatusOutput {
     status: u8,
 }
 
-fn source_basename(source: &Url) -> Option<String> {
+fn source_basename(source: &Url) -> Option<RepoName> {
     source
         .path_segments()
         .and_then(|mut segments| segments.rfind(|segment| !segment.is_empty()))
-        .map(str::to_string)
+        .and_then(|segment| RepoName::new(segment).ok())
 }
 
 pub(crate) async fn fork_status<H: HttpTransport, C: Clock>(
@@ -602,8 +669,6 @@ pub(crate) async fn fork_status<H: HttpTransport, C: Clock>(
     let input: ForkStatusInput = decode(&body)?;
     let name = input
         .name
-        .as_ref()
-        .map(|name| name.as_str().to_string())
         .or_else(|| {
             input
                 .source
@@ -611,7 +676,9 @@ pub(crate) async fn fork_status<H: HttpTransport, C: Clock>(
                 .and_then(|source| source_basename(source.as_url()))
         })
         .ok_or_else(|| {
-            XrpcError::invalid_request("neither name nor a source url with path was supplied")
+            XrpcError::invalid_request(
+                "the request has neither a name or a source url ending in a repo name",
+            )
         })?;
     let repo_did = crate::merge::resolve_by_name(&state, &input.did, &name)?;
     crate::authorize_push(&state, &actor, &repo_did, FORK_DENIED).await?;

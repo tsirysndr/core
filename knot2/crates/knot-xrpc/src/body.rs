@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use serde::de::{self, Deserializer};
 
-use knot_types::{AtUri, RefName, RepoName};
+use knot_types::{AtUri, RefName};
 use url::Url;
 
 pub(crate) struct RepoAtUri(AtUri<String>);
@@ -21,29 +21,15 @@ impl<'de> Deserialize<'de> for RepoAtUri {
     }
 }
 
-pub(crate) struct RepoNameArg(RepoName);
-
-impl RepoNameArg {
-    pub(crate) fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
-impl<'de> Deserialize<'de> for RepoNameArg {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = String::deserialize(deserializer)?;
-        RepoName::new(raw)
-            .map(RepoNameArg)
-            .map_err(de::Error::custom)
-    }
-}
-
 #[derive(Clone)]
 pub(crate) struct SourceUrl(Url);
 
 impl SourceUrl {
-    pub(crate) fn parse(raw: &str) -> Result<Self, &'static str> {
-        parse_source_url(raw)
+    pub(crate) fn from_url(url: Url) -> Result<Self, &'static str> {
+        match matches!(url.scheme(), "http" | "https") && url.has_host() {
+            true => Ok(Self(url)),
+            false => Err("source must be an http or https url"),
+        }
     }
 
     pub(crate) fn as_str(&self) -> &str {
@@ -64,10 +50,7 @@ impl<'de> Deserialize<'de> for SourceUrl {
 
 fn parse_source_url(raw: &str) -> Result<SourceUrl, &'static str> {
     let url = Url::parse(raw).map_err(|_| "source must be a valid url")?;
-    match matches!(url.scheme(), "http" | "https") && url.has_host() {
-        true => Ok(SourceUrl(url)),
-        false => Err("source must be an http or https url"),
-    }
+    SourceUrl::from_url(url)
 }
 
 // A sourceless repo is a plain repo not a bad request necessarily,

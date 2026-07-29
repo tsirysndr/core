@@ -152,6 +152,10 @@ crate::text_newtype! {
     pub struct Email(String) => strip_control;
 }
 
+crate::text_newtype! {
+    pub struct OriginUrl(String) => verbatim;
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct LanguageName(&'static str);
 
