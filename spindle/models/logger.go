@@ -1,6 +1,7 @@
 package models
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -87,20 +88,35 @@ type dataWriter struct {
 
 func (w *dataWriter) Write(p []byte) (int, error) {
 	w.pending = append(w.pending, p...)
-	window := w.logger.mask.Window()
-	// anything within window of the tail might be half a secret, keep
-	// it buffered
-	if len(w.pending) <= window {
-		return len(p), nil
+	if err := w.flushCompleteLines(); err != nil {
+		return 0, err
 	}
-	emit := w.pending[:len(w.pending)-window]
-	// copy the tail out, emit still aliases the same backing array
-	w.pending = append([]byte(nil), w.pending[len(w.pending)-window:]...)
-	return len(p), w.emit(emit)
+	return len(p), nil
 }
 
-// the writer is done, so a buffered tail can no longer grow into a
-// full secret and goes out as-is
+func (w *dataWriter) flushCompleteLines() error {
+	limit := len(w.pending) - w.logger.mask.Window()
+	if limit <= 0 {
+		return nil
+	}
+
+	for {
+		lineEnd := bytes.IndexByte(w.pending[:limit], '\n')
+		if lineEnd < 0 {
+			return nil
+		}
+		lineEnd++
+		line := append([]byte(nil), w.pending[:lineEnd]...)
+		w.pending = w.pending[lineEnd:]
+		limit -= lineEnd
+		if err := w.emit(line); err != nil {
+			return err
+		}
+	}
+}
+
+// the writer is done, so a buffered tail can no longer grow into a full
+// secret and goes out as-is
 func (w *dataWriter) flush() error {
 	if len(w.pending) == 0 {
 		return nil

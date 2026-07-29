@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,24 @@ import (
 
 func testWorkflowId(name string) WorkflowId {
 	return WorkflowId{PipelineId: PipelineId{Knot: "knot1", Rkey: "rkey1"}, Name: name}
+}
+
+func readDataContents(t *testing.T, path string) []string {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got []string
+	for _, encoded := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		var line LogLine
+		if err := json.Unmarshal([]byte(encoded), &line); err != nil {
+			t.Fatalf("decode log line %q: %v", encoded, err)
+		}
+		got = append(got, line.Content)
+	}
+	return got
 }
 
 func TestDataWriterMasksSecretSplitAcrossWrites(t *testing.T) {
@@ -43,6 +62,9 @@ func TestDataWriterMasksSecretSplitAcrossWrites(t *testing.T) {
 	// trailing bytes land in the final flush entry contiguously
 	if !strings.Contains(string(raw), "suffix") {
 		t.Errorf("log lost trailing output: %s", raw)
+	}
+	if got := strings.Join(readDataContents(t, filepath.Join(dir, wid.String()+".log")), "\n"); got != "prefix *** suffix" {
+		t.Errorf("masked output changed: %q", got)
 	}
 }
 
@@ -98,5 +120,63 @@ func TestDataWriterNoMaskPassthrough(t *testing.T) {
 	}
 	if !strings.Contains(string(raw), "hello") || !strings.Contains(string(raw), " world") {
 		t.Errorf("log missing output: %s", raw)
+	}
+}
+
+func TestDataWriterDoesNotSplitSafeFragmentsIntoLogLines(t *testing.T) {
+	dir := t.TempDir()
+	wid := testWorkflowId("line-boundaries")
+	logger, err := NewFileWorkflowLogger(dir, wid, []string{"a-secret-with-a-long-window"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := logger.DataWriter(0, "stdout")
+	want := []string{
+		"first line",
+		"second line",
+		"third line",
+		"fourth line",
+		"fifth line",
+		"sixth line",
+		"seventh line",
+		"eighth line",
+	}
+	for _, line := range want {
+		if _, err := w.Write([]byte(line + "\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := logger.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	got := readDataContents(t, filepath.Join(dir, wid.String()+".log"))
+
+	if joined := strings.Join(got, "\n"); joined != strings.Join(want, "\n") {
+		t.Fatalf("log content was split at masking window:\n got: %q\nwant: %q", joined, strings.Join(want, "\n"))
+	}
+}
+
+func TestDataWriterMasksMultilineSecret(t *testing.T) {
+	dir := t.TempDir()
+	secret := "line-one\nline-two"
+	wid := testWorkflowId("multiline-mask")
+	logger, err := NewFileWorkflowLogger(dir, wid, []string{secret})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := logger.DataWriter(0, "stdout")
+	chunk := strings.Repeat("p", 40) + "\nline-one\nline-two\n" + strings.Repeat("t", 30) + "\nsuffix\n"
+	if _, err := w.Write([]byte(chunk)); err != nil {
+		t.Fatal(err)
+	}
+	if err := logger.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	got := strings.Join(readDataContents(t, filepath.Join(dir, wid.String()+".log")), "\n")
+	want := strings.Repeat("p", 40) + "\n***\n***\n" + strings.Repeat("t", 30) + "\nsuffix"
+	if got != want {
+		t.Fatalf("multiline secret was not masked: %q", got)
 	}
 }

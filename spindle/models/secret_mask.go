@@ -18,22 +18,34 @@ type SecretMask struct {
 // Also registers base64-encoded variants of each secret.
 func NewSecretMask(values []string) *SecretMask {
 	var pairs []string
+	add := func(value string) {
+		if value != "" {
+			pairs = append(pairs, value, "***")
+		}
+	}
 
 	for _, value := range values {
 		if value == "" {
 			continue
 		}
 
-		pairs = append(pairs, value, "***")
+		add(value)
+		// mask each non-empty line of a multiline secret
+		// output may split a secret over multiple log lines...
+		for _, line := range strings.FieldsFunc(value, func(r rune) bool {
+			return r == '\r' || r == '\n'
+		}) {
+			add(line)
+		}
 
 		b64 := base64.StdEncoding.EncodeToString([]byte(value))
 		if b64 != value {
-			pairs = append(pairs, b64, "***")
+			add(b64)
 		}
 
 		b64NoPad := strings.TrimRight(b64, "=")
 		if b64NoPad != b64 && b64NoPad != value {
-			pairs = append(pairs, b64NoPad, "***")
+			add(b64NoPad)
 		}
 	}
 

@@ -133,3 +133,16 @@ func TestSecretMask_EmptySecretsFiltered(t *testing.T) {
 		t.Errorf("expected %q, got %q", expected, result)
 	}
 }
+
+func TestSecretMask_MultilineSecretLines(t *testing.T) {
+	mask := NewSecretMask([]string{"line-one\nline-two"})
+
+	if result := mask.Mask("line-one\nline-two"); result != "***" {
+		t.Errorf("full multiline secret: expected %q, got %q", "***", result)
+	}
+	for _, line := range []string{"line-one", "line-two"} {
+		if result := mask.Mask(line); result != "***" {
+			t.Errorf("secret line %q: expected %q, got %q", line, "***", result)
+		}
+	}
+}
