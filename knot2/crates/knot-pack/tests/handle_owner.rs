@@ -6,7 +6,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use knot_git::Layout;
-use knot_pack::{CacheConfig, HandleResolver, RepoLookup, RepoResolver, RepoTarget};
+use knot_pack::{HandleResolver, RepoLookup, RepoResolver, RepoTarget};
 use knot_types::{AccountDid, Handle, OwnerDid, RepoDid};
 use tower::ServiceExt;
 
@@ -38,17 +38,15 @@ fn repo_resolver() -> Arc<dyn RepoResolver> {
 }
 
 fn build(layout: &Layout, handle_resolver: Option<Arc<dyn HandleResolver>>) -> axum::Router {
-    let (_write, advertisement) = knot_pack::edge_routes(
-        layout.clone(),
-        repo_resolver(),
-        None,
+    let (_write, advertisement) = knot_pack::edge_routes(knot_pack::EdgeConfig {
         handle_resolver,
-        knot_resource::PackSlots::new(4),
-        CacheConfig::default(),
-        Arc::new(knot_messages::Catalog::defaults()),
-        knot_pack::default_hostname().clone(),
-        Arc::new(knot_runtime::SystemClock),
-    );
+        pack_slots: knot_resource::PackSlots::new(4),
+        ..knot_pack::EdgeConfig::serving(
+            layout.clone(),
+            repo_resolver(),
+            Arc::new(knot_runtime::SystemClock),
+        )
+    });
     advertisement.into_router()
 }
 

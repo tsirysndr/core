@@ -7,7 +7,7 @@ use futures::stream::StreamExt;
 use knot_atproto::Atproto;
 use knot_cob::{CobHome, CobStore};
 use knot_cobs::{CollaboratorsChange, Grant, MembersChange, Registration, RegistryChange};
-use knot_git::{Layout, Repo};
+use knot_git::{ArchiveLimit, Layout, Repo};
 use knot_index::Index;
 use knot_pack::MaxWireBytes;
 use knot_postreceive::LanguagesPushBudget;
@@ -205,13 +205,21 @@ async fn spawn_server_with(
     max_pack_bytes: MaxWireBytes,
     warm: bool,
 ) -> (Server, Arc<Index>) {
-    let (server, index, _, _) = spawn_server_core(published_line, max_pack_bytes, warm, None).await;
+    let (server, index, _, _) = spawn_server_core(
+        published_line,
+        max_pack_bytes,
+        ArchiveLimit::default(),
+        warm,
+        None,
+    )
+    .await;
     (server, index)
 }
 
 async fn spawn_server_core(
     published_line: String,
     max_pack_bytes: MaxWireBytes,
+    archive_limit: ArchiveLimit,
     warm: bool,
     lfs: Option<knot_lfs::LfsHandle>,
 ) -> (
@@ -291,20 +299,21 @@ async fn spawn_server_core(
             knot_events::ReplayBytes::new(16 << 20).unwrap(),
         ),
     ));
-    let base = knot_ssh::SshState::new(
-        layout.clone(),
-        Arc::clone(&index),
+    let base = knot_ssh::SshState::new(knot_ssh::SshConfig {
+        layout: layout.clone(),
+        index: Arc::clone(&index),
         atproto,
-        actor_for_seed(1),
-        Arc::clone(&events),
-        knot_types::KnotHostname::new("knot.test").unwrap(),
-        knot_types::AppviewEndpoint::new("https://tangled.test").unwrap(),
-        std::collections::BTreeSet::new(),
-        knot_types::AdmissionPolicy::Closed,
+        knot_actor: actor_for_seed(1),
+        events: Arc::clone(&events),
+        hostname: knot_types::KnotHostname::new("knot.test").unwrap(),
+        appview: knot_types::AppviewEndpoint::new("https://tangled.test").unwrap(),
+        admins: std::collections::BTreeSet::new(),
+        admission: knot_types::AdmissionPolicy::Closed,
         max_pack_bytes,
-        LanguagesPushBudget::new(std::time::Duration::from_secs(2)),
-        None,
-    );
+        archive_limit,
+        languages_push_budget: LanguagesPushBudget::new(std::time::Duration::from_secs(2)),
+        ci_logs: None,
+    });
     let state = Arc::new(match lfs {
         Some(handle) => base.with_lfs(handle, 2),
         None => base,
@@ -470,9 +479,20 @@ struct Fixture {
 }
 
 async fn fixture() -> Fixture {
+    fixture_with_archive_limit(ArchiveLimit::default()).await
+}
+
+async fn fixture_with_archive_limit(archive_limit: ArchiveLimit) -> Fixture {
     let scratch = tempfile::tempdir().unwrap();
     let (key_path, public_line) = keygen(scratch.path(), "client");
-    let (server, index) = spawn_server(public_line, MaxWireBytes::new(1 << 30)).await;
+    let (server, index, _, _) = spawn_server_core(
+        public_line,
+        MaxWireBytes::new(1 << 30),
+        archive_limit,
+        true,
+        None,
+    )
+    .await;
     let url = format!(
         "ssh://git@127.0.0.1:{}/{OWNER_DID}/{REPO_NAME}",
         server.port
@@ -1081,20 +1101,21 @@ async fn launch(
             knot_events::ReplayBytes::new(16 << 20).unwrap(),
         ),
     ));
-    let state = Arc::new(knot_ssh::SshState::new(
+    let state = Arc::new(knot_ssh::SshState::new(knot_ssh::SshConfig {
         layout,
         index,
         atproto,
-        actor_for_seed(77),
+        knot_actor: actor_for_seed(77),
         events,
-        knot_types::KnotHostname::new("knot.test").unwrap(),
-        knot_types::AppviewEndpoint::new("https://tangled.test").unwrap(),
-        std::collections::BTreeSet::new(),
-        knot_types::AdmissionPolicy::Closed,
-        MaxWireBytes::new(1 << 30),
-        LanguagesPushBudget::new(std::time::Duration::from_secs(2)),
-        None,
-    ));
+        hostname: knot_types::KnotHostname::new("knot.test").unwrap(),
+        appview: knot_types::AppviewEndpoint::new("https://tangled.test").unwrap(),
+        admins: std::collections::BTreeSet::new(),
+        admission: knot_types::AdmissionPolicy::Closed,
+        max_pack_bytes: MaxWireBytes::new(1 << 30),
+        archive_limit: ArchiveLimit::default(),
+        languages_push_budget: LanguagesPushBudget::new(std::time::Duration::from_secs(2)),
+        ci_logs: None,
+    }));
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     tokio::spawn(async move {
@@ -1339,7 +1360,7 @@ async fn git_archive_remote_over_ssh_streams_a_tar_of_the_tree() {
     let fx = fixture().await;
     seed_work(&fx.work);
     let (ok, out) = push(&fx.work, &fx.url, &fx.key_path, &["main"]).await;
-    assert!(ok, "seeding push must land before archiving:\n{out}");
+    assert!(ok, "the seeding push must succeed before archiving:\n{out}");
 
     let out_tar = fx.scratch.path().join("archive.tar");
     let (ok, out) = git_ssh(
@@ -1362,6 +1383,35 @@ async fn git_archive_remote_over_ssh_streams_a_tar_of_the_tree() {
     assert!(
         knot_fixtures::contains(&tar, b"README.md"),
         "archived tar must contain the README.md entry"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn git_archive_remote_over_ssh_honors_the_configured_archive_limit() {
+    let fx = fixture_with_archive_limit(ArchiveLimit::new(512)).await;
+    seed_work(&fx.work);
+    let (ok, out) = push(&fx.work, &fx.url, &fx.key_path, &["main"]).await;
+    assert!(ok, "the seeding push must succeed before archiving:\n{out}");
+
+    let out_tar = fx.scratch.path().join("archive.tar");
+    let (ok, out) = git_ssh(
+        &fx.work,
+        &fx.key_path,
+        &[
+            "archive",
+            "--format=tar",
+            "--remote",
+            &fx.url,
+            "-o",
+            out_tar.to_str().unwrap(),
+            "HEAD",
+        ],
+    )
+    .await;
+    assert!(!ok, "git archive --remote past the limit must fail:\n{out}");
+    assert!(
+        out.contains("archive exceeds the 512 byte limit"),
+        "the refusal must reach the client over the ssh channel:\n{out}"
     );
 }
 
@@ -1480,6 +1530,7 @@ async fn shutdown_drains_an_in_flight_lfs_transfer_before_exit() {
     let (server, _index, shutdown, serve_task) = spawn_server_core(
         public_line,
         MaxWireBytes::new(1 << 20),
+        ArchiveLimit::default(),
         true,
         Some(handle.clone()),
     )

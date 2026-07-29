@@ -290,7 +290,7 @@ mod tests {
             RequestTimeout::from_millis(NonZeroU64::new(30_000).unwrap()),
             BodyInactivityTimeout::from_millis(NonZeroU64::new(30_000).unwrap()),
             WriteRequestTimeout::from_millis(NonZeroU64::new(1_800_000).unwrap()),
-            None,
+            knot_types::ProxyTrust::default(),
         )
         .prepare(&CancellationToken::new())
     }
@@ -312,7 +312,7 @@ mod tests {
             RequestTimeout::from_millis(NonZeroU64::new(30_000).unwrap()),
             BodyInactivityTimeout::from_millis(NonZeroU64::new(30_000).unwrap()),
             WriteRequestTimeout::from_millis(NonZeroU64::new(1_800_000).unwrap()),
-            None,
+            knot_types::ProxyTrust::default(),
         )
         .prepare(&CancellationToken::new())
     }

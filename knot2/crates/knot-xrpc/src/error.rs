@@ -120,6 +120,7 @@ impl From<knot_git::GitError> for XrpcError {
             GitError::AtomicRefs(_) => Self::conflict(message),
             GitError::UnsafeRepoDid(_) | GitError::ReservedDid(_) => Self::invalid_request(message),
             GitError::DepthExceeded(_) => Self::invalid_request(message),
+            GitError::ArchiveTooLarge { .. } => Self::request_too_large(message),
             GitError::Selection(_) => Self::overloaded(message),
             // Every oid passed to the object database here came from a ref this
             // knot already resolved or a tree it already read, so a miss means

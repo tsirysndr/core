@@ -483,7 +483,7 @@ async fn http_upload_archive_serves_a_framed_tar_and_guards_refuse_cob_raw_oids_
         args.iter()
             .for_each(|arg| request.extend(pkt(arg.as_bytes())));
         request.extend_from_slice(b"0000");
-        knot_pack::upload_archive(&repo, &request).unwrap()
+        knot_pack::upload_archive(&repo, &request, knot_git::ArchiveLimit::default()).unwrap()
     };
 
     let raw_arg = format!("argument {}\n", tree.to_hex());
@@ -524,6 +524,63 @@ async fn http_upload_archive_serves_a_framed_tar_and_guards_refuse_cob_raw_oids_
     assert!(
         !contains(&cob, b"README.md"),
         "refused archive mustn't leak the hidden tree's contents"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn http_upload_archive_honors_the_configured_archive_limit() {
+    use tower::ServiceExt as _;
+
+    let scan = tempfile::tempdir().unwrap();
+    let layout = Layout::new(scan.path());
+    let did = RepoDid::new("did:plc:limpet").unwrap();
+    layout.create(&did).unwrap();
+    let bare = layout.repo_path(&did).unwrap();
+
+    let scratch = tempfile::tempdir().unwrap();
+    let work = scratch.path().join("work");
+    seed_repo(&work, bare.to_str().unwrap(), "README.md", "archive me\n");
+
+    let (write_routes, _advertisement) = knot_pack::edge_routes(knot_pack::EdgeConfig {
+        pack_slots: knot_resource::PackSlots::new(1),
+        archive_limit: knot_git::ArchiveLimit::new(512),
+        ..knot_pack::EdgeConfig::serving(
+            layout.clone(),
+            serve_dids(),
+            Arc::new(knot_runtime::SystemClock),
+        )
+    });
+
+    let mut framed = Vec::new();
+    framed.extend(pkt(b"argument --format=tar\n"));
+    framed.extend(pkt(b"argument HEAD\n"));
+    framed.extend_from_slice(b"0000");
+    let response = write_routes
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri(format!("/{}/git-upload-archive", did.as_str()))
+                .header(
+                    header::CONTENT_TYPE,
+                    "application/x-git-upload-archive-request",
+                )
+                .body(Body::from(framed))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = http_body_util::BodyExt::collect(response.into_body())
+        .await
+        .unwrap()
+        .to_bytes();
+    let text = String::from_utf8_lossy(&body);
+    assert!(
+        text.contains("NACK") && text.contains("archive exceeds the 512 byte limit"),
+        "an archive past the state's limit must be declined, got {text:?}"
+    );
+    assert!(
+        !contains(&body, b"README.md"),
+        "the declined archive mustn't leak the tree it refused to serve"
     );
 }
 

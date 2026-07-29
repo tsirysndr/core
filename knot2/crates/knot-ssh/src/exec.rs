@@ -422,6 +422,7 @@ async fn serve_upload_archive<H: HttpTransport, C: Clock>(
     let (tx, mut rx) = mpsc::channel::<Vec<u8>>(16);
     let layout = state.layout.clone();
     let did = repo_did.clone();
+    let archive_limit = state.archive_limit;
     let handle = tokio::task::spawn_blocking(move || -> Result<(), PackError> {
         let _permit = permit;
         let repo = layout.open(&did)?;
@@ -429,7 +430,7 @@ async fn serve_upload_archive<H: HttpTransport, C: Clock>(
             tx.blocking_send(chunk.to_vec())
                 .map_err(|_| std::io::Error::other("client disconnected"))
         };
-        knot_pack::upload_archive_streamed(&repo, &request, &mut sink)
+        knot_pack::upload_archive_streamed(&repo, &request, archive_limit, &mut sink)
     });
 
     let mut writer = channel.make_writer();

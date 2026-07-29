@@ -1,5 +1,5 @@
 use std::fmt;
-use std::net::SocketAddr;
+use std::net::{AddrParseError, IpAddr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -237,6 +237,11 @@ pub struct XrpcConfig {
     #[config(env = "KNOT_XRPC_MAX_RESPONSE_BYTES", default = 5_242_880)]
     pub max_response_bytes: u64,
 
+    /// Upper bound on bytes that a single archive spools,
+    /// across all our surfaces: the sh.tangled.repo.archive query,
+    /// `git archive --remote` over SSH,
+    /// and the smart HTTP archive route.
+    /// The knot will refuse writing smth that would blast an archive past this bound.
     #[config(env = "KNOT_XRPC_MAX_ARCHIVE_BYTES", default = 1_073_741_824)]
     pub max_archive_bytes: u64,
 
@@ -302,6 +307,20 @@ pub struct XrpcConfig {
     /// can forge it otherwise.
     #[config(env = "KNOT_XRPC_TRUSTED_PROXY_HEADER")]
     pub trusted_proxy_header: Option<String>,
+
+    /// IP addresses whose `trusted_proxy_header` the knot honors,
+    /// without a port,
+    /// for ex the loopback address of a reverse proxy on the same host.
+    /// The knot rate-limits a request from any other address
+    /// by its own socket address and ignores the header.
+    /// Leave empty to honor the header from every peer,
+    /// which is safe *only* if nothing but the proxy can reach this knot.
+    #[config(
+        env = "KNOT_XRPC_TRUSTED_PROXIES",
+        parse_env = parse_trusted_proxies,
+        default = []
+    )]
+    pub trusted_proxies: Vec<IpAddr>,
 
     #[config(env = "KNOT_XRPC_EVENTS_REPLAY_BUFFER", default = 4096)]
     pub events_replay_buffer: u32,
@@ -417,6 +436,14 @@ fn parse_admins(raw: &str) -> Result<Vec<AccountDid>, knot_types::ParseError> {
         .map(str::trim)
         .filter(|item| !item.is_empty())
         .map(AccountDid::new)
+        .collect()
+}
+
+fn parse_trusted_proxies(raw: &str) -> Result<Vec<IpAddr>, AddrParseError> {
+    raw.split(',')
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(str::parse)
         .collect()
 }
 
@@ -803,6 +830,10 @@ impl KnotConfig {
                 .as_ref()
                 .filter(|header| !is_http_token(header))
                 .map(|_| "xrpc.trusted_proxy_header isn't valid HTTP header name".to_string()),
+            check(
+                self.xrpc.trusted_proxy_header.is_some() || self.xrpc.trusted_proxies.is_empty(),
+                "xrpc.trusted_proxies needs xrpc.trusted_proxy_header, the header the knot honors from those addresses",
+            ),
             self.acl
                 .legacy_admin_secret_env
                 .as_deref()
@@ -1188,6 +1219,7 @@ mod tests {
                 fork_max_pack_bytes: 1_073_741_824,
                 fork_fetch_timeout_ms: 600_000,
                 trusted_proxy_header: None,
+                trusted_proxies: Vec::new(),
                 events_replay_buffer: 4_096,
                 events_replay_bytes: 67_108_864,
                 events_max_subscribers: 256,
@@ -1542,6 +1574,11 @@ mod tests {
                 |config| config.homepage.path = Some(PathBuf::from("homepage.html")),
                 "homepage.path must be absolute path",
             ),
+            (
+                "trusted_proxies_without_the_header_the_knot_honors",
+                |config| config.xrpc.trusted_proxies = vec!["127.0.0.1".parse().unwrap()],
+                "needs xrpc.trusted_proxy_header",
+            ),
         ];
         cases.iter().for_each(|(label, mutate, expected)| {
             let mut config = sample();
@@ -1608,6 +1645,22 @@ mod tests {
         let parsed = parse_admins("did:plc:nel, did:plc:olaren").unwrap();
         assert_eq!(parsed.len(), 2);
         assert!(parse_admins("not-a-did").is_err());
+    }
+
+    #[test]
+    fn trusted_proxies_parse_from_comma_separated_env() {
+        assert_eq!(
+            parse_trusted_proxies("127.0.0.1, ::1").unwrap(),
+            vec![
+                "127.0.0.1".parse::<IpAddr>().unwrap(),
+                "::1".parse::<IpAddr>().unwrap()
+            ]
+        );
+        assert!(parse_trusted_proxies("").unwrap().is_empty());
+        assert!(
+            parse_trusted_proxies("127.0.0.1:5555").is_err(),
+            "xrpc.trusted_proxies takes bare IP addresses, so a port must fail to parse"
+        );
     }
 
     #[test]

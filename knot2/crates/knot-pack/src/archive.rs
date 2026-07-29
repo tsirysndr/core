@@ -1,6 +1,6 @@
 use std::io::{self, Read, Seek, SeekFrom};
 
-use knot_git::{ArchiveFormat, ArchivePrefix, Repo};
+use knot_git::{ArchiveFormat, ArchiveLimit, ArchivePrefix, Repo};
 use knot_types::Oid;
 
 use crate::error::PackError;
@@ -15,10 +15,11 @@ struct Request {
 pub fn stream(
     repo: &Repo,
     request: &[u8],
+    limit: ArchiveLimit,
     sink: &mut dyn FnMut(&[u8]) -> io::Result<()>,
 ) -> Result<(), PackError> {
     let args = parse_arguments(request)?;
-    match build(repo, &args) {
+    match build(repo, &args, limit) {
         Ok(mut spool) => {
             let mut head = Vec::new();
             pkt::write_data(&mut head, b"ACK\n")?;
@@ -109,7 +110,7 @@ fn format_from(value: &str) -> ArchiveFormat {
     }
 }
 
-fn build(repo: &Repo, args: &[String]) -> Result<std::fs::File, PackError> {
+fn build(repo: &Repo, args: &[String], limit: ArchiveLimit) -> Result<std::fs::File, PackError> {
     let request = interpret(args)?;
     let id = repo
         .resolve_revision(&request.treeish)
@@ -119,8 +120,14 @@ fn build(repo: &Repo, args: &[String]) -> Result<std::fs::File, PackError> {
         .peel_to_tree(commit)
         .map_err(|error| PackError::Pack(error.to_string()))?;
     let mut spool = tempfile::tempfile().map_err(|error| PackError::Pack(error.to_string()))?;
-    repo.write_archive(tree, request.format, request.prefix.as_ref(), &mut spool)
-        .map_err(|error| PackError::Pack(error.to_string()))?;
+    repo.write_archive(
+        tree,
+        request.format,
+        request.prefix.as_ref(),
+        limit,
+        &mut spool,
+    )
+    .map_err(|error| PackError::Pack(error.to_string()))?;
     spool
         .seek(SeekFrom::Start(0))
         .map_err(|error| PackError::Pack(error.to_string()))?;

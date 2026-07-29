@@ -732,7 +732,7 @@ fn assemble_router(parts: StateParts) -> Router {
             PerActorQuota::new(256),
             GlobalQuota::new(256),
         )),
-        trusted_proxy_header: None,
+        proxy_trust: knot_types::ProxyTrust::default(),
         committer: Committer {
             name: AuthorName::new("knot"),
             email: Email::new("knot@nel.pet"),

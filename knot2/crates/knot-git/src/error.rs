@@ -39,6 +39,8 @@ pub enum GitError {
     ReservedDid(String),
     #[error("{0} exceeds maximum supported depth")]
     DepthExceeded(&'static str),
+    #[error("archive exceeds the {} byte limit", limit.get())]
+    ArchiveTooLarge { limit: crate::ArchiveLimit },
     #[error("revision walk: {0}")]
     RevWalk(String),
     #[error("upload-pack selection exceeded its {0}")]

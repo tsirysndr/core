@@ -279,7 +279,7 @@ async fn main() -> anyhow::Result<()> {
             .context("server.listen_max_connections must be greater than zero")?,
     );
     // A header name that doesn't parse will never match,
-    // `effective_peer` falls back to socket,
+    // `ProxyTrust::client_peer` falls back to socket,
     // and every request in the world shares
     // the proxy's address + its one ratelimit bucket.
     // So... better to refuse to start.
@@ -290,6 +290,15 @@ async fn main() -> anyhow::Result<()> {
         .map(|header| axum::http::HeaderName::from_bytes(header.as_bytes()))
         .transpose()
         .context("xrpc.trusted_proxy_header isn't a valid HTTP header name")?;
+    let trusted_proxies =
+        knot_types::TrustedProxies::new(config.xrpc.trusted_proxies.iter().copied());
+    let proxy_trust = knot_types::ProxyTrust::new(trusted_proxy_header, trusted_proxies);
+    if proxy_trust.trusts_any_peer() && !http_addr.ip().is_loopback() {
+        tracing::warn!(
+            bind = %http_addr,
+            "xrpc.trusted_proxy_header is set without xrpc.trusted_proxies while the HTTP surface takes connections from off-host, so a client that reaches this knot without passing the proxy can forge the header and pick its own rate-limit bucket. List the proxy's address in xrpc.trusted_proxies."
+        );
+    }
     let edge_guards = knot_edge::EdgeGuards::new(
         knot_edge::RequestsPerSecond::new(
             NonZeroU32::new(config.server.listen_rate_limit_per_second)
@@ -315,7 +324,7 @@ async fn main() -> anyhow::Result<()> {
             NonZeroU64::new(config.server.listen_write_request_timeout_ms)
                 .context("server.listen_write_request_timeout_ms must be greater than zero")?,
         ),
-        trusted_proxy_header.clone(),
+        proxy_trust.clone(),
     );
     let tls_setup = build_tls_setup(&config, &hostname).context("assemble TLS configuration")?;
     if config.tls.http3 && tls_setup.is_none() {
@@ -325,7 +334,7 @@ async fn main() -> anyhow::Result<()> {
     }
     if tls_setup.is_none() && config.xrpc.trusted_proxy_header.is_none() {
         tracing::warn!(
-            "running plaintext behind a reverse proxy without xrpc.trusted_proxy_header. Per-IP rate limiting will key on the proxy socket address, throttling all clients as one. Set xrpc.trusted_proxy_header to the header your proxy appends."
+            "running plaintext behind a reverse proxy without xrpc.trusted_proxy_header. Per-IP rate limiting will key on the proxy socket address, throttling all clients as one. Set xrpc.trusted_proxy_header to the header your proxy appends, and xrpc.trusted_proxies to the address it connects from."
         );
     }
     if config.tls.acme_enabled && http_addr.port() != 443 {
@@ -502,20 +511,21 @@ async fn main() -> anyhow::Result<()> {
 
     let slots = knot_resource::Slots::for_machine();
 
-    let ssh_base = knot_ssh::SshState::new(
-        layout.clone(),
-        Arc::clone(&index),
-        Arc::clone(&atproto),
+    let ssh_base = knot_ssh::SshState::new(knot_ssh::SshConfig {
+        layout: layout.clone(),
+        index: Arc::clone(&index),
+        atproto: Arc::clone(&atproto),
         knot_actor,
-        Arc::clone(&events),
-        hostname.clone(),
-        appview_endpoint.clone(),
-        admins.clone(),
+        events: Arc::clone(&events),
+        hostname: hostname.clone(),
+        appview: appview_endpoint.clone(),
+        admins: admins.clone(),
         admission,
-        byte_limits.pack,
-        budgets.languages_push,
-        ci_logs.clone(),
-    )
+        max_pack_bytes: byte_limits.pack,
+        archive_limit: byte_limits.archive,
+        languages_push_budget: budgets.languages_push,
+        ci_logs: ci_logs.clone(),
+    })
     .with_maintenance(maintenance_handle.clone())
     .with_limits(pack_limits)
     .with_slots(slots.clone())
@@ -541,7 +551,7 @@ async fn main() -> anyhow::Result<()> {
         limiter: Arc::new(knot_xrpc::PreAuthLimiter::with_config(xrpc_limits)),
         cob_locks: Arc::new(knot_xrpc::CobLocks::default()),
         reservations,
-        trusted_proxy_header,
+        proxy_trust,
         committer,
         byte_limits,
         budgets,
@@ -573,17 +583,16 @@ async fn main() -> anyhow::Result<()> {
     let handle_resolver: Arc<dyn knot_pack::HandleResolver> = Arc::new(AtprotoHandleResolver {
         atproto: Arc::clone(&atproto),
     });
-    let (write_routes, early_data_safe) = knot_pack::edge_routes(
-        layout,
-        resolver,
-        Some(receive_advertiser),
-        Some(handle_resolver),
-        slots.pack.clone(),
-        pack_cache_config,
-        Arc::clone(&catalog),
-        xrpc_state.knot_hostname.clone(),
-        Arc::new(SystemClock),
-    );
+    let (write_routes, early_data_safe) = knot_pack::edge_routes(knot_pack::EdgeConfig {
+        receive: Some(receive_advertiser),
+        handle_resolver: Some(handle_resolver),
+        pack_slots: slots.pack.clone(),
+        cache: pack_cache_config,
+        catalog: Arc::clone(&catalog),
+        hostname: xrpc_state.knot_hostname.clone(),
+        archive_limit: byte_limits.archive,
+        ..knot_pack::EdgeConfig::serving(layout, resolver, Arc::new(SystemClock))
+    });
     let legacy_admin_routes = legacy_admin.map(|secret| {
         tracing::warn!(
             route = knot_xrpc::legacy_admin::ADD_MEMBER_ROUTE,

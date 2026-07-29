@@ -1,6 +1,6 @@
 use std::net::{IpAddr, SocketAddr};
 use std::num::{NonZeroU32, NonZeroU64};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use axum::Router;
@@ -10,7 +10,8 @@ use axum::extract::{ConnectInfo, State};
 use axum::middleware::{Next, from_fn_with_state};
 use axum::response::{IntoResponse, Response};
 use governor::middleware::NoOpMiddleware;
-use http::{HeaderName, Method, Request, StatusCode};
+use http::{Method, Request, StatusCode};
+use knot_types::ProxyTrust;
 use tokio_util::sync::CancellationToken;
 use tower::limit::GlobalConcurrencyLimitLayer;
 use tower::load_shed::LoadShedLayer;
@@ -77,7 +78,7 @@ pub struct EdgeGuards {
     request_timeout: RequestTimeout,
     body_timeout: BodyInactivityTimeout,
     write_request_timeout: WriteRequestTimeout,
-    proxy_header: Option<HeaderName>,
+    proxy_trust: ProxyTrust,
 }
 
 impl EdgeGuards {
@@ -88,7 +89,7 @@ impl EdgeGuards {
         request_timeout: RequestTimeout,
         body_timeout: BodyInactivityTimeout,
         write_request_timeout: WriteRequestTimeout,
-        proxy_header: Option<HeaderName>,
+        proxy_trust: ProxyTrust,
     ) -> Self {
         Self {
             rate,
@@ -97,12 +98,12 @@ impl EdgeGuards {
             request_timeout,
             body_timeout,
             write_request_timeout,
-            proxy_header,
+            proxy_trust,
         }
     }
 
     pub(crate) fn prepare(self, shutdown: &CancellationToken) -> GuardLayers {
-        let governor = build_governor(self.rate, self.burst, self.proxy_header);
+        let governor = build_governor(self.rate, self.burst, self.proxy_trust);
         spawn_state_cleanup(Arc::clone(&governor), shutdown.clone());
         GuardLayers {
             governor,
@@ -131,40 +132,53 @@ struct TimeoutBudget {
     extended: Duration,
 }
 
+#[derive(Clone, Default)]
+struct IgnoredHeaderNotice(Arc<OnceLock<IpAddr>>);
+
+impl IgnoredHeaderNotice {
+    fn report(&self, peer: IpAddr) {
+        if self.0.set(peer).is_ok() {
+            tracing::warn!(
+                %peer,
+                "a peer outside xrpc.trusted_proxies sent xrpc.trusted_proxy_header, so the knot ignored the header and rate-limits that peer by the address it connected from. Add this address to xrpc.trusted_proxies if it is the reverse proxy, since a proxy reaches the knot over one address family and listing the other one silently loses the header. This warning reports the first such peer only."
+            );
+        }
+    }
+}
+
 #[derive(Clone)]
 struct ProxyAwareIp {
-    header: Option<HeaderName>,
+    trust: ProxyTrust,
+    ignored_header: IgnoredHeaderNotice,
 }
 
 impl KeyExtractor for ProxyAwareIp {
     type Key = IpAddr;
 
     fn extract<T>(&self, request: &Request<T>) -> Result<Self::Key, GovernorError> {
-        let from_header = self
-            .header
-            .as_ref()
-            .and_then(|header| knot_types::forwarded_peer(request.headers(), header));
-        from_header
-            .or_else(|| {
-                request
-                    .extensions()
-                    .get::<ConnectInfo<SocketAddr>>()
-                    .map(|info| info.0.ip())
-            })
-            .ok_or(GovernorError::UnableToExtractKey)
+        let socket = request
+            .extensions()
+            .get::<ConnectInfo<SocketAddr>>()
+            .map(|info| info.0.ip());
+        let key = self.trust.peer_key(request.headers(), socket);
+        if let Some(peer) = key.ignored_header() {
+            self.ignored_header.report(peer);
+        }
+        key.address().ok_or(GovernorError::UnableToExtractKey)
     }
 }
 
 fn build_governor(
     rate: RequestsPerSecond,
     burst: BurstSize,
-    proxy_header: Option<HeaderName>,
+    proxy_trust: ProxyTrust,
 ) -> Arc<GuardGovernor> {
     let mut builder = GovernorConfigBuilder::default();
     builder.period(rate.period()).burst_size(burst.0.get());
     let config = builder
         .key_extractor(ProxyAwareIp {
-            header: proxy_header,
+            trust: proxy_trust,
+            ignored_header: IgnoredHeaderNotice::default(),
         })
         .finish()
         .expect("a non-zero rate period and burst size always yield a governor config");
@@ -257,7 +271,7 @@ mod tests {
         inflight: u32,
         request_timeout_ms: u64,
         body_timeout_ms: u64,
-        proxy_header: Option<&str>,
+        proxy_trust: ProxyTrust,
     ) -> EdgeGuards {
         guards_with_write(
             rate,
@@ -266,7 +280,7 @@ mod tests {
             request_timeout_ms,
             body_timeout_ms,
             request_timeout_ms,
-            proxy_header,
+            proxy_trust,
         )
     }
 
@@ -278,7 +292,7 @@ mod tests {
         request_timeout_ms: u64,
         body_timeout_ms: u64,
         write_request_timeout_ms: u64,
-        proxy_header: Option<&str>,
+        proxy_trust: ProxyTrust,
     ) -> EdgeGuards {
         EdgeGuards::new(
             RequestsPerSecond::new(NonZeroU32::new(rate).unwrap()),
@@ -287,8 +301,30 @@ mod tests {
             RequestTimeout::from_millis(NonZeroU64::new(request_timeout_ms).unwrap()),
             BodyInactivityTimeout::from_millis(NonZeroU64::new(body_timeout_ms).unwrap()),
             WriteRequestTimeout::from_millis(NonZeroU64::new(write_request_timeout_ms).unwrap()),
-            proxy_header.map(|header| HeaderName::from_bytes(header.as_bytes()).unwrap()),
+            proxy_trust,
         )
+    }
+
+    fn forwarded_for() -> http::HeaderName {
+        http::HeaderName::from_static("x-forwarded-for")
+    }
+
+    fn trusting_any_peer() -> ProxyTrust {
+        ProxyTrust::new(Some(forwarded_for()), knot_types::TrustedProxies::default())
+    }
+
+    fn trusting_loopback() -> ProxyTrust {
+        ProxyTrust::new(
+            Some(forwarded_for()),
+            knot_types::TrustedProxies::new(["127.0.0.1".parse::<IpAddr>().unwrap()]),
+        )
+    }
+
+    fn extractor(trust: ProxyTrust) -> ProxyAwareIp {
+        ProxyAwareIp {
+            trust,
+            ignored_header: IgnoredHeaderNotice::default(),
+        }
     }
 
     fn guarded_router(router: Router, guards: EdgeGuards) -> Router {
@@ -309,9 +345,7 @@ mod tests {
 
     #[test]
     fn the_extractor_keys_on_the_trusted_proxy_header_when_configured() {
-        let extractor = ProxyAwareIp {
-            header: Some(HeaderName::from_static("x-forwarded-for")),
-        };
+        let extractor = extractor(trusting_any_peer());
         let request = Request::get("/")
             .header("x-forwarded-for", "203.0.113.7, 198.51.100.4")
             .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 5000))))
@@ -326,7 +360,7 @@ mod tests {
 
     #[test]
     fn the_extractor_ignores_a_forgeable_header_when_no_proxy_is_trusted() {
-        let extractor = ProxyAwareIp { header: None };
+        let extractor = extractor(ProxyTrust::default());
         let request = Request::get("/")
             .header("x-forwarded-for", "203.0.113.7")
             .extension(ConnectInfo(SocketAddr::from(([10, 0, 0, 9], 5000))))
@@ -340,10 +374,30 @@ mod tests {
     }
 
     #[test]
-    fn the_extractor_falls_back_to_the_peer_when_the_trusted_header_is_absent() {
-        let extractor = ProxyAwareIp {
-            header: Some(HeaderName::from_static("x-forwarded-for")),
+    fn the_extractor_keys_an_unlisted_peer_on_its_socket_however_it_fills_the_header() {
+        let extractor = extractor(trusting_loopback());
+        let forged = |host| {
+            Request::get("/")
+                .header("x-forwarded-for", "198.51.100.4")
+                .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, host], 5000))))
+                .body(())
+                .unwrap()
         };
+        assert_eq!(
+            extractor.extract(&forged(1)).unwrap(),
+            "198.51.100.4".parse::<IpAddr>().unwrap(),
+            "the listed proxy relayed this one, so the extractor keys on the header address"
+        );
+        assert_eq!(
+            extractor.extract(&forged(9)).unwrap(),
+            "127.0.0.9".parse::<IpAddr>().unwrap(),
+            "an unlisted peer picked its own token bucket by forging the header"
+        );
+    }
+
+    #[test]
+    fn the_extractor_falls_back_to_the_peer_when_the_trusted_header_is_absent() {
+        let extractor = extractor(trusting_any_peer());
         let request = Request::get("/")
             .extension(ConnectInfo(SocketAddr::from(([10, 0, 0, 9], 5000))))
             .body(())
@@ -356,7 +410,7 @@ mod tests {
 
     #[test]
     fn the_extractor_fails_when_no_peer_can_be_identified() {
-        let extractor = ProxyAwareIp { header: None };
+        let extractor = extractor(ProxyTrust::default());
         let request = Request::get("/").body(()).unwrap();
         assert!(matches!(
             extractor.extract(&request),
@@ -364,11 +418,80 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn a_missing_connect_info_fails_closed_rather_than_taking_the_header_on_trust() {
+        let listed = extractor(trusting_loopback());
+        let headed = || {
+            Request::get("/")
+                .header("x-forwarded-for", "198.51.100.4")
+                .body(())
+                .unwrap()
+        };
+        assert!(
+            matches!(
+                listed.extract(&headed()),
+                Err(GovernorError::UnableToExtractKey)
+            ),
+            "with no socket to match against the allowlist the extractor identifies no client"
+        );
+        assert_eq!(
+            extractor(trusting_any_peer()).extract(&headed()).unwrap(),
+            "198.51.100.4".parse::<IpAddr>().unwrap(),
+            "an operator who lists no proxy already told the knot to take the header from anyone"
+        );
+    }
+
+    #[test]
+    fn the_first_unlisted_peer_sending_the_header_is_reported_once() {
+        let extractor = extractor(trusting_loopback());
+        let forged = |host| {
+            Request::get("/")
+                .header("x-forwarded-for", "198.51.100.4")
+                .extension(ConnectInfo(SocketAddr::from(([203, 0, 113, host], 5000))))
+                .body(())
+                .unwrap()
+        };
+        extractor.extract(&forged(7)).unwrap();
+        extractor.extract(&forged(9)).unwrap();
+        assert_eq!(
+            extractor.ignored_header.0.get(),
+            Some(&"203.0.113.7".parse::<IpAddr>().unwrap()),
+            "a wrong-family allowlist sends every request down this path, so only the first peer is reported"
+        );
+    }
+
+    #[test]
+    fn a_listed_proxy_and_a_headerless_request_report_nothing() {
+        let listed = extractor(trusting_loopback());
+        listed
+            .extract(
+                &Request::get("/")
+                    .header("x-forwarded-for", "198.51.100.4")
+                    .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 5000))))
+                    .body(())
+                    .unwrap(),
+            )
+            .unwrap();
+        listed
+            .extract(
+                &Request::get("/")
+                    .extension(ConnectInfo(SocketAddr::from(([203, 0, 113, 7], 5000))))
+                    .body(())
+                    .unwrap(),
+            )
+            .unwrap();
+        assert_eq!(
+            listed.ignored_header.0.get(),
+            None,
+            "neither a relayed request or a request without the header says anything about the allowlist"
+        );
+    }
+
     #[tokio::test]
     async fn a_well_behaved_request_passes_every_guard() {
         let app = guarded_router(
             Router::new().route("/", get(|| async { "ok" })),
-            guards(50, 200, 1_024, 60_000, 30_000, None),
+            guards(50, 200, 1_024, 60_000, 30_000, ProxyTrust::default()),
         );
         let status = app
             .oneshot(from_peer(get_request(), 1))
@@ -382,7 +505,7 @@ mod tests {
     async fn a_burst_beyond_the_per_ip_limit_is_rejected_with_429() {
         let app = guarded_router(
             Router::new().route("/", get(|| async { "ok" })),
-            guards(1, 2, 1_024, 60_000, 30_000, None),
+            guards(1, 2, 1_024, 60_000, 30_000, ProxyTrust::default()),
         );
         let first = app
             .clone()
@@ -432,7 +555,7 @@ mod tests {
                     "ok"
                 }),
             ),
-            guards(10_000, 10_000, 1, 60_000, 30_000, None),
+            guards(10_000, 10_000, 1, 60_000, 30_000, ProxyTrust::default()),
         );
         let holder = {
             let app = app.clone();
@@ -469,7 +592,7 @@ mod tests {
                     "ok"
                 }),
             ),
-            guards(10_000, 10_000, 1_024, 80, 30_000, None),
+            guards(10_000, 10_000, 1_024, 80, 30_000, ProxyTrust::default()),
         );
         let status = app
             .oneshot(from_peer(
@@ -500,7 +623,15 @@ mod tests {
                         "ok"
                     }),
                 ),
-            guards_with_write(10_000, 10_000, 1_024, 80, 30_000, 5_000, None),
+            guards_with_write(
+                10_000,
+                10_000,
+                1_024,
+                80,
+                30_000,
+                5_000,
+                ProxyTrust::default(),
+            ),
         );
         let push = app
             .clone()
@@ -539,7 +670,7 @@ mod tests {
     async fn a_stalled_request_body_is_cut_and_never_hangs() {
         let app = guarded_router(
             Router::new().route("/upload", post(|_body: Bytes| async { "ok" })),
-            guards(10_000, 10_000, 1_024, 60_000, 80, None),
+            guards(10_000, 10_000, 1_024, 60_000, 80, ProxyTrust::default()),
         );
         let body = Body::from_stream(
             futures::stream::once(async {

@@ -308,20 +308,21 @@ async fn spawn(published_line: String, with_h3: bool) -> World {
         ),
     ));
     let ssh_state = Arc::new(
-        knot_ssh::SshState::new(
-            layout.clone(),
-            Arc::clone(&index),
-            Arc::clone(&atproto),
-            knot_types::ActorId::from_secp256k1(actor_signer().public_key().as_bytes()),
-            Arc::clone(&events),
-            KnotHostname::new("nel.pet").unwrap(),
-            knot_types::AppviewEndpoint::new("https://tangled.test").unwrap(),
-            BTreeSet::from([AccountDid::new(OWNER_DID).unwrap()]),
-            AdmissionPolicy::Closed,
-            knot_xrpc::MaxWireBytes::new(1 << 30),
-            knot_xrpc::LanguagesPushBudget::new(Duration::from_secs(2)),
-            None,
-        )
+        knot_ssh::SshState::new(knot_ssh::SshConfig {
+            layout: layout.clone(),
+            index: Arc::clone(&index),
+            atproto: Arc::clone(&atproto),
+            knot_actor: knot_types::ActorId::from_secp256k1(actor_signer().public_key().as_bytes()),
+            events: Arc::clone(&events),
+            hostname: KnotHostname::new("nel.pet").unwrap(),
+            appview: knot_types::AppviewEndpoint::new("https://tangled.test").unwrap(),
+            admins: BTreeSet::from([AccountDid::new(OWNER_DID).unwrap()]),
+            admission: AdmissionPolicy::Closed,
+            max_pack_bytes: knot_xrpc::MaxWireBytes::new(1 << 30),
+            archive_limit: knot_git::ArchiveLimit::default(),
+            languages_push_budget: knot_xrpc::LanguagesPushBudget::new(Duration::from_secs(2)),
+            ci_logs: None,
+        })
         .with_lfs(lfs.clone(), 16),
     );
     let ssh_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -356,7 +357,7 @@ async fn spawn(published_line: String, with_h3: bool) -> World {
             knot_xrpc::PerActorQuota::new(16),
             knot_xrpc::GlobalQuota::new(16),
         )),
-        trusted_proxy_header: None,
+        proxy_trust: knot_types::ProxyTrust::default(),
         committer: knot_xrpc::Committer {
             name: AuthorName::new("Tangled"),
             email: Email::new("noreply@tangled.sh"),
@@ -405,17 +406,15 @@ async fn spawn(published_line: String, with_h3: bool) -> World {
         })
     };
     let advertiser = knot_xrpc::receive_advertiser(Arc::clone(&xrpc_state));
-    let (write_routes, advertisement) = knot_pack::edge_routes(
-        layout.clone(),
-        Arc::clone(&resolver),
-        Some(Arc::clone(&advertiser)),
-        None,
-        knot_resource::PackSlots::new(4),
-        knot_pack::CacheConfig::default(),
-        Arc::new(knot_messages::Catalog::defaults()),
-        knot_pack::default_hostname().clone(),
-        Arc::new(knot_runtime::SystemClock),
-    );
+    let (write_routes, advertisement) = knot_pack::edge_routes(knot_pack::EdgeConfig {
+        receive: Some(Arc::clone(&advertiser)),
+        pack_slots: knot_resource::PackSlots::new(4),
+        ..knot_pack::EdgeConfig::serving(
+            layout.clone(),
+            Arc::clone(&resolver),
+            Arc::new(knot_runtime::SystemClock),
+        )
+    });
     let router = write_routes
         .merge(advertisement.into_router())
         .merge(knot_xrpc::router(Arc::clone(&xrpc_state)));
@@ -428,17 +427,15 @@ async fn spawn(published_line: String, with_h3: bool) -> World {
         true => {
             let certdir = tempfile::tempdir().unwrap();
             let edge = common::serve_edge(certdir.path(), || {
-                let (write_routes, advertisement) = knot_pack::edge_routes(
-                    layout.clone(),
-                    Arc::clone(&resolver),
-                    Some(Arc::clone(&advertiser)),
-                    None,
-                    knot_resource::PackSlots::new(4),
-                    knot_pack::CacheConfig::default(),
-                    Arc::new(knot_messages::Catalog::defaults()),
-                    knot_pack::default_hostname().clone(),
-                    Arc::new(knot_runtime::SystemClock),
-                );
+                let (write_routes, advertisement) = knot_pack::edge_routes(knot_pack::EdgeConfig {
+                    receive: Some(Arc::clone(&advertiser)),
+                    pack_slots: knot_resource::PackSlots::new(4),
+                    ..knot_pack::EdgeConfig::serving(
+                        layout.clone(),
+                        Arc::clone(&resolver),
+                        Arc::new(knot_runtime::SystemClock),
+                    )
+                });
                 let app = RequiresFullHandshake::new(
                     write_routes.merge(knot_xrpc::router(Arc::clone(&xrpc_state))),
                 );

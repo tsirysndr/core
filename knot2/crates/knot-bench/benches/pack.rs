@@ -202,10 +202,12 @@ fn push(bencher: Bencher, commits: u32) {
 fn archive(bencher: Bencher, commits: u32) {
     let history = build_history(spec_for(commits));
     let request = build_archive_request(history.tip());
-    let bytes = upload_archive(history.repo(), &request).unwrap().len();
-    bencher
-        .counter(BytesCount::new(bytes))
-        .bench_local(|| upload_archive(history.repo(), &request).unwrap());
+    let bytes = upload_archive(history.repo(), &request, knot_git::ArchiveLimit::default())
+        .unwrap()
+        .len();
+    bencher.counter(BytesCount::new(bytes)).bench_local(|| {
+        upload_archive(history.repo(), &request, knot_git::ArchiveLimit::default()).unwrap()
+    });
 }
 
 struct FreshTarget {

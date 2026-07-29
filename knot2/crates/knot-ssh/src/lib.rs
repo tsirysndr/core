@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use knot_atproto::Atproto;
 use knot_events::EventLog;
-use knot_git::Layout;
+use knot_git::{ArchiveLimit, Layout};
 use knot_index::Index;
 use knot_maintenance::MaintenanceHandle;
 use knot_pack::{MaxWireBytes, PackLimits};
@@ -57,6 +57,7 @@ pub struct SshState<H, C> {
     admission: AdmissionPolicy,
     limits: PackLimits,
     max_pack_bytes: MaxWireBytes,
+    archive_limit: ArchiveLimit,
     languages_push_budget: LanguagesPushBudget,
     ci_logs: Option<CiLogsAddr>,
     slots: Slots,
@@ -74,22 +75,39 @@ pub(crate) struct LfsRuntime {
     pub(crate) peer_slots: Arc<PreAuthLimiter>,
 }
 
+pub struct SshConfig<H, C> {
+    pub layout: Layout,
+    pub index: Arc<Index>,
+    pub atproto: Arc<Atproto<H, C>>,
+    pub knot_actor: ActorId,
+    pub events: Arc<EventLog<C>>,
+    pub hostname: KnotHostname,
+    pub appview: AppviewEndpoint,
+    pub admins: BTreeSet<AccountDid>,
+    pub admission: AdmissionPolicy,
+    pub max_pack_bytes: MaxWireBytes,
+    pub archive_limit: ArchiveLimit,
+    pub languages_push_budget: LanguagesPushBudget,
+    pub ci_logs: Option<CiLogsAddr>,
+}
+
 impl<H: HttpTransport, C: Clock> SshState<H, C> {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        layout: Layout,
-        index: Arc<Index>,
-        atproto: Arc<Atproto<H, C>>,
-        knot_actor: ActorId,
-        events: Arc<EventLog<C>>,
-        hostname: KnotHostname,
-        appview: AppviewEndpoint,
-        admins: BTreeSet<AccountDid>,
-        admission: AdmissionPolicy,
-        max_pack_bytes: MaxWireBytes,
-        languages_push_budget: LanguagesPushBudget,
-        ci_logs: Option<CiLogsAddr>,
-    ) -> Self {
+    pub fn new(config: SshConfig<H, C>) -> Self {
+        let SshConfig {
+            layout,
+            index,
+            atproto,
+            knot_actor,
+            events,
+            hostname,
+            appview,
+            admins,
+            admission,
+            max_pack_bytes,
+            archive_limit,
+            languages_push_budget,
+            ci_logs,
+        } = config;
         Self {
             layout,
             index,
@@ -102,6 +120,7 @@ impl<H: HttpTransport, C: Clock> SshState<H, C> {
             admission,
             limits: PackLimits::default(),
             max_pack_bytes,
+            archive_limit,
             languages_push_budget,
             ci_logs,
             slots: Slots::for_machine(),

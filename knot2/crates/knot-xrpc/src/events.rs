@@ -39,11 +39,7 @@ pub(crate) async fn events<H: HttpTransport, C: Clock>(
     Query(query): Query<EventsQuery>,
     upgrade: WebSocketUpgrade,
 ) -> Response {
-    let peer = state
-        .trusted_proxy_header
-        .as_ref()
-        .and_then(|header| knot_types::forwarded_peer(&headers, header))
-        .unwrap_or_else(|| socket_peer.ip());
+    let peer = state.proxy_trust.client_peer_of(&headers, socket_peer.ip());
     let Some(permit) = state.subscriber_gate.try_admit(peer) else {
         return XrpcError::overloaded(
             "knot is serving its maximum number of event subscribers, retry shortly",

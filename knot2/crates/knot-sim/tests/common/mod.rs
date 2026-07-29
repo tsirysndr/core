@@ -73,7 +73,7 @@ pub fn edge_config(addr: SocketAddr, cert: PathBuf, key: PathBuf) -> EdgeConfig 
             RequestTimeout::from_millis(nz64(120_000)),
             BodyInactivityTimeout::from_millis(nz64(120_000)),
             WriteRequestTimeout::from_millis(nz64(1_800_000)),
-            None,
+            knot_types::ProxyTrust::default(),
         ),
         tls: Some(TlsSetup {
             source: CertSource::Static(StaticCertPaths {

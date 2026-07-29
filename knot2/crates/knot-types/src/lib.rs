@@ -20,7 +20,7 @@ mod hex;
 pub use hex::{decode_hex, lowercase_hex};
 
 mod net;
-pub use net::forwarded_peer;
+pub use net::{PeerKey, ProxyTrust, TrustedProxies};
 
 pub use jacquard_common::CowStr;
 pub use jacquard_common::DefaultStr;

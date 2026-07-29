@@ -57,6 +57,7 @@ use serde_json::json;
 
 use knot_atproto::{Atproto, AtprotoError, ServiceJwt};
 use knot_events::{EventLog, SubscriberGate};
+pub use knot_git::ArchiveLimit;
 use knot_git::Layout;
 use knot_index::{Index, Resolved};
 use knot_maintenance::MaintenanceHandle;
@@ -97,7 +98,6 @@ knot_types::scalar_newtype! {
     pub struct PatchLimit(usize);
     pub struct PatchDecompressedLimit(u64);
     pub struct ResponseLimit(usize);
-    pub struct ArchiveLimit(u64);
     pub struct ForkPackLimit(u64);
     pub struct TreeReadBudget(ReadBudget);
     pub struct BlobReadBudget(ReadBudget);
@@ -122,7 +122,7 @@ impl Default for ByteLimits {
             patch: PatchLimit::new(16 * 1024 * 1024),
             patch_decompressed: PatchDecompressedLimit::new(128 * 1024 * 1024),
             response: ResponseLimit::new(5 * 1024 * 1024),
-            archive: ArchiveLimit::new(1024 * 1024 * 1024),
+            archive: ArchiveLimit::default(),
             fork_pack: ForkPackLimit::new(1024 * 1024 * 1024),
             pack: MaxWireBytes::new(8 * 1024 * 1024 * 1024),
         }
@@ -164,7 +164,7 @@ pub struct XrpcState<H, C> {
     pub limiter: Arc<PreAuthLimiter>,
     pub cob_locks: Arc<CobLocks>,
     pub reservations: Arc<Reservations>,
-    pub trusted_proxy_header: Option<http::HeaderName>,
+    pub proxy_trust: knot_types::ProxyTrust,
     pub committer: Committer,
     pub byte_limits: ByteLimits,
     pub budgets: Budgets,
@@ -336,7 +336,9 @@ pub(crate) async fn enforce_pre_auth_limit<H: HttpTransport, C: Clock>(
     request: Request,
     next: Next,
 ) -> Response {
-    let peer = effective_peer(&state, socket, request.headers());
+    let peer = state
+        .proxy_trust
+        .client_peer(request.headers(), socket.ip());
     match admit_pre_auth(&state, peer) {
         Ok(guard) => {
             let response = next.run(request).await;
@@ -345,18 +347,6 @@ pub(crate) async fn enforce_pre_auth_limit<H: HttpTransport, C: Clock>(
         }
         Err(error) => error.into_response(),
     }
-}
-
-pub(crate) fn effective_peer<H: HttpTransport, C: Clock>(
-    state: &XrpcState<H, C>,
-    socket: SocketPeer,
-    headers: &HeaderMap,
-) -> Option<IpAddr> {
-    state
-        .trusted_proxy_header
-        .as_ref()
-        .and_then(|header| knot_types::forwarded_peer(headers, header))
-        .or(socket.ip())
 }
 
 pub(crate) fn admit_pre_auth<H: HttpTransport, C: Clock>(
@@ -501,7 +491,7 @@ pub(crate) async fn authenticate_and_authorize_push<H: HttpTransport, C: Clock>(
     repo: &RepoDid,
     denied: &str,
 ) -> Result<AccountDid, XrpcError> {
-    let peer = effective_peer(state, socket, headers);
+    let peer = state.proxy_trust.client_peer(headers, socket.ip());
     let guard = admit_pre_auth(state, peer)?;
     let actor = state.authenticate_push(headers).await?;
     guard.refund();

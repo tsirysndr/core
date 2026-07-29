@@ -205,20 +205,21 @@ async fn main() {
             .public_key()
             .as_bytes(),
     );
-    let state = Arc::new(knot_ssh::SshState::new(
+    let state = Arc::new(knot_ssh::SshState::new(knot_ssh::SshConfig {
         layout,
         index,
         atproto,
-        actor,
+        knot_actor: actor,
         events,
-        KnotHostname::new("knot.test").unwrap(),
-        knot_types::AppviewEndpoint::new("https://tangled.test").unwrap(),
-        BTreeSet::new(),
-        AdmissionPolicy::Closed,
-        knot_pack::MaxWireBytes::new(1 << 34),
-        knot_postreceive::LanguagesPushBudget::new(Duration::from_secs(2)),
-        None,
-    ));
+        hostname: KnotHostname::new("knot.test").unwrap(),
+        appview: knot_types::AppviewEndpoint::new("https://tangled.test").unwrap(),
+        admins: BTreeSet::new(),
+        admission: AdmissionPolicy::Closed,
+        max_pack_bytes: knot_pack::MaxWireBytes::new(1 << 34),
+        archive_limit: knot_git::ArchiveLimit::default(),
+        languages_push_budget: knot_postreceive::LanguagesPushBudget::new(Duration::from_secs(2)),
+        ci_logs: None,
+    }));
 
     let listener = TcpListener::bind(("127.0.0.1", port)).await.unwrap();
     let bound = listener.local_addr().unwrap().port();

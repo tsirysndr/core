@@ -183,20 +183,23 @@ async fn spawn(published_line: String) -> Server {
             knot_events::ReplayBytes::new(16 << 20).unwrap(),
         ),
     ));
-    let state = Arc::new(knot_ssh::SshState::new(
-        layout.clone(),
+    let state = Arc::new(knot_ssh::SshState::new(knot_ssh::SshConfig {
+        layout: layout.clone(),
         index,
         atproto,
-        actor_for_seed(1),
-        Arc::clone(&events),
-        knot_types::KnotHostname::new("knot.test").unwrap(),
-        knot_types::AppviewEndpoint::new("https://tangled.test").unwrap(),
-        std::collections::BTreeSet::new(),
-        knot_types::AdmissionPolicy::Closed,
-        knot_xrpc::MaxWireBytes::new(1 << 30),
-        knot_xrpc::LanguagesPushBudget::new(std::time::Duration::from_secs(2)),
-        None,
-    ));
+        knot_actor: actor_for_seed(1),
+        events: Arc::clone(&events),
+        hostname: knot_types::KnotHostname::new("knot.test").unwrap(),
+        appview: knot_types::AppviewEndpoint::new("https://tangled.test").unwrap(),
+        admins: std::collections::BTreeSet::new(),
+        admission: knot_types::AdmissionPolicy::Closed,
+        max_pack_bytes: knot_xrpc::MaxWireBytes::new(1 << 30),
+        archive_limit: knot_git::ArchiveLimit::default(),
+        languages_push_budget: knot_xrpc::LanguagesPushBudget::new(std::time::Duration::from_secs(
+            2,
+        )),
+        ci_logs: None,
+    }));
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     tokio::spawn(async move {

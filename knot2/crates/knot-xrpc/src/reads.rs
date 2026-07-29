@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::io::{Seek, SeekFrom};
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -56,7 +55,6 @@ const LIST_REPOS_DEFAULT: usize = 50;
 const LIST_REPOS_MAX: usize = 1000;
 const MAX_BLOB_BYTES: u64 = 25 * 1024 * 1024;
 const MAX_COMPARE_COMMITS: usize = 500;
-const ARCHIVE_CAP_MESSAGE: &str = "archive exceeds configured maximum size";
 const RAW_CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
 
 pub(crate) fn repo_not_found() -> XrpcError {
@@ -1213,40 +1211,6 @@ fn content_disposition(filename: &str) -> String {
     }
 }
 
-struct BoundedSpool {
-    file: std::fs::File,
-    position: u64,
-    limit: u64,
-    tripped: bool,
-}
-
-impl std::io::Write for BoundedSpool {
-    fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
-        if self.position.saturating_add(data.len() as u64) > self.limit {
-            self.tripped = true;
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::WriteZero,
-                ARCHIVE_CAP_MESSAGE,
-            ));
-        }
-        let written = self.file.write(data)?;
-        self.position += written as u64;
-        Ok(written)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.file.flush()
-    }
-}
-
-impl Seek for BoundedSpool {
-    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
-        let position = self.file.seek(pos)?;
-        self.position = position;
-        Ok(position)
-    }
-}
-
 fn archive_etag(did: &RepoDid, commit: Oid, format: ArchiveFormat, prefix: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(did.as_str().as_bytes());
@@ -1333,7 +1297,7 @@ pub(crate) async fn repo_archive<H: HttpTransport, C: Clock>(
     let temp = run_blocking({
         let layout = state.layout.clone();
         let did = did.clone();
-        let archive_limit = state.byte_limits.archive.get();
+        let archive_limit = state.byte_limits.archive;
         let tree_prefix = knot_git::ArchivePrefix::new(format!("{archive_prefix}/"))
             .expect("validated prefix with trailing slash stays valid");
         move || {
@@ -1341,24 +1305,26 @@ pub(crate) async fn repo_archive<H: HttpTransport, C: Clock>(
             let tree = repo.peel_to_tree(resolved)?;
             let temp = tempfile::NamedTempFile::new()
                 .map_err(|error| XrpcError::internal(format!("cannot spool archive: {error}")))?;
-            let file = temp
+            let mut file = temp
                 .reopen()
                 .map_err(|error| XrpcError::internal(format!("cannot spool archive: {error}")))?;
-            let mut spool = BoundedSpool {
-                file,
-                position: 0,
-                limit: archive_limit,
-                tripped: false,
-            };
-            repo.write_archive(tree, format.format(), Some(&tree_prefix), &mut spool)
-                .map_err(|error| match spool.tripped {
-                    true => XrpcError::request_too_large(ARCHIVE_CAP_MESSAGE),
+            repo.write_archive(
+                tree,
+                format.format(),
+                Some(&tree_prefix),
+                archive_limit,
+                &mut file,
+            )
+            .map_err(|error| {
+                match matches!(error, knot_git::GitError::ArchiveTooLarge { .. }) {
+                    true => XrpcError::from(error),
                     false => XrpcError::named(
                         StatusCode::BAD_REQUEST,
                         "ArchiveError",
                         format!("failed to create archive: {error}"),
                     ),
-                })?;
+                }
+            })?;
             temp.as_file()
                 .set_modified(pinned_modified(modified_secs))
                 .map_err(|error| XrpcError::internal(error.to_string()))?;

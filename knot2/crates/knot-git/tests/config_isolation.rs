@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 
-use knot_git::ArchiveFormat;
+use knot_git::{ArchiveFormat, ArchiveLimit};
 use knot_types::Oid;
 
 mod common;
@@ -80,8 +80,14 @@ fn a_filter_driver_pulled_in_by_an_include_never_runs_for_a_served_archive() {
     let bare = layout.open(&did).unwrap();
     let tree = bare.peel_to_tree(head).unwrap();
     let mut out = std::io::Cursor::new(Vec::new());
-    bare.write_archive(tree, ArchiveFormat::Tar, None, &mut out)
-        .unwrap();
+    bare.write_archive(
+        tree,
+        ArchiveFormat::Tar,
+        None,
+        ArchiveLimit::new(u64::MAX),
+        &mut out,
+    )
+    .unwrap();
     let served = out.into_inner();
 
     assert!(
@@ -98,5 +104,39 @@ fn a_filter_driver_pulled_in_by_an_include_never_runs_for_a_served_archive() {
     assert!(
         !contains(&served, b"pwned"),
         "the knot ran a filter driver defined by config outside the repository"
+    );
+}
+
+#[test]
+fn a_pushed_replace_ref_never_substitutes_an_object_the_knot_reads() {
+    let (_scan, work_dir, layout, did) = seeded();
+    let work = work_dir.path();
+    let bare_path = layout.repo_path(&did).unwrap();
+
+    commit_file(work, "payload.txt", "kelp\n", "seed");
+    git(work, &["push", "-q", bare_path.to_str().unwrap(), "main"]);
+    let original = Oid::from_hex(&git(work, &["rev-parse", "HEAD:payload.txt"])).unwrap();
+    commit_file(work, "payload.txt", "pwned\n", "second");
+    git(work, &["push", "-q", bare_path.to_str().unwrap(), "main"]);
+    let substitute = Oid::from_hex(&git(work, &["rev-parse", "HEAD:payload.txt"])).unwrap();
+
+    git(
+        &bare_path,
+        &[
+            "update-ref",
+            &format!("refs/replace/{}", original.to_hex()),
+            &substitute.to_hex(),
+        ],
+    );
+
+    assert_eq!(
+        git(&bare_path, &["cat-file", "blob", &original.to_hex()]),
+        "pwned",
+        "git read the replaced object as itself, so this fixture never armed the substitution"
+    );
+    assert_eq!(
+        layout.open(&did).unwrap().read_blob(original).unwrap(),
+        b"kelp\n",
+        "a pushed replace ref rewrote what the knot serves for an object"
     );
 }

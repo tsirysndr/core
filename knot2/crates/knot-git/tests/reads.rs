@@ -628,6 +628,7 @@ fn archives_round_trip_through_tar() {
         tree,
         knot_git::ArchiveFormat::TarGz,
         Some(&knot_git::ArchivePrefix::new("squid-main/").unwrap()),
+        knot_git::ArchiveLimit::new(u64::MAX),
         &mut out,
     )
     .unwrap();
@@ -644,6 +645,81 @@ fn archives_round_trip_through_tar() {
     assert!(
         contains(&tar, b"squid-main/src/lib.rs"),
         "tar contains prefixed entries"
+    );
+}
+
+#[test]
+fn an_archive_stops_at_its_limit_instead_of_spooling_the_whole_tree() {
+    let (_scan, work_dir, layout, did) = seed_rich();
+    let work = work_dir.path();
+    let bare = layout.open(&did).unwrap();
+    let head = Oid::from_hex(&git(work, &["rev-parse", "HEAD"])).unwrap();
+    let tree = bare.peel_to_tree(head).unwrap();
+
+    [
+        knot_git::ArchiveFormat::Tar,
+        knot_git::ArchiveFormat::TarGz,
+        knot_git::ArchiveFormat::Zip,
+    ]
+    .iter()
+    .for_each(|format| {
+        let mut out = std::io::Cursor::new(Vec::new());
+        let refused = bare.write_archive(
+            tree,
+            *format,
+            None,
+            knot_git::ArchiveLimit::new(512),
+            &mut out,
+        );
+        assert!(
+            matches!(refused, Err(knot_git::GitError::ArchiveTooLarge { .. })),
+            "a {format:?} archive past its limit must be refused, got {refused:?}"
+        );
+        assert!(
+            out.into_inner().len() <= 512,
+            "the {format:?} writer took bytes past the limit before the refusal"
+        );
+    });
+}
+
+#[test]
+fn a_compressible_tree_is_measured_before_the_compressor_ever_sees_it() {
+    let scan = tempfile::tempdir().unwrap();
+    let layout = Layout::new(scan.path());
+    let did = RepoDid::new("did:plc:whelk").unwrap();
+    layout.create(&did).unwrap();
+    let bare_path = layout.repo_path(&did).unwrap();
+
+    let work_dir = tempfile::tempdir().unwrap();
+    let work = work_dir.path();
+    git(work, &["init", "-q", "-b", "main"]);
+    commit_file(
+        work,
+        "kelp.txt",
+        &"kelp\n".repeat(200_000),
+        "one very compressible blob",
+    );
+    git(work, &["push", "-q", bare_path.to_str().unwrap(), "main"]);
+
+    let bare = layout.open(&did).unwrap();
+    let head = Oid::from_hex(&git(work, &["rev-parse", "HEAD"])).unwrap();
+    let tree = bare.peel_to_tree(head).unwrap();
+
+    let mut out = std::io::Cursor::new(Vec::new());
+    let refused = bare.write_archive(
+        tree,
+        knot_git::ArchiveFormat::TarGz,
+        None,
+        knot_git::ArchiveLimit::new(64 * 1024),
+        &mut out,
+    );
+    assert!(
+        matches!(refused, Err(knot_git::GitError::ArchiveTooLarge { .. })),
+        "a tree that gzips under the limit still costs its full size to read, so it must be refused, got {refused:?}"
+    );
+    assert!(
+        out.into_inner().is_empty(),
+        "the knot must refuse before the compressor writes a byte"
     );
 }
 

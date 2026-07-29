@@ -184,7 +184,7 @@ impl World {
                 PerActorQuota::new(16),
                 GlobalQuota::new(16),
             )),
-            trusted_proxy_header: None,
+            proxy_trust: knot_types::ProxyTrust::default(),
             committer: knot_xrpc::Committer {
                 name: AuthorName::new("Tangled"),
                 email: Email::new("noreply@tangled.sh"),

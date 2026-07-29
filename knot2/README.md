@@ -193,6 +193,8 @@ That talks to the knot by container name, which needs both containers on a singl
 
 Set `xrpc.trusted_proxy_header = "x-forwarded-for"` when doing this, otherwise every client looks like it comes from the proxy and the ratelimiter wil treat them as one very busy mister. Only set it behind a proxy the operator controls, since a direct client can like, invent that header.
 
+Add `xrpc.trusted_proxies = ["fd00:1::4", "10.89.0.4"]` for example, one entry per address that the proxy connects from, so the knot honors that header from the proxy alone & ratelimits anyone else by the address they connected from.
+
 The knot can also terminate TLS itself (and that's the only way to get its HTTP3 support) because a plain TCP frontend can't proxy QUIC. Using a certificate the operator already manages:
 
 ```toml

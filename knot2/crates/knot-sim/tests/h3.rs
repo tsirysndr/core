@@ -11,7 +11,7 @@ use common::Edge;
 use http::Method;
 use knot_edge::RequiresFullHandshake;
 use knot_git::Layout;
-use knot_pack::{CacheConfig, RepoLookup, RepoResolver, RepoTarget};
+use knot_pack::{RepoLookup, RepoResolver, RepoTarget};
 use knot_types::{ObjectFormat, RepoDid};
 
 const PINNED_DATE: &str = "2026-06-20T12:00:00+00:00";
@@ -192,17 +192,14 @@ async fn cloned_set(
     let certdir = tempfile::tempdir().unwrap();
     let clonedir = tempfile::tempdir().unwrap();
     let edge = common::serve_edge(certdir.path(), || {
-        let (write_routes, advertisement) = knot_pack::edge_routes(
-            layout.clone(),
-            serve_dids(),
-            None,
-            None,
-            knot_resource::PackSlots::new(4),
-            CacheConfig::default(),
-            Arc::new(knot_messages::Catalog::defaults()),
-            knot_pack::default_hostname().clone(),
-            Arc::new(knot_runtime::SystemClock),
-        );
+        let (write_routes, advertisement) = knot_pack::edge_routes(knot_pack::EdgeConfig {
+            pack_slots: knot_resource::PackSlots::new(4),
+            ..knot_pack::EdgeConfig::serving(
+                layout.clone(),
+                serve_dids(),
+                Arc::new(knot_runtime::SystemClock),
+            )
+        });
         (RequiresFullHandshake::new(write_routes), advertisement)
     })
     .await;

@@ -219,14 +219,19 @@ pub fn receive_preflight(request: &[u8]) -> Preflight {
 pub fn upload_archive_streamed(
     repo: &Repo,
     request: &[u8],
+    limit: knot_git::ArchiveLimit,
     sink: &mut dyn FnMut(&[u8]) -> io::Result<()>,
 ) -> Result<(), PackError> {
-    archive::stream(repo, request, sink)
+    archive::stream(repo, request, limit, sink)
 }
 
-pub fn upload_archive(repo: &Repo, request: &[u8]) -> Result<Vec<u8>, PackError> {
+pub fn upload_archive(
+    repo: &Repo,
+    request: &[u8],
+    limit: knot_git::ArchiveLimit,
+) -> Result<Vec<u8>, PackError> {
     let mut buf = Vec::new();
-    upload_archive_streamed(repo, request, &mut |chunk| {
+    upload_archive_streamed(repo, request, limit, &mut |chunk| {
         buf.extend_from_slice(chunk);
         Ok(())
     })?;
@@ -340,15 +345,45 @@ struct PackState {
     cache: Arc<cache::PackCache>,
     catalog: Arc<Catalog>,
     hostname: KnotHostname,
+    archive_limit: knot_git::ArchiveLimit,
+}
+
+pub struct EdgeConfig {
+    pub layout: Layout,
+    pub resolver: Arc<dyn RepoResolver>,
+    pub receive: Option<Arc<dyn ReceiveAdvertiser>>,
+    pub handle_resolver: Option<Arc<dyn HandleResolver>>,
+    pub pack_slots: PackSlots,
+    pub cache: CacheConfig,
+    pub catalog: Arc<Catalog>,
+    pub hostname: KnotHostname,
+    pub clock: Arc<dyn Clock>,
+    pub archive_limit: knot_git::ArchiveLimit,
+}
+
+impl EdgeConfig {
+    pub fn serving(layout: Layout, resolver: Arc<dyn RepoResolver>, clock: Arc<dyn Clock>) -> Self {
+        Self {
+            layout,
+            resolver,
+            receive: None,
+            handle_resolver: None,
+            pack_slots: PackSlots::new(knot_resource::threads().get()),
+            cache: CacheConfig::default(),
+            catalog: Arc::new(Catalog::defaults()),
+            hostname: default_hostname().clone(),
+            clock,
+            archive_limit: knot_git::ArchiveLimit::default(),
+        }
+    }
+
+    pub fn with_pack_slots(self, pack_slots: PackSlots) -> Self {
+        Self { pack_slots, ..self }
+    }
 }
 
 pub fn router(layout: Layout, resolver: Arc<dyn RepoResolver>, clock: Arc<dyn Clock>) -> Router {
-    router_with_pack_slots(
-        layout,
-        resolver,
-        PackSlots::new(knot_resource::threads().get()),
-        clock,
-    )
+    serving_router(EdgeConfig::serving(layout, resolver, clock))
 }
 
 pub fn router_with_pack_slots(
@@ -357,33 +392,21 @@ pub fn router_with_pack_slots(
     pack_slots: PackSlots,
     clock: Arc<dyn Clock>,
 ) -> Router {
-    let state = pack_state(
-        layout,
-        resolver,
-        None,
-        None,
-        pack_slots,
-        CacheConfig::default(),
-        Arc::new(Catalog::defaults()),
-        default_hostname().clone(),
-        clock,
-    );
+    serving_router(EdgeConfig::serving(layout, resolver, clock).with_pack_slots(pack_slots))
+}
+
+fn serving_router(config: EdgeConfig) -> Router {
+    let state = pack_state(config);
     write_routes(state.clone()).merge(advertisement_routes(state).into_router())
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn edge_routes(
-    layout: Layout,
-    resolver: Arc<dyn RepoResolver>,
-    receive: Option<Arc<dyn ReceiveAdvertiser>>,
-    handle_resolver: Option<Arc<dyn HandleResolver>>,
-    pack_slots: PackSlots,
-    cache: CacheConfig,
-    catalog: Arc<Catalog>,
-    hostname: KnotHostname,
-    clock: Arc<dyn Clock>,
-) -> (Router, knot_edge::ZeroRttRoutes) {
-    let state = pack_state(
+pub fn edge_routes(config: EdgeConfig) -> (Router, knot_edge::ZeroRttRoutes) {
+    let state = pack_state(config);
+    (write_routes(state.clone()), advertisement_routes(state))
+}
+
+fn pack_state(config: EdgeConfig) -> PackState {
+    let EdgeConfig {
         layout,
         resolver,
         receive,
@@ -393,22 +416,8 @@ pub fn edge_routes(
         catalog,
         hostname,
         clock,
-    );
-    (write_routes(state.clone()), advertisement_routes(state))
-}
-
-#[allow(clippy::too_many_arguments)]
-fn pack_state(
-    layout: Layout,
-    resolver: Arc<dyn RepoResolver>,
-    receive: Option<Arc<dyn ReceiveAdvertiser>>,
-    handle_resolver: Option<Arc<dyn HandleResolver>>,
-    pack_slots: PackSlots,
-    cache: CacheConfig,
-    catalog: Arc<Catalog>,
-    hostname: KnotHostname,
-    clock: Arc<dyn Clock>,
-) -> PackState {
+        archive_limit,
+    } = config;
     PackState {
         layout,
         resolver,
@@ -418,6 +427,7 @@ fn pack_state(
         cache: cache::PackCache::new(cache, clock),
         catalog,
         hostname,
+        archive_limit,
     }
 }
 
@@ -830,10 +840,15 @@ async fn archive_dispatch(
     body: Vec<u8>,
 ) -> Result<Response, PackError> {
     let permit = state.pack_slots.acquire().await;
-    Ok(archive_response(repo, body, permit))
+    Ok(archive_response(repo, body, state.archive_limit, permit))
 }
 
-fn archive_response(repo: Repo, body: Vec<u8>, permit: SlotPermit) -> Response {
+fn archive_response(
+    repo: Repo,
+    body: Vec<u8>,
+    limit: knot_git::ArchiveLimit,
+    permit: SlotPermit,
+) -> Response {
     let (tx, rx) = mpsc::channel::<Result<Bytes, io::Error>>(16);
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
@@ -841,7 +856,7 @@ fn archive_response(repo: Repo, body: Vec<u8>, permit: SlotPermit) -> Response {
             tx.blocking_send(Ok(Bytes::copy_from_slice(chunk)))
                 .map_err(|_| io::Error::other("client disconnected"))
         };
-        if let Err(error) = upload_archive_streamed(&repo, &body, &mut sink) {
+        if let Err(error) = upload_archive_streamed(&repo, &body, limit, &mut sink) {
             let _ = tx.blocking_send(Err(io::Error::other(error.to_string())));
         }
     });

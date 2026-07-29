@@ -331,7 +331,7 @@ fn state_from(
         limiter: Arc::new(crate::PreAuthLimiter::default()),
         cob_locks: Arc::new(crate::CobLocks::default()),
         reservations,
-        trusted_proxy_header: None,
+        proxy_trust: knot_types::ProxyTrust::default(),
         committer: crate::Committer {
             name: AuthorName::new("Tangled"),
             email: Email::new("noreply@tangled.sh"),

@@ -13,7 +13,7 @@ use knot_edge::{
     RequiresFullHandshake, StaticCertPaths, TlsSetup, WriteRequestTimeout,
 };
 use knot_git::Layout;
-use knot_pack::{CacheConfig, RepoLookup, RepoResolver, RepoTarget};
+use knot_pack::{RepoLookup, RepoResolver, RepoTarget};
 use knot_types::{ObjectFormat, RepoDid};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::aws_lc_rs;
@@ -92,7 +92,7 @@ fn edge_config(addr: SocketAddr, cert: PathBuf, key: PathBuf) -> EdgeConfig {
             RequestTimeout::from_millis(nz64(120_000)),
             BodyInactivityTimeout::from_millis(nz64(120_000)),
             WriteRequestTimeout::from_millis(nz64(1_800_000)),
-            None,
+            knot_types::ProxyTrust::default(),
         ),
         tls: Some(TlsSetup {
             source: CertSource::Static(StaticCertPaths {
@@ -164,17 +164,14 @@ async fn stand_up(layout: Layout, certdir: &Path) -> Edge {
     for _ in 0..8 {
         let addr: SocketAddr = format!("127.0.0.1:{}", free_port()).parse().unwrap();
         let (cert, key, cert_der) = write_self_signed(certdir);
-        let (write_routes, advertisement) = knot_pack::edge_routes(
-            layout.clone(),
-            serve_dids(),
-            None,
-            None,
-            knot_resource::PackSlots::new(4),
-            CacheConfig::default(),
-            Arc::new(knot_messages::Catalog::defaults()),
-            knot_pack::default_hostname().clone(),
-            Arc::new(knot_runtime::SystemClock),
-        );
+        let (write_routes, advertisement) = knot_pack::edge_routes(knot_pack::EdgeConfig {
+            pack_slots: knot_resource::PackSlots::new(4),
+            ..knot_pack::EdgeConfig::serving(
+                layout.clone(),
+                serve_dids(),
+                Arc::new(knot_runtime::SystemClock),
+            )
+        });
         let log: Arc<Mutex<Vec<Captured>>> = Arc::new(Mutex::new(Vec::new()));
         let sink = log.clone();
         let recorded = write_routes.layer(axum::middleware::from_fn(
