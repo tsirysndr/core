@@ -8,7 +8,7 @@ use knot_git::{EntryKind, Haves, RefUpdate, Repo, Wants};
 use knot_messages::{CiLogsKey, PushMessages, UrlKey};
 use knot_types::{
     AccountDid, AppviewEndpoint, BranchName, ChangedFiles, CiLogsAddr, Email, Handle, Listing, Oid,
-    OwnerDid, PushOptions, RefName, RefTransition, RepoDid, RepoPath, RepoRkey,
+    OriginUrl, OwnerDid, PushOptions, RefName, RefTransition, RepoDid, RepoPath, RepoRkey,
 };
 use knot_workflow::{Compiled, RawWorkflow, Trigger, WorkflowName};
 use url::Url;
@@ -125,7 +125,8 @@ fn publish_one(
 
     let pull_link = match (transition, context.pull) {
         (RefTransition::Create { .. }, Some(link)) => {
-            pull_request_message(repo, link, name, context.messages).unwrap_or_default()
+            pull_request_message(repo, link, name, context.messages, &context.actor.repo)
+                .unwrap_or_default()
         }
         _ => Vec::new(),
     };
@@ -166,6 +167,7 @@ fn pull_request_message(
     link: &PullLink,
     name: &RefName,
     messages: &PushMessages,
+    repo_did: &RepoDid,
 ) -> Option<Vec<String>> {
     let branch = branch_short(name)?;
     let default_ref = repo.default_branch()?;
@@ -174,37 +176,86 @@ fn pull_request_message(
         return None;
     }
     repo.find_ref(&default_ref).ok().flatten()?;
-    if repo.origin_url().is_some() {
-        return None;
-    }
-    let url = pull_url(
-        &link.appview,
-        &link.owner,
-        &link.rkey,
-        &SourceBranch(branch),
-        &TargetBranch(default),
-    )?;
+
+    let url = match repo.origin_url() {
+        Some(remote) => fork_pull_url(
+            &link.appview,
+            &SourceBranch(branch),
+            &TargetBranch(default),
+            remote,
+            repo_did,
+        )?,
+        None => branch_pull_url(
+            &link.appview,
+            &link.owner,
+            &link.rkey,
+            &SourceBranch(branch),
+            &TargetBranch(default),
+        )?,
+    };
+
     Some(messages.pull_request.lines(|UrlKey::Url| url.to_string()))
 }
 
-fn pull_url(
+fn branch_pull_url(
     appview: &AppviewEndpoint,
     owner: &OwnerLabel,
-    repo: &RepoRkey,
+    repo_rkey: &RepoRkey,
     source: &SourceBranch,
     target: &TargetBranch,
 ) -> Option<Url> {
     let mut url = Url::parse(appview.as_str()).ok()?;
+
     url.path_segments_mut().ok()?.pop_if_empty().extend([
         owner.as_str(),
-        repo.as_str(),
+        repo_rkey.as_str(),
         "pulls",
         "new",
     ]);
+
     url.query_pairs_mut()
         .append_pair("source", "branch")
         .append_pair("sourceBranch", source.0.as_str())
         .append_pair("targetBranch", target.0.as_str());
+
+    Some(url)
+}
+
+fn fork_pull_url(
+    appview: &AppviewEndpoint,
+    source: &SourceBranch,
+    target: &TargetBranch,
+    remote: OriginUrl,
+    repo_did: &RepoDid,
+) -> Option<Url> {
+    let remote_url = Url::parse(remote.as_str()).ok()?;
+
+    // TODO: We need to handle file schemes. For now though if the remote is a
+    // file scheme a fork PR link won't be created.
+    match remote_url.scheme() {
+        "http" | "https" => (),
+        _ => return None,
+    }
+
+    let paths: Vec<&str> = remote_url
+        .path_segments()
+        .map(|segments| segments.collect())
+        .unwrap_or_default();
+
+    let mut url = Url::parse(appview.as_str()).ok()?;
+
+    url.path_segments_mut()
+        .ok()?
+        .pop_if_empty()
+        .extend(paths)
+        .extend(["pulls", "new"]);
+
+    url.query_pairs_mut()
+        .append_pair("source", "fork")
+        .append_pair("sourceBranch", source.0.as_str())
+        .append_pair("targetBranch", target.0.as_str())
+        .append_pair("fork", repo_did.as_str());
+
     Some(url)
 }
 

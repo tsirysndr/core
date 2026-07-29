@@ -611,6 +611,35 @@ fn a_new_non_default_branch_yields_a_pull_request_link() {
     );
     assert!(link.contains("sourceBranch=feature"), "{link}");
     assert!(link.contains("targetBranch=main"), "{link}");
+    assert!(link.contains("source=branch"), "{link}");
+}
+
+#[test]
+fn a_new_branch_with_an_origin_remote_yields_a_pull_request_link() {
+    let world = world();
+    world
+        .repo
+        .set_origin_url(&OriginUrl::new("https://oyster.cafe/did:plc:squid/anemone"))
+        .unwrap();
+    let log = log();
+    let head = create_feature(&world);
+
+    let applied = created("feature", head);
+    let messages = run(&world, &log, &applied, &Ci::Skip, Some(&pull()));
+
+    let link = messages
+        .iter()
+        .find(|line| line.contains("/pulls/new"))
+        .expect("pull-request link is offered for a new branch on a fork with origin remote");
+
+    assert!(
+        link.contains("https://tangled.test/did:plc:squid/anemone/pulls/new"),
+        "{link}"
+    );
+    assert!(link.contains("sourceBranch=feature"), "{link}");
+    assert!(link.contains("targetBranch=main"), "{link}");
+    assert!(link.contains("source=fork"), "{link}");
+    assert!(link.contains("fork=did%3Aplc%3Alimpet"), "{link}");
 }
 
 #[test]
@@ -633,10 +662,12 @@ fn no_pull_request_link_for_default_existing_forked_or_rootless_branches() {
                 new: oid(w, "HEAD"),
             }]
         }),
-        ("new branch on a fork with an origin remote", |w| {
+        ("new branch with a file origin remote", |w| {
             let head = create_feature(w);
             w.repo
-                .set_origin_url(&OriginUrl::new("https://oyster.cafe/did:plc:squid/anemone"))
+                .set_origin_url(&OriginUrl::new(
+                    "file://git/repos/oyster.cafe/did:plc:squid/anemone",
+                ))
                 .unwrap();
             created("feature", head)
         }),
