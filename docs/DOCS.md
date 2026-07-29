@@ -465,7 +465,7 @@ sudo adduser git
 
 Create `/home/git/.knot.env` with the following, updating the values as
 necessary. The `KNOT_SERVER_OWNER` should be set to your
-DID, you can find your DID in the [Settings](https://tangled.sh/settings) page.
+DID, you can find your DID in the [Settings](https://tangled.org/settings) page.
 
 ```
 KNOT_REPO_SCAN_PATH=/home/git
