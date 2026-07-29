@@ -1,10 +1,5 @@
 # Knot 2
 
-> Lewis 🦪
->
-> Not sure if this will be upstreamed by Tangled the company, but I'm mentioning that possibility if it concerns the reader.
-> I work at Tangled after all!
-
 This is an alternate implementation of a Tangled knot server!
 
 In Tangled, a "knot" is simply a git server that does its auth layer over the AT Protocol.
