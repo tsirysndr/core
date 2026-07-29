@@ -4,7 +4,7 @@ use knot_git::Layout;
 use knot_types::RepoDid;
 
 pub use knot_fixtures::{
-    available as git_available, commit as commit_file, must as git_ok, run as git,
+    available as git_available, commit as commit_file, contains, must as git_ok, run as git,
 };
 
 pub fn seeded() -> (tempfile::TempDir, tempfile::TempDir, Layout, RepoDid) {

@@ -1360,7 +1360,7 @@ async fn git_archive_remote_over_ssh_streams_a_tar_of_the_tree() {
 
     let tar = std::fs::read(&out_tar).unwrap();
     assert!(
-        tar.windows(b"README.md".len()).any(|w| w == b"README.md"),
+        knot_fixtures::contains(&tar, b"README.md"),
         "archived tar must contain the README.md entry"
     );
 }

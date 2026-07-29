@@ -96,6 +96,12 @@ pub fn commit(work: &Path, file: &str, contents: &str, message: &str) {
     must(work, &["commit", "-q", "-m", message]);
 }
 
+pub fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+    haystack
+        .windows(needle.len())
+        .any(|window| window == needle)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

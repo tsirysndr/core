@@ -23,7 +23,7 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 mod common;
-use common::{must, pack_objects, receive_request};
+use common::{contains, must, pack_objects, receive_request};
 
 type Captured = (Method, Uri, HeaderMap, Bytes);
 
@@ -373,9 +373,7 @@ fn fetch_request(log: &Arc<Mutex<Vec<Captured>>>) -> Captured {
         .find(|(method, uri, _, body)| {
             method == Method::POST
                 && uri.path().ends_with("/git-upload-pack")
-                && body
-                    .windows(b"command=fetch".len())
-                    .any(|window| window == b"command=fetch")
+                && contains(body, b"command=fetch")
         })
         .cloned()
         .unwrap_or_else(|| {

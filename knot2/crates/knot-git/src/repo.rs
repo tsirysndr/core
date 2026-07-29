@@ -245,6 +245,22 @@ impl Layout {
     }
 }
 
+// `worktree_stream` builds a `gix_filter::Pipeline`
+// out of whatever config it has loaded,
+// so a filter command defined in any of those sources
+// runs against the tree being archived.
+// The repository's own config is then the only source gix reads,
+// and mr knot wrote that file when it created the repo under the scan path.
+// We pin the trust because gix otherwise works it out from who owns the git dir,
+// and it reduces the trust when someone else owns that dir,
+// at which point it applies a 16MiB object allocation limit
+// and treats the repository's own config sections as untrusted.
+// Under isolation no safe.directory entry can restore `Full` trust,
+// since gix honors that key from only system/global config.
+fn isolated_open_options() -> gix::open::Options {
+    gix::open::Options::isolated().with(gix::sec::Trust::Full)
+}
+
 pub(crate) fn init_bare_with_format(
     path: &Path,
     format: ObjectFormat,
@@ -257,7 +273,7 @@ pub(crate) fn init_bare_with_format(
             object_hash,
             ..Default::default()
         },
-        gix::open::Options::default(),
+        isolated_open_options(),
     )
     .map(Into::into)
     .map_err(|error| error.to_string())
@@ -270,7 +286,7 @@ fn staging_path(parent: &Path) -> PathBuf {
 }
 
 fn init_bare_idempotent(path: PathBuf) -> Result<Repo, GitError> {
-    if let Ok(git) = gix::open(&path) {
+    if let Ok(git) = gix::open_opts(&path, isolated_open_options()) {
         return Ok(assembled(git, path));
     }
     let parent = path.parent().ok_or_else(|| GitError::Create {
@@ -283,9 +299,9 @@ fn init_bare_idempotent(path: PathBuf) -> Result<Repo, GitError> {
     })?;
     let staging = staging_path(parent);
     let _ = std::fs::remove_dir_all(&staging);
-    gix::init_bare(&staging).map_err(|error| GitError::Create {
+    init_bare_with_format(&staging, ObjectFormat::SHA1).map_err(|message| GitError::Create {
         path: staging.clone(),
-        message: error.to_string(),
+        message,
     })?;
     match std::fs::rename(&staging, &path) {
         Ok(()) => Repo::open(path),
@@ -442,10 +458,11 @@ pub(crate) fn fsync_if_present(path: &Path) -> Result<(), GitError> {
 impl Repo {
     pub fn open(path: impl Into<PathBuf>) -> Result<Repo, GitError> {
         let path = path.into();
-        let git = gix::open(&path).map_err(|error| GitError::Open {
-            path: path.clone(),
-            message: error.to_string(),
-        })?;
+        let git =
+            gix::open_opts(&path, isolated_open_options()).map_err(|error| GitError::Open {
+                path: path.clone(),
+                message: error.to_string(),
+            })?;
         Ok(assembled(git, path))
     }
 
@@ -1084,6 +1101,85 @@ mod tests {
         let layout = Layout::new(dir.path());
         let did = RepoDid::new("did:plc:squid").unwrap();
         (dir, layout, did)
+    }
+
+    #[test]
+    fn every_repo_opens_against_its_own_config_and_nothing_ambient() {
+        let permissions = isolated_open_options().permissions;
+        let config = permissions.config;
+        assert!(
+            !config.system
+                && !config.git
+                && !config.user
+                && !config.env
+                && !config.includes
+                && !config.git_binary,
+            "a filter driver in ambient config would execute when worktree_stream archives a \
+             pushed tree, so we read only the repository's own config: {config:?}"
+        );
+        assert!(
+            !permissions.attributes.system
+                && !permissions.attributes.git
+                && !permissions.attributes.git_binary,
+            "only the archived tree's own .gitattributes may set filter= on a path: {:?}",
+            permissions.attributes
+        );
+        let denied = |permission| matches!(permission, gix::sec::Permission::Deny);
+        let env = permissions.env;
+        assert!(
+            denied(env.xdg_config_home)
+                && denied(env.home)
+                && denied(env.git_prefix)
+                && denied(env.ssh_prefix)
+                && denied(env.identity)
+                && denied(env.objects)
+                && denied(env.http_transport),
+            "gix resolves GIT_CONFIG_KEY_n, HOME and XDG_CONFIG_HOME into config that can define a \
+             filter driver: {env:?}"
+        );
+        assert!(
+            permissions.is_isolated(),
+            "every permission must match the set gix itself calls isolated, including any field a \
+             gix upgrade adds that the three checks above don't name: {permissions:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_knot_keeps_full_trust_on_a_git_dir_it_no_longer_owns() {
+        const NOBODY: u32 = 65534;
+        let (_dir, layout, did) = repo();
+        layout.create(&did).unwrap();
+        let path = layout.repo_path(&did).unwrap();
+        let unreachable_uid = |kind| {
+            matches!(
+                kind,
+                std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::InvalidInput
+            )
+        };
+        match std::os::unix::fs::chown(&path, Some(NOBODY), None) {
+            Err(error) if unreachable_uid(error.kind()) => {
+                eprintln!(
+                    "skipping the foreign-owner trust check: chown to {NOBODY} needs root and a \
+                     uid mapping reaching that far"
+                );
+                return;
+            }
+            outcome => outcome.unwrap(),
+        }
+        assert_eq!(
+            layout.open(&did).unwrap().git().git_dir_trust(),
+            gix::sec::Trust::Full,
+            "reduced trust applies a 16MiB limit to every object allocation"
+        );
+        assert_eq!(
+            gix::open_opts(&path, gix::open::Options::isolated())
+                .unwrap()
+                .git_dir_trust(),
+            gix::sec::Trust::Reduced,
+            "gix raised the trust of a git dir owned by another user with no safe.directory entry \
+             in reach"
+        );
     }
 
     #[test]

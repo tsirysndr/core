@@ -8,7 +8,7 @@ fn rp(path: &str) -> RepoPath {
 }
 
 mod common;
-use common::{commit_file, git_ok as git};
+use common::{commit_file, contains, git_ok as git};
 
 #[test]
 fn typed_reads_over_a_seeded_repo() {
@@ -641,9 +641,8 @@ fn archives_round_trip_through_tar() {
     let mut decoder = flate2::read::GzDecoder::new(compressed.as_slice());
     let mut tar = Vec::new();
     std::io::Read::read_to_end(&mut decoder, &mut tar).unwrap();
-    let needle = b"squid-main/src/lib.rs";
     assert!(
-        tar.windows(needle.len()).any(|window| window == needle),
+        contains(&tar, b"squid-main/src/lib.rs"),
         "tar contains prefixed entries"
     );
 }

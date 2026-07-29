@@ -12,7 +12,7 @@ use knot_git::{Layout, Repo};
 use knot_pack::{RepoLookup, RepoResolver, RepoTarget};
 use knot_types::{ObjectFormat, RepoDid};
 
-pub use knot_fixtures::{commit, must, run as git};
+pub use knot_fixtures::{commit, contains, must, run as git};
 
 pub fn pkt(payload: &[u8]) -> Vec<u8> {
     let mut out = format!("{:04x}", payload.len() + 4).into_bytes();

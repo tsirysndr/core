@@ -7,8 +7,8 @@ use knot_types::{ObjectCount, ObjectFormat, Oid, RefName, RepoDid};
 
 mod common;
 use common::{
-    commit, delta_bomb_pack, index_into_bare, must, pack_objects, pack_objects_tuned, pkt,
-    receive_request, seeded, unsideband,
+    commit, contains, delta_bomb_pack, index_into_bare, must, pack_objects, pack_objects_tuned,
+    pkt, receive_request, seeded, unsideband,
 };
 
 fn generous() -> PackLimits {
@@ -679,7 +679,7 @@ fn v2_fetch_negotiation_acks_readies_waits_and_ignores_unknowns() {
         "must open packfile section after ready"
     );
     assert!(
-        bytes.windows(4).any(|window| window == b"PACK"),
+        contains(&bytes, b"PACK"),
         "side-band payload must contain a real PACK"
     );
 
@@ -714,7 +714,7 @@ fn v2_fetch_negotiation_acks_readies_waits_and_ignores_unknowns() {
         "once done arrives server opens the pack:\n{finished_text}"
     );
     assert!(
-        finished.windows(4).any(|window| window == b"PACK"),
+        contains(&finished, b"PACK"),
         "follow-up round must contain a real PACK"
     );
 

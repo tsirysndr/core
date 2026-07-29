@@ -9,7 +9,7 @@ use knot_pack::{RepoLookup, RepoResolver, RepoTarget};
 use knot_types::{OwnerDid, RefName, RepoDid, RepoRkey};
 
 mod common;
-use common::{commit, git, must, pkt, serve_dids, spawn, unsideband};
+use common::{commit, contains, git, must, pkt, serve_dids, spawn, unsideband};
 
 fn seed_repo(work: &Path, bare: &str, file: &str, contents: &str) {
     std::fs::create_dir_all(work).unwrap();
@@ -471,8 +471,7 @@ async fn http_upload_archive_serves_a_framed_tar_and_guards_refuse_cob_raw_oids_
         "archive response opens with the ACK pkt-line"
     );
     assert!(
-        body.windows("README.md".len())
-            .any(|window| window == b"README.md"),
+        contains(&body, b"README.md"),
         "framed archive contains README.md entry"
     );
 
@@ -523,8 +522,7 @@ async fn http_upload_archive_serves_a_framed_tar_and_guards_refuse_cob_raw_oids_
         "archiving cob-only tree must be refused"
     );
     assert!(
-        !cob.windows("README.md".len())
-            .any(|window| window == b"README.md"),
+        !contains(&cob, b"README.md"),
         "refused archive mustn't leak the hidden tree's contents"
     );
 }
@@ -834,7 +832,7 @@ async fn http_boundary_encoding_and_streaming() {
     );
     let collected = streamed.into_body().collect().await.unwrap().to_bytes();
     assert!(
-        collected.windows(4).any(|window| window == b"PACK"),
+        contains(&collected, b"PACK"),
         "streamed response must contain a real PACK"
     );
 }
