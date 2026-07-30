@@ -1,6 +1,9 @@
 package repoident
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestNewRepoDid_RejectsInvalid(t *testing.T) {
 	if _, err := NewRepoDid(""); err == nil {
@@ -33,5 +36,26 @@ func TestNewOwnerDid_AcceptsValid(t *testing.T) {
 	}
 	if got.String() != raw {
 		t.Errorf("got %q, want %q", got, raw)
+	}
+}
+
+func TestDidJSONRoundTripsAndValidates(t *testing.T) {
+	var pair struct {
+		Repo  RepoDid  `json:"repo"`
+		Owner OwnerDid `json:"owner"`
+	}
+	const raw = `{"repo":"did:plc:boltless","owner":"did:plc:akshay"}`
+	if err := json.Unmarshal([]byte(raw), &pair); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	out, err := json.Marshal(pair)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if string(out) != raw {
+		t.Errorf("re-encoded %s, want %s", out, raw)
+	}
+	if err := json.Unmarshal([]byte(`{"repo":"not-a-did","owner":"did:plc:akshay"}`), &pair); err == nil {
+		t.Error("Unmarshal accepted a malformed repoDid")
 	}
 }

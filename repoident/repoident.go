@@ -18,6 +18,15 @@ func NewRepoDid(s string) (RepoDid, error) {
 	return RepoDid(did), nil
 }
 
+func (r *RepoDid) UnmarshalText(text []byte) error {
+	did, err := NewRepoDid(string(text))
+	if err != nil {
+		return err
+	}
+	*r = did
+	return nil
+}
+
 type OwnerDid syntax.DID
 
 func (o OwnerDid) String() string { return string(o) }
