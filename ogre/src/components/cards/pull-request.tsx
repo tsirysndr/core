@@ -5,6 +5,7 @@ import { CardHeader } from "../shared/card-header";
 import { FooterStats } from "../shared/footer-stats";
 import { FileDiff, RefreshCw } from "../../icons/lucide";
 import { COLORS, TYPOGRAPHY } from "../shared/constants";
+import { pluralize } from "../../lib/pluralize";
 import type { PullRequestCardData } from "../../validation";
 
 interface FilesChangedPillProps {
@@ -33,7 +34,7 @@ function FilesChangedPill({
         }}>
         <FileDiff size={34} color="#202020" />
         <span style={{ ...TYPOGRAPHY.body, color: "#202020" }}>
-          {filesChanged} files
+          {filesChanged} {pluralize("file", filesChanged)}
         </span>
       </Row>
       <Row style={{ gap: 0 }}>

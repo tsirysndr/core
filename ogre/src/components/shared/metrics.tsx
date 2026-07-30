@@ -6,14 +6,13 @@ import {
   CircleDot,
   type LucideIcon,
 } from "../../icons/lucide";
+import { pluralize } from "../../lib/pluralize";
 
 interface MetricsProps {
   stars: number;
   pulls: number;
   issues: number;
 }
-
-const pluralize = (label: string, n: number) => (`${label}${n === 1 ? "" : "s"}`);
 
 // Display stars, pulls, issues with Lucide icons
 export function Metrics({ stars, pulls, issues }: MetricsProps) {
