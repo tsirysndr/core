@@ -301,6 +301,7 @@ services:
       TANGLED_ZOEKT_INDEX_DIR: /data/index
       TANGLED_ZOEKT_PLC_URL: https://plc.tngl.boltless.dev
       TANGLED_ZOEKT_APPVIEW_URL: http://127.0.0.1:3000
+      TANGLED_ZOEKT_ALLOW_HTTP: "true"
     volumes:
       - zoekt-index:/data/index
       - ./localinfra/certs/root.crt:/etc/ssl/certs/caddy.crt:ro

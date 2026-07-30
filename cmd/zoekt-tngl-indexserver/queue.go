@@ -3,20 +3,20 @@ package main
 import (
 	"sync"
 
-	"github.com/bluesky-social/indigo/atproto/syntax"
+	"tangled.org/core/repoident"
 )
 
 // deduplicating index work queue
 type Queue struct {
 	mu      sync.Mutex
-	order   []syntax.DID
-	pending map[syntax.DID]indexRequest
+	order   []repoident.RepoDid
+	pending map[repoident.RepoDid]indexRequest
 	size    int
 }
 
 func NewQueue(size int) *Queue {
 	return &Queue{
-		pending: make(map[syntax.DID]indexRequest),
+		pending: make(map[repoident.RepoDid]indexRequest),
 		size:    size,
 	}
 }

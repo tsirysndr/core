@@ -12,9 +12,9 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/sourcegraph/zoekt"
-	"tangled.org/core/api/tangled"
+	"tangled.org/core/repoident"
+	"tangled.org/core/repoverify"
 )
 
 // 1 MB; match https://sourcegraph.sourcegraph.com/r/github.com/sourcegraph/sourcegraph/-/blob/cmd/searcher/internal/search/store.go?L32
@@ -24,9 +24,9 @@ func gitIndex(ctx context.Context, cfg *Config, dir identity.Directory, req inde
 	ctx, cancel := context.WithTimeout(ctx, cfg.IndexTimeout)
 	defer cancel()
 
-	repo, err := loadRepo(ctx, dir, req.Repo)
+	repo, err := loadRepo(ctx, cfg, dir, req.Repo)
 	if err != nil {
-		return nil
+		return fmt.Errorf("loading repo %s: %w", req.Repo, err)
 	}
 	repo.Branches = req.Branches
 
@@ -47,24 +47,26 @@ func gitIndex(ctx context.Context, cfg *Config, dir identity.Directory, req inde
 	return nil
 }
 
-func loadRepo(ctx context.Context, dir identity.Directory, repoDID syntax.DID) (*Repo, error) {
-	ident, err := dir.LookupDID(ctx, repoDID)
+func loadRepo(ctx context.Context, cfg *Config, dir identity.Directory, repoDID repoident.RepoDid) (*Repo, error) {
+	ident, err := dir.LookupDID(ctx, syntax.DID(repoDID))
 	if err != nil {
 		return nil, err
 	}
 
-	knot := ident.PDSEndpoint()
+	knot, err := repoident.KnotURLFromIdentity(ident, cfg.KnotScheme)
+	if err != nil {
+		return nil, fmt.Errorf("repoDid %s: %w", repoDID, err)
+	}
 
-	xrpcc := &indigoxrpc.Client{Host: knot}
-	out, err := tangled.RepoDescribeRepo(ctx, xrpcc, repoDID.String())
+	described, err := repoverify.Describe(ctx, nil, knot, repoDID)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Repo{
 		Did:   repoDID,
-		Owner: syntax.DID(out.OwnerDid),
-		Slug:  syntax.RecordKey(out.Rkey),
+		Owner: described.OwnerDid,
+		Slug:  described.Rkey,
 		Knot:  knot,
 	}, nil
 }

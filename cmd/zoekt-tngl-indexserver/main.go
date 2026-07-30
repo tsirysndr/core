@@ -20,10 +20,12 @@ import (
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/carlmjohnson/versioninfo"
+	"github.com/samber/lo"
 	"github.com/sourcegraph/zoekt"
 	"github.com/sourcegraph/zoekt/gitindex"
 	"github.com/sourcegraph/zoekt/index"
 	"github.com/urfave/cli/v3"
+	"tangled.org/core/repoident"
 )
 
 func loggedRun(cmd *exec.Cmd) error {
@@ -116,6 +118,11 @@ func run(args []string) error {
 					Value:   ":6060",
 					Sources: cli.EnvVars("TANGLED_ZOEKT_SERVER_LISTEN"),
 				},
+				&cli.BoolFlag{
+					Name:    "allow-http",
+					Usage:   "accept repo DIDs whose knot service endpoint is plaintext http.",
+					Sources: cli.EnvVars("TANGLED_ZOEKT_ALLOW_HTTP"),
+				},
 			},
 		},
 		{
@@ -151,6 +158,8 @@ type Config struct {
 	PlcUrl     string
 	AppviewUrl string
 	Listen     string
+
+	KnotScheme repoident.SchemePolicy
 }
 
 func createMissingDirectories(cfg *Config) {
@@ -162,15 +171,15 @@ func createMissingDirectories(cfg *Config) {
 }
 
 type Repo struct {
-	Did      syntax.DID // repo DID
-	Owner    syntax.DID
+	Did      repoident.RepoDid
+	Owner    repoident.OwnerDid
 	Slug     syntax.RecordKey
-	Knot     string // knot service url derived from #atproto_pds service endpoint
+	Knot     repoident.KnotURL
 	Branches []zoekt.RepositoryBranch
 }
 
 func (r *Repo) CloneURL() string {
-	return r.Knot + "/" + r.Did.String()
+	return r.Knot.JoinPath(r.Did.String())
 }
 
 func runIndexServer(ctx context.Context, cmd *cli.Command) error {
@@ -182,6 +191,7 @@ func runIndexServer(ctx context.Context, cmd *cli.Command) error {
 		PlcUrl:           cmd.String("plc-url"),
 		AppviewUrl:       cmd.String("appview-url"),
 		Listen:           cmd.String("listen"),
+		KnotScheme:       repoident.SchemeFor(cmd.Bool("allow-http")),
 	}
 	createMissingDirectories(cfg)
 
@@ -213,11 +223,11 @@ func runIndex(ctx context.Context, cmd *cli.Command) error {
 	if err := json.Unmarshal([]byte(repoRaw), &repo); err != nil {
 		return fmt.Errorf("invalid repo: %w", err)
 	}
-
-	var branches []string
-	for _, b := range repo.Branches {
-		branches = append(branches, b.Name)
+	if repo.Did == "" || repo.Owner == "" || repo.Knot.IsZero() {
+		return fmt.Errorf("repo is missing did, owner, or knot: %q", repoRaw)
 	}
+
+	branches := lo.Map(repo.Branches, func(b zoekt.RepositoryBranch, _ int) string { return b.Name })
 
 	buildOpts := index.Options{}
 	buildOpts.SetDefaults()
@@ -238,7 +248,7 @@ func runIndex(ctx context.Context, cmd *cli.Command) error {
 		"foo":   "bar", // for testing
 		"did":   repo.Did.String(),
 		"owner": repo.Owner.String(),
-		"knot":  repo.Knot,
+		"knot":  repo.Knot.String(),
 	}
 	// buildOpts.RepositoryDescription.Source = gitDir // configured later in IndexGitRepo
 	buildOpts.RepositoryDescription.Branches = nil

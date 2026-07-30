@@ -6,6 +6,8 @@ tmp
 appview/pages/static/*
 spindle/spindle
 spindle/spindle-microvm-run
+/prefill-zoekt
+/zoekt-tngl-indexserver
 result
 !.gitkeep
 !appview/pages/static/topbar-search.js

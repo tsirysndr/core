@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/identity"
-	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sourcegraph/zoekt"
+	"tangled.org/core/repoident"
 )
 
 type IndexServer struct {
@@ -59,7 +59,7 @@ func (s *IndexServer) handleMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 type indexRequest struct {
-	Repo     syntax.DID               `json:"repo"`
+	Repo     repoident.RepoDid        `json:"repo"`
 	Branches []zoekt.RepositoryBranch `json:"branches"`
 }
 
