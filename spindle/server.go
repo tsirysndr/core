@@ -579,7 +579,7 @@ func (s *Spindle) resolveSourceRepoInfo(ctx context.Context, repoDid syntax.DID)
 	if err != nil {
 		return nil, fmt.Errorf("verify sourceRepo %s: %w", repoDid, err)
 	}
-	return s.buildTriggerRepoFrom(ctx, res.KnotURL.Host, res.OwnerDid.String(), res.Rkey, repoDid.String()), nil
+	return s.buildTriggerRepoFrom(ctx, res.KnotURL.Host(), res.OwnerDid.String(), res.Rkey.String(), repoDid.String()), nil
 }
 
 // runPipeline compiles and enqueues the pipeline for the given revision.

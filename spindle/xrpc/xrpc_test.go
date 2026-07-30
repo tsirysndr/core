@@ -232,26 +232,6 @@ func TestCancelPipeline_RBAC(t *testing.T) {
 	}
 }
 
-type mockDirectory struct {
-	ident *identity.Identity
-}
-
-func (m *mockDirectory) LookupDID(ctx context.Context, did syntax.DID) (*identity.Identity, error) {
-	return m.ident, nil
-}
-
-func (m *mockDirectory) LookupHandle(ctx context.Context, handle syntax.Handle) (*identity.Identity, error) {
-	return m.ident, nil
-}
-
-func (m *mockDirectory) Lookup(ctx context.Context, id syntax.AtIdentifier) (*identity.Identity, error) {
-	return m.ident, nil
-}
-
-func (m *mockDirectory) Purge(ctx context.Context, id syntax.AtIdentifier) error {
-	return nil
-}
-
 func TestSecrets_RBAC(t *testing.T) {
 	d, e := newTestXrpcDB(t)
 
@@ -322,7 +302,7 @@ func TestSecrets_RBAC(t *testing.T) {
 		},
 	}
 
-	resolver := idresolver.NewMockResolver(&mockDirectory{ident: mockIdent})
+	resolver := idresolver.NewMockResolver(idresolver.MockDirectory{Ident: mockIdent})
 
 	x := &Xrpc{
 		Logger:   slog.Default(),

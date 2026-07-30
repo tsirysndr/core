@@ -443,11 +443,11 @@ func (i *Ingester) verifyOwnership(ctx context.Context, l *slog.Logger, repoDid,
 		)
 		return false, nil
 	}
-	if !strings.EqualFold(recordKnot, result.KnotURL.Host) {
+	if !strings.EqualFold(recordKnot, result.KnotURL.Host()) {
 		l.Warn("rejecting repo event: record knot does not match DID-doc endpoint",
 			"repoDid", repoDid,
 			"recordKnot", recordKnot,
-			"canonicalKnot", result.KnotURL.Host,
+			"canonicalKnot", result.KnotURL.Host(),
 		)
 		return false, nil
 	}

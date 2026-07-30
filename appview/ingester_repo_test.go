@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"net/url"
 	"path/filepath"
 	"testing"
 
@@ -22,11 +21,11 @@ import (
 	"tangled.org/core/repoverify"
 )
 
-func mustKnotURL(t *testing.T, raw string) *url.URL {
+func mustKnotURL(t *testing.T, raw string) repoident.KnotURL {
 	t.Helper()
-	u, err := repoverify.ParseKnotEndpoint(raw, true)
+	u, err := repoident.ParseKnotURL(raw, repoident.AllowHTTP)
 	if err != nil {
-		t.Fatalf("ParseKnotEndpoint(%q): %v", raw, err)
+		t.Fatalf("ParseKnotURL(%q): %v", raw, err)
 	}
 	return u
 }

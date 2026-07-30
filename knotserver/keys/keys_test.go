@@ -3,7 +3,6 @@ package keys
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -14,6 +13,7 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/idresolver"
 	"tangled.org/core/knotserver/db"
 )
 
@@ -32,7 +32,7 @@ func TestFetchAndStore_EmptyResponseDoesNotWipe(t *testing.T) {
 	})
 	defer srv.Close()
 
-	if err := FetchAndStore(context.Background(), fakeDirectory{pdsURL: srv.URL}, store, didBoltless); err != nil {
+	if err := FetchAndStore(context.Background(), pdsDirectory(srv.URL), store, didBoltless); err != nil {
 		t.Fatalf("FetchAndStore: %v", err)
 	}
 
@@ -54,7 +54,7 @@ func TestFetchAndStore_ReplacesExistingKeys(t *testing.T) {
 	})
 	defer srv.Close()
 
-	if err := FetchAndStore(context.Background(), fakeDirectory{pdsURL: srv.URL}, store, didBoltless); err != nil {
+	if err := FetchAndStore(context.Background(), pdsDirectory(srv.URL), store, didBoltless); err != nil {
 		t.Fatalf("FetchAndStore: %v", err)
 	}
 
@@ -82,7 +82,7 @@ func TestFetchAndStore_PaginatesAcrossPages(t *testing.T) {
 	})
 	defer srv.Close()
 
-	if err := FetchAndStore(context.Background(), fakeDirectory{pdsURL: srv.URL}, store, didBoltless); err != nil {
+	if err := FetchAndStore(context.Background(), pdsDirectory(srv.URL), store, didBoltless); err != nil {
 		t.Fatalf("FetchAndStore: %v", err)
 	}
 
@@ -173,27 +173,10 @@ func pdsServer(t *testing.T, pages map[string]*comatproto.RepoListRecords_Output
 	}))
 }
 
-type fakeDirectory struct {
-	pdsURL string
-}
-
-func (f fakeDirectory) LookupDID(ctx context.Context, did syntax.DID) (*identity.Identity, error) {
-	return &identity.Identity{
-		DID: did,
+func pdsDirectory(url string) idresolver.MockDirectory {
+	return idresolver.MockDirectory{Ident: &identity.Identity{
 		Services: map[string]identity.ServiceEndpoint{
-			"atproto_pds": {Type: "AtprotoPersonalDataServer", URL: f.pdsURL},
+			"atproto_pds": {Type: "AtprotoPersonalDataServer", URL: url},
 		},
-	}, nil
-}
-
-func (f fakeDirectory) LookupHandle(ctx context.Context, handle syntax.Handle) (*identity.Identity, error) {
-	return nil, errors.New("LookupHandle unused in tests")
-}
-
-func (f fakeDirectory) Lookup(ctx context.Context, atid syntax.AtIdentifier) (*identity.Identity, error) {
-	return nil, errors.New("Lookup unused in tests")
-}
-
-func (f fakeDirectory) Purge(ctx context.Context, atid syntax.AtIdentifier) error {
-	return nil
+	}}
 }

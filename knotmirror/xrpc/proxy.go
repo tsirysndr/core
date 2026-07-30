@@ -16,9 +16,12 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"github.com/go-git/go-git/v5/plumbing/filemode"
+	"github.com/samber/lo"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/knotmirror/db"
 	"tangled.org/core/knotmirror/models"
+	"tangled.org/core/repoident"
+	"tangled.org/core/repoverify"
 )
 
 var mirrorToKnotNSID = map[string]string{
@@ -49,31 +52,9 @@ type knotInfo struct {
 	repoIdentifier string
 }
 
-// validateKnotURL ensures a knot base URL is safe to proxy to.
-// It rejects URLs with path components, query strings, or fragments
-// that could be used for path injection.
-func validateKnotURL(raw string) (string, error) {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return "", fmt.Errorf("invalid knot URL: %w", err)
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return "", errors.New("knot URL must use http or https scheme")
-	}
-	if u.Path != "" && u.Path != "/" {
-		return "", fmt.Errorf("knot URL must not contain a path: %q", raw)
-	}
-	if u.RawQuery != "" || u.Fragment != "" {
-		return "", fmt.Errorf("knot URL must not contain query or fragment: %q", raw)
-	}
-	if u.User != nil {
-		return "", fmt.Errorf("knot URL must not contain userinfo: %q", raw)
-	}
-	// Strip trailing slash for consistent formatting
-	return strings.TrimRight(u.String(), "/"), nil
-}
-
 func (x *Xrpc) resolveKnot(ctx context.Context, repoDid syntax.DID) (*knotInfo, error) {
+	policy := repoident.SchemeFor(!x.cfg.KnotSSRF)
+
 	if repo, err := db.GetRepoByRepoDid(ctx, x.db, repoDid); err == nil && repo != nil {
 		knotURL := repo.KnotDomain
 		if !strings.Contains(repo.KnotDomain, "://") {
@@ -81,52 +62,40 @@ func (x *Xrpc) resolveKnot(ctx context.Context, repoDid syntax.DID) (*knotInfo, 
 				knotURL = host.URL()
 			} else {
 				x.logger.Warn("repo is from unknown knot")
-				if x.cfg.KnotUseSSL {
-					knotURL = "https://" + knotURL
-				} else {
-					knotURL = "http://" + knotURL
-				}
+				knotURL = lo.Ternary(x.cfg.KnotUseSSL, "https://", "http://") + knotURL
 			}
 		}
-		knotURL, err = validateKnotURL(knotURL)
+		base, err := repoident.ParseKnotURL(knotURL, policy)
 		if err != nil {
 			return nil, err
 		}
-		return &knotInfo{baseURL: knotURL, repoIdentifier: repo.RepoIdentifier()}, nil
+		return &knotInfo{baseURL: base.String(), repoIdentifier: repo.RepoIdentifier()}, nil
 	}
 
 	ident, err := x.resolver.ResolveIdent(ctx, repoDid.String())
 	if err != nil {
 		return nil, fmt.Errorf("resolving repoDid %s: %w", repoDid, err)
 	}
-	knotURL, err := validateKnotURL(ident.GetServiceEndpoint("atproto_pds"))
+	base, err := repoident.KnotURLFromIdentity(ident, policy)
 	if err != nil {
 		return nil, fmt.Errorf("repoDid %s: %w", repoDid, err)
 	}
+	knotURL := base.String()
 
-	xrpcc := &indigoxrpc.Client{Host: knotURL, Client: x.httpClient}
-	out, err := tangled.RepoDescribeRepo(ctx, xrpcc, repoDid.String())
+	described, err := repoverify.Describe(ctx, x.httpClient, base, repoident.RepoDid(repoDid))
+	if errors.Is(err, repoverify.ErrKnotAnswer) {
+		return nil, err
+	}
 	if err != nil {
 		x.logger.Warn("describeRepo failed; serving without metadata upsert", "knot", knotURL, "repo", repoDid, "err", err)
 		return &knotInfo{baseURL: knotURL, repoIdentifier: repoDid.String()}, nil
 	}
-	if out.RepoDid != repoDid.String() {
-		return nil, fmt.Errorf("knot %s returned mismatched repoDid: got %q, want %q", knotURL, out.RepoDid, repoDid)
-	}
-	ownerDid, err := syntax.ParseDID(out.OwnerDid)
-	if err != nil {
-		return nil, fmt.Errorf("describeRepo on %s returned invalid ownerDid %q: %w", knotURL, out.OwnerDid, err)
-	}
-	rkey, err := syntax.ParseRecordKey(out.Rkey)
-	if err != nil {
-		return nil, fmt.Errorf("describeRepo on %s returned invalid rkey %q: %w", knotURL, out.Rkey, err)
-	}
 
 	go func() {
 		pending := &models.Repo{
-			Did:        ownerDid,
-			Rkey:       rkey,
-			Name:       string(rkey),
+			Did:        syntax.DID(described.OwnerDid),
+			Rkey:       described.Rkey,
+			Name:       string(described.Rkey),
 			KnotDomain: knotURL,
 			RepoDid:    repoDid,
 			State:      models.RepoStatePending,

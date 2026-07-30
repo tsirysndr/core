@@ -9,6 +9,7 @@ import (
 	atcrypto "github.com/bluesky-social/indigo/atproto/atcrypto"
 	"github.com/did-method-plc/go-didplc/didplc"
 	"tangled.org/core/idresolver"
+	"tangled.org/core/repoident"
 )
 
 type PreparedDID struct {
@@ -47,8 +48,8 @@ func PrepareRepoDID(plcUrl, knotServiceUrl string) (*PreparedDID, error) {
 		},
 		AlsoKnownAs: []string{},
 		Services: map[string]didplc.OpService{
-			"atproto_pds": {
-				Type:     "AtprotoPersonalDataServer",
+			repoident.LegacyKnotServiceID: {
+				Type:     repoident.LegacyKnotServiceType,
 				Endpoint: knotServiceUrl,
 			},
 		},
@@ -107,11 +108,18 @@ func VerifyRepoDIDWeb(ctx context.Context, resolver *idresolver.Resolver, repoDi
 		return fmt.Errorf("resolving did:web document: %w", err)
 	}
 
-	knotEndpoint := ident.GetServiceEndpoint("atproto_pds")
-	if strings.TrimRight(knotEndpoint, "/") != strings.TrimRight(knotServiceUrl, "/") {
+	knotEndpoint, err := repoident.KnotURLFromIdentity(ident, repoident.AllowHTTP)
+	if err != nil {
+		return fmt.Errorf("did:web document: %w", err)
+	}
+	expected, err := repoident.ParseKnotURL(knotServiceUrl, repoident.AllowHTTP)
+	if err != nil {
+		return fmt.Errorf("knot service URL %q: %w", knotServiceUrl, err)
+	}
+	if knotEndpoint != expected {
 		return fmt.Errorf(
-			"did:web atproto_pds service endpoint %q does not match this knot %q",
-			knotEndpoint, knotServiceUrl,
+			"did:web knot service endpoint %q doesn't match this knot %q",
+			knotEndpoint, expected,
 		)
 	}
 
