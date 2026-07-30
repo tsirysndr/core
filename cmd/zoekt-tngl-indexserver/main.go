@@ -21,7 +21,6 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/carlmjohnson/versioninfo"
 	"github.com/samber/lo"
-	"github.com/sourcegraph/zoekt"
 	"github.com/sourcegraph/zoekt/gitindex"
 	"github.com/sourcegraph/zoekt/index"
 	"github.com/urfave/cli/v3"
@@ -175,7 +174,7 @@ type Repo struct {
 	Owner    repoident.OwnerDid
 	Slug     syntax.RecordKey
 	Knot     repoident.KnotURL
-	Branches []zoekt.RepositoryBranch
+	Branches []indexBranch
 }
 
 func (r *Repo) CloneURL() string {
@@ -227,7 +226,7 @@ func runIndex(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("repo is missing did, owner, or knot: %q", repoRaw)
 	}
 
-	branches := lo.Map(repo.Branches, func(b zoekt.RepositoryBranch, _ int) string { return b.Name })
+	branches := lo.Map(repo.Branches, func(b indexBranch, _ int) string { return string(b.Name) })
 
 	buildOpts := index.Options{}
 	buildOpts.SetDefaults()

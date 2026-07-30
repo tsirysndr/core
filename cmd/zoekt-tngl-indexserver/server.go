@@ -3,16 +3,20 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bluesky-social/indigo/atproto/identity"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/sourcegraph/zoekt"
+	"github.com/samber/lo"
 	"tangled.org/core/repoident"
 )
 
@@ -58,9 +62,60 @@ func (s *IndexServer) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	promhttp.Handler().ServeHTTP(w, r)
 }
 
+type branchName string
+
+func (b branchName) Ref() string {
+	return lo.Ternary(b == "HEAD", "HEAD", "refs/heads/"+string(b))
+}
+
+func (b *branchName) UnmarshalText(text []byte) error {
+	name := branchName(text)
+	if strings.HasPrefix(string(name), "refs/") {
+		return fmt.Errorf("branch %q must be a short name, without the refs/ prefix", name)
+	}
+	if err := plumbing.ReferenceName(name.Ref()).Validate(); err != nil {
+		return fmt.Errorf("branch %q isn't a valid ref: %w", name, err)
+	}
+	*b = name
+	return nil
+}
+
+type objectID string
+
+var objectIDPattern = regexp.MustCompile(`^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$`)
+
+func (o *objectID) UnmarshalText(text []byte) error {
+	if !objectIDPattern.Match(text) {
+		return fmt.Errorf("%q isn't a sha1 or sha256 object id", text)
+	}
+	*o = objectID(text)
+	return nil
+}
+
+type indexBranch struct {
+	Name    branchName `json:"name"`
+	Version objectID   `json:"version"`
+}
+
 type indexRequest struct {
-	Repo     repoident.RepoDid        `json:"repo"`
-	Branches []zoekt.RepositoryBranch `json:"branches"`
+	Repo     repoident.RepoDid `json:"repo"`
+	Branches []indexBranch     `json:"branches"`
+}
+
+func decodeIndexRequest(r *http.Request) (indexRequest, error) {
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	var req indexRequest
+	if err := dec.Decode(&req); err != nil {
+		return indexRequest{}, err
+	}
+	if req.Repo == "" {
+		return indexRequest{}, errors.New("index request has no repo did")
+	}
+	if len(req.Branches) == 0 {
+		return indexRequest{}, fmt.Errorf("index request for %s has no branches", req.Repo)
+	}
+	return req, nil
 }
 
 func (s *IndexServer) handleDebugQueue(w http.ResponseWriter, r *http.Request) {
@@ -74,10 +129,8 @@ func (s *IndexServer) handleDebugQueue(w http.ResponseWriter, r *http.Request) {
 
 func (s *IndexServer) handleEnqueueIndex(w http.ResponseWriter, r *http.Request) {
 	route := "enqueueIndex"
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	var req indexRequest
-	if err := dec.Decode(&req); err != nil {
+	req, err := decodeIndexRequest(r)
+	if err != nil {
 		log.Printf("Error decoding index request: %v", err)
 		http.Error(w, "JSON parser error", http.StatusBadRequest)
 		s.incrementRequestsTotal(r.Method, route, http.StatusBadRequest)
@@ -97,12 +150,11 @@ func (s *IndexServer) handleEnqueueIndex(w http.ResponseWriter, r *http.Request)
 
 func (s *IndexServer) handleForceIndex(w http.ResponseWriter, r *http.Request) {
 	route := "index"
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	var req indexRequest
-	if err := dec.Decode(&req); err != nil {
+	req, err := decodeIndexRequest(r)
+	if err != nil {
 		log.Printf("Error decoding index request: %v", err)
 		http.Error(w, "JSON parser error", http.StatusBadRequest)
+		s.incrementRequestsTotal(r.Method, route, http.StatusBadRequest)
 		return
 	}
 

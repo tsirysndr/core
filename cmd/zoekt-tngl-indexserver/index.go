@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -12,7 +13,7 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	"github.com/sourcegraph/zoekt"
+	"github.com/samber/lo"
 	"tangled.org/core/repoident"
 	"tangled.org/core/repoverify"
 )
@@ -71,7 +72,7 @@ func loadRepo(ctx context.Context, cfg *Config, dir identity.Directory, repoDID 
 	}, nil
 }
 
-func fetchRepo(ctx context.Context, gitDir, cloneUrl string, branches []zoekt.RepositoryBranch) error {
+func fetchRepo(ctx context.Context, gitDir, cloneUrl string, branches []indexBranch) error {
 	// Create a repo to fetch into
 	if err := executeCmd(ctx,
 		"git",
@@ -87,38 +88,27 @@ func fetchRepo(ctx context.Context, gitDir, cloneUrl string, branches []zoekt.Re
 		return err
 	}
 
-	fetchArgs := []string{
+	fetchArgs := append([]string{
 		"-C", gitDir,
 		"-c", "protocol.version=2",
 		"fetch", "--depth=1", "--no-tags",
-	}
-	// Git's blob:limit filter excludes blobs whose size is >= the given limit,
-	// while zoekt indexes files up to and including FileLimit bytes.
-	fetchArgs = append(fetchArgs, fmt.Sprintf("--filter=blob:limit=%d", int64(MaxFileSize)+1))
-
-	fetchArgs = append(fetchArgs, cloneUrl)
-
-	var commits []string
-	for _, b := range branches {
-		commits = append(commits, b.Version)
-	}
-	fetchArgs = append(fetchArgs, commits...)
+		// Git's blob:limit filter excludes blobs whose size is >= the given limit,
+		// while zoekt indexes files up to and including FileLimit bytes.
+		fmt.Sprintf("--filter=blob:limit=%d", int64(MaxFileSize)+1),
+		cloneUrl,
+	}, lo.Map(branches, func(b indexBranch, _ int) string { return string(b.Version) })...)
 
 	if err := executeCmd(ctx, "git", fetchArgs...); err != nil {
 		return err
 	}
 
-	for _, b := range branches {
-		ref := b.Name
-		if ref != "HEAD" {
-			ref = "refs/heads/" + ref
+	return errors.Join(lo.FilterMap(branches, func(b indexBranch, _ int) (error, bool) {
+		err := executeCmd(ctx, "git", "-C", gitDir, "update-ref", b.Name.Ref(), string(b.Version))
+		if err == nil {
+			return nil, false
 		}
-		if err := executeCmd(ctx, "git", "-C", gitDir, "update-ref", ref, b.Version); err != nil {
-			return fmt.Errorf("failed update-ref %s to %s: %w", ref, b.Version, err)
-		}
-	}
-
-	return nil
+		return fmt.Errorf("failed update-ref %s to %s: %w", b.Name.Ref(), b.Version, err), true
+	})...)
 }
 
 func indexRepo(ctx context.Context, cfg *Config, gitDir string, repo Repo) error {
