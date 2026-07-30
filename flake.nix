@@ -160,7 +160,7 @@
         appview = self.callPackage ./nix/pkgs/appview.nix {};
         blog = self.callPackage ./nix/pkgs/blog.nix {};
         docs = self.callPackage ./nix/pkgs/docs.nix {
-          inherit inter-fonts-src ibm-plex-mono-src lucide-src;
+          inherit inter-fonts-src ibm-plex-mono-src lucide-src tailwindcss-animated-src;
           inherit (pkgs) pagefind;
         };
         spindle = self.callPackage ./nix/pkgs/spindle.nix {};

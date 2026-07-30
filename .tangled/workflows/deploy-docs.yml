@@ -4,6 +4,7 @@ when:
     paths:
       - docs/**
       - input.css
+      - nix/pkgs/docs.nix
 
 engine: microvm
 image: nixos
