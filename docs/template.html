@@ -4,6 +4,12 @@
     <meta charset="utf-8" />
     <meta name="generator" content="pandoc" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+
+    <script>
+      if (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = 'dark';
+    </script>
+
     $for(author-meta)$
       <meta name="author" content="$author-meta$" />
     $endfor$
