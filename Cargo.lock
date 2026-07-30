@@ -687,6 +687,7 @@ dependencies = [
  "clap",
  "confique",
  "futures",
+ "rustls",
  "serde",
  "socket2",
  "thiserror 2.0.18",

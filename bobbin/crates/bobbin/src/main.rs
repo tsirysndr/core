@@ -69,6 +69,8 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+
     let cli = Cli::parse();
 
     if let Some(Command::ConfigTemplate) = cli.command {
