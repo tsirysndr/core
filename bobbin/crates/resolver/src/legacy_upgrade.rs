@@ -320,6 +320,7 @@ async fn upgrade_issue(
     let repo = upgrade_repo_did(resolver, l.repo, l.repo_did).await?;
     Some(Issue {
         created_at: l.created_at,
+        blobs: None,
         body: l.body,
         mentions: l.mentions,
         references: l.references,
@@ -377,6 +378,7 @@ async fn upgrade_pull(
     };
     Some(Pull {
         created_at: l.created_at,
+        blobs: None,
         body: l.body,
         dependent_on: l.dependent_on,
         mentions: l.mentions,
