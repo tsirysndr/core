@@ -1,0 +1,38 @@
+when:
+  - event: ["push"]
+    branch: master
+    paths:
+      - bobbin/crates/**
+      - shuttle/**
+      - lexicons/**
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - .tangled/workflows/rust-test-bobbin.yml
+
+engine: nixery
+
+dependencies:
+  nixpkgs:
+    - gcc
+    - gnumake
+    - cmake
+    - perl
+    - gawk
+    - gnused
+    - gnugrep
+    - findutils
+    - protobuf
+  github:nix-community/fenix/f6670530f53e69cc284f7aef818eb0f08fe81905:
+    - stable.defaultToolchain
+
+environment:
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  RUST_BACKTRACE: "1"
+
+steps:
+  - name: bobbin and shuttle tests
+    command: |
+      cargo test --locked -p 'bobbin*' -p shuttle

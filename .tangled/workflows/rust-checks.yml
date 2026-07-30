@@ -1,0 +1,32 @@
+when:
+  - event: ["push", "pull_request"]
+    branch: master
+
+engine: nixery
+
+dependencies:
+  nixpkgs:
+    - gcc
+    - gnumake
+    - cmake
+    - perl
+    - gawk
+    - gnused
+    - gnugrep
+    - findutils
+    - just
+  github:nix-community/fenix/f6670530f53e69cc284f7aef818eb0f08fe81905:
+    - stable.defaultToolchain
+
+environment:
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+
+steps:
+  - name: knot architecture checks
+    command: |
+      cd knot2 && just checks
+
+  - name: knot lints
+    command: |
+      cd knot2 && just clippy

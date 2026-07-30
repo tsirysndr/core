@@ -145,7 +145,7 @@ in
           workflowTimeout = mkOption {
             type = types.str;
             default = "5m";
-            description = "Timeout for each workflow step";
+            description = "Timeout for a whole workflow, covering the wait for a concurrency slot, setup, and every step in it";
           };
 
           nixery = {

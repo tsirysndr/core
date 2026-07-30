@@ -1,0 +1,54 @@
+when:
+  - event: ["push"]
+    branch: master
+    paths:
+      - knot2/**
+      - lexicons/**
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - .tangled/workflows/rust-test-knot.yml
+
+engine: nixery
+
+dependencies:
+  nixpkgs:
+    - gcc
+    - gnumake
+    - cmake
+    - perl
+    - gawk
+    - gnused
+    - gnugrep
+    - findutils
+    - just
+    - git-lfs
+    - openssh
+  github:nix-community/fenix/f6670530f53e69cc284f7aef818eb0f08fe81905:
+    - stable.defaultToolchain
+
+environment:
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  RUST_BACKTRACE: "1"
+  KNOT_LFS_CONFORMANCE: "skip"
+  GIT_CONFIG_COUNT: "2"
+  GIT_CONFIG_KEY_0: "gc.autoDetach"
+  GIT_CONFIG_VALUE_0: "false"
+  GIT_CONFIG_KEY_1: "maintenance.auto"
+  GIT_CONFIG_VALUE_1: "false"
+
+steps:
+  - name: user database for ssh-keygen and ssh
+    command: |
+      printf 'root:x:0:0::/tangled/home:/bin/bash\n' > /etc/passwd &&
+      printf 'root:x:0:\n' > /etc/group
+
+  - name: knot tests
+    command: |
+      cargo test --locked -p 'knot-*'
+
+  - name: knot instrumented tests
+    command: |
+      cd knot2 && just instrument-tests

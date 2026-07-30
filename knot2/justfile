@@ -13,10 +13,10 @@ fmt-check:
     cargo fmt --all --check
 
 clippy:
-    cargo clippy -p 'knot-*' --all-targets -- -D warnings
+    cargo clippy --locked -p 'knot-*' --all-targets -- -D warnings
 
 test:
-    cargo test -p 'knot-*'
+    cargo test --locked -p 'knot-*'
 
 fuzz crate='knot-pack' target='pack' time='60':
     cd crates/{{crate}}/fuzz && RUSTUP_TOOLCHAIN=nightly cargo fuzz run {{target}} -- -max_total_time={{time}}
@@ -31,11 +31,8 @@ bench filter='':
 bench-scaling:
     cargo bench -p knot-bench --bench coldstart
 
-bench-gate:
-    cargo test -p knot-bench --features instrument --test gate
-
-bench-gate-registry:
-    cargo test -p knot-bench --features instrument --test registry_gate
+instrument-tests:
+    cargo test --locked -p knot-bench --features instrument --tests
 
 differential:
     cargo test -p knot-pack --test differential
@@ -43,55 +40,71 @@ differential:
 t55xx *tests:
     internal_docs/t55xx/run.sh {{tests}}
 
-ci: fmt-check clippy test gates bench-gate fuzz-ci
+ci: fmt-check clippy test checks instrument-tests fuzz-ci
 
-gates: gate-no-subprocess (gate-no-banned-deps "no-sql" "an embedded database" "rusqlite|libsqlite3-sys|sqlx|sqlx-core|sled|fjall|redb") (gate-no-banned-deps "no-native-git" "a native git or TLS shim" "git2|libgit2-sys|openssl-sys|zlib-ng|zlib-ng-sys") gate-no-string-ids gate-no-unguarded-receive gate-fuzz-targets-enumerated
+checks: require-tools check-no-subprocess (check-no-banned-deps "no-sql" "an embedded database" "rusqlite|libsqlite3-sys|sqlx|sqlx-core|sled|fjall|redb") (check-no-banned-deps "no-native-git" "a native git or TLS shim" "git2|libgit2-sys|openssl-sys|zlib-ng|zlib-ng-sys") check-no-string-ids check-no-unguarded-receive check-fuzz-targets-enumerated check-workflow-toolchain
 
-gate-no-subprocess:
+require-tools:
     #!/usr/bin/env bash
     set -euo pipefail
-    hits=$(grep -rn "process::Command" crates/*/src --include="*.rs" | grep -v "/_lex/" || true)
+    missing=""
+    for tool in cargo comm cut find grep head just mktemp rm sed sort tr; do
+        command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
+    done
+    if [ -n "$missing" ]; then
+        echo "require-tools failed, these aren't on PATH:$missing" >&2
+        exit 1
+    fi
+    echo "ok: every tool the checks below run is on PATH"
+
+check-no-subprocess:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    hits=$(grep -rn --include="*.rs" --exclude-dir=_lex "process::Command" crates/*/src || [ $? = 1 ])
     if [ -n "$hits" ]; then
-        echo "no-subprocess gate failed: server source spawns processes" >&2
+        echo "no-subprocess check failed: server source spawns processes" >&2
         echo "$hits" >&2
         exit 1
     fi
     echo "ok: no process spawning in server source"
 
-gate-no-banned-deps name subject pattern:
+check-no-banned-deps name subject pattern:
     #!/usr/bin/env bash
     set -euo pipefail
-    hits=$(cargo tree -p knot-server --edges normal,build --prefix none | sort -u | grep -iE '^({{pattern}}) v' || true)
+    tree=$(cargo tree --locked -p knot-server --edges normal,build --prefix none | sort -u)
+    hits=$(printf '%s\n' "$tree" | grep -iE '^({{pattern}}) v' || [ $? = 1 ])
     if [ -n "$hits" ]; then
-        echo "{{name}} gate failed: {{subject}} is in the knot-server dependency tree" >&2
+        echo "{{name}} check failed: {{subject}} is in the knot-server dependency tree" >&2
         echo "$hits" >&2
         exit 1
     fi
     echo "ok: {{subject}} isn't in the knot-server dependency tree"
 
-gate-no-string-ids:
+check-no-string-ids:
     #!/usr/bin/env bash
     set -euo pipefail
-    hits=$(grep -nE 'pub fn .*(-> *String|: *String\b)' crates/knot-types/src/ids.rs | grep -v 'fn to_hex' || true)
+    declared=$(grep -nE 'pub fn .*(-> *String|: *String\b)' crates/knot-types/src/ids.rs || [ $? = 1 ])
+    hits=$(printf '%s\n' "$declared" | grep -v 'fn to_hex' || [ $? = 1 ])
     if [ -n "$hits" ]; then
-        echo "no-string-ids gate failed: a String-typed id crosses the knot-types boundary" >&2
+        echo "no-string-ids check failed: a String-typed id crosses the knot-types boundary" >&2
         echo "$hits" >&2
         exit 1
     fi
     echo "ok: no String-typed id crosses the knot-types boundary"
 
-gate-no-unguarded-receive:
+check-no-unguarded-receive:
     #!/usr/bin/env bash
     set -euo pipefail
-    hits=$(grep -rn 'receive_pack(\|receive_pack_with_limits(' crates/*/src --include="*.rs" | grep -v 'pub fn ' || true)
+    called=$(grep -rn --include="*.rs" 'receive_pack(\|receive_pack_with_limits(' crates/*/src || [ $? = 1 ])
+    hits=$(printf '%s\n' "$called" | grep -v 'pub fn ' || [ $? = 1 ])
     if [ -n "$hits" ]; then
-        echo "no-unguarded-receive gate failed: server source calls the unguarded receive path, use receive_pack_guarded" >&2
+        echo "no-unguarded-receive check failed: server source calls the unguarded receive path, use receive_pack_guarded" >&2
         echo "$hits" >&2
         exit 1
     fi
     echo "ok: the unguarded receive path is reached only from tests"
 
-gate-fuzz-targets-enumerated:
+check-fuzz-targets-enumerated:
     #!/usr/bin/env bash
     set -euo pipefail
     disk=$(mktemp)
@@ -103,14 +116,14 @@ gate-fuzz-targets-enumerated:
     cut -d' ' -f1,2 "$triplet" > "$recipe"
     while read -r crate target secs; do
         if ! [[ "$secs" =~ ^[1-9][0-9]*$ ]]; then
-            echo "fuzz-targets-enumerated gate failed: target '$crate $target' runs for '$secs', not a positive number of seconds" >&2
+            echo "fuzz-targets-enumerated check failed: target '$crate $target' runs for '$secs', not a positive number of seconds" >&2
             exit 1
         fi
     done < "$triplet"
-    missing=$(comm -23 "$disk" "$recipe" || true)
-    extra=$(comm -13 "$disk" "$recipe" || true)
+    missing=$(comm -23 "$disk" "$recipe")
+    extra=$(comm -13 "$disk" "$recipe")
     if [ -n "$missing" ] || [ -n "$extra" ]; then
-        echo "fuzz-targets-enumerated gate failed: the fuzz-ci recipe and the targets on disk disagree" >&2
+        echo "fuzz-targets-enumerated check failed: the fuzz-ci recipe and the targets on disk disagree" >&2
         if [ -n "$missing" ]; then
             echo "on disk but absent from fuzz-ci:" >&2
             echo "$missing" >&2
@@ -124,14 +137,33 @@ gate-fuzz-targets-enumerated:
     while read -r crate target; do
         manifest="crates/$crate/fuzz/Cargo.toml"
         if ! grep -qF "name = \"$target\"" "$manifest" || ! grep -qF "path = \"fuzz_targets/$target.rs\"" "$manifest"; then
-            echo "fuzz-targets-enumerated gate failed: $manifest has no [[bin]] declaring target '$target'" >&2
+            echo "fuzz-targets-enumerated check failed: $manifest has no [[bin]] declaring target '$target'" >&2
             exit 1
         fi
         entry=$(grep -oE 'knot_[a-z0-9_]+::fuzz::[a-z0-9_]+' "crates/$crate/fuzz/fuzz_targets/$target.rs" | head -1 | sed -E 's#.*::fuzz::##' || true)
         smoke="crates/$crate/tests/fuzz_smoke.rs"
         if [ -z "$entry" ] || ! grep -qE "fuzz::${entry}\(" "$smoke"; then
-            echo "fuzz-targets-enumerated gate failed: target '$target' entry point $(echo "$crate" | tr - _)::fuzz::$entry has no smoke-test coverage in $smoke" >&2
+            echo "fuzz-targets-enumerated check failed: target '$target' entry point $(echo "$crate" | tr - _)::fuzz::$entry has no smoke-test coverage in $smoke" >&2
             exit 1
         fi
     done < "$disk"
     echo "ok: every fuzz target is enumerated in fuzz-ci, declared in its fuzz manifest, and smoke-tested"
+
+check-workflow-toolchain:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    locked=$(sed -n '/^    "fenix": {/,/^    }/p' ../flake.lock | sed -nE 's/.*"rev": "([0-9a-f]{40})".*/\1/p' | head -1)
+    if [ -z "$locked" ]; then
+        echo "workflow-toolchain check failed: no fenix node with a revision in flake.lock" >&2
+        exit 1
+    fi
+    used=$(grep -hoE 'github:nix-community/fenix/[0-9a-f]{40}' ../.tangled/workflows/*.yml | sed -E 's#.*/##' | sort -u || [ $? = 1 ])
+    if [ -z "$used" ]; then
+        echo "workflow-toolchain check failed: no workflow in ../.tangled/workflows references a fenix revision" >&2
+        exit 1
+    fi
+    if [ "$used" != "$locked" ]; then
+        echo "workflow-toolchain check failed: flake.lock records fenix $locked and the workflows reference '$used'" >&2
+        exit 1
+    fi
+    echo "ok: every workflow builds with the fenix revision flake.lock records"

@@ -2,7 +2,7 @@
 
 use knot_bench::{ChurnCount, CommitCount, HistorySpec, PathCount, build_history};
 use knot_git::instrument::measure;
-use knot_git::{Filter, PackBudget};
+use knot_git::{Filter, Haves, PackBudget, Wants};
 use knot_pack::upload_pack;
 use knot_types::Oid;
 
@@ -39,7 +39,12 @@ fn a_single_selection_walk_has_an_exact_odb_read_count() {
     let (_selection, reads) = measure(|| {
         history
             .repo()
-            .select_pack_objects_filtered(&tips, &[], Filter::None, PackBudget::unbounded())
+            .select_pack_objects_filtered(
+                Wants::new(&tips),
+                Haves::new(&[]),
+                Filter::None,
+                PackBudget::unbounded(),
+            )
             .unwrap()
     });
     assert_eq!(
@@ -57,7 +62,11 @@ fn a_single_selection_walk_has_an_exact_odb_read_count() {
 #[test]
 fn the_upload_pack_server_path_has_an_exact_odb_read_count() {
     let history = build_history(gate_spec());
-    let walk = history.repo().rev_walk(&history.tips(), &[]).unwrap();
+    let tips = history.tips();
+    let walk = history
+        .repo()
+        .rev_walk(Wants::new(&tips), Haves::new(&[]))
+        .unwrap();
     let hidden = walk
         .iter()
         .copied()
