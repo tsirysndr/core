@@ -459,8 +459,15 @@ const PASSTHROUGH_HEADERS: &[&HeaderName] = &[
     &CONTENT_RANGE,
 ];
 
-const FORWARDED_REQUEST_HEADERS: &[&HeaderName] =
-    &[&RANGE, &IF_RANGE, &IF_NONE_MATCH, &IF_MODIFIED_SINCE];
+static X_FORWARDED_FOR: HeaderName = HeaderName::from_static("x-forwarded-for");
+
+const FORWARDED_REQUEST_HEADERS: &[&HeaderName] = &[
+    &RANGE,
+    &IF_RANGE,
+    &IF_NONE_MATCH,
+    &IF_MODIFIED_SINCE,
+    &X_FORWARDED_FOR,
+];
 
 const KNOT_HOST_PARAM: &str = "knot";
 const REPO_PARAM: &str = "repo";

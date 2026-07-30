@@ -568,7 +568,7 @@ async fn does_not_inject_auth_or_atproto_proxy_headers() {
 }
 
 #[tokio::test]
-async fn forwards_range_and_conditional_request_headers() {
+async fn forwards_range_conditional_and_client_address_headers() {
     let h = Harness::new().await;
     let tid = "3jzfcijpj2z2d";
     h.mount_repo_record(&did("did:plc:limpet"), &rkey(tid), "kelp")
@@ -598,6 +598,7 @@ async fn forwards_range_and_conditional_request_headers() {
                 ("range", "bytes=0-99"),
                 ("if-none-match", "\"old\""),
                 ("if-modified-since", "Wed, 01 May 2026 00:00:00 GMT"),
+                ("x-forwarded-for", "203.0.113.42"),
             ],
         )
         .await;
@@ -619,6 +620,10 @@ async fn forwards_range_and_conditional_request_headers() {
     assert_eq!(
         knot_call.headers.get("if-modified-since").unwrap(),
         "Wed, 01 May 2026 00:00:00 GMT",
+    );
+    assert_eq!(
+        knot_call.headers.get("x-forwarded-for").unwrap(),
+        "203.0.113.42",
     );
 }
 
