@@ -119,10 +119,56 @@ impl PeerState {
     }
 }
 
+const CONCENTRATED_REFUSALS: u32 = 1_024;
+
+#[derive(Default)]
+struct RefusalMajority {
+    peer: Option<IpAddr>,
+    votes: u32,
+    reported: bool,
+}
+
+impl RefusalMajority {
+    fn observe(&mut self, peer: IpAddr) -> Option<IpAddr> {
+        match (self.peer == Some(peer), self.votes) {
+            (true, _) => self.votes = self.votes.saturating_add(1),
+            (false, 0) => {
+                self.peer = Some(peer);
+                self.votes = 1;
+            }
+            (false, _) => self.votes -= 1,
+        }
+        let crossed = self.votes >= CONCENTRATED_REFUSALS && !self.reported;
+        self.reported |= crossed;
+        crossed.then_some(peer)
+    }
+}
+
 struct Inner {
     peers: HashMap<Option<IpAddr>, PeerState>,
     global_inflight: usize,
     last_sweep: UnixMicros,
+    refusal_majority: RefusalMajority,
+}
+
+impl Inner {
+    fn has_room_for(
+        &mut self,
+        peer: Option<IpAddr>,
+        rate: Option<RateLimit>,
+        now: UnixMicros,
+    ) -> bool {
+        if rate.is_none() || self.peers.contains_key(&peer) || self.peers.len() < MAX_TRACKED_PEERS
+        {
+            return true;
+        }
+        if now.get().saturating_sub(self.last_sweep.get()) >= SWEEP_INTERVAL_MICROS {
+            self.last_sweep = now;
+            self.peers
+                .retain(|_, state| state.worth_tracking(rate, now));
+        }
+        self.peers.len() < MAX_TRACKED_PEERS
+    }
 }
 
 pub struct PreAuthLimiter {
@@ -150,6 +196,7 @@ impl PreAuthLimiter {
                 peers: HashMap::new(),
                 global_inflight: 0,
                 last_sweep: UnixMicros::new(0),
+                refusal_majority: RefusalMajority::default(),
             }),
         }
     }
@@ -172,48 +219,29 @@ impl PreAuthLimiter {
             .global_inflight
             .is_some_and(|limit| inner.global_inflight >= limit.get());
 
-        // Only a rate budget outlives the work it admitted, so only a rate
-        // budget can pile up entries for peers that have gone away. Without one
-        // the last operation removes the entry and the table is already bounded
-        // by live concurrency, so capping it would shed callers over a table
-        // that can't grow.
-        if rate.is_some()
-            && !inner.peers.contains_key(&peer)
-            && inner.peers.len() >= MAX_TRACKED_PEERS
-        {
-            let sweep_due =
-                now.get().saturating_sub(inner.last_sweep.get()) >= SWEEP_INTERVAL_MICROS;
-            if sweep_due {
-                inner.last_sweep = now;
-                inner
-                    .peers
-                    .retain(|_, state| state.worth_tracking(rate, now));
-            }
-            if inner.peers.len() >= MAX_TRACKED_PEERS {
-                return Err(Refusal::Saturated);
-            }
-        }
-
         let per_peer = self.config.per_peer_inflight;
-        let decision = {
-            let state = inner.peers.entry(peer).or_insert_with(|| PeerState {
-                bucket: rate.map(|rate| Bucket::new(rate, now)),
-                inflight: 0,
-            });
-            let ready = match (rate, state.bucket.as_mut()) {
-                (Some(rate), Some(bucket)) => bucket.replenish(rate, now),
-                _ => true,
-            };
-            let over_peer = per_peer.is_some_and(|limit| state.inflight >= limit.get());
-            match (ready, over_peer || over_global) {
-                (false, _) => Err(Refusal::RateLimited),
-                (_, true) => Err(Refusal::Saturated),
-                (true, false) => {
-                    if let Some(bucket) = state.bucket.as_mut() {
-                        bucket.tokens -= 1;
+        let decision = match inner.has_room_for(peer, rate, now) {
+            false => Err(Refusal::Saturated),
+            true => {
+                let state = inner.peers.entry(peer).or_insert_with(|| PeerState {
+                    bucket: rate.map(|rate| Bucket::new(rate, now)),
+                    inflight: 0,
+                });
+                let ready = match (rate, state.bucket.as_mut()) {
+                    (Some(rate), Some(bucket)) => bucket.replenish(rate, now),
+                    _ => true,
+                };
+                let over_peer = per_peer.is_some_and(|limit| state.inflight >= limit.get());
+                match (ready, over_peer || over_global) {
+                    (false, _) => Err(Refusal::RateLimited),
+                    (_, true) => Err(Refusal::Saturated),
+                    (true, false) => {
+                        if let Some(bucket) = state.bucket.as_mut() {
+                            bucket.tokens -= 1;
+                        }
+                        state.inflight += 1;
+                        Ok(())
                     }
-                    state.inflight += 1;
-                    Ok(())
                 }
             }
         };
@@ -221,6 +249,14 @@ impl PreAuthLimiter {
             Err(refusal) => {
                 if inner.peers.get(&peer).is_some_and(PeerState::forgettable) {
                     inner.peers.remove(&peer);
+                }
+                let concentrated = peer.and_then(|peer| inner.refusal_majority.observe(peer));
+                drop(inner);
+                if let Some(peer) = concentrated {
+                    tracing::warn!(
+                        %peer,
+                        "one address has taken {CONCENTRATED_REFUSALS} more of the pre-authentication limiter's refusals than every other address combined. If this address is a proxy, set xrpc.trusted_proxy_header to the header it forwards the client address in and add the address to xrpc.trusted_proxies, since every client behind a proxy will share its one rate-limit bucket. This warning reports the first such address only."
+                    );
                 }
                 Err(refusal)
             }
@@ -295,7 +331,7 @@ mod tests {
     }
 
     fn peer(last: u8) -> Option<IpAddr> {
-        Some(IpAddr::V4(Ipv4Addr::new(127, 0, 0, last)))
+        Some(ip(last))
     }
 
     fn rotating(index: u64) -> Option<IpAddr> {
@@ -311,6 +347,34 @@ mod tests {
 
     fn tracked(limiter: &Arc<PreAuthLimiter>) -> usize {
         limiter.lock().peers.len()
+    }
+
+    fn ip(last: u8) -> IpAddr {
+        IpAddr::V4(Ipv4Addr::new(127, 0, 0, last))
+    }
+
+    #[test]
+    fn only_an_address_taking_most_of_the_refusals_is_reported_and_only_once() {
+        let reported = |rounds, peer: fn(u32) -> u8| {
+            let mut majority = RefusalMajority::default();
+            (0..rounds)
+                .filter_map(|round| majority.observe(ip(peer(round))))
+                .collect::<Vec<IpAddr>>()
+        };
+        [
+            (CONCENTRATED_REFUSALS * 3, (|round| (round % 4 == 0) as u8) as fn(u32) -> u8, vec![ip(0)],
+             "the warning reports that address once, since three refusals in every four come from it"),
+            (CONCENTRATED_REFUSALS * 8, |round| (round % 251) as u8, vec![],
+             "a knot under scattered load doesn't have a proxy to point the operator at"),
+            (CONCENTRATED_REFUSALS - 1, |_| 1, vec![],
+             "a burst under the threshold is ordinary rate limiting and doesn't point at a proxy"),
+            (CONCENTRATED_REFUSALS, |_| 1, vec![ip(1)],
+             "the threshold itself is where an address earns the warning"),
+        ]
+        .into_iter()
+        .for_each(|(rounds, peer, expected, why)| {
+            assert_eq!(reported(rounds, peer), expected, "{why}");
+        });
     }
 
     #[test]
@@ -492,6 +556,30 @@ mod tests {
         assert!(
             tracked <= MAX_TRACKED_PEERS,
             "a flood of distinct source addresses mustn't grow the peer map past its limit, saw {tracked}"
+        );
+    }
+
+    #[test]
+    fn the_majority_counter_sees_a_refusal_from_a_full_peer_table() {
+        let limiter = limiter(LimitConfig {
+            rate: rate(1, 1_000),
+            per_peer_inflight: Some(PerPeerInflight::new(8)),
+            global_inflight: Some(GlobalInflight::new(64)),
+        });
+        (0..MAX_TRACKED_PEERS as u64).for_each(|index| {
+            let _ = limiter.admit(rotating(index), at(0));
+        });
+        assert_eq!(
+            limiter
+                .admit(peer(201), at(SWEEP_INTERVAL_MICROS - 1))
+                .err(),
+            Some(Refusal::Saturated)
+        );
+        let inner = limiter.lock();
+        assert_eq!(
+            (inner.refusal_majority.peer, inner.refusal_majority.votes),
+            (peer(201), 1),
+            "that refusal has to reach the counter like every other refusal, since a peer shed by a full table is what the warning most needs to report"
         );
     }
 }

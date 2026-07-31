@@ -4749,6 +4749,7 @@ dependencies = [
  "rustix",
  "tempfile",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
