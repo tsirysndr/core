@@ -7,6 +7,8 @@ ARG BOBBIN_PROFILE=release
 WORKDIR /src
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY lexicons ./lexicons
+COPY crates ./crates
+COPY knot2 ./knot2
 COPY bobbin ./bobbin
 COPY shuttle ./shuttle
 RUN cargo build --profile ${BOBBIN_PROFILE} --bin bobbin --package bobbin

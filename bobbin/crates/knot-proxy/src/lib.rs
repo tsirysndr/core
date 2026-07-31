@@ -8,7 +8,7 @@ use bobbin_runtime::{
     NetworkError, ReqwestHttp, RuntimeHasher,
 };
 use bytes::Bytes;
-use futures::Stream;
+use futures::{Stream, StreamExt};
 use http::{HeaderMap, StatusCode};
 use jacquard_common::BosStr;
 use jacquard_common::types::nsid::Nsid;
@@ -20,13 +20,16 @@ use url::Url;
 mod breaker;
 mod dns;
 mod host;
+mod mirror;
 
 pub use breaker::{Breaker, BreakerPermit, CircuitOpen, FailureThreshold, ThresholdError};
 pub use dns::PrivateAddressFilter;
 pub use host::{KnotHost, KnotHostError, PrivateHostReason, RepoSlug, RepoSlugError, classify_ip};
+pub use mirror::{MirrorNsid, MirrorProxy, MirrorProxyError};
 
 const USER_AGENT: &str = concat!("bobbin/", env!("CARGO_PKG_VERSION"));
 const HTTPS_SCHEME: &str = "https";
+const DISCARD_BUDGET_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Debug)]
 pub struct KnotProxyConfig {
@@ -226,6 +229,17 @@ impl ProxyResponse {
 
     pub fn into_body_stream(self) -> BodyStream {
         BodyStream::new(self.body, self.permit)
+    }
+
+    pub async fn discard(self) {
+        let mut stream = self.into_body_stream();
+        let mut seen = 0usize;
+        while seen < DISCARD_BUDGET_BYTES {
+            match stream.next().await {
+                None | Some(Err(_)) => return,
+                Some(Ok(chunk)) => seen = seen.saturating_add(chunk.len().max(1)),
+            }
+        }
     }
 }
 
