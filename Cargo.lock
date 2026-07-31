@@ -698,6 +698,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "trusted-proxies",
  "url",
 ]
 
@@ -930,6 +931,7 @@ dependencies = [
  "tower",
  "tower-http 0.7.0",
  "tracing",
+ "trusted-proxies",
  "url",
  "wiremock",
 ]

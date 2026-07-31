@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, anyhow};
 use confique::Config;
+use trusted_proxies::{ProxyNetError, TrustedProxies};
 use url::Url;
 
 const SYSTEM_CONFIG_PATH: &str = "/etc/bobbin/config.toml";
@@ -14,6 +15,7 @@ const KNOWN_KEYS: &[&str] = &[
     "server.binds",
     "server.shutdown_grace_secs",
     "server.debug_bind",
+    "server.trusted_proxies",
     "hydrant.url",
     "hydrant.start_cursor",
     "ingest.parallelism",
@@ -36,6 +38,7 @@ const KNOWN_ENVS: &[&str] = &[
     "BOBBIN_BIND",
     "BOBBIN_SHUTDOWN_GRACE_SECS",
     "BOBBIN_DEBUG_BIND",
+    "BOBBIN_TRUSTED_PROXIES",
     "BOBBIN_HYDRANT_URL",
     "BOBBIN_START_CURSOR",
     "BOBBIN_INGEST_PARALLELISM",
@@ -103,6 +106,31 @@ pub struct ServerConfig {
     /// never reachable on the public listener. Bind to loopback only.
     #[config(env = "BOBBIN_DEBUG_BIND", default = "")]
     pub debug_bind: String,
+
+    /// Reverse proxies in front of bobbin,
+    /// each a bare IP address without a port or a CIDR block such as `173.245.48.0/20`.
+    /// Bobbin will read the client address out of `x-forwarded-for`
+    /// and forward that one address to the knot
+    /// when a request arrives from a proxy on this list,
+    /// so a knot that lists bobbin under its own `xrpc.trusted_proxies`
+    /// can rate-limit per browser
+    /// instead of pooling everyone bobbin serves into a single bucket.
+    /// Bobbin will read the last 32 entries of the chain, at most.
+    /// Leave empty when bobbin takes connections directly,
+    /// since bobbin would otherwise believe a header any client can write.
+    /// When using as an env var, comma-separated.
+    #[config(
+        env = "BOBBIN_TRUSTED_PROXIES",
+        parse_env = trusted_proxies::comma_separated,
+        default = []
+    )]
+    pub trusted_proxies: Vec<String>,
+}
+
+impl ServerConfig {
+    pub fn trusted_proxies(&self) -> Result<TrustedProxies, ProxyNetError> {
+        TrustedProxies::parse(self.trusted_proxies.iter().map(String::as_str))
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -269,10 +297,15 @@ pub fn load(path: Option<&PathBuf>) -> anyhow::Result<BobbinConfig> {
     if let Some(p) = path {
         builder = builder.file(p);
     }
-    builder
+    let config = builder
         .file(SYSTEM_CONFIG_PATH)
         .load()
-        .context("load configuration")
+        .context("load configuration")?;
+    config
+        .server
+        .trusted_proxies()
+        .context("server.trusted_proxies takes a bare IP address or a CIDR block")?;
+    Ok(config)
 }
 
 pub fn template() -> String {
@@ -451,6 +484,34 @@ mod tests {
                 "KNOWN_ENVS entry {name:?} must start with {ENV_PREFIX:?}"
             );
         });
+    }
+
+    #[test]
+    fn known_envs_matches_every_env_attribute_this_crate_declares() {
+        let known: HashSet<&str> = KNOWN_ENVS.iter().copied().collect();
+        let declared: HashSet<&str> = [include_str!("config.rs"), include_str!("main.rs")]
+            .into_iter()
+            .flat_map(|source| {
+                source
+                    .split("env = \"")
+                    .skip(1)
+                    .filter_map(|rest| rest.split('"').next())
+            })
+            .collect();
+        assert!(
+            declared.contains("BOBBIN_BIND") && declared.contains("BOBBIN_CONFIG"),
+            "the scan stopped matching config.rs or main.rs and every name in it would pass unchecked, since it came back with {declared:?}"
+        );
+        let missing: Vec<&&str> = declared.difference(&known).collect();
+        assert!(
+            missing.is_empty(),
+            "confique reads {missing:?} but check_envs will refuse to start with them set. Add them to KNOWN_ENVS"
+        );
+        let stale: Vec<&&str> = known.difference(&declared).collect();
+        assert!(
+            stale.is_empty(),
+            "KNOWN_ENVS lists {stale:?}, which the fields stopped reading. Drop them, or check_envs will keep accepting a name that stopped meaning anything"
+        );
     }
 
     #[test]

@@ -23,6 +23,24 @@
 # Default value: ""
 #debug_bind = ""
 
+# Reverse proxies in front of bobbin,
+# each a bare IP address without a port or a CIDR block such as `173.245.48.0/20`.
+# Bobbin will read the client address out of `x-forwarded-for`
+# and forward that one address to the knot
+# when a request arrives from a proxy on this list,
+# so a knot that lists bobbin under its own `xrpc.trusted_proxies`
+# can rate-limit per browser
+# instead of pooling everyone bobbin serves into a single bucket.
+# Bobbin will read the last 32 entries of the chain, at most.
+# Leave empty when bobbin takes connections directly,
+# since bobbin would otherwise believe a header any client can write.
+# When using as an env var, comma-separated.
+#
+# Can also be specified via environment variable `BOBBIN_TRUSTED_PROXIES`.
+#
+# Default value: []
+#trusted_proxies = []
+
 [hydrant]
 # Base URL of the hydrant instance - the cursor-replayable /stream lives
 # under this. Use `ws://` or `wss://` - `http://` and `https://`

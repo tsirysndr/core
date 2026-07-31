@@ -95,12 +95,16 @@ use tower_http::trace::{DefaultMakeSpan, OnFailure, OnResponse, TraceLayer};
 use tracing::{Level, Span};
 
 mod backpressure;
+mod client_address;
 mod filter;
 
 pub use backpressure::{
     HeavyLimiter, HeavyPermit, MaxInFlight, PerRequestAnonBytes, PressureVerdict, ReservedFloor,
 };
+use client_address::X_FORWARDED_FOR;
+pub use client_address::{ClientAddress, SocketPeer};
 use filter::{IssueFilter, ListFilter, NoFilter, PullFilter};
+use trusted_proxies::TrustedProxies;
 
 const DEFAULT_LIMIT: u32 = 50;
 const FETCH_CONCURRENCY: usize = 8;
@@ -117,6 +121,7 @@ pub struct AppState {
     pub search: Arc<dyn SearchReader>,
     pub resolver: Arc<RepoIdResolver>,
     pub limiter: Option<Arc<HeavyLimiter>>,
+    pub client_address: Arc<ClientAddress>,
 }
 
 impl AppState {
@@ -143,11 +148,17 @@ impl AppState {
             search,
             resolver,
             limiter: None,
+            client_address: Arc::new(ClientAddress::default()),
         }
     }
 
     pub fn with_limiter(mut self, limiter: Option<Arc<HeavyLimiter>>) -> Self {
         self.limiter = limiter;
+        self
+    }
+
+    pub fn with_proxies(mut self, proxies: TrustedProxies) -> Self {
+        self.client_address = Arc::new(ClientAddress::new(proxies));
         self
     }
 
@@ -459,15 +470,8 @@ const PASSTHROUGH_HEADERS: &[&HeaderName] = &[
     &CONTENT_RANGE,
 ];
 
-static X_FORWARDED_FOR: HeaderName = HeaderName::from_static("x-forwarded-for");
-
-const FORWARDED_REQUEST_HEADERS: &[&HeaderName] = &[
-    &RANGE,
-    &IF_RANGE,
-    &IF_NONE_MATCH,
-    &IF_MODIFIED_SINCE,
-    &X_FORWARDED_FOR,
-];
+const FORWARDED_REQUEST_HEADERS: &[&HeaderName] =
+    &[&RANGE, &IF_RANGE, &IF_NONE_MATCH, &IF_MODIFIED_SINCE];
 
 const KNOT_HOST_PARAM: &str = "knot";
 const REPO_PARAM: &str = "repo";
@@ -485,7 +489,7 @@ fn register_proxied<H, Fut>(
     handler: H,
 ) -> Router<AppState>
 where
-    H: Fn(AppState, HeaderMap, ProxyParams, Nsid<DefaultStr>) -> Fut
+    H: Fn(AppState, HeaderMap, SocketPeer, ProxyParams, Nsid<DefaultStr>) -> Fut
         + Clone
         + Send
         + Sync
@@ -500,8 +504,9 @@ where
             get(
                 move |State(state): State<AppState>,
                       headers: HeaderMap,
+                      socket: SocketPeer,
                       Query(params): Query<ProxyParams>| {
-                    handler(state, headers, params, nsid.clone())
+                    handler(state, headers, socket, params, nsid.clone())
                 },
             ),
         )
@@ -2660,13 +2665,24 @@ fn pick_human_slug(rkey: Option<&Rkey<DefaultStr>>, name: Option<&str>) -> Optio
     }
 }
 
-fn filter_request_headers(client: &HeaderMap) -> HeaderMap {
-    FORWARDED_REQUEST_HEADERS
+fn filter_request_headers(
+    client: &HeaderMap,
+    socket: SocketPeer,
+    address: &ClientAddress,
+) -> HeaderMap {
+    let forwarded = FORWARDED_REQUEST_HEADERS
         .iter()
         .fold(HeaderMap::new(), |mut acc, name| {
             if let Some(value) = client.get(*name) {
                 acc.insert((*name).clone(), value.clone());
             }
+            acc
+        });
+    address
+        .of(client, socket)
+        .into_iter()
+        .fold(forwarded, |mut acc, address| {
+            acc.insert(X_FORWARDED_FOR.clone(), address);
             acc
         })
 }
@@ -2691,6 +2707,7 @@ fn upstream_to_axum(resp: ProxyResponse) -> Response {
 async fn dispatch_proxy(
     state: AppState,
     headers: HeaderMap,
+    socket: SocketPeer,
     nsid: Nsid<DefaultStr>,
     host: KnotHost,
     params: ProxyParams,
@@ -2699,7 +2716,7 @@ async fn dispatch_proxy(
         .iter()
         .map(|(k, v)| (k.as_str(), v.as_str()))
         .collect();
-    let allowed = filter_request_headers(&headers);
+    let allowed = filter_request_headers(&headers, socket, &state.client_address);
     let upstream = state
         .knots
         .forward(&host, &nsid, &forward, allowed)
@@ -2727,6 +2744,7 @@ fn extract_param(
 async fn proxy_repo_handler(
     state: AppState,
     headers: HeaderMap,
+    socket: SocketPeer,
     params: ProxyParams,
     nsid: Nsid<DefaultStr>,
 ) -> Result<Response, XrpcError> {
@@ -2741,12 +2759,13 @@ async fn proxy_repo_handler(
             slug.as_str().to_owned(),
         )))
         .collect();
-    dispatch_proxy(state, headers, nsid, host, forward).await
+    dispatch_proxy(state, headers, socket, nsid, host, forward).await
 }
 
 async fn proxy_knot_handler(
     state: AppState,
     headers: HeaderMap,
+    socket: SocketPeer,
     params: ProxyParams,
     nsid: Nsid<DefaultStr>,
 ) -> Result<Response, XrpcError> {
@@ -2755,5 +2774,5 @@ async fn proxy_knot_handler(
     let host =
         KnotHost::parse(&knot_raw).map_err(|e| XrpcError::InvalidParams(format!("knot: {e}")))?;
     validate_client_supplied_knot(&state, &host)?;
-    dispatch_proxy(state, headers, nsid, host, forward).await
+    dispatch_proxy(state, headers, socket, nsid, host, forward).await
 }

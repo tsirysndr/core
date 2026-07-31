@@ -20,6 +20,7 @@ bobbin-search = { workspace = true }
 bobbin-slingshot-client = { workspace = true }
 bobbin-xrpc = { workspace = true }
 rustls = { workspace = true }
+trusted-proxies = { workspace = true }
 
 axum = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

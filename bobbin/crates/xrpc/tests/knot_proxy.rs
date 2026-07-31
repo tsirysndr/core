@@ -1,7 +1,9 @@
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::body::{Body, to_bytes};
+use axum::extract::ConnectInfo;
 use bobbin_edge_index::{CoverageWatch, EdgeStore, StateIndex};
 use bobbin_knot_proxy::{FailureThreshold, KnotHttpConfig, KnotProxy, KnotProxyConfig};
 use bobbin_record_lru::{CacheCapacity, LruRecordStore};
@@ -10,12 +12,13 @@ use bobbin_runtime::{RuntimeHasher, SystemClock};
 use bobbin_search::{DEFAULT_WRITER_HEAP_BYTES, SearchIndex, SearchReader};
 use bobbin_slingshot_client::SlingshotClient;
 use bobbin_xrpc::{AppState, router};
-use http::{Request, StatusCode};
+use http::{HeaderName, HeaderValue, Request, StatusCode};
 use jacquard_common::DefaultStr;
 use jacquard_common::types::did::Did;
 use jacquard_common::types::recordkey::Rkey;
 use serde_json::{Value, json};
 use tower::ServiceExt;
+use trusted_proxies::TrustedProxies;
 use url::Url;
 use url::form_urlencoded::byte_serialize;
 use wiremock::matchers::{header_exists, method, path, query_param};
@@ -23,12 +26,21 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const CID: &str = "bafyreieqygohnz2zqyvtvktbjpvhutphobcmbsnt4q5lc36ri7vpcmoz4i";
 
+const SOCKET: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 4321);
+
 fn did(s: &str) -> Did<DefaultStr> {
     Did::new_owned(s).unwrap()
 }
 
 fn rkey(s: &str) -> Rkey<DefaultStr> {
     Rkey::new_owned(s).unwrap()
+}
+
+fn hdr(name: &'static str, value: &'static str) -> (HeaderName, HeaderValue) {
+    (
+        HeaderName::from_static(name),
+        HeaderValue::from_static(value),
+    )
 }
 
 fn test_config() -> KnotProxyConfig {
@@ -56,6 +68,17 @@ struct Harness {
 impl Harness {
     async fn new() -> Self {
         Self::with_config(test_config()).await
+    }
+
+    async fn behind_proxy() -> Self {
+        let harness = Self::with_config(test_config()).await;
+        Self {
+            state: harness
+                .state
+                .clone()
+                .with_proxies(TrustedProxies::parse(["127.0.0.1"]).unwrap()),
+            ..harness
+        }
     }
 
     async fn with_config(config: KnotProxyConfig) -> Self {
@@ -135,13 +158,56 @@ impl Harness {
     async fn call_with_headers(
         &self,
         path_and_query: &str,
-        client_headers: &[(&str, &str)],
+        client_headers: &[(HeaderName, HeaderValue)],
     ) -> http::Response<Body> {
+        self.call_from(path_and_query, client_headers, Some(SOCKET))
+            .await
+    }
+
+    async fn blob_client_address(&self, tid: &str, socket: Option<SocketAddr>) -> Option<String> {
+        self.mount_repo_record(&did("did:plc:limpet"), &rkey(tid), "kelp")
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/xrpc/sh.tangled.repo.blob"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_raw(r#"{"path":"x"}"#, "application/json"),
+            )
+            .mount(&self.knot)
+            .await;
+        let target = format!(
+            "/xrpc/sh.tangled.repo.blob?repo={}&path=x",
+            enc(&format!("at://did:plc:limpet/sh.tangled.repo/{tid}")),
+        );
+        let resp = self
+            .call_from(&target, &[hdr("x-forwarded-for", "203.0.113.42")], socket)
+            .await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        self.knot
+            .received_requests()
+            .await
+            .unwrap()
+            .iter()
+            .find(|r| r.url.path() == "/xrpc/sh.tangled.repo.blob")
+            .expect("knot received the proxied call")
+            .headers
+            .get("x-forwarded-for")
+            .map(|value| value.to_str().unwrap().to_owned())
+    }
+
+    async fn call_from(
+        &self,
+        path_and_query: &str,
+        client_headers: &[(HeaderName, HeaderValue)],
+        socket: Option<SocketAddr>,
+    ) -> http::Response<Body> {
+        let connected = socket
+            .into_iter()
+            .fold(Request::builder().uri(path_and_query), |b, socket| {
+                b.extension(ConnectInfo(socket))
+            });
         let builder = client_headers
             .iter()
-            .fold(Request::builder().uri(path_and_query), |b, (k, v)| {
-                b.header(*k, *v)
-            });
+            .fold(connected, |b, (name, value)| b.header(name, value));
         router(self.state.clone())
             .oneshot(builder.body(Body::empty()).unwrap())
             .await
@@ -569,7 +635,7 @@ async fn does_not_inject_auth_or_atproto_proxy_headers() {
 
 #[tokio::test]
 async fn forwards_range_conditional_and_client_address_headers() {
-    let h = Harness::new().await;
+    let h = Harness::behind_proxy().await;
     let tid = "3jzfcijpj2z2d";
     h.mount_repo_record(&did("did:plc:limpet"), &rkey(tid), "kelp")
         .await;
@@ -595,10 +661,10 @@ async fn forwards_range_conditional_and_client_address_headers() {
         .call_with_headers(
             &target,
             &[
-                ("range", "bytes=0-99"),
-                ("if-none-match", "\"old\""),
-                ("if-modified-since", "Wed, 01 May 2026 00:00:00 GMT"),
-                ("x-forwarded-for", "203.0.113.42"),
+                hdr("range", "bytes=0-99"),
+                hdr("if-none-match", "\"old\""),
+                hdr("if-modified-since", "Wed, 01 May 2026 00:00:00 GMT"),
+                hdr("x-forwarded-for", "203.0.113.42"),
             ],
         )
         .await;
@@ -628,6 +694,26 @@ async fn forwards_range_conditional_and_client_address_headers() {
 }
 
 #[tokio::test]
+async fn bobbin_forwards_only_a_client_address_it_can_vouch_for() {
+    assert_eq!(
+        Harness::new()
+            .await
+            .blob_client_address("3jzfcijpj2z2e", Some(SOCKET))
+            .await,
+        Some(SOCKET.ip().to_string()),
+        "a client that writes this header itself must reach the knot under the address it connected from, since bobbin hasn't been told to trust any proxy"
+    );
+    assert_eq!(
+        Harness::behind_proxy()
+            .await
+            .blob_client_address("3jzfcijpj2z2f", None)
+            .await,
+        None,
+        "bobbin won't forward the header a client wrote or an address it made up, because a listener served without connect info doesn't leave it anything to vouch for"
+    );
+}
+
+#[tokio::test]
 async fn drops_disallowed_client_headers() {
     let h = Harness::new().await;
     h.mount_repo_record(&did("did:plc:abalone"), &rkey("r1"), "barnacle")
@@ -647,9 +733,9 @@ async fn drops_disallowed_client_headers() {
         .call_with_headers(
             &target,
             &[
-                ("authorization", "Bearer secret"),
-                ("cookie", "sid=evil"),
-                ("x-custom", "should-not-pass"),
+                hdr("authorization", "Bearer secret"),
+                hdr("cookie", "sid=evil"),
+                hdr("x-custom", "should-not-pass"),
             ],
         )
         .await;
@@ -980,7 +1066,7 @@ async fn knot_not_modified_passes_through() {
         enc("at://did:plc:limpet/sh.tangled.repo/r5"),
     );
     let resp = h
-        .call_with_headers(&target, &[("if-none-match", "\"v1\"")])
+        .call_with_headers(&target, &[hdr("if-none-match", "\"v1\"")])
         .await;
     assert_eq!(resp.status(), StatusCode::NOT_MODIFIED);
     assert_eq!(resp.headers().get("etag").unwrap(), "\"v1\"");

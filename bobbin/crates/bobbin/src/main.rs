@@ -300,6 +300,10 @@ async fn run(cfg: BobbinConfig) -> anyhow::Result<()> {
                 format!("invalid server.debug_bind `{}`", cfg.server.debug_bind)
             })?)
         };
+    let trusted_proxies = cfg
+        .server
+        .trusted_proxies()
+        .context("server.trusted_proxies takes a bare IP address or a CIDR block")?;
     let mem_probe = debug_bind.is_some().then(|| mem::MemProbe {
         edges: edges.clone(),
         search: search.clone(),
@@ -318,7 +322,8 @@ async fn run(cfg: BobbinConfig) -> anyhow::Result<()> {
         search as Arc<dyn SearchReader>,
         resolver,
     )
-    .with_limiter(limiter);
+    .with_limiter(limiter)
+    .with_proxies(trusted_proxies);
     let app = router(state);
 
     let _debug_server = match (debug_bind, mem_probe) {
@@ -428,9 +433,12 @@ async fn serve_all(
         let app = app.clone();
         let cancel = cancel.clone();
         async move {
-            axum::serve(listener, app)
-                .with_graceful_shutdown(async move { cancel.cancelled().await })
-                .await
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .with_graceful_shutdown(async move { cancel.cancelled().await })
+            .await
         }
     });
 
