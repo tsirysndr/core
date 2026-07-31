@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["bobbin/crates/*", "shuttle", "knot2/crates/*"]
+members = ["bobbin/crates/*", "crates/*", "shuttle", "knot2/crates/*"]
 exclude = ["sites"]
 
 [workspace.package]
@@ -28,6 +28,8 @@ print_stdout = "deny"
 print_stderr = "warn"
 
 [workspace.dependencies]
+trusted-proxies = { path = "crates/trusted-proxies" }
+
 bobbin-types = { path = "bobbin/crates/types" }
 bobbin-edge-index = { path = "bobbin/crates/edge-index" }
 bobbin-ingest = { path = "bobbin/crates/ingest" }
@@ -124,6 +126,7 @@ governor = "0.10"
 http = "1"
 http-body = "1"
 httpdate = "1"
+ipnet = "2.10"
 
 rustls = { version = "0.23", features = ["aws_lc_rs", "prefer-post-quantum"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["aws_lc_rs", "tls12", "logging"] }

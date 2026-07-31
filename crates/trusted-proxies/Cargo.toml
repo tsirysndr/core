@@ -1,0 +1,10 @@
+[package]
+name = "trusted-proxies"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ipnet = { workspace = true }
+thiserror = { workspace = true }

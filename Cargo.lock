@@ -8374,6 +8374,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "trusted-proxies"
+version = "0.0.1"
+dependencies = [
+ "ipnet",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
