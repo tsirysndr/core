@@ -1,0 +1,40 @@
+when:
+  - event: ["push", "pull_request"]
+    branch: master
+
+engine: microvm
+image: nixos
+
+dependencies:
+  - git
+  - bash
+
+# The default clone is depth 1 (single SHA), which is enough for a push but not
+# for computing a pull-request commit range. Fetch some history so we can find
+# the merge-base with the target branch.
+clone:
+  depth: 100
+
+steps:
+  - name: lint commit messages
+    command: |
+      set -eu
+      lint=.tangled/hooks/commit-msg-lint.sh
+      chmod +x "$lint"
+
+      kind="${TANGLED_PIPELINE_KIND:-push}"
+      head="${TANGLED_COMMIT_SHA:-HEAD}"
+
+      # For a pull request, lint every commit between the target branch and the
+      # PR head. For a push, only the tip SHA is known, so lint just that.
+      if [ "$kind" = "pull_request" ]; then
+        base_branch="${TANGLED_PR_TARGET_BRANCH:-${TANGLED_REPO_DEFAULT_BRANCH:-master}}"
+        git fetch --depth=100 origin "$base_branch"
+        base="$(git merge-base FETCH_HEAD "$head" || true)"
+        if [ -n "$base" ]; then
+          exec "$lint" --range "$base" "$head"
+        fi
+        echo "commit-lint: no merge-base with $base_branch; linting tip only" >&2
+      fi
+
+      exec "$lint" --rev "$head"

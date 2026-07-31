@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#
+# git commit-msg hook — lint the message against the Go commit conventions.
+#
+# Installed by pointing core.hooksPath at this directory:
+#   ./.tangled/hooks/install.sh
+#
+# Bypass for a single commit with `git commit --no-verify`.
+#
+# Note: jj (jujutsu) does not run git hooks. jj users are covered by the
+# `commit-lint` CI workflow instead, and can lint locally on demand with:
+#   .tangled/hooks/commit-msg-lint.sh --rev @
+
+exec "$(dirname "$0")/commit-msg-lint.sh" --file "$1"
