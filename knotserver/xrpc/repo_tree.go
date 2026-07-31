@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 
 	"tangled.org/core/api/tangled"
-	"tangled.org/core/appview/pages/markup"
+	"tangled.org/core/gitutil"
 	"tangled.org/core/knotserver/git"
 	"tangled.org/core/types"
 	xrpcerr "tangled.org/core/xrpc/errors"
@@ -50,7 +50,7 @@ func (x *Xrpc) RepoTree(w http.ResponseWriter, r *http.Request) {
 	var readmeFileName string
 	var readmeContents string
 	for _, file := range files {
-		if markup.IsReadmeFile(file.Name, file.Mode) {
+		if gitutil.IsReadmeFile(file.Name, file.Mode) {
 			contents, err := gr.RawContent(filepath.Join(path, file.Name))
 			if err != nil {
 				x.Logger.Error("failed to read contents of file", "path", path, "file", file.Name)

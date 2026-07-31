@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"time"
+	"unicode/utf8"
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
@@ -14,12 +15,14 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/gitutil"
 	"tangled.org/core/knotmirror/xrpc/gitea"
 )
 
 const (
 	LastCommitCache    = "last_commit:%s:%s"
 	LastCommitCacheTTL = 30 * 24 * time.Hour
+	MaxReadmeBytes     = 1 << 20
 )
 
 func (x *Xrpc) GetTree(w http.ResponseWriter, r *http.Request) {
@@ -170,6 +173,11 @@ func (x *Xrpc) getTree(ctx context.Context, repo syntax.DID, ref, treePath strin
 		return nil, err
 	}
 
+	sizes, err := gitea.EntrySizes(ctx, repoPath, subTree.Entries)
+	if err != nil {
+		x.logger.Warn("tree entry size read failed", "err", err)
+	}
+
 	outEntries := make([]*tangled.GitTempGetTree_TreeEntry, len(subTree.Entries))
 	for i, entry := range subTree.Entries {
 		var entryLastCommit *tangled.GitTempGetTree_LastCommit
@@ -187,6 +195,7 @@ func (x *Xrpc) getTree(ctx context.Context, repo syntax.DID, ref, treePath strin
 		outEntries[i] = &tangled.GitTempGetTree_TreeEntry{
 			Name:        entry.Name,
 			Mode:        entry.Mode.String(),
+			Size:        sizes[i],
 			Last_commit: entryLastCommit,
 		}
 	}
@@ -195,7 +204,7 @@ func (x *Xrpc) getTree(ctx context.Context, repo syntax.DID, ref, treePath strin
 	var dotdot *string
 	if treePath != "" {
 		parent = &treePath
-		if dir := filepath.Dir(treePath); dir != "" {
+		if dir := filepath.Dir(treePath); dir != "." {
 			dotdot = &dir
 		}
 	}
@@ -213,6 +222,8 @@ func (x *Xrpc) getTree(ctx context.Context, repo syntax.DID, ref, treePath strin
 		}
 	}
 
+	readmeName, readmeContents := x.readme(ctx, repoPath, subTree.Entries, sizes)
+
 	return &tangled.GitTempGetTree_Output{
 		Ref:        ref,
 		Parent:     parent,
@@ -221,8 +232,35 @@ func (x *Xrpc) getTree(ctx context.Context, repo syntax.DID, ref, treePath strin
 		LastCommit: outLastCommit,
 		// TODO: remove this field entirely
 		Readme: &tangled.GitTempGetTree_Readme{
-			Filename: "",
-			Contents: "",
+			Filename: readmeName,
+			Contents: readmeContents,
 		},
 	}, nil
+}
+
+func (x *Xrpc) readme(ctx context.Context, repoPath string, entries []object.TreeEntry, sizes []int64) (string, string) {
+	for i, entry := range entries {
+		if !gitutil.IsReadmeFile(entry.Name, entry.Mode.String()) || sizes[i] > MaxReadmeBytes {
+			continue
+		}
+		size, reader, err := gitea.ReadBlob(ctx, repoPath, entry.Hash)
+		if err != nil {
+			x.logger.Warn("readme blob open failed", "file", entry.Name, "err", err)
+			continue
+		}
+		if size > MaxReadmeBytes {
+			reader.Close()
+			continue
+		}
+		contents, err := io.ReadAll(reader)
+		reader.Close()
+		if err != nil {
+			x.logger.Warn("readme blob read failed", "file", entry.Name, "err", err)
+			continue
+		}
+		if utf8.Valid(contents) {
+			return entry.Name, string(contents)
+		}
+	}
+	return "", ""
 }

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -163,6 +164,7 @@ func (x *Xrpc) listBranches(ctx context.Context, repo syntax.DID, limit int, cur
 	if err != nil {
 		return nil, fmt.Errorf("hydrating branch commits: %w", err)
 	}
+	slices.Reverse(branches)
 
 	// -> total
 	total, err := func(repoPath string) (int, error) {

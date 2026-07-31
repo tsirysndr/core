@@ -22,8 +22,8 @@ import (
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/pages"
-	"tangled.org/core/appview/pages/markup"
 	"tangled.org/core/appview/pipelines"
+	"tangled.org/core/gitutil"
 	"tangled.org/core/types"
 
 	"github.com/go-chi/chi/v5"
@@ -322,7 +322,7 @@ func (rp *Repo) buildIndexResponse(ctx context.Context, repo *models.Repo, ref s
 		treeResp = resp
 
 		for _, file := range resp.Files {
-			if markup.IsReadmeFile(file.Name, file.Mode) {
+			if gitutil.IsReadmeFile(file.Name, file.Mode) {
 				readmeFileName = file.Name
 				break
 			}

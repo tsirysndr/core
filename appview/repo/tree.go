@@ -11,8 +11,8 @@ import (
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/db"
 	"tangled.org/core/appview/pages"
-	"tangled.org/core/appview/pages/markup"
 	"tangled.org/core/appview/reporesolver"
+	"tangled.org/core/gitutil"
 	"tangled.org/core/types"
 	xrpcclient "tangled.org/core/xrpc/xrpcclient"
 
@@ -71,7 +71,7 @@ func (rp *Repo) Tree(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		files[i] = file
-		if markup.IsReadmeFile(xrpcFile.Name, xrpcFile.Mode) {
+		if gitutil.IsReadmeFile(xrpcFile.Name, xrpcFile.Mode) {
 			readmeFile = xrpcFile
 		}
 	}
