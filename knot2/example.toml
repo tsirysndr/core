@@ -264,22 +264,32 @@
 #fork_fetch_timeout_ms = 600000
 
 # When the knot runs behind a trusted reverse proxy that terminates TLS,
-# set this to the header the proxy appends the client address to, for
-# example x-forwarded-for. The rightmost entry is used. Leave unset when
-# the knot is directly exposed so the socket peer address is used. Only set
-# this when a trusted proxy overwrites or appends the header, since a client
-# can forge it otherwise.
+# set this to the header the proxy appends the client address to,
+# for example x-forwarded-for.
+# The knot will read the chain right -> left
+# and take the first entry that `trusted_proxies` doesn't cover.
+# Leave unset when the knot is directly exposed so the socket peer address is used.
+# Only set this when a trusted proxy overwrites or appends the header,
+# since a client can forge it otherwise.
 #
 # Can also be specified via environment variable `KNOT_XRPC_TRUSTED_PROXY_HEADER`.
 #trusted_proxy_header =
 
-# IP addresses whose `trusted_proxy_header` the knot honors,
-# without a port,
+# Addresses whose `trusted_proxy_header` the knot honors,
+# each a bare IP without a port or a CIDR block such as 173.245.48.0/20,
 # for ex the loopback address of a reverse proxy on the same host.
-# The knot rate-limits a request from any other address
-# by its own socket address and ignores the header.
-# Leave empty to honor the header from every peer,
-# which is safe *only* if nothing but the proxy can reach this knot.
+# The knot will rate-limit a request from any other address
+# by its own socket address and ignore the header.
+# These same addresses are hops the knot will iterate over when it reads
+# the header, so list every proxy you control in the path.
+# A proxy that the knot doesn't know about becomes the entry it keys on,
+# and everyone that proxy serves will then share one rate-limit bucket.
+# The knot will read the last 32 entries of the chain, at most.
+# When the list covers all 32, the knot
+# will rate-limit by the address the request connected from.
+# Leave empty to honor the header from every peer and take its rightmost
+# entry, which is safe *only* while every route to this knot passes
+# through the proxy.
 #
 # Can also be specified via environment variable `KNOT_XRPC_TRUSTED_PROXIES`.
 #

@@ -290,9 +290,7 @@ async fn main() -> anyhow::Result<()> {
         .map(|header| axum::http::HeaderName::from_bytes(header.as_bytes()))
         .transpose()
         .context("xrpc.trusted_proxy_header isn't a valid HTTP header name")?;
-    let trusted_proxies =
-        knot_types::TrustedProxies::new(config.xrpc.trusted_proxies.iter().copied());
-    let proxy_trust = knot_types::ProxyTrust::new(trusted_proxy_header, trusted_proxies);
+    let proxy_trust = knot_types::ProxyTrust::new(trusted_proxy_header, config.trusted_proxies()?);
     if proxy_trust.trusts_any_peer() && !http_addr.ip().is_loopback() {
         tracing::warn!(
             bind = %http_addr,

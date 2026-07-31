@@ -1,5 +1,5 @@
 use std::fmt;
-use std::net::{AddrParseError, IpAddr, SocketAddr};
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -7,7 +7,9 @@ use std::time::Duration;
 use base64::Engine;
 use confique::Config;
 use knot_runtime::HttpLimits;
-use knot_types::{AccountDid, AdmissionPolicy, AppviewEndpoint};
+use knot_types::{
+    AccountDid, AdmissionPolicy, AppviewEndpoint, ProxyNetError, TrustedProxies, comma_separated,
+};
 use url::Url;
 
 #[derive(Debug, Config)]
@@ -300,27 +302,37 @@ pub struct XrpcConfig {
     pub fork_fetch_timeout_ms: u64,
 
     /// When the knot runs behind a trusted reverse proxy that terminates TLS,
-    /// set this to the header the proxy appends the client address to, for
-    /// example x-forwarded-for. The rightmost entry is used. Leave unset when
-    /// the knot is directly exposed so the socket peer address is used. Only set
-    /// this when a trusted proxy overwrites or appends the header, since a client
-    /// can forge it otherwise.
+    /// set this to the header the proxy appends the client address to,
+    /// for example x-forwarded-for.
+    /// The knot will read the chain right -> left
+    /// and take the first entry that `trusted_proxies` doesn't cover.
+    /// Leave unset when the knot is directly exposed so the socket peer address is used.
+    /// Only set this when a trusted proxy overwrites or appends the header,
+    /// since a client can forge it otherwise.
     #[config(env = "KNOT_XRPC_TRUSTED_PROXY_HEADER")]
     pub trusted_proxy_header: Option<String>,
 
-    /// IP addresses whose `trusted_proxy_header` the knot honors,
-    /// without a port,
+    /// Addresses whose `trusted_proxy_header` the knot honors,
+    /// each a bare IP without a port or a CIDR block such as 173.245.48.0/20,
     /// for ex the loopback address of a reverse proxy on the same host.
-    /// The knot rate-limits a request from any other address
-    /// by its own socket address and ignores the header.
-    /// Leave empty to honor the header from every peer,
-    /// which is safe *only* if nothing but the proxy can reach this knot.
+    /// The knot will rate-limit a request from any other address
+    /// by its own socket address and ignore the header.
+    /// These same addresses are hops the knot will iterate over when it reads
+    /// the header, so list every proxy you control in the path.
+    /// A proxy that the knot doesn't know about becomes the entry it keys on,
+    /// and everyone that proxy serves will then share one rate-limit bucket.
+    /// The knot will read the last 32 entries of the chain, at most.
+    /// When the list covers all 32, the knot
+    /// will rate-limit by the address the request connected from.
+    /// Leave empty to honor the header from every peer and take its rightmost
+    /// entry, which is safe *only* while every route to this knot passes
+    /// through the proxy.
     #[config(
         env = "KNOT_XRPC_TRUSTED_PROXIES",
-        parse_env = parse_trusted_proxies,
+        parse_env = comma_separated,
         default = []
     )]
-    pub trusted_proxies: Vec<IpAddr>,
+    pub trusted_proxies: Vec<String>,
 
     #[config(env = "KNOT_XRPC_EVENTS_REPLAY_BUFFER", default = 4096)]
     pub events_replay_buffer: u32,
@@ -439,17 +451,13 @@ fn parse_admins(raw: &str) -> Result<Vec<AccountDid>, knot_types::ParseError> {
         .collect()
 }
 
-fn parse_trusted_proxies(raw: &str) -> Result<Vec<IpAddr>, AddrParseError> {
-    raw.split(',')
-        .map(str::trim)
-        .filter(|item| !item.is_empty())
-        .map(str::parse)
-        .collect()
-}
-
 impl KnotConfig {
     pub fn object_format(&self) -> Option<knot_types::ObjectFormat> {
         knot_types::ObjectFormat::from_capability(&self.git.object_format)
+    }
+
+    pub fn trusted_proxies(&self) -> Result<TrustedProxies, ProxyNetError> {
+        TrustedProxies::parse(self.xrpc.trusted_proxies.iter().map(String::as_str))
     }
 
     pub fn tls_enabled(&self) -> bool {
@@ -834,6 +842,9 @@ impl KnotConfig {
                 self.xrpc.trusted_proxy_header.is_some() || self.xrpc.trusted_proxies.is_empty(),
                 "xrpc.trusted_proxies needs xrpc.trusted_proxy_header, the header the knot honors from those addresses",
             ),
+            self.trusted_proxies()
+                .err()
+                .map(|error| format!("xrpc.trusted_proxies: {error}")),
             self.acl
                 .legacy_admin_secret_env
                 .as_deref()
@@ -1576,7 +1587,7 @@ mod tests {
             ),
             (
                 "trusted_proxies_without_the_header_the_knot_honors",
-                |config| config.xrpc.trusted_proxies = vec!["127.0.0.1".parse().unwrap()],
+                |config| config.xrpc.trusted_proxies = vec!["127.0.0.1".to_owned()],
                 "needs xrpc.trusted_proxy_header",
             ),
         ];
@@ -1648,19 +1659,36 @@ mod tests {
     }
 
     #[test]
-    fn trusted_proxies_parse_from_comma_separated_env() {
-        assert_eq!(
-            parse_trusted_proxies("127.0.0.1, ::1").unwrap(),
-            vec![
-                "127.0.0.1".parse::<IpAddr>().unwrap(),
-                "::1".parse::<IpAddr>().unwrap()
-            ]
-        );
-        assert!(parse_trusted_proxies("").unwrap().is_empty());
-        assert!(
-            parse_trusted_proxies("127.0.0.1:5555").is_err(),
-            "xrpc.trusted_proxies takes bare IP addresses, so a port must fail to parse"
-        );
+    fn a_trusted_proxy_entry_takes_an_address_or_a_cidr_block() {
+        let listing = |entries: &[&str]| {
+            let mut config = sample();
+            config.xrpc.trusted_proxy_header = Some("x-forwarded-for".to_owned());
+            config.xrpc.trusted_proxies = entries.iter().map(|&e| e.to_owned()).collect();
+            config
+        };
+        let config = listing(&["127.0.0.1", "173.245.48.0/20", "2400:cb00::/32"]);
+        assert!(config.validate().is_ok());
+        let proxies = config.trusted_proxies().unwrap();
+        assert!(proxies.contains("173.245.48.7".parse().unwrap()));
+        assert!(proxies.contains("2400:cb00::1".parse().unwrap()));
+
+        [
+            (
+                "127.0.0.1:5555",
+                "127.0.0.1:5555",
+                "xrpc.trusted_proxies takes a bare address or a CIDR block, so the failure must quote the rejected entry",
+            ),
+            (
+                " ",
+                "blank entry",
+                "parse refuses a blank in the file instead of reading a list the operator filled in as empty, because the knot honors the header from every peer while the list is empty. `comma_separated` discards the same blank from the env var, since it can't tell that blank from the gap a trailing separator leaves",
+            ),
+        ]
+        .iter()
+        .for_each(|&(entry, quoted, why)| {
+            let report = listing(&[entry]).validate().unwrap_err().to_string();
+            assert!(report.contains(quoted), "{why}: {report}");
+        });
     }
 
     #[test]

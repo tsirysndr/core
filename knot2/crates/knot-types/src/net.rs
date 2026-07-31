@@ -1,29 +1,7 @@
-use std::collections::BTreeSet;
 use std::net::IpAddr;
 
 use http::{HeaderMap, HeaderName};
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct TrustedProxies(BTreeSet<IpAddr>);
-
-impl TrustedProxies {
-    pub fn new(addresses: impl IntoIterator<Item = IpAddr>) -> Self {
-        Self(
-            addresses
-                .into_iter()
-                .map(|peer| peer.to_canonical())
-                .collect(),
-        )
-    }
-
-    pub fn trusts(&self, peer: Option<IpAddr>) -> bool {
-        match peer {
-            _ if self.0.is_empty() => true,
-            Some(peer) => self.0.contains(&peer.to_canonical()),
-            None => false,
-        }
-    }
-}
+pub use trusted_proxies::{ProxyNetError, TrustedProxies, comma_separated};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PeerKey {
@@ -63,7 +41,15 @@ impl ProxyTrust {
     }
 
     pub fn trusts_any_peer(&self) -> bool {
-        self.header.is_some() && self.proxies.trusts(None)
+        self.header.is_some() && self.proxies.is_empty()
+    }
+
+    fn trusts(&self, socket: Option<IpAddr>) -> bool {
+        match socket {
+            _ if self.proxies.is_empty() => true,
+            Some(socket) => self.proxies.contains(socket),
+            None => false,
+        }
     }
 
     pub fn peer_key(&self, headers: &HeaderMap, socket: Option<IpAddr>) -> PeerKey {
@@ -90,25 +76,24 @@ impl ProxyTrust {
     fn relayed_peer(&self, headers: &HeaderMap, socket: Option<IpAddr>) -> Option<IpAddr> {
         self.header
             .as_ref()
-            .filter(|_| self.proxies.trusts(socket))
-            .and_then(|header| forwarded_peer(headers, header))
+            .filter(|_| self.trusts(socket))
+            .and_then(|header| {
+                self.proxies.rightmost_untrusted(
+                    headers
+                        .get_all(header)
+                        .iter()
+                        .filter_map(|value| value.to_str().ok())
+                        .flat_map(|value| value.split(',')),
+                )
+            })
     }
 
     fn ignores_header_from(&self, headers: &HeaderMap, socket: IpAddr) -> bool {
         self.header
             .as_ref()
             .is_some_and(|header| headers.contains_key(header))
-            && !self.proxies.trusts(Some(socket))
+            && !self.trusts(Some(socket))
     }
-}
-
-fn forwarded_peer(headers: &HeaderMap, header: &HeaderName) -> Option<IpAddr> {
-    headers
-        .get(header)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.rsplit(',').next())
-        .map(str::trim)
-        .and_then(|candidate| candidate.parse::<IpAddr>().ok())
 }
 
 #[cfg(test)]
@@ -133,53 +118,85 @@ mod tests {
         value.parse().unwrap()
     }
 
+    fn trusting<'a>(entries: impl IntoIterator<Item = &'a str>) -> TrustedProxies {
+        TrustedProxies::parse(entries).unwrap()
+    }
+
+    fn relaying<'a>(entries: impl IntoIterator<Item = &'a str>) -> ProxyTrust {
+        ProxyTrust::new(Some(forwarded_for()), trusting(entries))
+    }
+
     #[test]
-    fn forwarded_peer_takes_the_rightmost_parseable_entry() {
+    fn the_knot_reads_the_rightmost_entry_from_any_peer_with_an_empty_allowlist() {
+        let anyone = ProxyTrust::new(Some(forwarded_for()), TrustedProxies::default());
         [
-            (Some("203.0.113.7, 198.51.100.4"), Some("198.51.100.4")),
-            (Some("  192.0.2.1  "), Some("192.0.2.1")),
-            (Some("not-an-ip"), None),
-            (None, None),
+            (Some("203.0.113.7, 198.51.100.4"), "198.51.100.4"),
+            (Some("  192.0.2.1  "), "192.0.2.1"),
+            (Some("not-an-ip"), "192.0.2.9"),
+            (None, "192.0.2.9"),
         ]
         .iter()
         .for_each(|&(header, expected)| {
             assert_eq!(
-                forwarded_peer(&headers(header), &forwarded_for()),
-                expected.map(ip),
+                anyone.client_peer_of(&headers(header), ip("192.0.2.9")),
+                ip(expected),
                 "{header:?}"
             );
         });
     }
 
     #[test]
-    fn an_empty_allowlist_trusts_every_peer() {
-        let anyone = TrustedProxies::default();
-        assert!(anyone.trusts(Some(ip("203.0.113.7"))));
-        assert!(anyone.trusts(None));
+    fn the_knot_joins_every_line_of_a_repeated_header_into_one_chain() {
+        let mut map = HeaderMap::new();
+        map.append(forwarded_for(), "203.0.113.7".parse().unwrap());
+        map.append(forwarded_for(), "198.51.100.4".parse().unwrap());
+        assert_eq!(
+            relaying(["127.0.0.1"]).client_peer(&map, Some(ip("127.0.0.1"))),
+            Some(ip("198.51.100.4")),
+            "a proxy that appends a second header line puts the address we want in the last line"
+        );
     }
 
     #[test]
     fn the_header_applies_only_to_a_peer_on_the_allowlist() {
-        let proxy = ip("127.0.0.1");
-        let forged = headers(Some("198.51.100.4"));
-        let trust = ProxyTrust::new(Some(forwarded_for()), TrustedProxies::new([proxy]));
-        let peer = |socket| trust.client_peer(&forged, Some(socket));
-
+        let relayed = headers(Some("198.51.100.4"));
+        [
+            (&["127.0.0.1"][..], "127.0.0.1", "198.51.100.4",
+             "a request relayed by the listed proxy is limited by the address the proxy recorded"),
+            (&["127.0.0.1"], "203.0.113.7", "203.0.113.7",
+             "a client reaching the knot directly forged the header and must answer for its socket"),
+            (&["127.0.0.1", "::1"], "::1", "198.51.100.4",
+             "a second listed entry relays as readily as the first"),
+            (&["127.0.0.1"], "::ffff:127.0.0.1", "198.51.100.4",
+             "binding [::] turns an IPv4 proxy into ::ffff:127.0.0.1 and the allowlist must still match it"),
+            (&["::ffff:127.0.0.1"], "127.0.0.1", "198.51.100.4",
+             "an operator who writes the mapped form must match a plain IPv4 peer too"),
+            (&["127.0.0.1"], "::1",  "::1",
+             "that peer answers for the socket it connected from, since the IPv6 loopback is a different address from the IPv4 loopback"),
+            (&["127.0.0.1"], "::ffff:203.0.113.7", "203.0.113.7",
+             "an ignored header still keys the peer on its socket, canonical so the warning and the bucket agree"),
+        ]
+        .iter()
+        .for_each(|&(listed, socket, expected, why)| {
+            assert_eq!(
+                relaying(listed.iter().copied()).client_peer(&relayed, Some(ip(socket))),
+                Some(ip(expected)),
+                "{why}: {listed:?} saw {socket}"
+            );
+        });
         assert_eq!(
-            peer(proxy),
-            Some(ip("198.51.100.4")),
-            "a request relayed by the listed proxy is limited by the address the proxy recorded"
-        );
-        assert_eq!(
-            peer(ip("203.0.113.7")),
-            Some(ip("203.0.113.7")),
-            "a client reaching the knot directly forged the header and must answer for its socket"
+            relaying(["127.0.0.1"]).client_peer(
+                &headers(Some("203.0.113.7, not-an-ip")),
+                Some(ip("127.0.0.1"))
+            ),
+            Some(ip("127.0.0.1")),
+            "the knot keys on the listed proxy's own socket when it can't read past the chain"
         );
     }
 
     #[test]
     fn a_caller_with_a_socket_address_gets_the_same_answer_without_an_option() {
-        let listed = TrustedProxies::new([ip("127.0.0.1")]);
+        let listed = trusting(["127.0.0.1"]);
         [
             (ProxyTrust::default(), Some("198.51.100.4")),
             (
@@ -207,24 +224,7 @@ mod tests {
     }
 
     #[test]
-    fn a_listed_ipv4_proxy_still_matches_the_v4_mapped_address_a_dual_stack_listener_reports() {
-        let mapped = ip("::ffff:127.0.0.1");
-        assert!(
-            TrustedProxies::new([ip("127.0.0.1")]).trusts(Some(mapped)),
-            "binding [::] turns an IPv4 proxy into ::ffff:127.0.0.1 and the allowlist must still match it"
-        );
-        assert!(
-            TrustedProxies::new([mapped]).trusts(Some(ip("127.0.0.1"))),
-            "an operator who writes the mapped form must match a plain IPv4 peer too"
-        );
-        assert!(
-            !TrustedProxies::new([ip("127.0.0.1")]).trusts(Some(ip("::1"))),
-            "the IPv6 loopback is a different address from the IPv4 one"
-        );
-    }
-
-    #[test]
-    fn client_peer_falls_back_to_the_socket_whenever_no_header_applies() {
+    fn client_peer_falls_back_to_the_socket_whenever_the_header_doesnt_apply() {
         let socket = ip("203.0.113.7");
         [
             (None, Some("198.51.100.4")),
@@ -239,47 +239,26 @@ mod tests {
                 Some(socket),
                 "{header_name:?} with {header_value:?}"
             );
+            assert_eq!(
+                trust.client_peer(&headers(header_value), Some(ip("::ffff:203.0.113.7"))),
+                Some(socket),
+                "a v4-mapped socket and the plain v4 address are one client, so they share a key"
+            );
         });
     }
 
     #[test]
-    fn one_address_gets_one_bucket_however_the_listener_spelled_it() {
-        let trust = ProxyTrust::default();
-        assert_eq!(
-            trust.client_peer(&headers(None), Some(ip("::ffff:203.0.113.7"))),
-            trust.client_peer(&headers(None), Some(ip("203.0.113.7"))),
-            "a v4-mapped socket and the plain v4 address are one client, so they share a key"
-        );
-    }
-
-    #[test]
-    fn client_peer_reports_no_peer_when_an_allowlist_leaves_it_with_neither_source() {
-        let trust = ProxyTrust::new(
-            Some(forwarded_for()),
-            TrustedProxies::new([ip("127.0.0.1")]),
-        );
-        assert_eq!(
-            trust.client_peer(&headers(Some("198.51.100.4")), None),
-            None,
-            "with no socket to check against the allowlist there is no client to key on"
-        );
-    }
-
-    #[test]
     fn the_peer_key_separates_an_ignored_header_from_a_request_that_never_sent_one() {
-        let listed = ProxyTrust::new(
-            Some(forwarded_for()),
-            TrustedProxies::new([ip("127.0.0.1")]),
-        );
+        let listed = ProxyTrust::new(Some(forwarded_for()), trusting(["127.0.0.1"]));
         assert_eq!(
             listed.peer_key(&headers(Some("198.51.100.4")), Some(ip("203.0.113.7"))),
             PeerKey::SocketWithIgnoredHeader(ip("203.0.113.7")),
-            "an unlisted peer sent the header, which is the address an operator has to see"
+            "an operator has to see the address of an unlisted peer that sent the header"
         );
         assert_eq!(
             listed.peer_key(&headers(None), Some(ip("203.0.113.7"))),
             PeerKey::Socket(ip("203.0.113.7")),
-            "a request without the header says nothing about the allowlist"
+            "the allowlist stays untested when a request arrives without the header"
         );
         assert_eq!(
             listed.peer_key(&headers(Some("198.51.100.4")), Some(ip("127.0.0.1"))),
@@ -290,10 +269,15 @@ mod tests {
             listed.peer_key(&headers(Some("198.51.100.4")), None),
             PeerKey::Unidentified
         );
+        assert_eq!(
+            listed.client_peer(&headers(Some("198.51.100.4")), None),
+            None,
+            "the knot won't key on a client until it has a socket to check against the allowlist"
+        );
     }
 
     #[test]
-    fn only_an_ignored_header_reports_an_address_to_warn_about() {
+    fn only_an_ignored_header_has_an_address_to_warn_about() {
         assert_eq!(
             PeerKey::SocketWithIgnoredHeader(ip("203.0.113.7")).ignored_header(),
             Some(ip("203.0.113.7"))
@@ -308,47 +292,14 @@ mod tests {
             assert_eq!(
                 key.ignored_header(),
                 None,
-                "{key:?} is not a misconfigured allowlist"
+                "{key:?} isn't a misconfigured allowlist"
             );
         });
     }
 
     #[test]
-    fn an_ignored_header_still_keys_the_peer_on_its_socket() {
-        let listed = ProxyTrust::new(
-            Some(forwarded_for()),
-            TrustedProxies::new([ip("127.0.0.1")]),
-        );
-        let forged = headers(Some("198.51.100.4"));
-        assert_eq!(
-            listed.client_peer(&forged, Some(ip("203.0.113.7"))),
-            Some(ip("203.0.113.7"))
-        );
-        assert_eq!(
-            listed.client_peer_of(&forged, ip("::ffff:203.0.113.7")),
-            ip("203.0.113.7"),
-            "the reported address stays canonical so the warning and the bucket agree"
-        );
-    }
-
-    #[test]
-    fn a_populated_allowlist_trusts_only_the_addresses_it_lists() {
-        let proxies = TrustedProxies::new([ip("127.0.0.1"), ip("::1")]);
-        assert!(proxies.trusts(Some(ip("127.0.0.1"))));
-        assert!(proxies.trusts(Some(ip("::1"))));
-        assert!(
-            !proxies.trusts(Some(ip("203.0.113.7"))),
-            "a client reaching the knot directly would pick its own rate-limit bucket"
-        );
-        assert!(
-            !proxies.trusts(None),
-            "a peer of None has no address to match against the list"
-        );
-    }
-
-    #[test]
-    fn only_a_header_without_an_allowlist_trusts_any_peer() {
-        let listed = TrustedProxies::new([ip("127.0.0.1")]);
+    fn only_a_header_without_an_allowlist_makes_the_knot_trust_any_peer() {
+        let listed = trusting(["127.0.0.1"]);
         assert!(
             ProxyTrust::new(Some(forwarded_for()), TrustedProxies::default()).trusts_any_peer()
         );

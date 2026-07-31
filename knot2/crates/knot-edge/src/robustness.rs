@@ -316,7 +316,7 @@ mod tests {
     fn trusting_loopback() -> ProxyTrust {
         ProxyTrust::new(
             Some(forwarded_for()),
-            knot_types::TrustedProxies::new(["127.0.0.1".parse::<IpAddr>().unwrap()]),
+            knot_types::TrustedProxies::parse(["127.0.0.1"]).unwrap(),
         )
     }
 

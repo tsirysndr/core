@@ -193,7 +193,7 @@ That talks to the knot by container name, which needs both containers on a singl
 
 Set `xrpc.trusted_proxy_header = "x-forwarded-for"` when doing this, otherwise every client looks like it comes from the proxy and the ratelimiter wil treat them as one very busy mister. Only set it behind a proxy the operator controls, since a direct client can like, invent that header.
 
-Add `xrpc.trusted_proxies = ["fd00:1::4", "10.89.0.4"]` for example, one entry per address that the proxy connects from, so the knot honors that header from the proxy alone & ratelimits anyone else by the address they connected from.
+Add `xrpc.trusted_proxies = ["fd00:1::4", "10.89.0.4"]` for example, one entry per address that the proxy connects from, so the knot honors that header from the proxy alone & ratelimits anyone else by the address they connected from. A CIDR block will work too, `["173.245.48.0/20"]` covers a whole provider's edge. If several proxies you control are in the path, list them all. Mister knot will read the chain right -> left, iterate over every entry the list covers, and take the first entry it doesn't. It will read 32 entries at most, and the knot will ratelimit by the address the request connected from when the list covers all 32.
 
 The knot can also terminate TLS itself (and that's the only way to get its HTTP3 support) because a plain TCP frontend can't proxy QUIC. Using a certificate the operator already manages:
 
