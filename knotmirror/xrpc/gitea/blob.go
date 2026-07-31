@@ -10,6 +10,9 @@ import (
 	"io"
 
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/filemode"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/samber/lo"
 )
 
 func GetBlobSize(ctx context.Context, repoPath string, hash plumbing.Hash) (int64, error) {
@@ -20,6 +23,35 @@ func GetBlobSize(ctx context.Context, repoPath string, hash plumbing.Hash) (int6
 	}
 	_, _, size, err := ReadBatchLine(rd)
 	return size, err
+}
+
+func EntrySizes(ctx context.Context, repoPath string, entries []object.TreeEntry) ([]int64, error) {
+	sizes := make([]int64, len(entries))
+	blobs := lo.Filter(lo.Range(len(entries)), func(i int, _ int) bool {
+		return isBlobMode(entries[i].Mode)
+	})
+	if len(blobs) == 0 {
+		return sizes, nil
+	}
+	wr, rd, cancel := CatFileBatchCheck(ctx, repoPath)
+	defer cancel()
+	for _, i := range blobs {
+		if _, err := wr.Write([]byte(entries[i].Hash.String() + "\n")); err != nil {
+			return sizes, err
+		}
+		_, typ, size, err := ReadBatchLine(rd)
+		if err != nil {
+			return sizes, err
+		}
+		if typ == "blob" {
+			sizes[i] = size
+		}
+	}
+	return sizes, nil
+}
+
+func isBlobMode(mode filemode.FileMode) bool {
+	return mode == filemode.Regular || mode == filemode.Executable || mode == filemode.Symlink
 }
 
 // ReadBlob returns blob size and [io.ReadCloser] of that blob.
