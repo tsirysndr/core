@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -35,6 +36,8 @@ var mirrorToKnotNSID = map[string]string{
 	tangled.GitTempListLanguagesNSID: tangled.RepoLanguagesNSID,
 	tangled.GitTempGetBlobNSID:       tangled.RepoBlobNSID,
 }
+
+const forwardedForHeader = "X-Forwarded-For"
 
 var hopByHopHeaders = map[string]bool{
 	"Connection":          true,
@@ -132,6 +135,7 @@ func (x *Xrpc) proxyToKnot(w http.ResponseWriter, r *http.Request, repoDid synta
 		x.logger.Warn("proxy: failed to build request", "target", target, "err", err)
 		return false
 	}
+	req.Header.Set(forwardedForHeader, forwardedFor(r))
 
 	resp, err := x.httpClient.Do(req)
 	if err != nil {
@@ -155,6 +159,17 @@ func (x *Xrpc) proxyToKnot(w http.ResponseWriter, r *http.Request, repoDid synta
 
 	x.logger.Info("proxy: served from knot", "repo", repoDid, "knot", knot.baseURL, "status", resp.StatusCode)
 	return true
+}
+
+func forwardedFor(r *http.Request) string {
+	peer := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		peer = host
+	}
+	chain := lo.Filter(r.Header.Values(forwardedForHeader), func(entry string, _ int) bool {
+		return strings.TrimSpace(entry) != ""
+	})
+	return strings.Join(append(chain, peer), ", ")
 }
 
 func (x *Xrpc) forwardSuspended(next http.Handler) http.Handler {

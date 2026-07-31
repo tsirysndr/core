@@ -14,8 +14,8 @@ use axum::{
         HeaderMap, HeaderName, StatusCode,
         header::{
             ACCEPT_RANGES, CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_ENCODING, CONTENT_LENGTH,
-            CONTENT_RANGE, CONTENT_TYPE, ETAG, IF_MODIFIED_SINCE, IF_NONE_MATCH, IF_RANGE,
-            LAST_MODIFIED, RANGE,
+            CONTENT_RANGE, CONTENT_SECURITY_POLICY, CONTENT_TYPE, ETAG, IF_MODIFIED_SINCE,
+            IF_NONE_MATCH, IF_RANGE, LAST_MODIFIED, RANGE, X_CONTENT_TYPE_OPTIONS,
         },
         request::Parts,
     },
@@ -26,7 +26,9 @@ use bobbin_edge_index::{
     Coverage, CoverageWatch, CursorParseError, EdgeItem, EdgePage, EdgeStore, IssueStateKind,
     PageCursor, PageLimit, PageToken, PullStatusKind, SortDir, StateIndex, StateKind,
 };
-use bobbin_knot_proxy::{KnotHost, KnotProxy, KnotProxyError, ProxyResponse, RepoSlug};
+use bobbin_knot_proxy::{
+    KnotHost, KnotProxy, KnotProxyError, MirrorNsid, MirrorProxy, ProxyResponse, RepoSlug,
+};
 use bobbin_record_lru::RecordStore;
 use bobbin_resolver::RepoIdResolver;
 use bobbin_search::{
@@ -118,6 +120,7 @@ pub struct AppState {
     pub pull_statuses: Arc<StateIndex<PullStatusKind>>,
     pub coverage: Arc<CoverageWatch>,
     pub knots: Arc<KnotProxy>,
+    pub mirror: Option<Arc<MirrorProxy>>,
     pub search: Arc<dyn SearchReader>,
     pub resolver: Arc<RepoIdResolver>,
     pub limiter: Option<Arc<HeavyLimiter>>,
@@ -145,6 +148,7 @@ impl AppState {
             pull_statuses,
             coverage,
             knots,
+            mirror: None,
             search,
             resolver,
             limiter: None,
@@ -154,6 +158,11 @@ impl AppState {
 
     pub fn with_limiter(mut self, limiter: Option<Arc<HeavyLimiter>>) -> Self {
         self.limiter = limiter;
+        self
+    }
+
+    pub fn with_mirror(mut self, mirror: Option<Arc<MirrorProxy>>) -> Self {
+        self.mirror = mirror;
         self
     }
 
@@ -468,9 +477,11 @@ const PASSTHROUGH_HEADERS: &[&HeaderName] = &[
     &CONTENT_DISPOSITION,
     &ACCEPT_RANGES,
     &CONTENT_RANGE,
+    &X_CONTENT_TYPE_OPTIONS,
+    &CONTENT_SECURITY_POLICY,
 ];
 
-const FORWARDED_REQUEST_HEADERS: &[&HeaderName] =
+const RANGE_OR_CONDITIONAL_HEADERS: &[&HeaderName] =
     &[&RANGE, &IF_RANGE, &IF_NONE_MATCH, &IF_MODIFIED_SINCE];
 
 const KNOT_HOST_PARAM: &str = "knot";
@@ -2637,10 +2648,16 @@ fn validate_client_supplied_knot(state: &AppState, host: &KnotHost) -> Result<()
     }
 }
 
+struct RepoTarget {
+    host: KnotHost,
+    slug: RepoSlug,
+    repo_did: Option<Did<DefaultStr>>,
+}
+
 async fn resolve_knot_target(
     state: &AppState,
     repo_uri: AtUri<DefaultStr>,
-) -> Result<(KnotHost, RepoSlug), XrpcError> {
+) -> Result<RepoTarget, XrpcError> {
     let rkey: Option<Rkey<DefaultStr>> = repo_uri.rkey().map(|r| r.clone().into_static());
     let (body, did) = resolve(state, ExpectedNsid::from_static(RepoRecord::NSID), repo_uri).await?;
     let value: Repo<DefaultStr> = serde_json::from_slice(&body.value)
@@ -2652,7 +2669,11 @@ async fn resolve_knot_target(
     })?;
     let slug = RepoSlug::new(&did, &name)
         .map_err(|e| XrpcError::InvalidRecord(format!("repo slug: {e}")))?;
-    Ok((host, slug))
+    Ok(RepoTarget {
+        host,
+        slug,
+        repo_did: value.repo_did,
+    })
 }
 
 fn pick_human_slug(rkey: Option<&Rkey<DefaultStr>>, name: Option<&str>) -> Option<String> {
@@ -2670,7 +2691,7 @@ fn filter_request_headers(
     socket: SocketPeer,
     address: &ClientAddress,
 ) -> HeaderMap {
-    let forwarded = FORWARDED_REQUEST_HEADERS
+    let forwarded = RANGE_OR_CONDITIONAL_HEADERS
         .iter()
         .fold(HeaderMap::new(), |mut acc, name| {
             if let Some(value) = client.get(*name) {
@@ -2704,25 +2725,68 @@ fn upstream_to_axum(resp: ProxyResponse) -> Response {
     response
 }
 
-async fn dispatch_proxy(
-    state: AppState,
+async fn dispatch_knot(
+    state: &AppState,
+    nsid: &Nsid<DefaultStr>,
+    host: &KnotHost,
+    query: &[(&str, &str)],
     headers: HeaderMap,
-    socket: SocketPeer,
-    nsid: Nsid<DefaultStr>,
-    host: KnotHost,
-    params: ProxyParams,
 ) -> Result<Response, XrpcError> {
-    let forward: Vec<(&str, &str)> = params
-        .iter()
-        .map(|(k, v)| (k.as_str(), v.as_str()))
-        .collect();
-    let allowed = filter_request_headers(&headers, socket, &state.client_address);
     let upstream = state
         .knots
-        .forward(&host, &nsid, &forward, allowed)
+        .forward(host, nsid, query, headers)
         .await
         .map_err(map_proxy_error)?;
     Ok(upstream_to_axum(upstream))
+}
+
+async fn dispatch_mirror(
+    state: &AppState,
+    nsid: &Nsid<DefaultStr>,
+    target: &RepoTarget,
+    query: &[(&str, &str)],
+    headers: &HeaderMap,
+) -> Option<Response> {
+    let mirror = state.mirror.as_ref()?;
+    let repo_did = target.repo_did.as_ref()?;
+    if RANGE_OR_CONDITIONAL_HEADERS
+        .iter()
+        .any(|name| headers.contains_key(*name))
+    {
+        return None;
+    }
+    let mirror_nsid = MirrorNsid::route(nsid.as_ref(), query)?;
+    let refused = match mirror
+        .forward(&mirror_nsid, repo_did, query, headers.clone())
+        .await
+    {
+        Ok(upstream) if !upstream.status().is_client_error() => {
+            return Some(upstream_to_axum(upstream));
+        }
+        Ok(upstream) => {
+            let status = upstream.status();
+            upstream.discard().await;
+            status.to_string()
+        }
+        Err(KnotProxyError::Upstream(status)) => status.to_string(),
+        Err(err @ KnotProxyError::CircuitOpen) => err.to_string(),
+        Err(err) => {
+            tracing::warn!(
+                nsid = mirror_nsid.as_str(),
+                repo = repo_did.as_ref(),
+                error = %err,
+                "mirror call failed, asking the knot",
+            );
+            return None;
+        }
+    };
+    tracing::debug!(
+        nsid = mirror_nsid.as_str(),
+        repo = repo_did.as_ref(),
+        refused,
+        "mirror couldn't serve this repo, asking the knot",
+    );
+    None
 }
 
 fn extract_param(
@@ -2751,15 +2815,17 @@ async fn proxy_repo_handler(
     let (repo_raw, rest) = extract_param(params, REPO_PARAM)?
         .ok_or_else(|| XrpcError::InvalidParams("missing repo".into()))?;
     let repo_uri = parse_uri(&repo_raw)?;
-    let (host, slug) = resolve_knot_target(&state, repo_uri).await?;
-    let forward = rest
+    let target = resolve_knot_target(&state, repo_uri).await?;
+    let allowed = filter_request_headers(&headers, socket, &state.client_address);
+    let query: Vec<(&str, &str)> = rest.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+    if let Some(response) = dispatch_mirror(&state, &nsid, &target, &query, &allowed).await {
+        return Ok(response);
+    }
+    let forward: Vec<(&str, &str)> = query
         .into_iter()
-        .chain(std::iter::once((
-            REPO_PARAM.to_owned(),
-            slug.as_str().to_owned(),
-        )))
+        .chain(std::iter::once((REPO_PARAM, target.slug.as_str())))
         .collect();
-    dispatch_proxy(state, headers, socket, nsid, host, forward).await
+    dispatch_knot(&state, &nsid, &target.host, &forward, allowed).await
 }
 
 async fn proxy_knot_handler(
@@ -2769,10 +2835,12 @@ async fn proxy_knot_handler(
     params: ProxyParams,
     nsid: Nsid<DefaultStr>,
 ) -> Result<Response, XrpcError> {
-    let (knot_raw, forward) = extract_param(params, KNOT_HOST_PARAM)?
+    let (knot_raw, rest) = extract_param(params, KNOT_HOST_PARAM)?
         .ok_or_else(|| XrpcError::InvalidParams("missing knot".into()))?;
     let host =
         KnotHost::parse(&knot_raw).map_err(|e| XrpcError::InvalidParams(format!("knot: {e}")))?;
     validate_client_supplied_knot(&state, &host)?;
-    dispatch_proxy(state, headers, socket, nsid, host, forward).await
+    let allowed = filter_request_headers(&headers, socket, &state.client_address);
+    let forward: Vec<(&str, &str)> = rest.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+    dispatch_knot(&state, &nsid, &host, &forward, allowed).await
 }

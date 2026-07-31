@@ -29,6 +29,7 @@ const KNOWN_KEYS: &[&str] = &[
     "search.heap_bytes",
     "knot.allow_private",
     "knot.require_https",
+    "mirror.url",
     "log.format",
     "log.filter",
 ];
@@ -52,6 +53,7 @@ const KNOWN_ENVS: &[&str] = &[
     "BOBBIN_SEARCH_HEAP_BYTES",
     "BOBBIN_KNOT_ALLOW_PRIVATE",
     "BOBBIN_KNOT_REQUIRE_HTTPS",
+    "BOBBIN_MIRROR_URL",
     "BOBBIN_LOG_FORMAT",
     "BOBBIN_LOG",
 ];
@@ -81,6 +83,9 @@ pub struct BobbinConfig {
 
     #[config(nested)]
     pub knot: KnotConfig,
+
+    #[config(nested)]
+    pub mirror: MirrorConfig,
 
     #[config(nested)]
     pub log: LogConfig,
@@ -251,6 +256,12 @@ pub struct KnotConfig {
     /// knot for development.
     #[config(env = "BOBBIN_KNOT_REQUIRE_HTTPS", default = true)]
     pub require_https: bool,
+}
+
+#[derive(Debug, Config)]
+pub struct MirrorConfig {
+    #[config(env = "BOBBIN_MIRROR_URL")]
+    pub url: Option<Url>,
 }
 
 #[derive(Debug, Config)]

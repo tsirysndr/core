@@ -11,7 +11,7 @@ use bobbin_ingest::{
     IngestConfig, IngestRuntime, RepoIdResolver, WarmingBuffer, run as run_ingest,
 };
 use bobbin_knot_ingest::{CapabilityGate, KnotClient, KnotRegistry, Orchestrator};
-use bobbin_knot_proxy::{KnotHttpConfig, KnotProxy, KnotProxyConfig, classify_ip};
+use bobbin_knot_proxy::{KnotHttpConfig, KnotProxy, KnotProxyConfig, MirrorProxy, classify_ip};
 use bobbin_record_lru::{CacheCapacity, LruRecordStore, RecordStore};
 use bobbin_runtime::{
     Clock, GuardedWs, MemoryBudget, NetworkError, OsEntropy, RuntimeHasher, SystemClock,
@@ -201,8 +201,22 @@ async fn run(cfg: BobbinConfig) -> anyhow::Result<()> {
         },
         KnotHttpConfig::default(),
         clock.clone(),
-        hasher,
+        hasher.clone(),
     )?);
+    let mirror = cfg
+        .mirror
+        .url
+        .as_ref()
+        .map(|url| MirrorProxy::new(url, clock.clone(), hasher.clone()).map(Arc::new))
+        .transpose()
+        .context("mirror.url")?;
+    match mirror.as_ref() {
+        Some(m) => tracing::info!(
+            mirror = %m.host().url(),
+            "we will forward git reads to the mirror before any knot",
+        ),
+        None => tracing::info!("we will forward git reads to knots, since mirror.url is unset"),
+    }
     let search_heap = usize::try_from(search_heap_cap)
         .with_context(|| format!("search heap {search_heap_cap} exceeds usize"))?;
     let search = Arc::new(SearchIndex::new(search_heap, clock.clone())?);
@@ -323,6 +337,7 @@ async fn run(cfg: BobbinConfig) -> anyhow::Result<()> {
         resolver,
     )
     .with_limiter(limiter)
+    .with_mirror(mirror)
     .with_proxies(trusted_proxies);
     let app = router(state);
 

@@ -162,6 +162,10 @@
 # Default value: true
 #require_https = true
 
+[mirror]
+# Can also be specified via environment variable `BOBBIN_MIRROR_URL`.
+#url =
+
 [log]
 # Log emitter format. `text` produces human-readable output for local
 # development. `json` emits one structured object per line for log
