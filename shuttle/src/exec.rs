@@ -167,37 +167,36 @@ fn resolve_user(spec: &str) -> Result<ResolvedUser, String> {
 }
 
 fn lookup_user(name: &str) -> Result<ResolvedUser, String> {
-    match User::from_name(name) {
-        Ok(Some(user)) => Ok(ResolvedUser {
+    match name.parse::<u32>() {
+        Ok(uid) => Ok(ResolvedUser {
             name: name.to_owned(),
-            uid: user.uid.as_raw(),
-            gid: user.gid.as_raw(),
-            home: user.dir.into_os_string(),
-            shell: user.shell.into_os_string(),
+            uid,
+            gid: uid,
+            home: OsString::from("/"),
+            shell: OsString::from("/bin/sh"),
         }),
-        Ok(None) => {
-            let uid = name
-                .parse::<u32>()
-                .map_err(|_| format!("workflow user {name:?} was not found"))?;
-            Ok(ResolvedUser {
+        Err(_) => match User::from_name(name) {
+            Ok(Some(user)) => Ok(ResolvedUser {
                 name: name.to_owned(),
-                uid,
-                gid: uid,
-                home: OsString::from("/"),
-                shell: OsString::from("/bin/sh"),
-            })
-        }
-        Err(error) => Err(format!("lookup workflow user {name:?}: {error}")),
+                uid: user.uid.as_raw(),
+                gid: user.gid.as_raw(),
+                home: user.dir.into_os_string(),
+                shell: user.shell.into_os_string(),
+            }),
+            Ok(None) => Err(format!("workflow user {name:?} was not found")),
+            Err(error) => Err(format!("lookup workflow user {name:?}: {error}")),
+        },
     }
 }
 
 fn lookup_group(name: &str) -> Result<u32, String> {
-    match Group::from_name(name) {
-        Ok(Some(group)) => Ok(group.gid.as_raw()),
-        Ok(None) => name
-            .parse::<u32>()
-            .map_err(|_| format!("workflow group {name:?} was not found")),
-        Err(error) => Err(format!("lookup workflow group {name:?}: {error}")),
+    match name.parse::<u32>() {
+        Ok(gid) => Ok(gid),
+        Err(_) => match Group::from_name(name) {
+            Ok(Some(group)) => Ok(group.gid.as_raw()),
+            Ok(None) => Err(format!("workflow group {name:?} was not found")),
+            Err(error) => Err(format!("lookup workflow group {name:?}: {error}")),
+        },
     }
 }
 
@@ -214,14 +213,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn refuses_root_exec_user() {
-        let err = resolve_user("root").unwrap_err();
+    fn refuses_exec_as_uid_zero() {
+        let err = resolve_user("0").unwrap_err();
         assert!(err.contains("refusing to run exec as privileged user"));
     }
 
     #[test]
-    fn refuses_root_exec_group() {
+    fn refuses_exec_as_gid_zero() {
         let err = resolve_user("65534:0").unwrap_err();
         assert!(err.contains("refusing to run exec as privileged user"));
+    }
+
+    #[test]
+    fn resolves_numeric_spec_without_a_user_database() {
+        let user = resolve_user("65534:65533").unwrap();
+        assert_eq!((user.uid, user.gid), (65534, 65533));
     }
 }

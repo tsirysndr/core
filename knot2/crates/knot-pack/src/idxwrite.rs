@@ -22,35 +22,35 @@ struct Record {
     offset: PackOffset,
 }
 
+type Bucket = Mutex<Option<BufWriter<std::fs::File>>>;
+
 pub(crate) struct Spool {
-    buckets: Vec<Mutex<BufWriter<std::fs::File>>>,
+    buckets: Vec<Bucket>,
     record_len: usize,
     hash_len: usize,
 }
 
 impl Spool {
-    pub(crate) fn new(kind: gix::hash::Kind) -> io::Result<Self> {
+    pub(crate) fn new(kind: gix::hash::Kind) -> Self {
         let hash_len = kind.len_in_bytes();
-        let buckets = (0..BUCKETS)
-            .map(|_| {
-                tempfile::tempfile()
-                    .map(|file| Mutex::new(BufWriter::with_capacity(BUCKET_BUF, file)))
-            })
-            .collect::<io::Result<Vec<_>>>()?;
-        Ok(Self {
-            buckets,
+        Self {
+            buckets: (0..BUCKETS).map(|_| Mutex::new(None)).collect(),
             record_len: hash_len + CRC_LEN + OFFSET_LEN,
             hash_len,
-        })
+        }
     }
 
     pub(crate) fn push(&self, id: ObjectId, crc32: Crc32, offset: PackOffset) -> io::Result<()> {
         let mut guard = self.buckets[id.first_byte() as usize]
             .lock()
             .expect("spool bucket poisoned");
-        guard.write_all(id.as_slice())?;
-        guard.write_all(&crc32.get().to_be_bytes())?;
-        guard.write_all(&offset.get().to_be_bytes())
+        let writer = match guard.as_mut() {
+            Some(writer) => writer,
+            None => guard.insert(BufWriter::with_capacity(BUCKET_BUF, tempfile::tempfile()?)),
+        };
+        writer.write_all(id.as_slice())?;
+        writer.write_all(&crc32.get().to_be_bytes())?;
+        writer.write_all(&offset.get().to_be_bytes())
     }
 
     fn cumulative_fanout(&self) -> Result<[u32; 256], PackError> {
@@ -58,9 +58,13 @@ impl Spool {
         self.buckets.iter().enumerate().try_for_each(
             |(bucket, cell)| -> Result<(), PackError> {
                 let mut guard = cell.lock().expect("spool bucket poisoned");
-                guard.flush()?;
-                let len = guard.get_ref().metadata()?.len() as usize;
-                fanout[bucket] = (len / self.record_len) as u32;
+                fanout[bucket] = match guard.as_mut() {
+                    None => 0,
+                    Some(writer) => {
+                        writer.flush()?;
+                        (writer.get_ref().metadata()?.len() as usize / self.record_len) as u32
+                    }
+                };
                 Ok(())
             },
         )?;
@@ -82,16 +86,19 @@ impl Spool {
         })
     }
 
-    fn read_bucket(
-        &self,
-        cell: &Mutex<BufWriter<std::fs::File>>,
-    ) -> Result<Vec<Record>, PackError> {
+    fn read_bucket(&self, cell: &Bucket) -> Result<Vec<Record>, PackError> {
         let mut guard = cell.lock().expect("spool bucket poisoned");
-        guard.flush()?;
-        let file = guard.get_ref();
-        let len = file.metadata()?.len() as usize;
-        let mut bytes = vec![0u8; len];
-        file.read_exact_at(&mut bytes, 0)?;
+        let bytes = match guard.as_mut() {
+            None => Vec::new(),
+            Some(writer) => {
+                writer.flush()?;
+                let file = writer.get_ref();
+                let len = file.metadata()?.len() as usize;
+                let mut bytes = vec![0u8; len];
+                file.read_exact_at(&mut bytes, 0)?;
+                bytes
+            }
+        };
         drop(guard);
         bytes
             .chunks_exact(self.record_len)
@@ -179,7 +186,7 @@ mod tests {
             (oid(0x80), 0x3333_3333, 0x1_2345_6789),
             (oid(0xc0), 0x4444_4444, LARGE_OFFSET_THRESHOLD + 1),
         ];
-        let spool = Spool::new(gix::hash::Kind::Sha1).unwrap();
+        let spool = Spool::new(gix::hash::Kind::Sha1);
         records.iter().for_each(|(id, crc32, offset)| {
             spool
                 .push(*id, Crc32::new(*crc32), PackOffset::new(*offset))

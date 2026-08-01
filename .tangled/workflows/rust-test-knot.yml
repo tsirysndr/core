@@ -47,8 +47,10 @@ steps:
 
   - name: knot tests
     command: |
+      ulimit -n "$(ulimit -Hn)" &&
       cargo test --locked -p 'knot-*'
 
   - name: knot instrumented tests
     command: |
+      ulimit -n "$(ulimit -Hn)" &&
       cd knot2 && just instrument-tests

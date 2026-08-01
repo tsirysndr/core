@@ -742,7 +742,7 @@ fn spool_pack(
     .map_err(|error| PackError::Pack(error.to_string()))?;
     let stored = gix_pack::data::File::at(pack_path, kind)
         .map_err(|error| PackError::Pack(error.to_string()))?;
-    let spool = crate::idxwrite::Spool::new(kind)?;
+    let spool = crate::idxwrite::Spool::new(kind);
     run_ingest_traverse(
         tree,
         &stored,
