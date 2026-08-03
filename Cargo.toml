@@ -57,6 +57,7 @@ knot-pack = { path = "knot2/crates/knot-pack" }
 knot-cob = { path = "knot2/crates/knot-cob" }
 knot-cobs = { path = "knot2/crates/knot-cobs" }
 knot-index = { path = "knot2/crates/knot-index" }
+knot-keyfill = { path = "knot2/crates/knot-keyfill" }
 knot-cache = { path = "knot2/crates/knot-cache" }
 knot-acl = { path = "knot2/crates/knot-acl" }
 knot-atproto = { path = "knot2/crates/knot-atproto" }

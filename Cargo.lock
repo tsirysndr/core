@@ -4555,6 +4555,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "knot-keyfill"
+version = "2.0.0"
+dependencies = [
+ "bytes",
+ "futures",
+ "http",
+ "knot-atproto",
+ "knot-cob",
+ "knot-cobs",
+ "knot-git",
+ "knot-index",
+ "knot-resource",
+ "knot-runtime",
+ "knot-types",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "knot-langs"
 version = "2.0.0"
 dependencies = [
