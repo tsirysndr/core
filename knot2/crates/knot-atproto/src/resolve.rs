@@ -39,6 +39,8 @@ pub enum ResolveError {
     BadPlcDirectory { value: String },
     #[error("identity {did} recently failed to resolve and is negatively cached")]
     RecentlyFailed { did: AccountDid },
+    #[error("{did} doesn't have a DID document, the directory answered HTTP {status}")]
+    Gone { did: AccountDid, status: HttpStatus },
     #[error("did:web document for {did} doesn't publish expected signing key")]
     ExpectedKeyAbsent { did: RepoDid },
     #[error("handle {handle} has no atproto DNS or well-known record")]
@@ -63,6 +65,31 @@ impl ResolveError {
             ResolveError::Network(_) => true,
             ResolveError::Status { status } => status.is_transient(),
             _ => false,
+        }
+    }
+
+    pub fn is_gone(&self) -> bool {
+        match self {
+            ResolveError::Gone { .. } | ResolveError::Unresolvable { .. } => true,
+            ResolveError::UnsupportedMethod { .. }
+            | ResolveError::Status { .. }
+            | ResolveError::Network(_)
+            | ResolveError::Malformed(_)
+            | ResolveError::IdMismatch { .. }
+            | ResolveError::InsecureScheme { .. }
+            | ResolveError::BlockedHost { .. }
+            | ResolveError::MissingSigningKey
+            | ResolveError::BadSigningKey(_)
+            | ResolveError::MissingPds
+            | ResolveError::BadPds { .. }
+            | ResolveError::BadPlcDirectory { .. }
+            | ResolveError::RecentlyFailed { .. }
+            | ResolveError::ExpectedKeyAbsent { .. }
+            | ResolveError::HandleUnresolvable { .. }
+            | ResolveError::HandleAmbiguous { .. }
+            | ResolveError::HandleForwardMalformed { .. }
+            | ResolveError::HandleMismatch { .. }
+            | ResolveError::HandleRecentlyFailed { .. } => false,
         }
     }
 }
@@ -582,5 +609,44 @@ mod tests {
                 case.name
             );
         });
+    }
+
+    #[test]
+    fn only_a_missing_document_reads_as_an_account_that_no_longer_exists() {
+        assert!(
+            ResolveError::Gone {
+                did: did("did:plc:squid"),
+                status: HttpStatus::new(404)
+            }
+            .is_gone()
+        );
+        assert!(
+            ResolveError::Unresolvable {
+                value: "did:web:nel.pet/../..".to_string()
+            }
+            .is_gone(),
+            "a DID that doesn't form a document location can never have published a key"
+        );
+        assert!(
+            !ResolveError::Malformed("{".to_string()).is_gone(),
+            "a knot that read a broken document as proof the account stopped publishing keys \
+             would delete the keys of everyone behind one bad PDS migration"
+        );
+        assert!(
+            !ResolveError::RecentlyFailed {
+                did: did("did:plc:squid")
+            }
+            .is_gone(),
+            "the negative cache stores broken documents as well as missing documents, so \
+             reading it back mustn't stand in for either"
+        );
+        assert!(
+            !ResolveError::Status {
+                status: HttpStatus::new(404)
+            }
+            .is_gone(),
+            "the handle and pubkey fetches answer 404 too, so the knot can't read a bare 404 \
+             as an account that stopped existing"
+        );
     }
 }

@@ -54,7 +54,7 @@ use futures::stream::{self, TryStreamExt};
 use http::StatusCode;
 use knot_cache::{
     Admitted, AsyncCache, EntryCount, Expiring, GroupQuota, MokaFuture, Quotas, Rejected,
-    TotalQuota,
+    TotalQuota, Weight,
 };
 use knot_runtime::{
     Clock, DnsTxtResolver, HttpRequest, HttpTransport, NetworkError, PublicKeyBytes, SystemDns,
@@ -76,6 +76,10 @@ fn repo_collection() -> Nsid {
     Nsid::new_static("sh.tangled.repo").expect("literal nsid parses")
 }
 const PUBKEY_MAX_PAGES: usize = 8;
+const PUBKEY_TTL: Duration = Duration::from_secs(30);
+const MAX_PUBKEY_CACHE_BYTES: u64 = 1 << 20;
+const PUBKEY_CACHE_ENTRY_OVERHEAD: u64 = 128;
+const PUBKEY_CACHE_KEY_OVERHEAD: u64 = 192;
 const MAX_IDENTITY_CACHE: usize = 4096;
 const MAX_SEEN_JTI: usize = 8192;
 
@@ -135,6 +139,26 @@ impl AtprotoError {
             _ => false,
         }
     }
+
+    pub fn is_gone(&self) -> bool {
+        match self {
+            AtprotoError::Resolve(error) => error.is_gone(),
+            AtprotoError::Jwt(_)
+            | AtprotoError::Network(_)
+            | AtprotoError::ListRecords { .. }
+            | AtprotoError::MalformedRecords(_)
+            | AtprotoError::BadPdsEndpoint { .. }
+            | AtprotoError::Replay { .. }
+            | AtprotoError::ReplayStoreSaturated
+            | AtprotoError::ReplayShareExhausted { .. }
+            | AtprotoError::Identity(_)
+            | AtprotoError::PlcSubmit { .. }
+            | AtprotoError::PutRecord { .. }
+            | AtprotoError::GetRecord { .. }
+            | AtprotoError::PointerEncode(_)
+            | AtprotoError::MalformedReceipt(_) => false,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -157,6 +181,23 @@ struct Cached<R> {
     expires_at: UnixMicros,
 }
 
+#[derive(Clone)]
+pub enum ClaimedKeys {
+    Published(Vec<OfferedKey>),
+    Unread(Arc<AtprotoError>),
+}
+
+fn claimed_weight(cached: &Cached<ClaimedKeys>) -> Weight {
+    Weight::new(match &cached.resolution {
+        ClaimedKeys::Published(keys) => keys
+            .iter()
+            .map(|key| key.as_bytes().len() as u64 + PUBKEY_CACHE_KEY_OVERHEAD)
+            .sum::<u64>()
+            .saturating_add(PUBKEY_CACHE_ENTRY_OVERHEAD),
+        ClaimedKeys::Unread(_) => PUBKEY_CACHE_ENTRY_OVERHEAD,
+    })
+}
+
 pub struct Atproto<H, C> {
     http: H,
     clock: C,
@@ -165,6 +206,7 @@ pub struct Atproto<H, C> {
     dns: Arc<dyn DnsTxtResolver>,
     identities: MokaFuture<AccountDid, Cached<Resolution>>,
     handles: MokaFuture<Handle, Cached<HandleResolution>>,
+    claimed: MokaFuture<AccountDid, Cached<ClaimedKeys>>,
     seen_jti: Expiring<(AccountDid, JwtNonce), AccountDid, ()>,
 }
 
@@ -178,6 +220,7 @@ impl<H: HttpTransport, C: Clock> Atproto<H, C> {
             dns: Arc::new(SystemDns::new()),
             identities: MokaFuture::by_count(EntryCount::new(MAX_IDENTITY_CACHE as u64)),
             handles: MokaFuture::by_count(EntryCount::new(MAX_IDENTITY_CACHE as u64)),
+            claimed: MokaFuture::by_weight(Weight::new(MAX_PUBKEY_CACHE_BYTES), claimed_weight),
             seen_jti: Expiring::new(Quotas {
                 per_group: GroupQuota::new(MAX_JTI_PER_ISSUER),
                 total: TotalQuota::new(MAX_SEEN_JTI),
@@ -212,7 +255,7 @@ impl<H: HttpTransport, C: Clock> Atproto<H, C> {
         match filled.value.resolution {
             Resolution::Found(identity) => Ok(identity),
             Resolution::Transient(error) => Err(error),
-            Resolution::Failed(error) if fresh => Err(error),
+            Resolution::Failed(error) if fresh || error.is_gone() => Err(error),
             Resolution::Failed(_) => Err(ResolveError::RecentlyFailed { did: did.clone() }),
         }
     }
@@ -385,15 +428,61 @@ impl<H: HttpTransport, C: Clock> Atproto<H, C> {
             .await
             .map_err(ResolveError::from)?;
         if !response.status.is_success() {
-            return Err(ResolveError::Status {
-                status: HttpStatus::from(response.status),
-            });
+            let status = HttpStatus::from(response.status);
+            return match status.get() {
+                404 | 410 => Err(ResolveError::Gone {
+                    did: did.clone(),
+                    status,
+                }),
+                _ => Err(ResolveError::Status { status }),
+            };
         }
         resolve::identity_from_document(did, &response.body)
     }
 
+    pub fn document_url(&self, did: &AccountDid) -> Result<Url, ResolveError> {
+        resolve::document_url(did, &self.plc_directory)
+    }
+
     pub async fn resolve_pubkeys(&self, did: &AccountDid) -> Result<Vec<OfferedKey>, AtprotoError> {
         let identity = self.resolve_identity(did).await?;
+        self.pubkeys_at(&identity, did).await
+    }
+
+    pub async fn claimed_pubkeys(&self, did: &AccountDid) -> ClaimedKeys {
+        let now = self.clock.now_unix_micros();
+        let filled = self
+            .claimed
+            .get_or_fill_if(
+                did.clone(),
+                |cached: &Cached<ClaimedKeys>| cached.expires_at <= now,
+                self.fill_claimed(did, now),
+            )
+            .await;
+        filled.value.resolution
+    }
+
+    async fn fill_claimed(&self, did: &AccountDid, now: UnixMicros) -> Cached<ClaimedKeys> {
+        match self.resolve_pubkeys(did).await {
+            Ok(keys) => Cached {
+                resolution: ClaimedKeys::Published(keys),
+                expires_at: expires(now, PUBKEY_TTL),
+            },
+            Err(error) => Cached {
+                expires_at: match error.is_transient() {
+                    true => now,
+                    false => expires(now, NEGATIVE_TTL),
+                },
+                resolution: ClaimedKeys::Unread(Arc::new(error)),
+            },
+        }
+    }
+
+    pub async fn pubkeys_at(
+        &self,
+        identity: &Identity,
+        did: &AccountDid,
+    ) -> Result<Vec<OfferedKey>, AtprotoError> {
         let http = &self.http;
         let pds = &identity.pds;
         let pages = stream::try_unfold(Page::First(PUBKEY_MAX_PAGES), move |state| async move {
@@ -600,7 +689,8 @@ fn warrants_negative_cache(error: &ResolveError) -> bool {
         ResolveError::Status { status } => {
             (400..500).contains(&status.get()) && status.get() != 429
         }
-        ResolveError::Malformed(_)
+        ResolveError::Gone { .. }
+        | ResolveError::Malformed(_)
         | ResolveError::IdMismatch { .. }
         | ResolveError::BadSigningKey(_)
         | ResolveError::BadPds { .. } => true,
@@ -686,8 +776,8 @@ mod tests {
     use futures::StreamExt;
     use http::StatusCode;
     use knot_runtime::{DnsTxtResolver, FakeDns, FakeHttp, ManualClock, NetworkError};
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
 
     const POINTER_RKEY: &str = "3jzfcijpj2z2a";
     const POINTER_CID: &str = "bafyreidfayvfuwqa7qlnopdjiqrxzs6blmoeu4rujcjtnci5beludirz2a";
@@ -962,16 +1052,14 @@ mod tests {
         let atproto = Atproto::new(http, clock(), knot_did(KNOT), plc());
         let first = atproto.resolve_identity(&did(SQUID)).await.unwrap_err();
         assert!(
-            matches!(first, AtprotoError::Resolve(ResolveError::Status { status }) if status.get() == 404),
+            matches!(first, AtprotoError::Resolve(ResolveError::Gone { status, .. }) if status.get() == 404),
             "got {first:?}"
         );
         let second = atproto.resolve_identity(&did(SQUID)).await.unwrap_err();
         assert!(
-            matches!(
-                second,
-                AtprotoError::Resolve(ResolveError::RecentlyFailed { .. })
-            ),
-            "got {second:?}"
+            matches!(second, AtprotoError::Resolve(ResolveError::Gone { .. })),
+            "a caller that acts on a missing account must see the same answer from the cache as \
+             from the fetch, or it acts on the first read only: got {second:?}"
         );
         assert_eq!(
             hits.load(Ordering::SeqCst),
@@ -1117,35 +1205,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pubkeys_are_fetched_from_the_resolved_pds() {
-        let signing = signer(9);
-        let line = ssh_line("ssh-ed25519", &[4u8; 32], "nel@oyster.cafe");
-        let expected = parse_authorized_key(&line).unwrap();
-        let body = list_body(&[line], None);
-        let http = FakeHttp::new(move |request| {
-            if request.url.path().ends_with("did.json")
-                || request.url.host_str() == Some("plc.directory")
-            {
-                Ok(ok(squid_doc(&signing)))
-            } else {
-                assert_eq!(request.url.host_str(), Some("pds.oyster.cafe"));
-                assert!(request.url.path().ends_with("com.atproto.repo.listRecords"));
-                assert!(
-                    request
-                        .url
-                        .query()
-                        .unwrap()
-                        .contains("sh.tangled.publicKey")
-                );
-                Ok(ok(body.clone()))
-            }
-        });
-        let atproto = Atproto::new(http, clock(), knot_did(KNOT), plc());
-        let keys = atproto.resolve_pubkeys(&did(SQUID)).await.unwrap();
-        assert_eq!(keys, vec![expected]);
-    }
-
-    #[tokio::test]
     async fn pubkey_resolution_follows_the_cursor() {
         let doc_key = signer(9);
         let list_hits = Arc::new(AtomicUsize::new(0));
@@ -1171,6 +1230,97 @@ mod tests {
         let keys = atproto.resolve_pubkeys(&did(SQUID)).await.unwrap();
         assert_eq!(keys.len(), 2);
         assert_eq!(list_hits.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn a_repeated_claim_is_served_from_the_cache_instead_of_the_pds() {
+        let signing = signer(9);
+        let line = ssh_line("ssh-ed25519", &[4u8; 32], "nel@oyster.cafe");
+        let expected = parse_authorized_key(&line).unwrap();
+        let listings = Arc::new(AtomicUsize::new(0));
+        let counter = listings.clone();
+        let body = list_body(&[line], None);
+        let http = FakeHttp::new(move |request| {
+            if request.url.host_str() == Some("plc.directory") {
+                return Ok(ok(squid_doc(&signing)));
+            }
+            assert_eq!(request.url.host_str(), Some("pds.oyster.cafe"));
+            assert!(request.url.path().ends_with("com.atproto.repo.listRecords"));
+            assert!(
+                request
+                    .url
+                    .query()
+                    .unwrap()
+                    .contains("sh.tangled.publicKey")
+            );
+            counter.fetch_add(1, Ordering::SeqCst);
+            Ok(ok(body.clone()))
+        });
+        let atproto = Atproto::new(http, clock(), knot_did(KNOT), plc());
+
+        let first = atproto.claimed_pubkeys(&did(SQUID)).await;
+        assert!(
+            matches!(&first, ClaimedKeys::Published(keys) if keys == std::slice::from_ref(&expected))
+        );
+        let second = atproto.claimed_pubkeys(&did(SQUID)).await;
+        assert!(matches!(&second, ClaimedKeys::Published(keys) if keys == &[expected]));
+        assert_eq!(
+            listings.load(Ordering::SeqCst),
+            1,
+            "an ssh handshake asserting a login name reads the claimed account's records, so a \
+             repeat inside the cache turn mustn't read them again, or any stranger with an ssh \
+             client can make the knot fetch from that account's PDS at will"
+        );
+
+        atproto.clock.advance(PUBKEY_TTL + Duration::from_micros(1));
+        let _ = atproto.claimed_pubkeys(&did(SQUID)).await;
+        assert_eq!(
+            listings.load(Ordering::SeqCst),
+            2,
+            "a key published after the last read will be read once the cache turn is over"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_refused_claim_read_is_cached_and_an_outage_is_retried() {
+        let refusal = Arc::new(Mutex::new(StatusCode::BAD_REQUEST));
+        let answered = Arc::clone(&refusal);
+        let signing = signer(9);
+        let listings = Arc::new(AtomicUsize::new(0));
+        let counter = listings.clone();
+        let http = FakeHttp::new(move |request| {
+            if request.url.host_str() == Some("plc.directory") {
+                return Ok(ok(squid_doc(&signing)));
+            }
+            counter.fetch_add(1, Ordering::SeqCst);
+            Ok(status(*answered.lock().unwrap(), Bytes::new()))
+        });
+        let atproto = Atproto::new(http, clock(), knot_did(KNOT), plc());
+
+        assert!(matches!(
+            atproto.claimed_pubkeys(&did(SQUID)).await,
+            ClaimedKeys::Unread(_)
+        ));
+        let _ = atproto.claimed_pubkeys(&did(SQUID)).await;
+        assert_eq!(
+            listings.load(Ordering::SeqCst),
+            1,
+            "a listing the PDS refuses outright is served from the negative cache, so \
+             repeating the claim mustn't read the PDS again"
+        );
+
+        atproto
+            .clock
+            .advance(NEGATIVE_TTL + Duration::from_micros(1));
+        *refusal.lock().unwrap() = StatusCode::SERVICE_UNAVAILABLE;
+        let _ = atproto.claimed_pubkeys(&did(SQUID)).await;
+        let _ = atproto.claimed_pubkeys(&did(SQUID)).await;
+        assert_eq!(
+            listings.load(Ordering::SeqCst),
+            3,
+            "a transient failure is cached with no lifetime, so the account's next claim will \
+             read the PDS again instead of waiting out a negative turn"
+        );
     }
 
     #[tokio::test]
@@ -1808,31 +1958,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_coalesced_404_wave_gives_one_caller_the_real_error_and_masks_the_rest() {
+    async fn every_caller_in_a_coalesced_404_wave_learns_the_account_is_missing() {
         let (results, calls) = gated_wave(StatusCode::NOT_FOUND, Bytes::new()).await;
         assert_eq!(calls, 1, "404 wave coalesces into one outbound fetch");
-        let real = results
+        let gone = results
             .iter()
             .filter(|outcome| {
                 matches!(
                     outcome,
-                    Err(AtprotoError::Resolve(ResolveError::Status { status })) if status.get() == 404
+                    Err(AtprotoError::Resolve(ResolveError::Gone { status, .. })) if status.get() == 404
                 )
             })
             .count();
-        let masked = results
-            .iter()
-            .filter(|outcome| {
-                matches!(
-                    outcome,
-                    Err(AtprotoError::Resolve(ResolveError::RecentlyFailed { .. }))
-                )
-            })
-            .count();
-        assert_eq!(real, 1, "exactly one caller observes the real 404");
         assert_eq!(
-            masked, 1999,
-            "the rest of the coalesced wave is masked as RecentlyFailed"
+            gone, 2000,
+            "coalescing mustn't decide which callers learn the account is missing, since the \
+             callers served from the cache act on the answer the same way"
         );
     }
 

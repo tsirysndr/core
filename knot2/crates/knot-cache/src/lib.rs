@@ -365,6 +365,18 @@ where
         }
     }
 
+    pub fn by_weight<F>(max_weight: Weight, weigh: F) -> Self
+    where
+        F: Fn(&V) -> Weight + Send + Sync + 'static,
+    {
+        Self {
+            inner: moka::future::Cache::builder()
+                .max_capacity(max_weight.get())
+                .weigher(move |_key: &K, value: &V| weigh(value).get().min(u32::MAX as u64) as u32)
+                .build_with_hasher(DeterministicHasher::default()),
+        }
+    }
+
     pub async fn get_or_fill_if<Fut, P>(&self, key: K, refill_if: P, fill: Fut) -> Filled<V>
     where
         Fut: Future<Output = V> + Send,
