@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use knot_cob::{CobHome, CobId, CobStore};
 use knot_cobs::{CollaboratorsChange, Grant, MembersChange, Registration, RegistryChange, Removal};
 use knot_git::{Layout, Repo};
-use knot_index::Index;
+use knot_index::{Index, KeyBudget};
 use knot_runtime::{K256Signer, SeededEntropy};
 use knot_types::{AccountDid, KnotId, OwnerDid, RepoDid, RepoName, RepoRkey, UnixSeconds};
 use tempfile::TempDir;
@@ -98,6 +98,10 @@ impl World {
         Index::new(&self.meta_path, self.layout.clone())
     }
 
+    pub fn index_within(&self, budget: KeyBudget) -> Index {
+        Index::with_key_budget(&self.meta_path, self.layout.clone(), budget)
+    }
+
     pub fn seed_members(&self) -> CobId {
         let meta = Repo::open(&self.meta_path).unwrap();
         let store = CobStore::new(&meta);
@@ -150,13 +154,17 @@ impl World {
     }
 
     pub fn register_extra(&self, repo: &RepoDid, key: &str, registry: CobId) {
+        self.register_owned(repo, key, "nel", registry);
+    }
+
+    pub fn register_owned(&self, repo: &RepoDid, key: &str, owner: &str, registry: CobId) {
         let meta = Repo::open(&self.meta_path).unwrap();
         let store = CobStore::new(&meta);
         store
             .update(
                 &meta_home(),
                 registry,
-                &RegistryChange::Register(registration("nel", key, repo, 2)),
+                &RegistryChange::Register(registration(owner, key, repo, 2)),
                 &self.signer,
                 at(2),
             )
