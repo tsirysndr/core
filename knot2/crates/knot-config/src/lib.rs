@@ -41,6 +41,8 @@ pub struct KnotConfig {
     #[config(nested)]
     pub lfs: LfsConfig,
     #[config(nested)]
+    pub keyfill: KeyfillConfig,
+    #[config(nested)]
     pub resources: ResourcesConfig,
     #[config(nested)]
     pub homepage: HomepageConfig,
@@ -435,6 +437,21 @@ pub struct LfsConfig {
 }
 
 #[derive(Debug, Config)]
+pub struct KeyfillConfig {
+    #[config(env = "KNOT_KEYFILL_KEY_BUDGET_MIB", default = 64)]
+    pub key_budget_mib: u32,
+
+    #[config(env = "KNOT_KEYFILL_TTL_SECS", default = 3_600)]
+    pub ttl_secs: u64,
+
+    #[config(env = "KNOT_KEYFILL_REPRIEVE_RETRY_SECS", default = 300)]
+    pub reprieve_retry_secs: u64,
+
+    #[config(env = "KNOT_KEYFILL_REPRIEVE_BUDGET_SECS", default = 21_600)]
+    pub reprieve_budget_secs: u64,
+}
+
+#[derive(Debug, Config)]
 pub struct ResourcesConfig {
     #[config(env = "KNOT_MAX_THREADS", default = 0)]
     pub max_threads: u32,
@@ -758,6 +775,26 @@ impl KnotConfig {
                 "xrpc.events_max_subscribers must be at least xrpc.events_max_per_peer",
             ),
             check(
+                (1..=MAX_KEYFILL_BUDGET_MIB).contains(&self.keyfill.key_budget_mib),
+                "keyfill.key_budget_mib must be between one mebibyte and one tebibyte",
+            ),
+            check(
+                (1..=MAX_KEYFILL_SPAN_SECS).contains(&self.keyfill.ttl_secs),
+                "keyfill.ttl_secs must be between one second and one year",
+            ),
+            check(
+                (1..=MAX_KEYFILL_SPAN_SECS).contains(&self.keyfill.reprieve_retry_secs),
+                "keyfill.reprieve_retry_secs must be between one second and one year",
+            ),
+            check(
+                (1..=MAX_KEYFILL_SPAN_SECS).contains(&self.keyfill.reprieve_budget_secs),
+                "keyfill.reprieve_budget_secs must be between one second and one year",
+            ),
+            check(
+                self.keyfill.reprieve_budget_secs >= self.keyfill.reprieve_retry_secs,
+                "keyfill.reprieve_budget_secs must be at least keyfill.reprieve_retry_secs",
+            ),
+            check(
                 self.maintenance.interval_secs > 0,
                 "maintenance.interval_secs must be greater than zero",
             ),
@@ -1019,6 +1056,10 @@ pub enum EnvError {
 
 const MASTER_KEY_MIN_BYTES: usize = 32;
 
+const MAX_KEYFILL_SPAN_SECS: u64 = 365 * 24 * 60 * 60;
+
+const MAX_KEYFILL_BUDGET_MIB: u32 = 1024 * 1024;
+
 fn verify_writable_dir(field: &'static str, path: &Path) -> Result<(), EnvError> {
     let metadata = std::fs::metadata(path).map_err(|source| EnvError::DirInaccessible {
         field,
@@ -1268,6 +1309,12 @@ mod tests {
                 gc_interval_secs: 21_600,
                 max_ssh_transfers: 16,
                 max_http_downloads: 64,
+            },
+            keyfill: KeyfillConfig {
+                key_budget_mib: 64,
+                ttl_secs: 3_600,
+                reprieve_retry_secs: 300,
+                reprieve_budget_secs: 21_600,
             },
             resources: ResourcesConfig {
                 max_threads: 0,
@@ -1559,6 +1606,39 @@ mod tests {
                     config.xrpc.events_max_per_peer = 8;
                 },
                 "events_max_subscribers must be at least",
+            ),
+            (
+                "a_key_budget_too_small_for_any_key",
+                |config| config.keyfill.key_budget_mib = 0,
+                "keyfill.key_budget_mib",
+            ),
+            (
+                "a_key_budget_past_what_any_machine_has",
+                |config| config.keyfill.key_budget_mib = u32::MAX,
+                "keyfill.key_budget_mib",
+            ),
+            (
+                "a_key_ttl_that_expires_on_the_read",
+                |config| config.keyfill.ttl_secs = 0,
+                "keyfill.ttl_secs",
+            ),
+            (
+                "a_key_ttl_past_what_a_unix_timestamp_can_represent",
+                |config| config.keyfill.ttl_secs = u64::MAX,
+                "keyfill.ttl_secs",
+            ),
+            (
+                "a_zero_second_reprieve_retry",
+                |config| config.keyfill.reprieve_retry_secs = 0,
+                "keyfill.reprieve_retry_secs",
+            ),
+            (
+                "a_reprieve_budget_under_one_retry",
+                |config| {
+                    config.keyfill.reprieve_retry_secs = 600;
+                    config.keyfill.reprieve_budget_secs = 300;
+                },
+                "keyfill.reprieve_budget_secs must be at least",
             ),
             (
                 "a_non_https_plc_directory",

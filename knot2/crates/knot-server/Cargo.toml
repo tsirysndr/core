@@ -14,6 +14,7 @@ knot-pack = { workspace = true }
 knot-resource = { workspace = true }
 knot-cache = { workspace = true }
 knot-index = { workspace = true }
+knot-keyfill = { workspace = true }
 knot-atproto = { workspace = true }
 knot-runtime = { workspace = true }
 knot-ssh = { workspace = true }

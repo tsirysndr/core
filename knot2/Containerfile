@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=mold"
 WORKDIR /src
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY crates ./crates
 COPY bobbin/crates ./bobbin/crates
 COPY shuttle ./shuttle
 COPY lexicons ./lexicons

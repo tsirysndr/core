@@ -31,6 +31,7 @@ use knot_xrpc::XrpcState;
 use tower_http::services::ServeFile;
 
 const MAINTENANCE_SHUTDOWN_DRAIN: Duration = Duration::from_secs(30);
+const KEYFILL_SHUTDOWN_DRAIN: Duration = Duration::from_secs(10);
 const EDGE_SHUTDOWN_DRAIN: Duration = Duration::from_secs(40);
 
 const DEFAULT_HOMEPAGE: &str = include_str!("homepage.html");
@@ -118,6 +119,17 @@ fn validate(args: impl Iterator<Item = String>) -> anyhow::Result<()> {
     scope.verify(&config)?;
     println!("configuration is valid");
     Ok(())
+}
+
+fn keyfill_pace(config: &knot_config::KeyfillConfig) -> knot_keyfill::Pace {
+    knot_keyfill::Pace {
+        ttl: knot_index::KeyTtl::from_secs(config.ttl_secs),
+        reprieve: knot_index::KeyReprieve::from_secs(
+            config.reprieve_retry_secs,
+            config.reprieve_budget_secs,
+        ),
+        ..knot_keyfill::Pace::default()
+    }
 }
 
 fn subcommand(name: &str) -> Option<anyhow::Result<()>> {
@@ -210,7 +222,12 @@ async fn main() -> anyhow::Result<()> {
         .meta_path(&knot_did)
         .context("resolve meta-repo path")?;
 
-    let index = Arc::new(Index::new(meta_path.clone(), layout.clone()));
+    let key_pace = keyfill_pace(&config.keyfill);
+    let index = Arc::new(Index::with_key_budget(
+        meta_path.clone(),
+        layout.clone(),
+        knot_index::KeyBudget::from_mib(config.keyfill.key_budget_mib as usize),
+    ));
     index.rebuild().context("rebuild index from meta-repo")?;
     tracing::info!(coverage = ?index.coverage(), "index ready");
 
@@ -527,6 +544,7 @@ async fn main() -> anyhow::Result<()> {
     .with_maintenance(maintenance_handle.clone())
     .with_limits(pack_limits)
     .with_slots(slots.clone())
+    .with_key_ttl(key_pace.ttl)
     .with_catalog(Arc::clone(&catalog));
     let ssh_state = Arc::new(match &lfs_handle {
         Some(handle) => ssh_base.with_lfs(handle.clone(), lfs_max_ssh_transfers),
@@ -626,6 +644,13 @@ async fn main() -> anyhow::Result<()> {
 
     let shutdown = CancellationToken::new();
     tokio::spawn(allocator::govern_decay(shutdown.clone()));
+    let keyfill_task = knot_keyfill::spawn(
+        Arc::clone(&index),
+        Arc::clone(&atproto),
+        slots.clone(),
+        key_pace,
+        shutdown.clone(),
+    );
     let mut edge_task = tokio::spawn(knot_edge::serve(
         edge_config,
         app,
@@ -667,6 +692,15 @@ async fn main() -> anyhow::Result<()> {
         tracing::warn!(
             timeout_secs = EDGE_SHUTDOWN_DRAIN.as_secs(),
             "aborting edge drain after timeout"
+        );
+    }
+    if tokio::time::timeout(KEYFILL_SHUTDOWN_DRAIN, keyfill_task)
+        .await
+        .is_err()
+    {
+        tracing::warn!(
+            timeout_secs = KEYFILL_SHUTDOWN_DRAIN.as_secs(),
+            "aborting key fill drain after timeout"
         );
     }
     if let Some(shutdown) = maintenance_shutdown {

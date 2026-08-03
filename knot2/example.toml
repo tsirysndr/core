@@ -415,6 +415,23 @@
 # Default value: 64
 #max_http_downloads = 64
 
+[keyfill]
+# Can also be specified via environment variable `KNOT_KEYFILL_KEY_BUDGET_MIB`.
+# Default value: 64
+#key_budget_mib = 64
+
+# Can also be specified via environment variable `KNOT_KEYFILL_TTL_SECS`.
+# Default value: 3600
+#ttl_secs = 3600
+
+# Can also be specified via environment variable `KNOT_KEYFILL_REPRIEVE_RETRY_SECS`.
+# Default value: 300
+#reprieve_retry_secs = 300
+
+# Can also be specified via environment variable `KNOT_KEYFILL_REPRIEVE_BUDGET_SECS`.
+# Default value: 21600
+#reprieve_budget_secs = 21600
+
 [resources]
 # Can also be specified via environment variable `KNOT_MAX_THREADS`.
 # Default value: 0

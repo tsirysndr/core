@@ -4829,6 +4829,7 @@ dependencies = [
  "knot-events",
  "knot-git",
  "knot-index",
+ "knot-keyfill",
  "knot-lfs",
  "knot-maintenance",
  "knot-messages",
