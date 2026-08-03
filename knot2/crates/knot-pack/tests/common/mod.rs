@@ -35,7 +35,12 @@ pub fn pack_objects(cwd: &Path, oids: &[String]) -> Vec<u8> {
         .write_all(oids.join("\n").as_bytes())
         .unwrap();
     let out = child.wait_with_output().unwrap();
-    assert!(out.status.success(), "pack-objects failed");
+    assert!(
+        out.status.success(),
+        "pack-objects failed ({}): {}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
     out.stdout
 }
 
@@ -74,7 +79,12 @@ pub fn pack_objects_tuned(cwd: &Path, oids: &[String], ofs: bool) -> Vec<u8> {
         .write_all(oids.join("\n").as_bytes())
         .unwrap();
     let out = child.wait_with_output().unwrap();
-    assert!(out.status.success(), "pack-objects failed");
+    assert!(
+        out.status.success(),
+        "pack-objects failed ({}): {}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
     out.stdout
 }
 

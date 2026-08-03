@@ -19,12 +19,9 @@ pub fn free_bytes(path: &Path) -> io::Result<FreeBytes> {
 }
 
 #[derive(Debug)]
-pub enum ReserveError {
-    BelowFloor {
-        free: FreeBytes,
-        floor: DiskFloorBytes,
-    },
-    Probe(io::Error),
+pub struct BelowFloor {
+    pub free: FreeBytes,
+    pub floor: DiskFloorBytes,
 }
 
 struct Ledger {
@@ -47,23 +44,16 @@ impl DiskGovernor {
         self.0.reserved.load(Ordering::SeqCst)
     }
 
-    pub fn reserve(
+    pub fn reserve_against(
         &self,
-        path: &Path,
+        free: FreeBytes,
         bytes: ReserveBytes,
-    ) -> Result<DiskReservation, ReserveError> {
+    ) -> Result<DiskReservation, BelowFloor> {
         let amount = bytes.get();
         let projected = self.0.reserved.fetch_add(amount, Ordering::SeqCst) + amount;
-        let free = match free_bytes(path) {
-            Ok(free) => free,
-            Err(source) => {
-                self.0.reserved.fetch_sub(amount, Ordering::SeqCst);
-                return Err(ReserveError::Probe(source));
-            }
-        };
         if free.get() < self.0.floor.get().saturating_add(projected) {
             self.0.reserved.fetch_sub(amount, Ordering::SeqCst);
-            return Err(ReserveError::BelowFloor {
+            return Err(BelowFloor {
                 free,
                 floor: self.0.floor,
             });
@@ -103,13 +93,17 @@ mod tests {
 
     #[test]
     fn a_reservation_holds_bytes_until_it_drops() {
-        let dir = std::env::temp_dir();
+        let free = FreeBytes::new(1 << 20);
         let governor = DiskGovernor::new(DiskFloorBytes::new(0));
         assert_eq!(governor.reserved_bytes(), 0);
         {
-            let _held = governor.reserve(&dir, ReserveBytes::new(4_096)).unwrap();
+            let _held = governor
+                .reserve_against(free, ReserveBytes::new(4_096))
+                .unwrap();
             assert_eq!(governor.reserved_bytes(), 4_096);
-            let _also = governor.reserve(&dir, ReserveBytes::new(1_024)).unwrap();
+            let _also = governor
+                .reserve_against(free, ReserveBytes::new(1_024))
+                .unwrap();
             assert_eq!(governor.reserved_bytes(), 5_120);
         }
         assert_eq!(governor.reserved_bytes(), 0);
@@ -117,30 +111,37 @@ mod tests {
 
     #[test]
     fn concurrent_reservations_cannot_jointly_punch_through_the_floor() {
-        let dir = std::env::temp_dir();
-        let free = free_bytes(&dir).unwrap();
-        let floor = DiskFloorBytes::new(free.get().saturating_sub(6_144));
-        let governor = DiskGovernor::new(floor);
-        let first = governor.reserve(&dir, ReserveBytes::new(4_096)).unwrap();
-        let denied = governor.reserve(&dir, ReserveBytes::new(4_096));
+        let free = FreeBytes::new(10_240);
+        let governor = DiskGovernor::new(DiskFloorBytes::new(4_096));
+        let first = governor
+            .reserve_against(free, ReserveBytes::new(4_096))
+            .unwrap();
+        let denied = governor.reserve_against(free, ReserveBytes::new(4_096));
         assert!(
-            matches!(denied, Err(ReserveError::BelowFloor { .. })),
+            denied.is_err(),
             "the second reservation must see the first still held"
         );
         assert_eq!(governor.reserved_bytes(), 4_096);
         drop(first);
         assert_eq!(governor.reserved_bytes(), 0);
-        assert!(governor.reserve(&dir, ReserveBytes::new(4_096)).is_ok());
+        assert!(
+            governor
+                .reserve_against(free, ReserveBytes::new(4_096))
+                .is_ok(),
+            "a free-space reading the floor leaves room in must admit a lone reservation, or \
+             the refusal above was the floor rather than the reservation still being held"
+        );
     }
 
     #[test]
-    fn a_probe_fault_leaves_the_ledger_untouched() {
-        let governor = DiskGovernor::new(DiskFloorBytes::new(0));
-        let fault = governor.reserve(
-            Path::new("/definitely/not/a/mounted/path"),
-            ReserveBytes::new(4_096),
+    fn a_refused_reservation_leaves_the_ledger_untouched() {
+        let governor = DiskGovernor::new(DiskFloorBytes::new(4_096));
+        let refused = governor.reserve_against(FreeBytes::new(4_096), ReserveBytes::new(1));
+        assert!(refused.is_err());
+        assert_eq!(
+            governor.reserved_bytes(),
+            0,
+            "a refusal that left its bytes on the ledger would deny every later upload too"
         );
-        assert!(matches!(fault, Err(ReserveError::Probe(_))));
-        assert_eq!(governor.reserved_bytes(), 0);
     }
 }

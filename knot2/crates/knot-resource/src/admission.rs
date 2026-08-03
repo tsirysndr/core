@@ -1,10 +1,14 @@
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::net::IpAddr;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use knot_types::UnixMicros;
 
 const MAX_TRACKED_PEERS: usize = 100_000;
+
+const MAX_PACED_KEYS: usize = 4_096;
 
 const SWEEP_INTERVAL_MICROS: u64 = 1_000_000;
 
@@ -22,10 +26,10 @@ pub struct RateLimit {
 }
 
 impl RateLimit {
-    const fn interval(self) -> u64 {
+    pub const fn interval(self) -> RefillMicros {
         match self.refill.get() {
-            0 => 1,
-            micros => micros,
+            0 => RefillMicros::new(1),
+            micros => RefillMicros::new(micros),
         }
     }
 }
@@ -83,12 +87,12 @@ impl Bucket {
 
     fn tokens_at(&self, rate: RateLimit, now: UnixMicros) -> u32 {
         let elapsed = now.get().saturating_sub(self.last_refill.get());
-        let gained = (elapsed / rate.interval()).min(u64::from(rate.burst.get())) as u32;
+        let gained = (elapsed / rate.interval().get()).min(u64::from(rate.burst.get())) as u32;
         self.tokens.saturating_add(gained).min(rate.burst.get())
     }
 
     fn replenish(&mut self, rate: RateLimit, now: UnixMicros) -> bool {
-        if now.get().saturating_sub(self.last_refill.get()) >= rate.interval() {
+        if now.get().saturating_sub(self.last_refill.get()) >= rate.interval().get() {
             self.tokens = self.tokens_at(rate, now);
             self.last_refill = now;
         }
@@ -311,6 +315,124 @@ impl AdmitGuard {
 impl Drop for AdmitGuard {
     fn drop(&mut self) {
         self.limiter.leave(self.peer);
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct HostKey(String);
+
+impl HostKey {
+    pub fn new(host: &str) -> Self {
+        Self(host.to_ascii_lowercase())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SubjectKey(String);
+
+impl SubjectKey {
+    pub fn new(subject: &str) -> Self {
+        Self(subject.to_ascii_lowercase())
+    }
+}
+
+struct Booked<K> {
+    turns: HashMap<K, UnixMicros>,
+    last_sweep: UnixMicros,
+}
+
+impl<K: Eq + Hash> Booked<K> {
+    fn has_room_for(&mut self, key: &K, now: UnixMicros) -> bool {
+        if self.turns.contains_key(key) || self.turns.len() < MAX_PACED_KEYS {
+            return true;
+        }
+        if now.get().saturating_sub(self.last_sweep.get()) >= SWEEP_INTERVAL_MICROS {
+            self.last_sweep = now;
+            self.turns.retain(|_, until| until.get() > now.get());
+        }
+        self.turns.len() < MAX_PACED_KEYS
+    }
+}
+
+pub struct Pacer<K> {
+    rate: RateLimit,
+    inner: Mutex<Booked<K>>,
+}
+
+pub type HostPacer = Pacer<HostKey>;
+pub type SubjectPacer = Pacer<SubjectKey>;
+pub type PeerPacer = Pacer<IpAddr>;
+
+impl<K: Clone + Eq + Hash> Pacer<K> {
+    pub fn new(rate: RateLimit) -> Self {
+        Self {
+            rate,
+            inner: Mutex::new(Booked {
+                turns: HashMap::new(),
+                last_sweep: UnixMicros::new(0),
+            }),
+        }
+    }
+
+    pub fn reserve(&self, key: &K, now: UnixMicros) -> Duration {
+        let mut booked = self.lock();
+        match booked.has_room_for(key, now) {
+            false => Duration::from_micros(self.rate.interval().get()),
+            true => {
+                let wait = self.wait_for(&booked, key, now);
+                self.claim_turn(&mut booked, key, now);
+                wait
+            }
+        }
+    }
+
+    pub fn reserve_now(&self, key: &K, now: UnixMicros) -> bool {
+        let mut booked = self.lock();
+        match booked.has_room_for(key, now) {
+            false => false,
+            true => match self.wait_for(&booked, key, now).is_zero() {
+                false => false,
+                true => {
+                    self.claim_turn(&mut booked, key, now);
+                    true
+                }
+            },
+        }
+    }
+
+    fn wait_for(&self, booked: &Booked<K>, key: &K, now: UnixMicros) -> Duration {
+        let tolerance = self
+            .rate
+            .interval()
+            .get()
+            .saturating_mul(u64::from(self.rate.burst.get().saturating_sub(1)));
+        Duration::from_micros(
+            self.turn(booked, key, now)
+                .get()
+                .saturating_sub(tolerance)
+                .saturating_sub(now.get()),
+        )
+    }
+
+    fn claim_turn(&self, booked: &mut Booked<K>, key: &K, now: UnixMicros) {
+        let until = self
+            .turn(booked, key, now)
+            .get()
+            .saturating_add(self.rate.interval().get());
+        booked.turns.insert(key.clone(), UnixMicros::new(until));
+    }
+
+    fn turn(&self, booked: &Booked<K>, key: &K, now: UnixMicros) -> UnixMicros {
+        booked
+            .turns
+            .get(key)
+            .map_or(now, |until| UnixMicros::new(until.get().max(now.get())))
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Booked<K>> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
@@ -556,6 +678,103 @@ mod tests {
         assert!(
             tracked <= MAX_TRACKED_PEERS,
             "a flood of distinct source addresses mustn't grow the peer map past its limit, saw {tracked}"
+        );
+    }
+
+    #[test]
+    fn a_pacer_spends_a_hosts_burst_at_once_then_spaces_it_and_leaves_every_other_host_alone() {
+        let pacer = HostPacer::new(RateLimit {
+            burst: Burst::new(3),
+            refill: RefillMicros::new(100),
+        });
+        let plc = HostKey::new("plc.directory");
+        let pds = HostKey::new("PDS.Nel.Pet");
+        let waits: Vec<u128> = (0..5)
+            .map(|_| pacer.reserve(&plc, at(0)).as_micros())
+            .collect();
+        assert_eq!(
+            waits,
+            vec![0, 0, 0, 100, 200],
+            "a cold host takes its whole burst without waiting. Every visit after that is one \
+             refill interval further out"
+        );
+        assert_eq!(
+            pacer.reserve(&pds, at(0)),
+            Duration::ZERO,
+            "a knot whose accounts spread over many PDSes must fill at the sum of their rates, \
+             so one busy host mustn't delay another"
+        );
+        assert_eq!(
+            HostKey::new("PDS.Nel.Pet"),
+            HostKey::new("pds.nel.pet"),
+            "a PDS endpoint written in mixed case is the same host and must share its schedule"
+        );
+        assert_eq!(
+            pacer.reserve(&plc, at(10_000)),
+            Duration::ZERO,
+            "a host the caller hasn't visited since its last turn is due immediately"
+        );
+    }
+
+    #[test]
+    fn a_turn_that_isnt_due_is_refused_without_pushing_the_schedule_further_out() {
+        let pacer = SubjectPacer::new(RateLimit {
+            burst: Burst::new(1),
+            refill: RefillMicros::new(1_000),
+        });
+        let nel = SubjectKey::new("did:plc:nel");
+        assert!(
+            pacer.reserve_now(&nel, at(0)),
+            "a subject the caller hasn't read takes its turn straight away"
+        );
+        assert!(
+            !pacer.reserve_now(&nel, at(500)),
+            "a caller that mustn't wait is refused inside the interval"
+        );
+        assert!(
+            !pacer.reserve_now(&nel, at(999)),
+            "refusals must leave the booking alone, or whoever keeps trying pushes the turn \
+             further out every time and the knot never reads the subject again"
+        );
+        assert!(pacer.reserve_now(&nel, at(1_000)));
+        assert_eq!(
+            SubjectKey::new("DID:PLC:NEL"),
+            SubjectKey::new("did:plc:nel"),
+            "a DID a client typed in mixed case is the same account and shares its schedule"
+        );
+    }
+
+    #[test]
+    fn a_flood_of_distinct_hosts_doesnt_grow_the_schedule_past_its_limit_or_delay_a_newcomer() {
+        let pacer = HostPacer::new(RateLimit {
+            burst: Burst::new(1),
+            refill: RefillMicros::new(1_000_000),
+        });
+        (0..MAX_PACED_KEYS as u64 + 5_000).for_each(|index| {
+            let _ = pacer.reserve(&HostKey::new(&format!("{index}.nel.pet")), at(0));
+        });
+        let tracked = pacer.lock().turns.len();
+        assert!(
+            tracked <= MAX_PACED_KEYS,
+            "a grant set spread over more did:web hosts than the schedule can track mustn't \
+             grow it past its limit, saw {tracked}"
+        );
+        assert_eq!(
+            pacer.reserve(&HostKey::new("plc.directory"), at(0)),
+            Duration::from_micros(1_000_000),
+            "a host the full schedule can't track waits one refill interval, so a caller that \
+             outgrows the schedule slows itself down"
+        );
+        let settled = at(SWEEP_INTERVAL_MICROS + 2_000_000);
+        assert_eq!(
+            pacer.reserve(&HostKey::new("plc.directory"), settled),
+            Duration::ZERO
+        );
+        assert_eq!(
+            pacer.lock().turns.len(),
+            1,
+            "the sweep reclaims the schedule and tracks the newcomer once every booked turn \
+             has passed"
         );
     }
 

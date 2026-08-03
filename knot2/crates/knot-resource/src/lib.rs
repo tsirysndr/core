@@ -6,12 +6,12 @@ mod mem;
 mod slots;
 
 pub use admission::{
-    AdmitGuard, Burst, GlobalInflight, LimitConfig, PerPeerInflight, PreAuthLimiter, RateLimit,
-    RefillMicros, Refusal,
+    AdmitGuard, Burst, GlobalInflight, HostKey, HostPacer, LimitConfig, PeerPacer, PerPeerInflight,
+    PreAuthLimiter, RateLimit, RefillMicros, Refusal, SubjectKey, SubjectPacer,
 };
 pub use cpu::{Saturate, ThreadCount, gix_thread_limit, map_chunks, map_spans, saturate, threads};
 pub use disk::{
-    DiskFloorBytes, DiskGovernor, DiskReservation, FreeBytes, ReserveBytes, ReserveError,
+    BelowFloor, DiskFloorBytes, DiskGovernor, DiskReservation, FreeBytes, ReserveBytes,
     free_bytes as disk_free_bytes,
 };
 pub use fsio::{

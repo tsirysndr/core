@@ -1,4 +1,4 @@
-use knot_resource::{DiskGovernor, DiskReservation, ReserveError};
+use knot_resource::{BelowFloor, DiskGovernor, DiskReservation, FreeBytes};
 
 use crate::{ClaimedSize, FreeSpaceFloor, LfsError, LfsSize, LfsStorePath};
 
@@ -53,14 +53,34 @@ impl UploadAdmission for StoreAdmission {
         if self.floor.get() == 0 {
             return Ok(UploadPermit::unreserved());
         }
-        match self.governor.reserve(
-            self.root.as_path(),
-            knot_resource::ReserveBytes::new(declared.get()),
-        ) {
+        let free =
+            knot_resource::disk_free_bytes(self.root.as_path()).map_err(|source| LfsError::Io {
+                op: "probe free space under",
+                path: self.root.as_path().to_path_buf(),
+                source,
+            })?;
+        self.admit_against(free, declared)
+    }
+
+    fn max_object(&self) -> LfsSize {
+        self.max_object
+    }
+}
+
+impl StoreAdmission {
+    fn admit_against(
+        &self,
+        free: FreeBytes,
+        declared: ClaimedSize,
+    ) -> Result<UploadPermit, LfsError> {
+        match self
+            .governor
+            .reserve_against(free, knot_resource::ReserveBytes::new(declared.get()))
+        {
             Ok(reservation) => Ok(UploadPermit {
                 _reservation: Some(reservation),
             }),
-            Err(ReserveError::BelowFloor { free, .. }) => {
+            Err(BelowFloor { free, .. }) => {
                 tracing::warn!(
                     declared = declared.get(),
                     free = free.get(),
@@ -72,16 +92,7 @@ impl UploadAdmission for StoreAdmission {
                     floor: self.floor,
                 })
             }
-            Err(ReserveError::Probe(source)) => Err(LfsError::Io {
-                op: "probe free space under",
-                path: self.root.as_path().to_path_buf(),
-                source,
-            }),
         }
-    }
-
-    fn max_object(&self) -> LfsSize {
-        self.max_object
     }
 }
 
@@ -140,21 +151,27 @@ mod tests {
     #[test]
     fn a_held_permit_reserves_against_the_next_admission() {
         let dir = tempfile::tempdir().unwrap();
-        let free = knot_resource::disk_free_bytes(dir.path()).unwrap();
+        let free = FreeBytes::new(10_240);
         let gate = StoreAdmission::new(
             LfsStorePath::new(dir.path()),
             LfsSize::new(u64::MAX),
-            FreeSpaceFloor::new(free.get().saturating_sub(6_144)),
+            FreeSpaceFloor::new(4_096),
         );
-        let held = gate.admit(ClaimedSize::new(4_096)).unwrap();
+        let held = gate
+            .admit_against(free, ClaimedSize::new(4_096))
+            .expect("a free-space reading the floor leaves room in admits a lone upload");
         assert!(
             matches!(
-                gate.admit(ClaimedSize::new(4_096)),
+                gate.admit_against(free, ClaimedSize::new(4_096)),
                 Err(LfsError::FreeSpaceDenied { .. })
             ),
             "a second upload cannot pass the floor while the first is in flight"
         );
         drop(held);
-        assert!(gate.admit(ClaimedSize::new(4_096)).is_ok());
+        assert!(
+            gate.admit_against(free, ClaimedSize::new(4_096)).is_ok(),
+            "the same reading must admit again once the first upload finishes, or the refusal \
+             above was the floor rather than the reservation still being held"
+        );
     }
 }
