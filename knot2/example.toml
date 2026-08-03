@@ -516,6 +516,9 @@
 # Default value: ["Hi {user}! You're authenticated to {knot} knot.", "This knot serves git over ssh, so there's no shell here. :P", "Clone repo with: git clone {knot}:<repoDID>"]
 #greeting = ["Hi {user}! You're authenticated to {knot} knot.", "This knot serves git over ssh, so there's no shell here. :P", "Clone repo with: git clone {knot}:<repoDID>"]
 
+# Default value: ["Hi there! This is the {knot} knot.", "This knot serves git over ssh, so there's no shell here. :P", "Clone repo with: git clone {knot}:<repoDID>", "Publish your ssh key to your atproto account so this knot can identify your pushes.", "Put your handle in the url, as in yourhandle@{knot}:<repoDID>, so your ssh client can find your registered key on its own."]
+#greeting_unknown = ["Hi there! This is the {knot} knot.", "This knot serves git over ssh, so there's no shell here. :P", "Clone repo with: git clone {knot}:<repoDID>", "Publish your ssh key to your atproto account so this knot can identify your pushes.", "Put your handle in the url, as in yourhandle@{knot}:<repoDID>, so your ssh client can find your registered key on its own."]
+
 # Default value: "knot: unsupported command"
 #unsupported_command = "knot: unsupported command"
 
@@ -531,8 +534,11 @@
 # Default value: "knot: LFS isn't enabled on this knot"
 #lfs_disabled = "knot: LFS isn't enabled on this knot"
 
-# Default value: "knot: your ssh key isn't registered to a user authorized to push here. If you offer several keys, make sure the registered one is offered first."
-#key_not_registered = "knot: your ssh key isn't registered to a user authorized to push here. If you offer several keys, make sure the registered one is offered first."
+# Default value: "knot: this ssh key doesn't match any key published by the accounts that may push here. Authorized: {authorized}. If your agent offers several keys, add -o IdentitiesOnly=yes so it offers your registered key."
+#key_not_registered = "knot: this ssh key doesn't match any key published by the accounts that may push here. Authorized: {authorized}. If your agent offers several keys, add -o IdentitiesOnly=yes so it offers your registered key."
+
+# Default value: "knot: couldn't read the account records needed to check your ssh key, retry shortly"
+#identity_unavailable = "knot: couldn't read the account records needed to check your ssh key, retry shortly"
 
 # Default value: "knot: you aren't authorized to push to this repository."
 #push_denied = "knot: you aren't authorized to push to this repository."

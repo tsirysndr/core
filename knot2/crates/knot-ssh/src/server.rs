@@ -3,7 +3,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 use knot_runtime::{Clock, HttpTransport};
-use knot_types::OfferedKey;
+use knot_types::{OfferedKey, OwnerRef};
 use russh::keys::ssh_key;
 use russh::server::{Auth, Handler, Msg, Server, Session};
 use russh::{Channel, ChannelId};
@@ -11,6 +11,7 @@ use tokio_util::task::TaskTracker;
 
 use crate::SshState;
 use crate::exec::run_exec;
+use crate::identity::{self, Asserted, Credential, Verdict};
 
 pub(crate) struct KnotSshServer<H, C> {
     pub(crate) state: Arc<SshState<H, C>>,
@@ -32,10 +33,18 @@ impl<H: HttpTransport, C: Clock> Server for KnotSshServer<H, C> {
 pub(crate) struct KnotSession<H, C> {
     state: Arc<SshState<H, C>>,
     tracker: TaskTracker,
-    key: Option<OfferedKey>,
+    credential: Option<Credential>,
+    asserted: Option<Asserted>,
     channels: HashMap<ChannelId, Channel<Msg>>,
     protocols: HashSet<ChannelId>,
     peer: Option<IpAddr>,
+}
+
+fn reject() -> Auth {
+    Auth::Reject {
+        proceed_with_methods: None,
+        partial_success: false,
+    }
 }
 
 impl<H, C> KnotSession<H, C> {
@@ -43,7 +52,8 @@ impl<H, C> KnotSession<H, C> {
         Self {
             state,
             tracker,
-            key: None,
+            credential: None,
+            asserted: None,
             channels: HashMap::new(),
             protocols: HashSet::new(),
             peer,
@@ -51,32 +61,54 @@ impl<H, C> KnotSession<H, C> {
     }
 }
 
+impl<H: HttpTransport, C: Clock> KnotSession<H, C> {
+    async fn decide(
+        &mut self,
+        user: &str,
+        public_key: &ssh_key::PublicKey,
+    ) -> Option<(Verdict, OfferedKey)> {
+        let key = OfferedKey::from_bytes(public_key.to_bytes().ok()?);
+        let verdict = identity::verify(
+            &self.state,
+            OwnerRef::parse(user),
+            &key,
+            self.peer,
+            &mut self.asserted,
+        )
+        .await;
+        Some((verdict, key))
+    }
+}
+
 impl<H: HttpTransport, C: Clock> Handler for KnotSession<H, C> {
     type Error = russh::Error;
 
-    async fn auth_publickey(
+    async fn auth_publickey_offered(
         &mut self,
-        _user: &str,
+        user: &str,
         public_key: &ssh_key::PublicKey,
     ) -> Result<Auth, Self::Error> {
-        let reject = Auth::Reject {
-            proceed_with_methods: None,
-            partial_success: false,
-        };
-        let Ok(blob) = public_key.to_bytes() else {
-            return Ok(reject);
-        };
-        let key = OfferedKey::from_bytes(blob);
-        if self
-            .state
-            .roster
-            .recognizes_fresh(&key, &self.state.index, &self.state.atproto)
-            .await
-        {
-            self.key = Some(key);
-            Ok(Auth::Accept)
-        } else {
-            Ok(reject)
+        match self.decide(user, public_key).await {
+            Some((Verdict::Refused, _)) | None => Ok(reject()),
+            Some(_) => Ok(Auth::Accept),
+        }
+    }
+
+    async fn auth_publickey(
+        &mut self,
+        user: &str,
+        public_key: &ssh_key::PublicKey,
+    ) -> Result<Auth, Self::Error> {
+        match self.decide(user, public_key).await {
+            Some((Verdict::Identified(did), _)) => {
+                self.credential = Some(Credential::Identified(did));
+                Ok(Auth::Accept)
+            }
+            Some((Verdict::Offered, key)) => {
+                self.credential = Some(Credential::Offered(key));
+                Ok(Auth::Accept)
+            }
+            Some((Verdict::Refused, _)) | None => Ok(reject()),
         }
     }
 
@@ -146,15 +178,16 @@ impl<H: HttpTransport, C: Clock> Handler for KnotSession<H, C> {
         channel: ChannelId,
         session: &mut Session,
     ) -> Result<(), Self::Error> {
-        let Some(handle) = self.channels.remove(&channel) else {
+        let (Some(handle), Some(credential)) =
+            (self.channels.remove(&channel), self.credential.clone())
+        else {
             session.channel_failure(channel)?;
             return Ok(());
         };
         session.channel_success(channel)?;
         let state = Arc::clone(&self.state);
-        let key = self.key.clone();
         self.tracker.spawn(async move {
-            crate::exec::run_greeting(state, key, handle).await;
+            crate::exec::run_greeting(state, credential, handle).await;
         });
         Ok(())
     }
@@ -165,18 +198,19 @@ impl<H: HttpTransport, C: Clock> Handler for KnotSession<H, C> {
         data: &[u8],
         session: &mut Session,
     ) -> Result<(), Self::Error> {
-        let Some(handle) = self.channels.remove(&channel) else {
+        let (Some(handle), Some(credential)) =
+            (self.channels.remove(&channel), self.credential.clone())
+        else {
             session.channel_failure(channel)?;
             return Ok(());
         };
         session.channel_success(channel)?;
         let protocol_v2 = self.protocols.remove(&channel);
         let state = Arc::clone(&self.state);
-        let key = self.key.clone();
         let peer = self.peer;
         let command = data.to_vec();
         self.tracker.spawn(async move {
-            run_exec(state, key, handle, &command, protocol_v2, peer).await;
+            run_exec(state, credential, handle, &command, protocol_v2, peer).await;
         });
         Ok(())
     }

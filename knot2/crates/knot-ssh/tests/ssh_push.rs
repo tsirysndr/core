@@ -1,14 +1,15 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use futures::stream::StreamExt;
 use knot_atproto::Atproto;
 use knot_cob::{CobHome, CobStore};
 use knot_cobs::{CollaboratorsChange, Grant, MembersChange, Registration, RegistryChange};
 use knot_git::{ArchiveLimit, Layout, Repo};
-use knot_index::Index;
+use knot_index::{Index, Resolved};
 use knot_pack::MaxWireBytes;
 use knot_postreceive::LanguagesPushBudget;
 use knot_runtime::{
@@ -133,6 +134,18 @@ fn not_found() -> HttpResponse {
     }
 }
 
+fn forever() -> knot_index::KeyLease {
+    knot_index::KeyTtl::from_secs(u32::MAX.into()).lease_from(UnixSeconds::new(0))
+}
+
+fn server_error() -> HttpResponse {
+    HttpResponse {
+        status: http::StatusCode::INTERNAL_SERVER_ERROR,
+        headers: http::HeaderMap::new(),
+        body: bytes::Bytes::new(),
+    }
+}
+
 fn fake_http(published_line: String) -> impl knot_runtime::HttpTransport {
     let signer = K256Signer::generate(&SeededEntropy::new(1));
     let pds = format!("https://{PDS_HOST}");
@@ -154,7 +167,54 @@ fn fake_http(published_line: String) -> impl knot_runtime::HttpTransport {
     })
 }
 
-fn multi_http(identities: HashMap<String, Vec<String>>) -> impl knot_runtime::HttpTransport {
+#[derive(Default, Clone)]
+struct Accounts {
+    identities: Arc<Mutex<HashMap<String, Vec<String>>>>,
+    unreachable: Arc<Mutex<HashSet<String>>>,
+    listings: Arc<AtomicUsize>,
+}
+
+impl Accounts {
+    fn publishing(identities: HashMap<String, Vec<String>>) -> Self {
+        Self {
+            identities: Arc::new(Mutex::new(identities)),
+            ..Self::default()
+        }
+    }
+
+    fn unreachable(self, dids: HashSet<String>) -> Self {
+        *self.unreachable.lock().unwrap() = dids;
+        self
+    }
+
+    fn restore(&self, did: &str) {
+        self.unreachable.lock().unwrap().remove(did);
+    }
+
+    fn publish(&self, did: &str, line: String) {
+        self.identities
+            .lock()
+            .unwrap()
+            .entry(did.to_string())
+            .or_default()
+            .push(line);
+    }
+
+    fn published_by(&self, did: &str) -> Vec<String> {
+        self.identities
+            .lock()
+            .unwrap()
+            .get(did)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn listings(&self) -> usize {
+        self.listings.load(Ordering::SeqCst)
+    }
+}
+
+fn multi_http(accounts: Accounts) -> impl knot_runtime::HttpTransport {
     let signer = K256Signer::generate(&SeededEntropy::new(77));
     FakeHttp::new(move |request| {
         let host = request.url.host_str().unwrap_or_default().to_string();
@@ -169,7 +229,11 @@ fn multi_http(identities: HashMap<String, Vec<String>>) -> impl knot_runtime::Ht
                 .find(|(key, _)| key == "repo")
                 .map(|(_, value)| value.into_owned())
                 .unwrap_or_default();
-            let lines = identities.get(&repo).cloned().unwrap_or_default();
+            accounts.listings.fetch_add(1, Ordering::SeqCst);
+            if accounts.unreachable.lock().unwrap().contains(&repo) {
+                return Ok(server_error());
+            }
+            let lines = accounts.published_by(&repo);
             let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
             return Ok(ok_body(list_records_body(&refs)));
         }
@@ -996,6 +1060,66 @@ async fn cob_ref_guard_lifecycle() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_filled_key_set_refuses_an_unregistered_key_and_an_acl_write_reopens_the_check() {
+    let fx = fixture().await;
+    let head = seed_work(&fx.work);
+    let head_oid = Oid::from_hex(&head).unwrap();
+
+    fx.index.keys().mark_ready(fx.index.generation());
+    fx.index.refresh_members().unwrap();
+    let (ok, out) = push(&fx.work, &fx.url, &fx.key_path, &["main"]).await;
+    assert!(
+        ok,
+        "a grant written after the key set was read must reopen the check, or whoever it \
+         grants is refused at the handshake until the next fill pass:\n{out}"
+    );
+    assert_eq!(
+        main_tip(&fx.server.layout, &fx.server.repo_did),
+        Some(head_oid)
+    );
+
+    fx.index.keys().record(
+        &AccountDid::new(OWNER_DID).unwrap(),
+        vec![knot_types::OfferedKey::from_bytes(registered_blob(&fx))],
+        forever(),
+    );
+    fx.index.keys().mark_ready(fx.index.generation());
+
+    let (unregistered_path, _unregistered_line) = keygen(fx.scratch.path(), "unregistered");
+    let two_ids = format!(
+        "ssh -i {unregistered_path} -i {} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no \
+         -o UserKnownHostsFile=/dev/null -o PreferredAuthentications=publickey -o BatchMode=yes",
+        fx.key_path
+    );
+    let (ok, out) = {
+        let (work, url) = (fx.work.clone(), fx.url.clone());
+        tokio::task::spawn_blocking(move || {
+            git(
+                &work,
+                &[("GIT_SSH_COMMAND", &two_ids)],
+                &["push", "-q", &url, "main:refs/heads/second"],
+            )
+        })
+        .await
+        .unwrap()
+    };
+    assert!(
+        ok,
+        "a filled key set refuses the unregistered key, so the client offers its registered key \
+         without the url identifying anybody:\n{out}"
+    );
+    assert_eq!(
+        fx.server
+            .layout
+            .open(&fx.server.repo_did)
+            .unwrap()
+            .find_ref(&RefName::new("refs/heads/second").unwrap())
+            .unwrap(),
+        Some(head_oid)
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn key_recognition_edge_cases() {
     let fx = fixture().await;
     let head = seed_work(&fx.work);
@@ -1020,9 +1144,26 @@ async fn key_recognition_edge_cases() {
         .unwrap()
     };
     assert!(
-        ok,
-        "rejecting unregistered key must let client cycle to the registered one:\n{out}"
+        !ok,
+        "with the key set still filling, the push is checked against whichever key the client \
+         offers first:\n{out}"
     );
+    assert!(
+        out.contains("@nel.pet"),
+        "refusal lists who may push, so the pusher knows which key to offer:\n{out}"
+    );
+    assert!(
+        out.contains("IdentitiesOnly"),
+        "refusal states how a multi-key client can offer its registered key:\n{out}"
+    );
+    assert_eq!(
+        main_tip(&fx.server.layout, &fx.server.repo_did),
+        None,
+        "the refused push leaves the repo empty"
+    );
+
+    let (ok, out) = push(&fx.work, &fx.url, &fx.key_path, &["main"]).await;
+    assert!(ok, "offering only the registered key must succeed:\n{out}");
     assert_eq!(
         main_tip(&fx.server.layout, &fx.server.repo_did),
         Some(head_oid)
@@ -1035,9 +1176,9 @@ async fn key_recognition_edge_cases() {
     .to_bytes()
     .unwrap();
     fx.index.keys().record(
-        &AccountDid::new("did:plc:whelk").unwrap(),
+        &AccountDid::new("did:plc:cuttle").unwrap(),
         vec![knot_types::OfferedKey::from_bytes(blob)],
-        knot_index::KeyTtl::from_secs(u32::MAX.into()).lease_from(knot_types::UnixSeconds::new(0)),
+        forever(),
     );
     let (ok, out) = push(
         &fx.work,
@@ -1081,14 +1222,9 @@ fn a_group_or_other_readable_host_key_is_refused_on_load() {
     );
 }
 
-async fn launch(
-    host_key_dir: &Path,
-    layout: Layout,
-    index: Arc<Index>,
-    identities: HashMap<String, Vec<String>>,
-) -> u16 {
+async fn launch(host_key_dir: &Path, layout: Layout, index: Arc<Index>, accounts: Accounts) -> u16 {
     let atproto = Arc::new(Atproto::new(
-        multi_http(identities),
+        multi_http(accounts),
         ManualClock::new(UnixMicros::new(1_000_000_000)),
         KnotId::new("did:web:nel.pet").unwrap(),
         knot_atproto::PlcDirectory::new(Url::parse("https://plc.directory/").unwrap()).unwrap(),
@@ -1126,8 +1262,209 @@ async fn launch(
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_collaborator_pushes_its_repo_but_a_recognized_key_is_denied_on_a_repo_it_has_no_grant_on()
- {
+async fn a_handle_in_the_url_identifies_a_visitor_and_lets_a_multi_key_client_find_its_key() {
+    let fx = fixture().await;
+    let head = seed_work(&fx.work);
+    let head_oid = Oid::from_hex(&head).unwrap();
+
+    let port = fx.server.port;
+    let greeted_key = fx.key_path.clone();
+    let (_ok, out) =
+        tokio::task::spawn_blocking(move || ssh_bare_as(&greeted_key, "nel.pet", port))
+            .await
+            .unwrap();
+    assert!(
+        out.contains("@nel.pet"),
+        "an asserted handle identifies the visitor on first contact, with an empty cache:\n{out}"
+    );
+
+    let (unregistered_path, _unregistered_line) = keygen(fx.scratch.path(), "unregistered");
+    let two_ids = format!(
+        "ssh -i {unregistered_path} -i {} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no \
+         -o UserKnownHostsFile=/dev/null -o PreferredAuthentications=publickey -o BatchMode=yes",
+        fx.key_path
+    );
+    let identified = format!("ssh://nel.pet@127.0.0.1:{}/{REPO_DID}", fx.server.port);
+    let (ok, out) = {
+        let (work, url) = (fx.work.clone(), identified.clone());
+        tokio::task::spawn_blocking(move || {
+            git(
+                &work,
+                &[("GIT_SSH_COMMAND", &two_ids)],
+                &["push", "-q", &url, "main"],
+            )
+        })
+        .await
+        .unwrap()
+    };
+    assert!(
+        ok,
+        "a handle in the url lets the knot refuse the unregistered key so the client offers the \
+         next key:\n{out}"
+    );
+    assert_eq!(
+        main_tip(&fx.server.layout, &fx.server.repo_did),
+        Some(head_oid)
+    );
+    assert_eq!(
+        fx.index.owner_of_key(
+            &knot_types::OfferedKey::from_bytes(registered_blob(&fx)),
+            UnixSeconds::new(0),
+        ),
+        Resolved::Ready(None),
+        "an asserted handle is whatever the client typed, so the keys read for it mustn't enter \
+         the set, or anyone can fill the key budget by asserting handles"
+    );
+}
+
+fn registered_blob(fx: &Fixture) -> Vec<u8> {
+    russh::keys::ssh_key::PublicKey::from_openssh(
+        &std::fs::read_to_string(fx.scratch.path().join("client.pub")).unwrap(),
+    )
+    .unwrap()
+    .to_bytes()
+    .unwrap()
+}
+
+fn registered_index(
+    scratch: &TempDir,
+    budget: knot_index::KeyBudget,
+) -> (Layout, RepoDid, Arc<Index>) {
+    let meta_path = scratch.path().join("meta");
+    Repo::create(&meta_path).unwrap();
+    let layout = Layout::new(scratch.path().join("repos"));
+    let repo_did = RepoDid::new(REPO_DID).unwrap();
+    layout.create(&repo_did).unwrap();
+
+    let signer = K256Signer::generate(&SeededEntropy::new(2));
+    let meta = Repo::open(&meta_path).unwrap();
+    CobStore::new(&meta)
+        .create(
+            &CobHome::from(&KnotId::new("did:web:nel.pet").unwrap()),
+            &RegistryChange::Register(Registration {
+                owner: OwnerDid::new(OWNER_DID).unwrap(),
+                rkey: RepoRkey::new(REPO_NAME).unwrap(),
+                name: RepoName::new(REPO_NAME).unwrap(),
+                repo: repo_did.clone(),
+                created_at: UnixSeconds::new(1),
+            }),
+            &signer,
+            UnixSeconds::new(1),
+        )
+        .unwrap();
+
+    let index = Arc::new(Index::with_key_budget(meta_path, layout.clone(), budget));
+    index.rebuild().unwrap();
+    index.warm_collaborators();
+    (layout, repo_did, index)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_unreachable_pds_reads_as_transient_and_its_keys_get_in_once_it_recovers() {
+    let scratch = tempfile::tempdir().unwrap();
+    let (stale_key, stale_line) = keygen(scratch.path(), "stale");
+    let (fresh_key, fresh_line) = keygen(scratch.path(), "fresh");
+    let (layout, repo_did, index) = registered_index(&scratch, knot_index::KeyBudget::DEFAULT);
+
+    let accounts = Accounts::publishing(HashMap::from([(OWNER_DID.to_string(), vec![stale_line])]))
+        .unreachable(HashSet::from([OWNER_DID.to_string()]));
+    let port = launch(
+        &scratch.path().join("hostkey"),
+        layout.clone(),
+        Arc::clone(&index),
+        accounts.clone(),
+    )
+    .await;
+    let url = format!("ssh://git@127.0.0.1:{port}/{REPO_DID}");
+
+    let work = scratch.path().join("work");
+    let head = seed_work(&work);
+    let (ok, out) = push(&work, &url, &stale_key, &["main"]).await;
+    assert!(
+        !ok,
+        "a push mustn't be accepted while the owner's records are unreadable:\n{out}"
+    );
+    assert!(
+        out.contains("retry shortly"),
+        "an unreadable PDS must read as transient:\n{out}"
+    );
+    assert!(
+        !out.contains("doesn't match"),
+        "a transient failure mustn't be reported to the pusher as a wrong key:\n{out}"
+    );
+    assert_eq!(
+        main_tip(&layout, &repo_did),
+        None,
+        "the refused push leaves the repo empty"
+    );
+
+    accounts.restore(OWNER_DID);
+    let (ok, out) = push(&work, &url, &stale_key, &["main"]).await;
+    assert!(
+        ok,
+        "the key the owner publishes must push once its PDS answers again:\n{out}"
+    );
+
+    accounts.publish(OWNER_DID, fresh_line);
+    let (ok, out) = push(&work, &url, &fresh_key, &["main", "--force"]).await;
+    assert!(
+        ok,
+        "a key the owner published after the knot last read the account must get in on the next \
+         push, or publishing a second key locks its owner out until a fill pass catches up:\n{out}"
+    );
+    assert_eq!(
+        main_tip(&layout, &repo_did),
+        Some(Oid::from_hex(&head).unwrap())
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_account_the_budget_couldnt_fit_still_clears_the_handshake_and_pushes() {
+    let scratch = tempfile::tempdir().unwrap();
+    let (owner_key, owner_line) = keygen(scratch.path(), "owner");
+    let (layout, repo_did, index) =
+        registered_index(&scratch, knot_index::KeyBudget::from_bytes(200));
+
+    let blob = russh::keys::ssh_key::PublicKey::from_openssh(&owner_line)
+        .unwrap()
+        .to_bytes()
+        .unwrap();
+    assert_eq!(
+        index.keys().record(
+            &AccountDid::new(OWNER_DID).unwrap(),
+            vec![knot_types::OfferedKey::from_bytes(blob)],
+            forever(),
+        ),
+        knot_index::KeyRecord::Unheld,
+        "a 200-byte budget records the read without keeping the key"
+    );
+    index.keys().mark_ready(index.generation());
+
+    let port = launch(
+        &scratch.path().join("hostkey"),
+        layout.clone(),
+        Arc::clone(&index),
+        Accounts::publishing(HashMap::from([(OWNER_DID.to_string(), vec![owner_line])])),
+    )
+    .await;
+    let url = format!("ssh://git@127.0.0.1:{port}/{REPO_DID}");
+
+    let work = scratch.path().join("work");
+    let head = seed_work(&work);
+    let (ok, out) = push(&work, &url, &owner_key, &["main"]).await;
+    assert!(
+        ok,
+        "the set can't fit the owner's keys, so the handshake must defer to the push check \
+         instead of refusing a key the accounts on file don't publish:\n{out}"
+    );
+    assert_eq!(
+        main_tip(&layout, &repo_did),
+        Some(Oid::from_hex(&head).unwrap())
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_collaborator_pushes_its_repo_but_is_denied_on_a_repo_it_doesnt_collaborate_on() {
     const REPO_A: &str = "did:plc:squid";
     const REPO_B: &str = "did:plc:clam";
     const OWNER: &str = "did:plc:nel";
@@ -1211,11 +1548,12 @@ async fn a_collaborator_pushes_its_repo_but_a_recognized_key_is_denied_on_a_repo
         (OWNER.to_string(), vec![owner_line]),
         (COLLAB.to_string(), vec![collab_line]),
     ]);
+    let accounts = Accounts::publishing(identities);
     let port = launch(
         &scratch.path().join("hostkey"),
         layout.clone(),
         Arc::clone(&index),
-        identities,
+        accounts.clone(),
     )
     .await;
 
@@ -1239,12 +1577,22 @@ async fn a_collaborator_pushes_its_repo_but_a_recognized_key_is_denied_on_a_repo
     let (denied, out) = push(&work_b, &url_b, &collab_key, &["main"]).await;
     assert!(
         !denied,
-        "key recognized via repo A but with no grant on repo B must be denied, recognition is \
-         not authorization:\n{out}"
+        "a key that pushes repo A must be denied on repo B, where its owner was never granted:\n{out}"
     );
     assert!(
         main_tip(&layout, &repo_b).is_none(),
         "denied cross-repo push must land nothing on repo B"
+    );
+
+    let after_first_denial = accounts.listings();
+    let (denied, out) = push(&work_b, &url_b, &collab_key, &["main"]).await;
+    assert!(!denied, "the second attempt is denied the same way:\n{out}");
+    assert_eq!(
+        accounts.listings(),
+        after_first_denial,
+        "repo B's owner was read during the first denial and is on file, so retrying mustn't \
+         read that PDS again, or anyone with a key can make the knot fetch from a third party \
+         at will:\n{out}"
     );
 
     let work_owner = scratch.path().join("work_owner_b");
@@ -1259,6 +1607,10 @@ async fn a_collaborator_pushes_its_repo_but_a_recognized_key_is_denied_on_a_repo
 }
 
 fn ssh_bare(key_path: &str, port: u16) -> (bool, String) {
+    ssh_bare_as(key_path, "git", port)
+}
+
+fn ssh_bare_as(key_path: &str, user: &str, port: u16) -> (bool, String) {
     let out = Command::new("ssh")
         .args([
             "-i",
@@ -1275,7 +1627,7 @@ fn ssh_bare(key_path: &str, port: u16) -> (bool, String) {
             "BatchMode=yes",
             "-p",
             &port.to_string(),
-            "git@127.0.0.1",
+            &format!("{user}@127.0.0.1"),
         ])
         .output()
         .expect("ssh runs");
@@ -1290,18 +1642,32 @@ fn ssh_bare(key_path: &str, port: u16) -> (bool, String) {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_bare_ssh_session_greets_the_recognized_user() {
+async fn a_bare_ssh_session_greets_a_visitor_then_identifies_them_once_they_have_pushed() {
     let fx = fixture().await;
     let port = fx.server.port;
+
+    let key_path = fx.key_path.clone();
+    let (_ok, out) = tokio::task::spawn_blocking(move || ssh_bare(&key_path, port))
+        .await
+        .unwrap();
+    assert!(out.contains("knot.test"), "greeting names the knot:\n{out}");
+    assert!(
+        out.contains("ssh key"),
+        "a visitor the knot can't identify yet learns what a push needs:\n{out}"
+    );
+
+    seed_work(&fx.work);
+    let (ok, out) = push(&fx.work, &fx.url, &fx.key_path, &["main"]).await;
+    assert!(ok, "seeding main must succeed:\n{out}");
+
     let key_path = fx.key_path.clone();
     let (_ok, out) = tokio::task::spawn_blocking(move || ssh_bare(&key_path, port))
         .await
         .unwrap();
     assert!(
         out.contains("@nel.pet"),
-        "greeting resolves and addresses the user by handle:\n{out}"
+        "a push teaches the knot the key, so the next greeting uses the handle:\n{out}"
     );
-    assert!(out.contains("knot.test"), "greeting names the knot:\n{out}");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

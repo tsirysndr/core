@@ -78,6 +78,7 @@ keys! {
     UrlKey { Url = "url" }
     CiLogsKey { Host = "host", Port = "port", Repo = "repo", Sha = "sha" }
     GreetingKey { User = "user", Knot = "knot" }
+    AuthorizedKey { Authorized = "authorized" }
     CountKey { Count = "count" }
     RefKey { Ref = "ref" }
     ErrorKey { Error = "error" }
@@ -148,12 +149,20 @@ message_group! {
             "This knot serves git over ssh, so there's no shell here. :P",
             "Clone repo with: git clone {knot}:<repoDID>"
         ],
+        greeting_unknown: Lines<KnotKey> = [
+            "Hi there! This is the {knot} knot.",
+            "This knot serves git over ssh, so there's no shell here. :P",
+            "Clone repo with: git clone {knot}:<repoDID>",
+            "Publish your ssh key to your atproto account so this knot can identify your pushes.",
+            "Put your handle in the url, as in yourhandle@{knot}:<repoDID>, so your ssh client can find your registered key on its own."
+        ],
         unsupported_command: Line<NoKeys> = "knot: unsupported command",
         too_many_operations: Line<NoKeys> = "knot: too many concurrent operations from your address, try again shortly",
         repo_not_found: Line<NoKeys> = "knot: repository not found",
         index_warming: Line<NoKeys> = "knot: repository index is warming, retry shortly",
         lfs_disabled: Line<NoKeys> = "knot: LFS isn't enabled on this knot",
-        key_not_registered: Line<NoKeys> = "knot: your ssh key isn't registered to a user authorized to push here. If you offer several keys, make sure the registered one is offered first.",
+        key_not_registered: Line<AuthorizedKey> = "knot: this ssh key doesn't match any key published by the accounts that may push here. Authorized: {authorized}. If your agent offers several keys, add -o IdentitiesOnly=yes so it offers your registered key.",
+        identity_unavailable: Line<NoKeys> = "knot: couldn't read the account records needed to check your ssh key, retry shortly",
         push_denied: Line<NoKeys> = "knot: you aren't authorized to push to this repository.",
         shutting_down: Line<NoKeys> = "knot: server is shutting down",
         archive_malformed: Line<NoKeys> = "knot: malformed upload-archive request",
@@ -304,6 +313,29 @@ mod tests {
         });
         assert!(lines[0].contains("@nel.pet"));
         assert!(lines.iter().any(|line| line.contains("oyster.cafe")));
+    }
+
+    #[test]
+    fn an_unidentified_visitor_is_greeted_and_shown_what_a_push_needs() {
+        let catalog = Catalog::defaults();
+        let lines = catalog
+            .ssh
+            .greeting_unknown
+            .lines(|KnotKey::Knot| "oyster.cafe".to_string());
+        assert!(lines[0].contains("oyster.cafe"));
+        assert!(
+            lines.iter().any(|line| line.contains("ssh key")),
+            "a visitor the knot can't identify learns what a push needs: {lines:?}"
+        );
+
+        let denial = catalog
+            .ssh
+            .key_not_registered
+            .line(|AuthorizedKey::Authorized| "@nel.pet".to_string());
+        assert!(
+            denial.contains("@nel.pet"),
+            "the denial lists who may push instead: {denial}"
+        );
     }
 
     #[test]

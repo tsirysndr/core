@@ -1,5 +1,5 @@
 mod exec;
-mod roster;
+mod identity;
 mod server;
 
 use std::borrow::Cow;
@@ -12,7 +12,7 @@ use std::time::Duration;
 use knot_atproto::Atproto;
 use knot_events::EventLog;
 use knot_git::{ArchiveLimit, Layout};
-use knot_index::Index;
+use knot_index::{Index, KeyTtl};
 use knot_maintenance::MaintenanceHandle;
 use knot_pack::{MaxWireBytes, PackLimits};
 use knot_postreceive::LanguagesPushBudget;
@@ -26,11 +26,22 @@ use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
-use knot_resource::{LimitConfig, PerPeerInflight, PreAuthLimiter, Slots};
-use roster::KeyRoster;
+use knot_resource::{
+    Burst, GlobalInflight, LimitConfig, PeerPacer, PerPeerInflight, PreAuthLimiter, RateLimit,
+    RefillMicros, ResolveSlots, Slots, SubjectPacer,
+};
 use server::KnotSshServer;
 
 const MAX_INFLIGHT_PER_PEER: usize = 4;
+const MAX_INFLIGHT_LOOKUPS: usize = 16;
+const MAX_PREAUTH_LOOKUPS: usize = 4;
+const LOOKUP_BURST_PER_PEER: u32 = 8;
+const LOOKUP_REFILL_MICROS: u64 = 500_000;
+const LOOKUP_INFLIGHT_PER_PEER: usize = 2;
+const PROBE_BURST_PER_ACCOUNT: u32 = 1;
+const PROBE_REFILL_MICROS: u64 = 30_000_000;
+const MISS_BURST_PER_PEER: u32 = 1;
+const MISS_REFILL_MICROS: u64 = 120_000_000;
 const INACTIVITY_TIMEOUT: Duration = Duration::from_secs(120);
 const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
 const AUTH_REJECTION_TIME: Duration = Duration::from_millis(250);
@@ -61,8 +72,12 @@ pub struct SshState<H, C> {
     languages_push_budget: LanguagesPushBudget,
     ci_logs: Option<CiLogsAddr>,
     slots: Slots,
+    lookup_slots: ResolveSlots,
+    lookup_peers: Arc<PreAuthLimiter>,
+    probe_pace: SubjectPacer,
+    miss_pace: PeerPacer,
+    key_ttl: KeyTtl,
     peer_slots: Arc<PreAuthLimiter>,
-    roster: Arc<KeyRoster>,
     maintenance: MaintenanceHandle,
     lfs: Option<LfsRuntime>,
     catalog: Arc<knot_messages::Catalog>,
@@ -124,10 +139,27 @@ impl<H: HttpTransport, C: Clock> SshState<H, C> {
             languages_push_budget,
             ci_logs,
             slots: Slots::for_machine(),
+            lookup_slots: ResolveSlots::new(MAX_INFLIGHT_LOOKUPS),
+            lookup_peers: Arc::new(PreAuthLimiter::with_config(LimitConfig {
+                rate: Some(RateLimit {
+                    burst: Burst::new(LOOKUP_BURST_PER_PEER),
+                    refill: RefillMicros::new(LOOKUP_REFILL_MICROS),
+                }),
+                per_peer_inflight: Some(PerPeerInflight::new(LOOKUP_INFLIGHT_PER_PEER)),
+                global_inflight: Some(GlobalInflight::new(MAX_PREAUTH_LOOKUPS)),
+            })),
+            probe_pace: SubjectPacer::new(RateLimit {
+                burst: Burst::new(PROBE_BURST_PER_ACCOUNT),
+                refill: RefillMicros::new(PROBE_REFILL_MICROS),
+            }),
+            miss_pace: PeerPacer::new(RateLimit {
+                burst: Burst::new(MISS_BURST_PER_PEER),
+                refill: RefillMicros::new(MISS_REFILL_MICROS),
+            }),
+            key_ttl: KeyTtl::DEFAULT,
             peer_slots: Arc::new(PreAuthLimiter::with_config(LimitConfig::per_peer_only(
                 PerPeerInflight::new(MAX_INFLIGHT_PER_PEER),
             ))),
-            roster: Arc::new(KeyRoster::new()),
             maintenance: MaintenanceHandle::disabled(),
             lfs: None,
             catalog: Arc::new(knot_messages::Catalog::defaults()),
@@ -141,6 +173,11 @@ impl<H: HttpTransport, C: Clock> SshState<H, C> {
 
     pub fn with_slots(mut self, slots: Slots) -> Self {
         self.slots = slots;
+        self
+    }
+
+    pub fn with_key_ttl(mut self, ttl: KeyTtl) -> Self {
+        self.key_ttl = ttl;
         self
     }
 
@@ -208,7 +245,6 @@ pub async fn serve_drained<H: HttpTransport, C: Clock>(
 ) -> Result<(), SshError> {
     let config = server_config(host_key);
     let tracker = TaskTracker::new();
-    state.roster.prime(&state.index, &state.atproto);
     let mut server = KnotSshServer {
         state,
         tracker: tracker.clone(),

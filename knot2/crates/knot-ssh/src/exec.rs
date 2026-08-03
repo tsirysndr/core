@@ -1,6 +1,7 @@
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use futures::StreamExt;
@@ -8,8 +9,9 @@ use knot_acl::{KnotAcl, can_push};
 use knot_index::Resolved;
 use knot_lfs::TransferOp;
 use knot_pack::{PackError, PackLimits, RepoLookup};
+use knot_resource::SubjectKey;
 use knot_runtime::{Clock, HttpTransport};
-use knot_types::{AccountDid, ClonePath, ObjectFormat, OfferedKey, OwnerDid, RepoDid};
+use knot_types::{AccountDid, ClonePath, ObjectFormat, OwnerDid, RepoDid};
 use russh::Channel;
 use russh::server::Msg;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -17,6 +19,7 @@ use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 
 use crate::SshState;
+use crate::identity::Credential;
 
 const READ_CHUNK: usize = 64 * 1024;
 const MAX_UPLOAD_REQUEST: usize = 16 * 1024 * 1024;
@@ -25,6 +28,8 @@ const ARCHIVE_REQUEST_DEADLINE: Duration = Duration::from_secs(60);
 const LFS_PROGRESS_GRACE: Duration = Duration::from_secs(60);
 const LFS_PROGRESS_FLOOR_BYTES_PER_SEC: u64 = 1024;
 const LFS_STALL_TIMEOUT: Duration = Duration::from_secs(120);
+const CANDIDATE_FANOUT: usize = 4;
+const AUTHORIZED_NAMES_SHOWN: usize = 4;
 
 fn lfs_within_progress_budget(waited: Duration, moved_bytes: u64) -> bool {
     waited
@@ -119,7 +124,7 @@ fn resolve_repo_ref<H: HttpTransport, C: Clock>(
 
 pub(crate) async fn run_exec<H: HttpTransport, C: Clock>(
     state: Arc<SshState<H, C>>,
-    key: Option<OfferedKey>,
+    credential: Credential,
     channel: Channel<Msg>,
     command: &[u8],
     protocol_v2: bool,
@@ -151,6 +156,13 @@ pub(crate) async fn run_exec<H: HttpTransport, C: Clock>(
         RepoRef::Did(did) => ResolvedRef::Did(did),
         RepoRef::OwnerPath(owner, candidates) => ResolvedRef::OwnerPath(owner, candidates),
         RepoRef::HandlePath(owner_handle, candidates) => {
+            let Some(_lookup_permit) = state.lookup_slots.try_acquire() else {
+                tracing::warn!(
+                    ?peer,
+                    "ssh exec rejected, the lookup budget can't resolve another handle"
+                );
+                return fail(channel, &state.catalog.ssh.too_many_operations.text()).await;
+            };
             match state
                 .atproto
                 .resolve_handle_to_did(&owner_handle)
@@ -188,39 +200,28 @@ pub(crate) async fn run_exec<H: HttpTransport, C: Clock>(
     match service {
         Service::Upload => serve_upload(state, channel, repo_did, protocol_v2).await,
         Service::UploadArchive => serve_upload_archive(state, channel, repo_did).await,
-        Service::Receive => serve_receive(state, key, channel, repo_did).await,
-        Service::Lfs(op) => serve_lfs(state, key, channel, repo_did, op).await,
+        Service::Receive => serve_receive(state, credential, channel, repo_did, peer).await,
+        Service::Lfs(op) => serve_lfs(state, credential, channel, repo_did, op, peer).await,
     }
 }
 
 async fn serve_lfs<H: HttpTransport, C: Clock>(
     state: Arc<SshState<H, C>>,
-    key: Option<OfferedKey>,
+    credential: Credential,
     mut channel: Channel<Msg>,
     repo_did: RepoDid,
     op: TransferOp,
+    peer: Option<IpAddr>,
 ) {
     let Some(lfs) = state.lfs.clone() else {
         return fail(channel, &state.catalog.ssh.lfs_disabled.text()).await;
     };
-    if op == TransferOp::Upload {
-        let pusher = resolve_pusher(&state, key.as_ref(), &repo_did).await;
-        let allowed = pusher.as_ref().is_some_and(|did| {
-            let acl = KnotAcl::new(&state.admins, state.admission, &state.index);
-            can_push(&acl, did, &repo_did).is_allowed()
-        });
-        if !allowed {
-            tracing::warn!(
-                repo = repo_did.as_str(),
-                registered = pusher.is_some(),
-                "ssh lfs upload denied"
-            );
-            let message = match pusher {
-                None => state.catalog.ssh.key_not_registered.text(),
-                Some(_) => state.catalog.ssh.push_denied.text(),
-            };
-            return fail(channel, &message).await;
-        }
+    if op == TransferOp::Upload
+        && let PushAuth::Refused { reason, message } =
+            authorize_push(&state, &credential, &repo_did, peer).await
+    {
+        tracing::warn!(repo = repo_did.as_str(), reason, "ssh lfs upload denied");
+        return fail(channel, &message).await;
     }
     let permit = match Arc::clone(&lfs.slots).acquire_owned().await {
         Ok(permit) => permit,
@@ -624,9 +625,10 @@ where
 
 async fn serve_receive<H: HttpTransport, C: Clock>(
     state: Arc<SshState<H, C>>,
-    key: Option<OfferedKey>,
+    credential: Credential,
     mut channel: Channel<Msg>,
     repo_did: RepoDid,
+    peer: Option<IpAddr>,
 ) {
     let advert = {
         let layout = state.layout.clone();
@@ -648,28 +650,11 @@ async fn serve_receive<H: HttpTransport, C: Clock>(
         return;
     }
 
-    let pusher = resolve_pusher(&state, key.as_ref(), &repo_did).await;
-    let allowed = |did: &AccountDid| {
-        let acl = KnotAcl::new(&state.admins, state.admission, &state.index);
-        can_push(&acl, did, &repo_did).is_allowed()
-    };
-    let committer = match pusher {
-        Some(did) if allowed(&did) => did,
-        Some(_) => {
-            tracing::warn!(
-                repo = repo_did.as_str(),
-                registered = true,
-                "ssh push denied"
-            );
-            return fail(channel, &state.catalog.ssh.push_denied.text()).await;
-        }
-        None => {
-            tracing::warn!(
-                repo = repo_did.as_str(),
-                registered = false,
-                "ssh push denied"
-            );
-            return fail(channel, &state.catalog.ssh.key_not_registered.text()).await;
+    let committer = match authorize_push(&state, &credential, &repo_did, peer).await {
+        PushAuth::Allowed(did) => did,
+        PushAuth::Refused { reason, message } => {
+            tracing::warn!(repo = repo_did.as_str(), reason, "ssh push denied");
+            return fail(channel, &message).await;
         }
     };
 
@@ -754,14 +739,21 @@ async fn serve_receive<H: HttpTransport, C: Clock>(
 
 pub(crate) async fn run_greeting<H: HttpTransport, C: Clock>(
     state: Arc<SshState<H, C>>,
-    key: Option<OfferedKey>,
+    credential: Credential,
     channel: Channel<Msg>,
 ) {
-    let who = greeting_identity(&state, key.as_ref()).await;
-    let greeting = state.catalog.ssh.greeting.lines(|key| match key {
-        knot_messages::GreetingKey::User => who.clone(),
-        knot_messages::GreetingKey::Knot => state.hostname.as_str().to_string(),
-    });
+    let knot = state.hostname.as_str().to_string();
+    let greeting = match greeting_visitor(&state, &credential).await {
+        Visitor::Named(who) => state.catalog.ssh.greeting.lines(|key| match key {
+            knot_messages::GreetingKey::User => who.clone(),
+            knot_messages::GreetingKey::Knot => knot.clone(),
+        }),
+        Visitor::Unknown => state
+            .catalog
+            .ssh
+            .greeting_unknown
+            .lines(|knot_messages::KnotKey::Knot| knot.clone()),
+    };
     if greeting.is_empty() {
         return finish(channel, 0).await;
     }
@@ -772,25 +764,128 @@ pub(crate) async fn run_greeting<H: HttpTransport, C: Clock>(
     finish(channel, 0).await;
 }
 
-async fn greeting_identity<H: HttpTransport, C: Clock>(
+async fn greeting_visitor<H: HttpTransport, C: Clock>(
     state: &Arc<SshState<H, C>>,
-    key: Option<&OfferedKey>,
-) -> String {
-    let Some(did) = key.and_then(|key| state.roster.did_for(key)) else {
-        return "there".to_string();
+    credential: &Credential,
+) -> Visitor {
+    let did = match credential {
+        Credential::Identified(did) => did.clone(),
+        Credential::Offered(key) => {
+            match state.index.owner_of_key(key, state.atproto.now().seconds()) {
+                Resolved::Ready(Some(did)) => did,
+                _ => return Visitor::Unknown,
+            }
+        }
     };
     match knot_receive::resolve_handle(&state.atproto, &state.slots.resolve, &did).await {
-        Some(handle) => format!("@{}", handle.as_str()),
-        None => did.as_str().to_string(),
+        Some(handle) => Visitor::Named(format!("@{}", handle.as_str())),
+        None => Visitor::Named(did.as_str().to_string()),
     }
+}
+
+enum PusherLookup {
+    Matched(AccountDid),
+    Unmatched(Vec<AccountDid>),
+    Unavailable,
+}
+
+enum PushAuth {
+    Allowed(AccountDid),
+    Refused {
+        reason: &'static str,
+        message: String,
+    },
+}
+
+enum Visitor {
+    Named(String),
+    Unknown,
+}
+
+async fn authorize_push<H: HttpTransport, C: Clock>(
+    state: &Arc<SshState<H, C>>,
+    credential: &Credential,
+    repo: &RepoDid,
+    peer: Option<IpAddr>,
+) -> PushAuth {
+    match resolve_pusher(state, credential, repo, peer).await {
+        PusherLookup::Matched(did) => {
+            let acl = KnotAcl::new(&state.admins, state.admission, &state.index);
+            match can_push(&acl, &did, repo).is_allowed() {
+                true => PushAuth::Allowed(did),
+                false => PushAuth::Refused {
+                    reason: "unauthorized",
+                    message: state.catalog.ssh.push_denied.text(),
+                },
+            }
+        }
+        PusherLookup::Unavailable => PushAuth::Refused {
+            reason: "identity_unavailable",
+            message: state.catalog.ssh.identity_unavailable.text(),
+        },
+        PusherLookup::Unmatched(candidates) => {
+            let authorized = describe_authorized(state, &candidates).await;
+            PushAuth::Refused {
+                reason: "unregistered_key",
+                message: state
+                    .catalog
+                    .ssh
+                    .key_not_registered
+                    .line(|knot_messages::AuthorizedKey::Authorized| authorized.clone()),
+            }
+        }
+    }
+}
+
+async fn describe_authorized<H: HttpTransport, C: Clock>(
+    state: &Arc<SshState<H, C>>,
+    candidates: &[AccountDid],
+) -> String {
+    let names: Vec<String> = futures::stream::iter(
+        candidates
+            .iter()
+            .take(AUTHORIZED_NAMES_SHOWN)
+            .cloned()
+            .collect::<Vec<_>>(),
+    )
+    .map(|did| {
+        let state = Arc::clone(state);
+        async move {
+            match knot_receive::resolve_handle(&state.atproto, &state.slots.resolve, &did).await {
+                Some(handle) => format!("@{}", handle.as_str()),
+                None => did.as_str().to_string(),
+            }
+        }
+    })
+    .buffered(CANDIDATE_FANOUT)
+    .collect()
+    .await;
+    match (
+        names.as_slice(),
+        candidates.len().saturating_sub(AUTHORIZED_NAMES_SHOWN),
+    ) {
+        ([], _) => "nobody".to_string(),
+        (shown, 0) => shown.join(", "),
+        (shown, hidden) => format!("{}, and {hidden} more", shown.join(", ")),
+    }
+}
+
+fn probe_due<H: HttpTransport, C: Clock>(state: &Arc<SshState<H, C>>, did: &AccountDid) -> bool {
+    state
+        .probe_pace
+        .reserve_now(&SubjectKey::new(did.as_str()), state.atproto.now())
 }
 
 async fn resolve_pusher<H: HttpTransport, C: Clock>(
     state: &Arc<SshState<H, C>>,
-    key: Option<&OfferedKey>,
+    credential: &Credential,
     repo: &RepoDid,
-) -> Option<AccountDid> {
-    let key = key?;
+    peer: Option<IpAddr>,
+) -> PusherLookup {
+    let key = match credential {
+        Credential::Identified(did) => return PusherLookup::Matched(did.clone()),
+        Credential::Offered(key) => key,
+    };
     let owner = match state.index.owner_of(repo) {
         Resolved::Ready(Some(owner)) => Some(AccountDid::from(owner)),
         _ => None,
@@ -806,18 +901,68 @@ async fn resolve_pusher<H: HttpTransport, C: Clock>(
     };
     let candidates: Vec<AccountDid> = owner.into_iter().chain(collaborators).collect();
     let now = state.atproto.now().seconds();
-    if let Resolved::Ready(Some(cached)) = state.index.owner_of_key(key, now)
-        && candidates.contains(&cached)
-    {
-        return Some(cached);
+    if let Some(publisher) = state.index.keys().publisher_among(&candidates, key, now) {
+        return PusherLookup::Matched(publisher);
     }
-    let _permit = state.slots.resolve.acquire().await;
-    let matches = futures::stream::iter(candidates).filter_map(|did| async move {
-        let keys = state.atproto.resolve_pubkeys(&did).await.ok()?;
-        keys.iter().any(|resolved| resolved == key).then_some(did)
-    });
-    futures::pin_mut!(matches);
-    matches.next().await
+    let unread: Vec<AccountDid> = candidates
+        .iter()
+        .filter(|did| !state.index.keys().is_fresh(did, now) || probe_due(state, did))
+        .cloned()
+        .collect();
+    if unread.is_empty() {
+        tracing::debug!(
+            ?peer,
+            repo = repo.as_str(),
+            candidates = candidates.len(),
+            "push check has every candidate's keys on file, and the candidates don't publish \
+             the offered key"
+        );
+        return PusherLookup::Unmatched(candidates);
+    }
+    let lease = state.key_ttl.lease_from(now);
+    let unresolved = Arc::new(AtomicBool::new(false));
+    let read: Vec<Option<AccountDid>> = futures::stream::iter(unread)
+        .map(|did| {
+            let state = Arc::clone(state);
+            let key = key.clone();
+            let unresolved = Arc::clone(&unresolved);
+            async move {
+                let _permit = state.slots.resolve.acquire().await;
+                match state.atproto.resolve_pubkeys(&did).await {
+                    Ok(keys) => {
+                        let matches = keys.contains(&key);
+                        state.index.keys().record(&did, keys, lease);
+                        matches.then_some(did)
+                    }
+                    Err(error) if error.is_gone() => {
+                        tracing::debug!(
+                            did = did.as_str(),
+                            %error,
+                            "push check records an empty key set for a candidate whose DID document is gone"
+                        );
+                        state.index.keys().record(&did, Vec::new(), lease);
+                        None
+                    }
+                    Err(error) => {
+                        tracing::debug!(
+                            did = did.as_str(),
+                            %error,
+                            "push check couldn't read a candidate's records"
+                        );
+                        unresolved.store(true, Ordering::Relaxed);
+                        None
+                    }
+                }
+            }
+        })
+        .buffered(CANDIDATE_FANOUT)
+        .collect()
+        .await;
+    match read.into_iter().flatten().next() {
+        Some(did) => PusherLookup::Matched(did),
+        None if unresolved.load(Ordering::Relaxed) => PusherLookup::Unavailable,
+        None => PusherLookup::Unmatched(candidates),
+    }
 }
 
 async fn read_chunk<R: AsyncRead + Unpin>(
