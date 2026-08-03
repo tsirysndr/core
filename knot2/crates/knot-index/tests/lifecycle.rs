@@ -53,7 +53,7 @@ fn rebuild_folds_members_and_registry_and_collaborators_fold_on_access() {
             blocklist: Coverage::Ready,
             collaborators: Coverage::Ready,
             registry: Coverage::Ready,
-            keys: Coverage::Ready,
+            keys: Coverage::Warming,
         }
     );
 }
@@ -88,9 +88,9 @@ fn every_accessor_fails_closed_while_warming() {
     assert_eq!(index.coverage().members, Coverage::Warming);
 
     assert_eq!(
-        index.owner_of_key(&OfferedKey::from_bytes(vec![1, 2, 3])),
+        index.owner_of_key(&OfferedKey::from_bytes(vec![1, 2, 3]), at(0)),
         Resolved::Ready(None),
-        "key cache is operational from boot, never warming"
+        "a key lookup answers from the first request, even while the key set is warming"
     );
 }
 

@@ -4539,7 +4539,6 @@ dependencies = [
 name = "knot-index"
 version = "2.0.0"
 dependencies = [
- "knot-cache",
  "knot-cob",
  "knot-cobs",
  "knot-git",
@@ -4551,6 +4550,8 @@ dependencies = [
  "serde",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

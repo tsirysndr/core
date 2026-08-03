@@ -10,10 +10,11 @@ knot-types = { workspace = true }
 knot-git = { workspace = true }
 knot-cob = { workspace = true }
 knot-cobs = { workspace = true }
-knot-cache = { workspace = true }
 scc = { workspace = true }
 lasso = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
 knot-runtime = { workspace = true }

@@ -1034,9 +1034,10 @@ async fn key_recognition_edge_cases() {
     .unwrap()
     .to_bytes()
     .unwrap();
-    fx.index.cache_key(
-        knot_types::OfferedKey::from_bytes(blob),
+    fx.index.keys().record(
         &AccountDid::new("did:plc:whelk").unwrap(),
+        vec![knot_types::OfferedKey::from_bytes(blob)],
+        knot_index::KeyTtl::from_secs(u32::MAX.into()).lease_from(knot_types::UnixSeconds::new(0)),
     );
     let (ok, out) = push(
         &fx.work,

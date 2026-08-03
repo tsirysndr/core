@@ -805,7 +805,8 @@ async fn resolve_pusher<H: HttpTransport, C: Clock>(
         _ => Vec::new(),
     };
     let candidates: Vec<AccountDid> = owner.into_iter().chain(collaborators).collect();
-    if let Resolved::Ready(Some(cached)) = state.index.owner_of_key(key)
+    let now = state.atproto.now().seconds();
+    if let Resolved::Ready(Some(cached)) = state.index.owner_of_key(key, now)
         && candidates.contains(&cached)
     {
         return Some(cached);
@@ -813,8 +814,6 @@ async fn resolve_pusher<H: HttpTransport, C: Clock>(
     let _permit = state.slots.resolve.acquire().await;
     let matches = futures::stream::iter(candidates).filter_map(|did| async move {
         let keys = state.atproto.resolve_pubkeys(&did).await.ok()?;
-        keys.iter()
-            .for_each(|resolved| state.index.cache_key(resolved.clone(), &did));
         keys.iter().any(|resolved| resolved == key).then_some(did)
     });
     futures::pin_mut!(matches);

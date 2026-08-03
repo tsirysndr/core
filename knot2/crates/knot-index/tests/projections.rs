@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use knot_cob::{ChangePayload, CobHome, CobId, CobStore};
 use knot_cobs::{CollaboratorsChange, MembersChange, RegistryChange, Removal, Rename, RepoRef};
 use knot_git::{RefUpdate, Repo};
-use knot_index::{Coverage, IndexError, OfferedKey, Resolved};
+use knot_index::{Coverage, IndexError, Resolved};
 use knot_types::{ClonePath, RefName, RepoName};
 use serde::{Deserialize, Serialize};
 
@@ -535,36 +535,6 @@ fn a_repo_moved_within_one_delta_is_not_evacuated() {
         index.is_collaborator(&repo, &acc("lyna")),
         Resolved::Ready(true),
         "deregister and re-register within single delta leaves repo hosted, so its collaborators survive"
-    );
-}
-
-#[test]
-fn key_cache_evicts_least_recently_used() {
-    const CAP: u32 = 16_384;
-    let world = World::new();
-    let index = world.index();
-    let key = |i: u32| OfferedKey::from_bytes(i.to_le_bytes().to_vec());
-
-    (0..CAP).for_each(|i| index.cache_key(key(i), &acc("nel")));
-    assert_eq!(
-        index.owner_of_key(&key(0)),
-        Resolved::Ready(Some(acc("nel")))
-    );
-    index.cache_key(key(CAP), &acc("nel"));
-
-    assert_eq!(
-        index.owner_of_key(&key(1)),
-        Resolved::Ready(None),
-        "least-recently-used key is evicted"
-    );
-    assert_eq!(
-        index.owner_of_key(&key(0)),
-        Resolved::Ready(Some(acc("nel"))),
-        "recently-used key survives despite being inserted first"
-    );
-    assert_eq!(
-        index.owner_of_key(&key(CAP)),
-        Resolved::Ready(Some(acc("nel")))
     );
 }
 

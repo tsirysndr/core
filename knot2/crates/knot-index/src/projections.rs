@@ -1,9 +1,9 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
-use knot_cache::{Cache, EntryCount, Lru};
 use knot_cob::{Change, ChangeId, ChangePayload, Checkpoint, CobId, CobStore, Evaluate};
 use knot_cobs::{
     CollaboratorsChange, CollaboratorsCob, Grant, GrantChange, Registration, Registry,
@@ -14,8 +14,9 @@ use knot_types::{AccountDid, ClonePath, OfferedKey, OwnerDid, RepoDid, RepoRkey,
 use crate::coverage::{Coverage, CoverageCell, Resolved};
 use crate::error::IndexError;
 use crate::intern::{AccountKey, Interner, NameKey, OwnerKey, RepoKey, RkeyKey};
-
-const KEY_CACHE_CAPACITY: usize = 16_384;
+use crate::{
+    IndexGeneration, KeyBudget, KeyLease, KeyRecord, KeyReprieve, KeyReprieved, SweepFloor,
+};
 
 #[derive(Debug, Clone, Copy)]
 struct Provenance {
@@ -818,34 +819,437 @@ impl RegistryProjection {
     }
 }
 
-pub(crate) struct KeyProjection {
-    cache: Lru<OfferedKey, AccountKey>,
+enum Reading {
+    Published(Vec<Arc<OfferedKey>>),
+    Unheld,
+    Unread,
 }
 
-impl KeyProjection {
-    pub(crate) fn new() -> Self {
-        Self {
-            cache: Lru::by_count(EntryCount::new(KEY_CACHE_CAPACITY as u64)),
+impl Reading {
+    fn keys(&self) -> &[Arc<OfferedKey>] {
+        match self {
+            Reading::Published(keys) => keys,
+            Reading::Unheld | Reading::Unread => &[],
         }
     }
 
-    pub(crate) fn coverage(&self) -> Coverage {
-        Coverage::Ready
+    fn is_published(&self) -> bool {
+        matches!(self, Reading::Published(_))
+    }
+}
+
+struct Held {
+    reading: Reading,
+    lease: KeyLease,
+}
+
+const PER_KEY_OVERHEAD: usize = 192;
+
+const PER_ACCOUNT_OVERHEAD: usize = 128;
+
+impl Held {
+    fn bytes(&self) -> usize {
+        PER_ACCOUNT_OVERHEAD
+            + self
+                .reading
+                .keys()
+                .iter()
+                .map(|key| key.as_bytes().len() + PER_KEY_OVERHEAD)
+                .sum::<usize>()
     }
 
-    pub(crate) fn cache(&self, interner: &Interner, key: OfferedKey, did: &AccountDid) {
-        self.cache.insert(key, interner.intern_account(did));
+    fn answers(&self, now: UnixSeconds) -> bool {
+        self.reading.is_published() && self.lease.is_live(now)
+    }
+
+    fn settled(&self, now: UnixSeconds) -> bool {
+        !matches!(self.reading, Reading::Unread) && self.lease.is_live(now)
+    }
+
+    fn renewal_due(&self, now: UnixSeconds) -> bool {
+        match self.reading {
+            Reading::Published(_) => self.lease.renewal_due(now),
+            Reading::Unheld | Reading::Unread => !self.lease.is_live(now),
+        }
+    }
+
+    fn publishes(&self, key: &OfferedKey, now: UnixSeconds) -> bool {
+        self.answers(now)
+            && self
+                .reading
+                .keys()
+                .iter()
+                .any(|published| published.as_ref() == key)
+    }
+
+    fn is_unheld(&self) -> bool {
+        matches!(self.reading, Reading::Unheld)
+    }
+}
+
+#[derive(Default)]
+struct Publishers(Vec<AccountKey>);
+
+impl Publishers {
+    fn add(&mut self, account: AccountKey) {
+        if let Err(at) = self.0.binary_search(&account) {
+            self.0.insert(at, account);
+        }
+    }
+
+    fn remove(&mut self, account: AccountKey) -> bool {
+        if let Ok(at) = self.0.binary_search(&account) {
+            self.0.remove(at);
+        }
+        self.0.is_empty()
+    }
+
+    fn to_vec(&self) -> Vec<AccountKey> {
+        self.0.clone()
+    }
+}
+
+const NEVER: u64 = u64::MAX;
+
+pub(crate) struct KeyProjection {
+    owners: scc::HashMap<Arc<OfferedKey>, Publishers>,
+    held: scc::HashMap<AccountKey, Held>,
+    budget: KeyBudget,
+    tracked_bytes: AtomicUsize,
+    unheld: AtomicUsize,
+    suspect: AtomicBool,
+    swept_at: AtomicI64,
+    ready_at: AtomicU64,
+}
+
+impl KeyProjection {
+    pub(crate) fn new(budget: KeyBudget) -> Self {
+        Self {
+            owners: scc::HashMap::new(),
+            held: scc::HashMap::new(),
+            budget,
+            tracked_bytes: AtomicUsize::new(0),
+            unheld: AtomicUsize::new(0),
+            suspect: AtomicBool::new(false),
+            swept_at: AtomicI64::new(i64::MIN),
+            ready_at: AtomicU64::new(NEVER),
+        }
+    }
+
+    pub(crate) fn coverage(&self, generation: IndexGeneration) -> Coverage {
+        match self.ready_at.load(Ordering::Acquire) == generation.get() {
+            true => Coverage::Ready,
+            false => Coverage::Warming,
+        }
+    }
+
+    pub(crate) fn suspect_now(&self) {
+        self.suspect.store(true, Ordering::Release);
+    }
+
+    pub(crate) fn take_suspicion(&self, now: UnixSeconds, floor: SweepFloor) -> bool {
+        let held_until = |swept: i64| swept.saturating_add(crate::whole_secs(floor.get()));
+        match self.suspect.load(Ordering::Acquire) {
+            false => false,
+            true => {
+                self.swept_at
+                    .fetch_update(Ordering::AcqRel, Ordering::Acquire, |swept| {
+                        (now.get() >= held_until(swept)).then_some(now.get())
+                    })
+                    .is_ok()
+                    && self.suspect.swap(false, Ordering::AcqRel)
+            }
+        }
+    }
+
+    pub(crate) fn mark_ready(&self, generation: IndexGeneration) {
+        self.ready_at.store(generation.get(), Ordering::Release);
+    }
+
+    pub(crate) fn mark_warming(&self) {
+        self.ready_at.store(NEVER, Ordering::Release);
     }
 
     pub(crate) fn owner(
         &self,
         interner: &Interner,
         key: &OfferedKey,
+        now: UnixSeconds,
     ) -> Resolved<Option<AccountDid>> {
+        let publishers = self
+            .owners
+            .read_sync(key, |_, publishers| publishers.to_vec())
+            .unwrap_or_default();
         Resolved::Ready(
-            self.cache
-                .get(key)
+            publishers
+                .into_iter()
+                .find(|account| {
+                    self.held_by(*account, |held| held.publishes(key, now)) == Some(true)
+                })
                 .map(|account| interner.resolve_account(account)),
         )
+    }
+
+    pub(crate) fn any_unheld(&self) -> bool {
+        self.unheld.load(Ordering::Acquire) > 0
+    }
+
+    fn track_unheld(&self, lost: bool, gained: bool) {
+        match (lost, gained) {
+            (false, true) => {
+                self.unheld.fetch_add(1, Ordering::AcqRel);
+            }
+            (true, false) => {
+                self.unheld.fetch_sub(1, Ordering::AcqRel);
+            }
+            (true, true) | (false, false) => {}
+        }
+    }
+
+    pub(crate) fn record(
+        &self,
+        interner: &Interner,
+        did: &AccountDid,
+        keys: Vec<OfferedKey>,
+        lease: KeyLease,
+    ) -> KeyRecord {
+        let account = interner.intern_account(did);
+        let incoming = Held {
+            reading: Reading::Published(keys.into_iter().map(Arc::new).collect()),
+            lease,
+        };
+        let entry = self.held.entry_sync(account);
+        let held = match &entry {
+            scc::hash_map::Entry::Occupied(slot) => slot.get().bytes(),
+            scc::hash_map::Entry::Vacant(_) => 0,
+        };
+        if self.reserve_bytes(incoming.bytes() as isize - held as isize) {
+            self.settle(entry, account, incoming);
+            return KeyRecord::Stored;
+        }
+        let unheld = Held {
+            reading: Reading::Unheld,
+            lease,
+        };
+        if !self.reserve_bytes(unheld.bytes() as isize - held as isize) {
+            return KeyRecord::Saturated;
+        }
+        self.settle(entry, account, unheld);
+        KeyRecord::Unheld
+    }
+
+    fn settle(
+        &self,
+        entry: scc::hash_map::Entry<'_, AccountKey, Held>,
+        account: AccountKey,
+        incoming: Held,
+    ) {
+        let published: HashSet<Arc<OfferedKey>> = incoming.reading.keys().iter().cloned().collect();
+        let gained = incoming.is_unheld();
+        match entry {
+            scc::hash_map::Entry::Occupied(mut slot) => {
+                let replaced = slot.insert(incoming);
+                self.track_unheld(replaced.is_unheld(), gained);
+                self.rewire(account, &published, replaced.reading.keys());
+            }
+            scc::hash_map::Entry::Vacant(slot) => {
+                let _locked = slot.insert_entry(incoming);
+                self.track_unheld(false, gained);
+                self.rewire(account, &published, &[]);
+            }
+        }
+    }
+
+    fn rewire(
+        &self,
+        account: AccountKey,
+        published: &HashSet<Arc<OfferedKey>>,
+        replaced: &[Arc<OfferedKey>],
+    ) {
+        published
+            .iter()
+            .for_each(|key| self.claim(Arc::clone(key), account));
+        replaced
+            .iter()
+            .filter(|key| !published.contains(*key))
+            .for_each(|key| self.disown(key, account));
+    }
+
+    pub(crate) fn reprieve(
+        &self,
+        interner: &Interner,
+        did: &AccountDid,
+        now: UnixSeconds,
+        grace: KeyReprieve,
+        exhausted: KeyLease,
+    ) -> KeyReprieved {
+        let account = interner.intern_account(did);
+        let mut slot = match self.held.entry_sync(account) {
+            scc::hash_map::Entry::Vacant(slot) => {
+                let pending = Held {
+                    reading: Reading::Unread,
+                    lease: grace.first_failure(now),
+                };
+                if self.reserve_bytes(pending.bytes() as isize) {
+                    let _locked = slot.insert_entry(pending);
+                }
+                return KeyReprieved::Pending;
+            }
+            scc::hash_map::Entry::Occupied(slot) => slot,
+        };
+        match grace.extend(slot.get().lease, now) {
+            Some(lease) => {
+                let carried = slot.get().reading.is_published();
+                slot.get_mut().lease = lease;
+                match carried {
+                    true => KeyReprieved::Extended,
+                    false => KeyReprieved::Pending,
+                }
+            }
+            None => {
+                let given_up = Held {
+                    reading: Reading::Published(Vec::new()),
+                    lease: exhausted,
+                };
+                let _ = self.reserve_bytes(given_up.bytes() as isize - slot.get().bytes() as isize);
+                self.track_unheld(slot.get().is_unheld(), false);
+                self.disown_all(&slot, account);
+                *slot.get_mut() = given_up;
+                KeyReprieved::Exhausted
+            }
+        }
+    }
+
+    pub(crate) fn on_file(&self, interner: &Interner, did: &AccountDid) -> bool {
+        interner
+            .account(did)
+            .is_some_and(|account| self.held.contains_sync(&account))
+    }
+
+    fn held_by(&self, account: AccountKey, ready: impl Fn(&Held) -> bool) -> Option<bool> {
+        self.held.read_sync(&account, |_, held| ready(held))
+    }
+
+    fn held_for(
+        &self,
+        interner: &Interner,
+        did: &AccountDid,
+        ready: impl Fn(&Held) -> bool,
+    ) -> Option<bool> {
+        interner
+            .account(did)
+            .and_then(|account| self.held_by(account, ready))
+    }
+
+    pub(crate) fn is_fresh(&self, interner: &Interner, did: &AccountDid, now: UnixSeconds) -> bool {
+        self.held_for(interner, did, |held| held.answers(now))
+            .unwrap_or(false)
+    }
+
+    pub(crate) fn renewal_due(
+        &self,
+        interner: &Interner,
+        did: &AccountDid,
+        now: UnixSeconds,
+    ) -> bool {
+        self.held_for(interner, did, |held| held.renewal_due(now))
+            .unwrap_or(true)
+    }
+
+    pub(crate) fn all_live(
+        &self,
+        interner: &Interner,
+        subjects: &[AccountDid],
+        now: UnixSeconds,
+    ) -> bool {
+        subjects.iter().all(|did| {
+            self.held_for(interner, did, |held| held.settled(now))
+                .unwrap_or(false)
+        })
+    }
+
+    pub(crate) fn publisher_among(
+        &self,
+        interner: &Interner,
+        candidates: &[AccountDid],
+        key: &OfferedKey,
+        now: UnixSeconds,
+    ) -> Option<AccountDid> {
+        candidates
+            .iter()
+            .find(|did| {
+                self.held_for(interner, did, |held| held.publishes(key, now))
+                    .unwrap_or(false)
+            })
+            .cloned()
+    }
+
+    pub(crate) fn retain(&self, interner: &Interner, kept: &[AccountDid]) {
+        let keep: BTreeSet<AccountKey> = kept
+            .iter()
+            .filter_map(|did| interner.account(did))
+            .collect();
+        let mut released = Vec::new();
+        self.held.iter_sync(|account, _| {
+            if !keep.contains(account) {
+                released.push(*account);
+            }
+            true
+        });
+        released
+            .into_iter()
+            .for_each(|account| self.release(account));
+    }
+
+    fn release(&self, account: AccountKey) {
+        if let scc::hash_map::Entry::Occupied(slot) = self.held.entry_sync(account) {
+            self.evict(&slot, account);
+            let _ = slot.remove();
+        }
+    }
+
+    fn evict(
+        &self,
+        slot: &scc::hash_map::OccupiedEntry<'_, AccountKey, Held>,
+        account: AccountKey,
+    ) {
+        self.track_unheld(slot.get().is_unheld(), false);
+        self.disown_all(slot, account);
+        let _ = self.reserve_bytes(-(slot.get().bytes() as isize));
+    }
+
+    fn disown_all(
+        &self,
+        slot: &scc::hash_map::OccupiedEntry<'_, AccountKey, Held>,
+        account: AccountKey,
+    ) {
+        slot.get()
+            .reading
+            .keys()
+            .iter()
+            .for_each(|key| self.disown(key, account));
+    }
+
+    fn reserve_bytes(&self, growth: isize) -> bool {
+        self.tracked_bytes
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |tracked| {
+                let next = tracked.saturating_add_signed(growth);
+                (growth <= 0 || next <= self.budget.get()).then_some(next)
+            })
+            .is_ok()
+    }
+
+    fn claim(&self, key: Arc<OfferedKey>, account: AccountKey) {
+        self.owners
+            .entry_sync(key)
+            .or_default()
+            .get_mut()
+            .add(account);
+    }
+
+    fn disown(&self, key: &OfferedKey, account: AccountKey) {
+        let _ = self
+            .owners
+            .remove_if_sync(key, |publishers| publishers.remove(account));
     }
 }

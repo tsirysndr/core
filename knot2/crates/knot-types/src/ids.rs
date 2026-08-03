@@ -434,7 +434,7 @@ impl fmt::Display for CiLogsAddr {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum OwnerRef {
     Did(OwnerDid),
     Handle(Handle),
@@ -761,6 +761,10 @@ impl UnixMicros {
 
     pub const fn next(self) -> Self {
         Self(self.0.saturating_add(1))
+    }
+
+    pub const fn seconds(self) -> UnixSeconds {
+        UnixSeconds((self.0 / 1_000_000) as i64)
     }
 }
 
@@ -1348,6 +1352,13 @@ mod tests {
         );
         assert_eq!(base.get(), 1_000);
         assert_eq!(base.to_string(), "1000");
+    }
+
+    #[test]
+    fn micros_truncate_to_the_second_they_fall_in() {
+        assert_eq!(UnixMicros::new(1_999_999).seconds(), UnixSeconds::new(1));
+        assert_eq!(UnixMicros::new(2_000_000).seconds(), UnixSeconds::new(2));
+        assert_eq!(UnixMicros::new(0).seconds(), UnixSeconds::new(0));
     }
 
     #[test]
