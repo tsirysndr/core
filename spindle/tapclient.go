@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"tangled.org/core/api/tangled"
@@ -369,129 +370,251 @@ func (s *Spindle) processPull(ctx context.Context, evt *tapc.RecordEventData) er
 			return fmt.Errorf("parsing record: %w", err)
 		}
 
-		// ignore legacy records
-		if record.Target == nil {
-			l.Info("ignoring pull record: target repo is nil")
-			return nil
+		action := workflow.PullRequestActionOpened
+		if evt.Action == tapc.RecordUpdateAction {
+			action = workflow.PullRequestActionSynchronize
 		}
 
-		// ignore patch-based and fork-based PRs
-		if record.Source == nil || record.Source.Repo != nil {
-			l.Info("ignoring pull record: not a branch-based pull request")
-			return nil
-		}
-
-		// skip if target repo is unknown
-		repo, err := s.db.GetRepoByDid(syntax.DID(record.Target.Repo))
-		if err != nil {
-			l.Warn("target repo is not ingested yet", "repo", record.Target.Repo, "err", err)
-			return fmt.Errorf("target repo is unknown")
-		}
-
-		// only accept branch-based PR (excluding patch-based and fork-based)
-		if record.Source == nil || record.Source.Repo != nil {
-			l.Warn("skipping non-branch-based PR")
-			return nil
-		}
-
-		// check if pull record author has push access to target repo
-		allowed, err := s.e.IsPushAllowed(evt.Did.String(), rbac.ThisServer, repo.RepoDid.String())
-		if err != nil {
-			return fmt.Errorf("checking push access for pull record author: %w", err)
-		}
-		if !allowed {
-			l.Warn("rejecting pull-triggered pipeline. author has no push access",
-				"author", evt.Did, "repo", repo.RepoDid)
-			return nil
-		}
-
-		latestSubmission, err := s.fetchLatestSubmission(ctx, evt.Did.String(), evt.Rkey.String(), &record)
-		if err != nil {
-			return err
-		}
-		sourceSha := latestSubmission.SourceRev
-
-		scheme := "https"
-		if s.cfg.Server.Dev {
-			scheme = "http"
-		}
-		client := &indigoxrpc.Client{Host: fmt.Sprintf("%s://%s", scheme, repo.Knot)}
-
-		// fetch current default branch
-		defaultBranch, _ := func(repo syntax.DID) (string, error) {
-			defaultBranchOut, err := tangled.RepoGetDefaultBranch(ctx, client, repo.String())
-			if err != nil {
-				return "", err
-			}
-			return defaultBranchOut.Name, nil
-		}(repo.RepoDid)
-
-		compiler := workflow.Compiler{
-			Trigger: tangled.Pipeline_TriggerMetadata{
-				Kind: string(workflow.TriggerKindPullRequest),
-				PullRequest: &tangled.Pipeline_PullRequestTriggerData{
-					SourceBranch: record.Source.Branch,
-					SourceSha:    sourceSha,
-					TargetBranch: record.Target.Branch,
-				},
-				Repo: &tangled.Pipeline_TriggerRepo{
-					Did:           repo.Owner.String(),
-					Knot:          repo.Knot,
-					Repo:          (*string)(&repo.Rkey),
-					RepoDid:       (*string)(&repo.RepoDid),
-					DefaultBranch: defaultBranch,
-				},
-			},
-		}
-
-		repoUri := s.newRepoCloneUrl(repo.Knot, repo.RepoDid)
-		repoPath := s.newRepoPath(repo.RepoDid)
-
-		// load workflow definitions from rev (without spindle context)
-		rawPipeline, err := s.loadPipeline(ctx, repoUri, repoPath, sourceSha)
-		if err != nil {
-			// don't retry
-			l.Error("failed loading pipeline", "err", err)
-			return nil
-		}
-		if len(rawPipeline) == 0 {
-			l.Info("no workflow definition find for the repo. skipping the event")
-			return nil
-		}
-		tpl := compiler.Compile(compiler.Parse(rawPipeline))
-		// TODO: pass compile error to workflow log
-		for _, w := range compiler.Diagnostics.Errors {
-			l.Error(w.String())
-		}
-		for _, w := range compiler.Diagnostics.Warnings {
-			l.Warn(w.String())
-		}
-		if len(tpl.Workflows) == 0 {
-			l.Info("no workflow matching trigger 'pull_request'. skipping the event")
-			return nil
-		}
-
-		pipelineId := models.PipelineId{
-			Knot: tpl.TriggerMetadata.Repo.Knot,
-			Rkey: tid.TID(),
-		}
-		if err := s.db.CreatePipelineEvent(pipelineId.Rkey, tpl, s.n); err != nil {
-			l.Error("failed to create pipeline event", "err", err)
-			return nil
-		}
-		sourceRepo, err := s.resolvePipelineSourceRepo(ctx, tpl.TriggerMetadata)
-		if err != nil {
-			l.Error("failed resolving pipeline source repo", "err", err)
-			return nil
-		}
-		err = s.processPipeline(repo.RepoDid, tpl, pipelineId, sourceRepo)
-		if err != nil {
-			// don't retry
-			l.Error("failed processing pipeline", "err", err)
-			return nil
-		}
+		// for open/synchronize the event author is the pull record author.
+		pullAuthor := evt.Did.String()
+		return s.triggerPullRequestPipeline(ctx, l, pullAuthor, pullAuthor, evt.Rkey.String(), &record, action)
 	case tapc.RecordDeleteAction:
 		// no-op
+	}
+	return nil
+}
+
+// processPullStatus reacts to sh.tangled.repo.pull.status records, which record
+// pull request state transitions (reopen/close/merge). Unlike the pull record
+// itself, the status record only references the pull by AT-URI, so we resolve
+// and fetch the pull record before building the trigger.
+func (s *Spindle) processPullStatus(ctx context.Context, evt *tapc.RecordEventData) error {
+	l := s.l.With("component", "ingester", "collection", evt.Collection, "did", evt.Did, "rkey", evt.Rkey)
+
+	// only listen to live events
+	if !evt.Live {
+		l.Info("skipping backfill event", "event", evt.AtUri())
+		return nil
+	}
+
+	// status records are append-only; only creation is meaningful
+	if evt.Action != tapc.RecordCreateAction {
+		return nil
+	}
+
+	record := tangled.RepoPullStatus{}
+	if err := json.Unmarshal(evt.Record, &record); err != nil {
+		l.Error("invalid record", "err", err)
+		return fmt.Errorf("parsing record: %w", err)
+	}
+
+	action, ok := pullStatusAction(record.Status)
+	if !ok {
+		l.Info("ignoring pull status record: unknown status", "status", record.Status)
+		return nil
+	}
+
+	pullUri, err := syntax.ParseATURI(record.Pull)
+	if err != nil {
+		l.Error("invalid pull at-uri in status record", "pull", record.Pull, "err", err)
+		return nil
+	}
+	if pullUri.Collection().String() != tangled.RepoPullNSID {
+		l.Info("ignoring pull status record: subject is not a pull", "collection", pullUri.Collection())
+		return nil
+	}
+
+	pullDid := pullUri.Authority().String()
+	pullRkey := pullUri.RecordKey().String()
+	actorDid := evt.Did.String()
+
+	pull, err := s.fetchPullRecord(ctx, pullDid, pullRkey)
+	if err != nil {
+		l.Error("failed to fetch pull record for status event", "pull", record.Pull, "err", err)
+		return fmt.Errorf("fetch pull record: %w", err)
+	}
+
+	l = l.With("pull", record.Pull, "action", action, "actor", actorDid)
+	return s.triggerPullRequestPipeline(ctx, l, actorDid, pullDid, pullRkey, pull, action)
+}
+
+// pullStatusAction maps a sh.tangled.repo.pull.status variant to the
+// corresponding pull_request trigger action. A status.open record is only ever
+// written on reopen (initial creation emits no status record), so it maps to
+// "reopened".
+func pullStatusAction(status string) (string, bool) {
+	switch status {
+	case tangled.RepoPullStatusOpen:
+		return workflow.PullRequestActionReopened, true
+	case tangled.RepoPullStatusClosed:
+		return workflow.PullRequestActionClosed, true
+	case tangled.RepoPullStatusMerged:
+		return workflow.PullRequestActionMerged, true
+	default:
+		return "", false
+	}
+}
+
+// fetchPullRecord retrieves a sh.tangled.repo.pull record from its author's PDS.
+func (s *Spindle) fetchPullRecord(ctx context.Context, did, rkey string) (*tangled.RepoPull, error) {
+	ident, err := s.res.ResolveIdent(ctx, did)
+	if err != nil || ident.Handle.IsInvalidHandle() {
+		return nil, fmt.Errorf("failed to resolve pull owner: %w", err)
+	}
+
+	client := &indigoxrpc.Client{Host: ident.PDSEndpoint()}
+	resp, err := comatproto.RepoGetRecord(ctx, client, "", tangled.RepoPullNSID, did, rkey)
+	if err != nil {
+		return nil, fmt.Errorf("fetching pull record: %w", err)
+	}
+
+	pull, ok := resp.Value.Val.(*tangled.RepoPull)
+	if !ok {
+		return nil, fmt.Errorf("record %s/%s is not a pull record", did, rkey)
+	}
+	return pull, nil
+}
+
+// isPullTriggerAuthorized reports whether a pull_request pipeline may be
+// triggered on repoDid. The pull author must always have push access to the
+// target repo; the event actor must either be the pull author or also have push
+// access. For open/synchronize the actor and pull author are the same DID, so
+// this reduces to the pull author's push check.
+func (s *Spindle) isPullTriggerAuthorized(eventDid, pullDid, repoDid string) (bool, error) {
+	pullHasPush, err := s.e.IsPushAllowed(pullDid, rbac.ThisServer, repoDid)
+	if err != nil || !pullHasPush {
+		return false, err
+	}
+
+	if eventDid == pullDid {
+		return true, nil
+	}
+
+	return s.e.IsPushAllowed(eventDid, rbac.ThisServer, repoDid)
+}
+
+// triggerPullRequestPipeline builds and runs a pull_request-triggered pipeline
+// for the given pull record. eventDid is the DID that authored the firehose
+// event (the actor); pullDid/pullRkey identify the sh.tangled.repo.pull record
+// (used to fetch the latest submission and as the pull author for the
+// authorization check); action is the pull_request lifecycle action carried
+// into the trigger metadata for `types` matching.
+func (s *Spindle) triggerPullRequestPipeline(ctx context.Context, l *slog.Logger, eventDid, pullDid, pullRkey string, record *tangled.RepoPull, action string) error {
+	// ignore legacy records
+	if record.Target == nil {
+		l.Info("ignoring pull record: target repo is nil")
+		return nil
+	}
+
+	// ignore patch-based and fork-based PRs
+	if record.Source == nil || record.Source.Repo != nil {
+		l.Info("ignoring pull record: not a branch-based pull request")
+		return nil
+	}
+
+	// skip if target repo is unknown
+	repo, err := s.db.GetRepoByDid(syntax.DID(record.Target.Repo))
+	if err != nil {
+		l.Warn("target repo is not ingested yet", "repo", record.Target.Repo, "err", err)
+		return fmt.Errorf("target repo is unknown")
+	}
+
+	// authorize the actor against the target repo
+	allowed, err := s.isPullTriggerAuthorized(eventDid, pullDid, repo.RepoDid.String())
+	if err != nil {
+		return fmt.Errorf("authorizing pull-triggered pipeline: %w", err)
+	}
+	if !allowed {
+		l.Warn("rejecting pull-triggered pipeline: actor is not authorized",
+			"actor", eventDid, "author", pullDid, "repo", repo.RepoDid)
+		return nil
+	}
+
+	latestSubmission, err := s.fetchLatestSubmission(ctx, pullDid, pullRkey, record)
+	if err != nil {
+		return err
+	}
+	sourceSha := latestSubmission.SourceRev
+
+	scheme := "https"
+	if s.cfg.Server.Dev {
+		scheme = "http"
+	}
+	client := &indigoxrpc.Client{Host: fmt.Sprintf("%s://%s", scheme, repo.Knot)}
+
+	// fetch current default branch
+	defaultBranch, _ := func(repo syntax.DID) (string, error) {
+		defaultBranchOut, err := tangled.RepoGetDefaultBranch(ctx, client, repo.String())
+		if err != nil {
+			return "", err
+		}
+		return defaultBranchOut.Name, nil
+	}(repo.RepoDid)
+
+	compiler := workflow.Compiler{
+		Trigger: tangled.Pipeline_TriggerMetadata{
+			Kind: string(workflow.TriggerKindPullRequest),
+			PullRequest: &tangled.Pipeline_PullRequestTriggerData{
+				Action:       &action,
+				SourceBranch: record.Source.Branch,
+				SourceSha:    sourceSha,
+				TargetBranch: record.Target.Branch,
+			},
+			Repo: &tangled.Pipeline_TriggerRepo{
+				Did:           repo.Owner.String(),
+				Knot:          repo.Knot,
+				Repo:          (*string)(&repo.Rkey),
+				RepoDid:       (*string)(&repo.RepoDid),
+				DefaultBranch: defaultBranch,
+			},
+		},
+	}
+
+	repoUri := s.newRepoCloneUrl(repo.Knot, repo.RepoDid)
+	repoPath := s.newRepoPath(repo.RepoDid)
+
+	// load workflow definitions from rev (without spindle context)
+	rawPipeline, err := s.loadPipeline(ctx, repoUri, repoPath, sourceSha)
+	if err != nil {
+		// don't retry
+		l.Error("failed loading pipeline", "err", err)
+		return nil
+	}
+	if len(rawPipeline) == 0 {
+		l.Info("no workflow definition find for the repo. skipping the event")
+		return nil
+	}
+	tpl := compiler.Compile(compiler.Parse(rawPipeline))
+	// TODO: pass compile error to workflow log
+	for _, w := range compiler.Diagnostics.Errors {
+		l.Error(w.String())
+	}
+	for _, w := range compiler.Diagnostics.Warnings {
+		l.Warn(w.String())
+	}
+	if len(tpl.Workflows) == 0 {
+		l.Info("no workflow matching trigger 'pull_request'. skipping the event")
+		return nil
+	}
+
+	pipelineId := models.PipelineId{
+		Knot: tpl.TriggerMetadata.Repo.Knot,
+		Rkey: tid.TID(),
+	}
+	if err := s.db.CreatePipelineEvent(pipelineId.Rkey, tpl, s.n); err != nil {
+		l.Error("failed to create pipeline event", "err", err)
+		return nil
+	}
+	sourceRepo, err := s.resolvePipelineSourceRepo(ctx, tpl.TriggerMetadata)
+	if err != nil {
+		l.Error("failed resolving pipeline source repo", "err", err)
+		return nil
+	}
+	err = s.processPipeline(repo.RepoDid, tpl, pipelineId, sourceRepo)
+	if err != nil {
+		// don't retry
+		l.Error("failed processing pipeline", "err", err)
+		return nil
 	}
 	return nil
 }

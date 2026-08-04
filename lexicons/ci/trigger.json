@@ -26,6 +26,11 @@
       "required": ["targetBranch", "sourceSha"],
       "description": "TODO: reference PR record with strongRef instead of embedding raw values",
       "properties": {
+        "action": {
+          "type": "string",
+          "description": "the pull request lifecycle action that produced this trigger",
+          "enum": ["opened", "reopened", "closed", "merged", "synchronize"]
+        },
         "sourceRepo": {
           "type": "string",
           "format": "did",

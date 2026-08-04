@@ -497,6 +497,105 @@ func TestConstraintMatchTag_GlobPatterns(t *testing.T) {
 	}
 }
 
+func TestUnmarshalWorkflowWithTypes(t *testing.T) {
+	yamlData := `
+when:
+  - event: pull_request
+    types: [opened, reopened, closed]
+    branch: main`
+
+	wf, err := FromFile("test.yml", []byte(yamlData))
+	assert.NoError(t, err, "YAML should unmarshal without error")
+	assert.Len(t, wf.When, 1)
+	assert.ElementsMatch(t, []string{"opened", "reopened", "closed"}, wf.When[0].Types)
+	assert.ElementsMatch(t, []string{"pull_request"}, wf.When[0].Event)
+}
+
+func TestConstraintMatchTypes(t *testing.T) {
+	tests := []struct {
+		name       string
+		constraint Constraint
+		action     string
+		expected   bool
+	}{
+		{"empty types defaults to opened", Constraint{}, PullRequestActionOpened, true},
+		{"empty types defaults to reopened", Constraint{}, PullRequestActionReopened, true},
+		{"empty types defaults to synchronize", Constraint{}, PullRequestActionSynchronize, true},
+		{"empty types does not match closed", Constraint{}, PullRequestActionClosed, false},
+		{"empty types does not match merged", Constraint{}, PullRequestActionMerged, false},
+		{"missing action treated as opened", Constraint{}, "", true},
+		{"explicit closed matches", Constraint{Types: []string{"closed"}}, PullRequestActionClosed, true},
+		{"explicit closed does not match opened", Constraint{Types: []string{"closed"}}, PullRequestActionOpened, false},
+		{"merged is distinct from closed", Constraint{Types: []string{"closed"}}, PullRequestActionMerged, false},
+		{"explicit merged matches", Constraint{Types: []string{"merged"}}, PullRequestActionMerged, true},
+		{"multiple types", Constraint{Types: []string{"opened", "closed"}}, PullRequestActionClosed, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.constraint.MatchTypes(tt.action))
+		})
+	}
+}
+
+func TestConstraintMatch_PullRequestTypes(t *testing.T) {
+	prTrigger := func(action string) tangled.Pipeline_TriggerMetadata {
+		return tangled.Pipeline_TriggerMetadata{
+			Kind: string(TriggerKindPullRequest),
+			PullRequest: &tangled.Pipeline_PullRequestTriggerData{
+				Action:       &action,
+				TargetBranch: "main",
+			},
+		}
+	}
+
+	tests := []struct {
+		name       string
+		constraint Constraint
+		action     string
+		expected   bool
+	}{
+		{
+			name:       "no types matches opened on target branch",
+			constraint: Constraint{Event: []string{"pull_request"}, Branch: []string{"main"}},
+			action:     PullRequestActionOpened,
+			expected:   true,
+		},
+		{
+			name:       "no types does not match closed",
+			constraint: Constraint{Event: []string{"pull_request"}, Branch: []string{"main"}},
+			action:     PullRequestActionClosed,
+			expected:   false,
+		},
+		{
+			name:       "explicit closed type matches close event",
+			constraint: Constraint{Event: []string{"pull_request"}, Types: []string{"closed"}, Branch: []string{"main"}},
+			action:     PullRequestActionClosed,
+			expected:   true,
+		},
+		{
+			name:       "closed type does not fire on open",
+			constraint: Constraint{Event: []string{"pull_request"}, Types: []string{"closed"}, Branch: []string{"main"}},
+			action:     PullRequestActionOpened,
+			expected:   false,
+		},
+		{
+			name:       "branch mismatch overrides matching type",
+			constraint: Constraint{Event: []string{"pull_request"}, Types: []string{"closed"}, Branch: []string{"release"}},
+			action:     PullRequestActionClosed,
+			expected:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := tt.constraint.Match(prTrigger(tt.action), nil)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestMatch_ManualDispatch(t *testing.T) {
 	// manual dispatch is policy-free: every workflow matches regardless of its
 	// declared event/branch/tag/path constraints. Selection is the caller's job.

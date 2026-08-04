@@ -34,6 +34,7 @@ type (
 
 	Constraint struct {
 		Event  StringList `yaml:"event"`
+		Types  StringList `yaml:"types"`  // optional; only applies to pull_request events. defaults to opened, reopened and synchronize
 		Branch StringList `yaml:"branch"` // required for pull_request; for push, either branch or tag must be specified
 		Tag    StringList `yaml:"tag"`    // optional; only applies to push events
 		Paths  StringList `yaml:"paths"`  // optional; only run if any changed file matches a glob pattern
@@ -57,7 +58,25 @@ const (
 	TriggerKindPush        TriggerKind = "push"
 	TriggerKindPullRequest TriggerKind = "pull_request"
 	TriggerKindManual      TriggerKind = "manual"
+
+	// pull_request lifecycle actions, carried in the trigger metadata and
+	// matched against a constraint's `types` list.
+	PullRequestActionOpened      = "opened"
+	PullRequestActionReopened    = "reopened"
+	PullRequestActionClosed      = "closed"
+	PullRequestActionMerged      = "merged"
+	PullRequestActionSynchronize = "synchronize"
 )
+
+// DefaultPullRequestActions is the set of pull_request actions a constraint
+// matches when it does not specify an explicit `types` list. This preserves
+// the historic behaviour of firing on PR creation and resubmission, plus
+// reopen, while leaving close/merge opt-in.
+var DefaultPullRequestActions = []string{
+	PullRequestActionOpened,
+	PullRequestActionReopened,
+	PullRequestActionSynchronize,
+}
 
 func (t TriggerKind) String() string {
 	return strings.ReplaceAll(string(t), "_", " ")
@@ -131,13 +150,17 @@ func (c *Constraint) Match(trigger tangled.Pipeline_TriggerMetadata, changedFile
 	// apply event constraints
 	match = match && c.MatchEvent(trigger.Kind)
 
-	// apply branch constraints for PRs
+	// apply branch and action constraints for PRs
 	if trigger.PullRequest != nil {
 		matched, err := c.MatchBranch(trigger.PullRequest.TargetBranch)
 		if err != nil {
 			return false, err
 		}
-		match = match && matched
+		action := ""
+		if trigger.PullRequest.Action != nil {
+			action = *trigger.PullRequest.Action
+		}
+		match = match && matched && c.MatchTypes(action)
 	}
 
 	// apply ref constraints for pushes
@@ -200,6 +223,21 @@ func (c *Constraint) MatchTag(tag string) (bool, error) {
 
 func (c *Constraint) MatchEvent(event string) bool {
 	return slices.Contains(c.Event, event)
+}
+
+// MatchTypes reports whether a pull_request action satisfies this constraint's
+// `types` filter. An empty `types` list falls back to DefaultPullRequestActions.
+// A missing action (e.g. legacy trigger metadata) is treated as "opened" so
+// existing pull_request workflows keep matching.
+func (c *Constraint) MatchTypes(action string) bool {
+	if action == "" {
+		action = PullRequestActionOpened
+	}
+	types := []string(c.Types)
+	if len(types) == 0 {
+		types = DefaultPullRequestActions
+	}
+	return slices.Contains(types, action)
 }
 
 // Custom unmarshaller for StringList

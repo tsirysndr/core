@@ -17,6 +17,7 @@ import (
 	"tangled.org/core/rbac"
 	"tangled.org/core/spindle/config"
 	"tangled.org/core/spindle/db"
+	"tangled.org/core/workflow"
 
 	"tangled.org/core/tapc"
 )
@@ -670,5 +671,184 @@ func TestProcessCollaborator_ForgeDeleteRejection(t *testing.T) {
 	ok, err := e.IsRepoCollaborator(collabDid.String(), rbac.ThisServer, repoDid.String())
 	if err != nil || !ok {
 		t.Fatal("collaborator policy was removed from Casbin by forged delete")
+	}
+}
+
+func TestPullStatusAction(t *testing.T) {
+	tests := []struct {
+		name       string
+		status     string
+		wantAction string
+		wantOK     bool
+	}{
+		{"open maps to reopened", tangled.RepoPullStatusOpen, workflow.PullRequestActionReopened, true},
+		{"closed maps to closed", tangled.RepoPullStatusClosed, workflow.PullRequestActionClosed, true},
+		{"merged maps to merged", tangled.RepoPullStatusMerged, workflow.PullRequestActionMerged, true},
+		{"unknown status is rejected", "sh.tangled.repo.pull.status.bogus", "", false},
+		{"empty status is rejected", "", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			action, ok := pullStatusAction(tt.status)
+			if ok != tt.wantOK {
+				t.Fatalf("pullStatusAction(%q) ok = %v, want %v", tt.status, ok, tt.wantOK)
+			}
+			if action != tt.wantAction {
+				t.Fatalf("pullStatusAction(%q) action = %q, want %q", tt.status, action, tt.wantAction)
+			}
+		})
+	}
+}
+
+func TestProcessPullStatus(t *testing.T) {
+	d, e := newTestSpindleDB(t)
+
+	cfg := &config.Config{}
+	cfg.Server.Hostname = "spindle.test"
+
+	jc, jcerr := jetstream.NewJetstreamClient("", "", nil, nil, slog.Default(), nil, false, false)
+	if jcerr != nil {
+		t.Fatalf("NewJetstreamClient: %v", jcerr)
+	}
+	s := &Spindle{
+		db:      d,
+		e:       e,
+		l:       slog.Default(),
+		cfg:     cfg,
+		res:     idresolver.DefaultResolver("https://plc.test"),
+		jc:      jc,
+		rootCtx: context.Background(),
+	}
+
+	statusRecord := func(status, pullUri string) []byte {
+		rec := tangled.RepoPullStatus{
+			Status:    status,
+			Pull:      pullUri,
+			CreatedAt: time.Now().Format(time.RFC3339),
+		}
+		b, _ := json.Marshal(rec)
+		return b
+	}
+
+	validPullUri := "at://did:plc:pullowner/sh.tangled.repo.pull/pull-rkey-1"
+
+	// non-create actions are ignored
+	if err := s.processPullStatus(context.Background(), &tapc.RecordEventData{
+		Live:       true,
+		Did:        syntax.DID("did:plc:actor"),
+		Rkey:       "status-rkey",
+		Collection: syntax.NSID(tangled.RepoPullStatusNSID),
+		Action:     tapc.RecordUpdateAction,
+		Record:     statusRecord(tangled.RepoPullStatusClosed, validPullUri),
+	}); err != nil {
+		t.Fatalf("update action should be a no-op, got: %v", err)
+	}
+
+	// unknown status variant is skipped without error
+	if err := s.processPullStatus(context.Background(), &tapc.RecordEventData{
+		Live:       true,
+		Did:        syntax.DID("did:plc:actor"),
+		Rkey:       "status-rkey",
+		Collection: syntax.NSID(tangled.RepoPullStatusNSID),
+		Action:     tapc.RecordCreateAction,
+		Record:     statusRecord("sh.tangled.repo.pull.status.bogus", validPullUri),
+	}); err != nil {
+		t.Fatalf("unknown status should be skipped, got: %v", err)
+	}
+
+	// a malformed pull at-uri is skipped without error
+	if err := s.processPullStatus(context.Background(), &tapc.RecordEventData{
+		Live:       true,
+		Did:        syntax.DID("did:plc:actor"),
+		Rkey:       "status-rkey",
+		Collection: syntax.NSID(tangled.RepoPullStatusNSID),
+		Action:     tapc.RecordCreateAction,
+		Record:     statusRecord(tangled.RepoPullStatusClosed, "not-an-at-uri"),
+	}); err != nil {
+		t.Fatalf("invalid pull at-uri should be skipped, got: %v", err)
+	}
+
+	// a status pointing at a non-pull subject is skipped without error
+	if err := s.processPullStatus(context.Background(), &tapc.RecordEventData{
+		Live:       true,
+		Did:        syntax.DID("did:plc:actor"),
+		Rkey:       "status-rkey",
+		Collection: syntax.NSID(tangled.RepoPullStatusNSID),
+		Action:     tapc.RecordCreateAction,
+		Record:     statusRecord(tangled.RepoPullStatusClosed, "at://did:plc:x/sh.tangled.repo.issue/y"),
+	}); err != nil {
+		t.Fatalf("non-pull subject should be skipped, got: %v", err)
+	}
+
+	// a valid close event resolves the pull record; fetch fails because plc/pds
+	// are not real, confirming we reached the fetch stage with a mapped action.
+	err := s.processPullStatus(context.Background(), &tapc.RecordEventData{
+		Live:       true,
+		Did:        syntax.DID("did:plc:actor"),
+		Rkey:       "status-rkey",
+		Collection: syntax.NSID(tangled.RepoPullStatusNSID),
+		Action:     tapc.RecordCreateAction,
+		Record:     statusRecord(tangled.RepoPullStatusClosed, validPullUri),
+	})
+	if err == nil {
+		t.Fatal("expected error fetching pull record against fake pds, got nil")
+	}
+	if !strings.Contains(err.Error(), "fetch pull record") {
+		t.Fatalf("expected fetch pull record error, got: %v", err)
+	}
+}
+
+func TestIsPullTriggerAuthorized(t *testing.T) {
+	d, e := newTestSpindleDB(t)
+	s := &Spindle{
+		db: d,
+		e:  e,
+		l:  slog.Default(),
+	}
+
+	repoDid := syntax.DID("did:plc:targetrepo")
+	ownerDid := syntax.DID("did:plc:owner")   // has push (repo owner)
+	collaboratorDid := "did:plc:collaborator" // has push
+	noPushAuthorDid := "did:plc:nopushauthor" // pull author without push
+	strangerDid := "did:plc:stranger"         // no push, not the author
+
+	if err := e.AddRepo(ownerDid.String(), rbac.ThisServer, repoDid.String()); err != nil {
+		t.Fatalf("AddRepo permissions: %v", err)
+	}
+	if err := e.AddCollaborator(collaboratorDid, rbac.ThisServer, repoDid.String()); err != nil {
+		t.Fatalf("AddCollaborator: %v", err)
+	}
+
+	cases := []struct {
+		name     string
+		eventDid string
+		pullDid  string
+		allowed  bool
+	}{
+		// direct pr path: event author == pull author
+		{"direct pr by pushing author", ownerDid.String(), ownerDid.String(), true},
+		{"direct pr by non-pushing author", noPushAuthorDid, noPushAuthorDid, false},
+
+		// status path: actor differs from pull author, pull author has push
+		{"actor with push acts on authorized pr", collaboratorDid, ownerDid.String(), true},
+		{"pull author acts on own authorized pr", ownerDid.String(), ownerDid.String(), true},
+		{"stranger without push acts on authorized pr", strangerDid, ownerDid.String(), false},
+
+		// pull author must always have push, even if the actor does
+		{"pushing actor on unauthorized pull author", ownerDid.String(), noPushAuthorDid, false},
+		{"non-pushing actor on unauthorized pull author", strangerDid, noPushAuthorDid, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			allowed, err := s.isPullTriggerAuthorized(tc.eventDid, tc.pullDid, repoDid.String())
+			if err != nil {
+				t.Fatalf("isPullTriggerAuthorized: %v", err)
+			}
+			if allowed != tc.allowed {
+				t.Fatalf("event=%q pull=%q allowed=%v, want %v", tc.eventDid, tc.pullDid, allowed, tc.allowed)
+			}
+		})
 	}
 }

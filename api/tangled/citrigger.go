@@ -33,6 +33,8 @@ type CiTrigger_Pair struct {
 // RECORDTYPE: CiTrigger_PullRequest
 type CiTrigger_PullRequest struct {
 	LexiconTypeID string `json:"$type,const=sh.tangled.ci.trigger#pullRequest" cborgen:"$type,const=sh.tangled.ci.trigger#pullRequest"`
+	// action: the pull request lifecycle action that produced this trigger
+	Action *string `json:"action,omitempty" cborgen:"action,omitempty"`
 	// pull: AT-URI of the sh.tangled.repo.pull record this run belongs to
 	Pull         *string `json:"pull,omitempty" cborgen:"pull,omitempty"`
 	SourceBranch *string `json:"sourceBranch,omitempty" cborgen:"sourceBranch,omitempty"`

@@ -160,6 +160,7 @@ func (d *DB) mapToCiPipeline(rkey string, created int64, raw tangled.Pipeline) (
 			if raw.TriggerMetadata.PullRequest != nil {
 				commitSha = raw.TriggerMetadata.PullRequest.SourceSha
 				trigger.CiTrigger_PullRequest = &tangled.CiTrigger_PullRequest{
+					Action:       raw.TriggerMetadata.PullRequest.Action,
 					SourceBranch: &raw.TriggerMetadata.PullRequest.SourceBranch,
 					SourceRepo:   raw.TriggerMetadata.SourceRepo,
 					SourceSha:    raw.TriggerMetadata.PullRequest.SourceSha,

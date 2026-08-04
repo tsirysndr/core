@@ -49,6 +49,8 @@ type Pipeline_Pair struct {
 
 // Pipeline_PullRequestTriggerData is a "pullRequestTriggerData" in the sh.tangled.pipeline schema.
 type Pipeline_PullRequestTriggerData struct {
+	// action: the pull request lifecycle action that produced this trigger
+	Action *string `json:"action,omitempty" cborgen:"action,omitempty"`
 	// pull: AT-URI of the sh.tangled.repo.pull record this run belongs to
 	Pull         *string `json:"pull,omitempty" cborgen:"pull,omitempty"`
 	SourceBranch string  `json:"sourceBranch" cborgen:"sourceBranch"`

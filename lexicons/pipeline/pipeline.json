@@ -126,6 +126,17 @@
         "sourceSha"
       ],
       "properties": {
+        "action": {
+          "type": "string",
+          "description": "the pull request lifecycle action that produced this trigger",
+          "enum": [
+            "opened",
+            "reopened",
+            "closed",
+            "merged",
+            "synchronize"
+          ]
+        },
         "sourceBranch": {
           "type": "string"
         },

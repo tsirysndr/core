@@ -35,6 +35,10 @@ func (s *Spindle) ingest() Ingester {
 			if evt, ok := jetstreamToTapEvent(e); ok {
 				err = s.processPull(ctx, evt.Record)
 			}
+		case tangled.RepoPullStatusNSID:
+			if evt, ok := jetstreamToTapEvent(e); ok {
+				err = s.processPullStatus(ctx, evt.Record)
+			}
 		}
 
 		if err != nil {

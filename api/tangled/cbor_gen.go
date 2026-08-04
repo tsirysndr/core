@@ -2699,7 +2699,11 @@ func (t *CiTrigger_PullRequest) MarshalCBOR(w io.Writer) error {
 	}
 
 	cw := cbg.NewCborWriter(w)
-	fieldCount := 6
+	fieldCount := 7
+
+	if t.Action == nil {
+		fieldCount--
+	}
 
 	if t.Pull == nil {
 		fieldCount--
@@ -2766,6 +2770,38 @@ func (t *CiTrigger_PullRequest) MarshalCBOR(w io.Writer) error {
 	}
 	if _, err := cw.WriteString(string("sh.tangled.ci.trigger#pullRequest")); err != nil {
 		return err
+	}
+
+	// t.Action (string) (string)
+	if t.Action != nil {
+
+		if len("action") > 1000000 {
+			return xerrors.Errorf("Value in field \"action\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("action"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("action")); err != nil {
+			return err
+		}
+
+		if t.Action == nil {
+			if _, err := cw.Write(cbg.CborNull); err != nil {
+				return err
+			}
+		} else {
+			if len(*t.Action) > 1000000 {
+				return xerrors.Errorf("Value in field t.Action was too long")
+			}
+
+			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(*t.Action))); err != nil {
+				return err
+			}
+			if _, err := cw.WriteString(string(*t.Action)); err != nil {
+				return err
+			}
+		}
 	}
 
 	// t.SourceSha (string) (string)
@@ -2952,6 +2988,27 @@ func (t *CiTrigger_PullRequest) UnmarshalCBOR(r io.Reader) (err error) {
 				}
 
 				t.LexiconTypeID = string(sval)
+			}
+			// t.Action (string) (string)
+		case "action":
+
+			{
+				b, err := cr.ReadByte()
+				if err != nil {
+					return err
+				}
+				if b != cbg.CborNull[0] {
+					if err := cr.UnreadByte(); err != nil {
+						return err
+					}
+
+					sval, err := cbg.ReadStringWithMax(cr, 1000000)
+					if err != nil {
+						return err
+					}
+
+					t.Action = (*string)(&sval)
+				}
 			}
 			// t.SourceSha (string) (string)
 		case "sourceSha":
@@ -8387,7 +8444,11 @@ func (t *Pipeline_PullRequestTriggerData) MarshalCBOR(w io.Writer) error {
 	}
 
 	cw := cbg.NewCborWriter(w)
-	fieldCount := 4
+	fieldCount := 5
+
+	if t.Action == nil {
+		fieldCount--
+	}
 
 	if t.Pull == nil {
 		fieldCount--
@@ -8424,6 +8485,38 @@ func (t *Pipeline_PullRequestTriggerData) MarshalCBOR(w io.Writer) error {
 				return err
 			}
 			if _, err := cw.WriteString(string(*t.Pull)); err != nil {
+				return err
+			}
+		}
+	}
+
+	// t.Action (string) (string)
+	if t.Action != nil {
+
+		if len("action") > 1000000 {
+			return xerrors.Errorf("Value in field \"action\" was too long")
+		}
+
+		if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len("action"))); err != nil {
+			return err
+		}
+		if _, err := cw.WriteString(string("action")); err != nil {
+			return err
+		}
+
+		if t.Action == nil {
+			if _, err := cw.Write(cbg.CborNull); err != nil {
+				return err
+			}
+		} else {
+			if len(*t.Action) > 1000000 {
+				return xerrors.Errorf("Value in field t.Action was too long")
+			}
+
+			if err := cw.WriteMajorTypeHeader(cbg.MajTextString, uint64(len(*t.Action))); err != nil {
+				return err
+			}
+			if _, err := cw.WriteString(string(*t.Action)); err != nil {
 				return err
 			}
 		}
@@ -8560,6 +8653,27 @@ func (t *Pipeline_PullRequestTriggerData) UnmarshalCBOR(r io.Reader) (err error)
 					}
 
 					t.Pull = (*string)(&sval)
+				}
+			}
+			// t.Action (string) (string)
+		case "action":
+
+			{
+				b, err := cr.ReadByte()
+				if err != nil {
+					return err
+				}
+				if b != cbg.CborNull[0] {
+					if err := cr.UnreadByte(); err != nil {
+						return err
+					}
+
+					sval, err := cbg.ReadStringWithMax(cr, 1000000)
+					if err != nil {
+						return err
+					}
+
+					t.Action = (*string)(&sval)
 				}
 			}
 			// t.SourceSha (string) (string)
