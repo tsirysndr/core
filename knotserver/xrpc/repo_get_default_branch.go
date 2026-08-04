@@ -18,6 +18,11 @@ func (x *Xrpc) RepoGetDefaultBranch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	gr, err := git.PlainOpen(repoPath)
+	if err != nil {
+		x.Logger.Error("failed to open", "error", err.Error())
+		writeError(w, xrpcerr.RepoNotFoundError, http.StatusNotFound)
+		return
+	}
 
 	branch, err := gr.FindMainBranch()
 	if err != nil {

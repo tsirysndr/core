@@ -51,6 +51,29 @@ func TestCanonicalRepoPath(t *testing.T) {
 	}
 }
 
+func TestCanonicalRedirectTargetKeepsTheTailEscaped(t *testing.T) {
+	cases := []struct {
+		name string
+		path string
+		want string
+	}{
+		{"plain tail", "/boltless.dev/limpet/tree/main", "/akshay.dev/anemone/tree/main"},
+		{"space in a blob path", "/boltless.dev/limpet/blob/main/a%20b.txt", "/akshay.dev/anemone/blob/main/a%20b.txt"},
+		{"escaped slash in a ref", "/boltless.dev/limpet/archive/refs%2Fheads%2Fmain", "/akshay.dev/anemone/archive/refs%2Fheads%2Fmain"},
+		{"hash in a filename", "/boltless.dev/limpet/raw/main/c%23.cs", "/akshay.dev/anemone/raw/main/c%23.cs"},
+		{"repo root", "/boltless.dev/limpet", "/akshay.dev/anemone"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", c.path, nil)
+			if got := CanonicalRedirectTarget(req, "akshay.dev/anemone"); got != c.want {
+				t.Errorf("CanonicalRedirectTarget = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
 func reqWithChiParams(user, repo string) *http.Request {
 	r := httptest.NewRequest("GET", "/", nil)
 	rctx := chi.NewRouteContext()

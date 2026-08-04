@@ -13,6 +13,7 @@ import (
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/gitutil"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/knotserver/config"
 	"tangled.org/core/knotserver/db"
@@ -97,20 +98,30 @@ func (x *Xrpc) Router() http.Handler {
 	return r
 }
 
+type resolvedRepo struct {
+	path string
+	name gitutil.RepoName
+}
+
 func (x *Xrpc) parseRepoParam(repo string) (string, error) {
+	resolved, err := x.resolveRepo(repo)
+	return resolved.path, err
+}
+
+func (x *Xrpc) resolveRepo(repo string) (resolvedRepo, error) {
 	if repo == "" || !strings.HasPrefix(repo, "did:") {
-		return "", xrpcerr.NewXrpcError(
+		return resolvedRepo{}, xrpcerr.NewXrpcError(
 			xrpcerr.WithTag("InvalidRequest"),
 			xrpcerr.WithMessage("missing or invalid repo parameter, expected a repo DID"),
 		)
 	}
 
 	if !strings.Contains(repo, "/") {
-		repoPath, _, _, err := x.Db.ResolveRepoDIDOnDisk(x.Config.Repo.ScanPath, repo)
+		repoPath, _, repoName, err := x.Db.ResolveRepoDIDOnDisk(x.Config.Repo.ScanPath, repo)
 		if err != nil {
-			return "", xrpcerr.RepoNotFoundError
+			return resolvedRepo{}, xrpcerr.RepoNotFoundError
 		}
-		return repoPath, nil
+		return resolvedRepo{path: repoPath, name: gitutil.RepoName(repoName)}, nil
 	}
 
 	parts := strings.SplitN(repo, "/", 2)
@@ -120,18 +131,18 @@ func (x *Xrpc) parseRepoParam(repo string) (string, error) {
 	if err == nil {
 		repoPath, _, _, resolveErr := x.Db.ResolveRepoDIDOnDisk(x.Config.Repo.ScanPath, repoDid)
 		if resolveErr == nil {
-			return repoPath, nil
+			return resolvedRepo{path: repoPath, name: gitutil.RepoName(repoName)}, nil
 		}
 	}
 
 	repoPath, joinErr := securejoin.SecureJoin(x.Config.Repo.ScanPath, filepath.Join(ownerDid, repoName))
 	if joinErr != nil {
-		return "", xrpcerr.RepoNotFoundError
+		return resolvedRepo{}, xrpcerr.RepoNotFoundError
 	}
 	if _, statErr := os.Stat(repoPath); statErr != nil {
-		return "", xrpcerr.RepoNotFoundError
+		return resolvedRepo{}, xrpcerr.RepoNotFoundError
 	}
-	return repoPath, nil
+	return resolvedRepo{path: repoPath, name: gitutil.RepoName(repoName)}, nil
 }
 
 func (x *Xrpc) resolveRepoDID(repo *string, ownerDid, name string) (repoident.RepoDid, string, error) {

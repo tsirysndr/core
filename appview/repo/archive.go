@@ -6,63 +6,77 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/samber/lo"
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/appview/models"
+	"tangled.org/core/gitutil"
 )
+
+const archiveRoute = "/archive/*"
+
+func newArchiveClient(headerTimeout time.Duration) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ResponseHeaderTimeout = headerTimeout
+	return &http.Client{Transport: transport}
+}
 
 func (rp *Repo) DownloadArchive(w http.ResponseWriter, r *http.Request) {
 	l := rp.logger.With("handler", "DownloadArchive")
-	ref := chi.URLParam(r, "ref")
-	ref, _ = url.PathUnescape(ref)
-	format := r.URL.Query().Get("format")
-	ref, format = archiveRefAndFormat(ref, format, r.UserAgent())
-	f, err := rp.repoResolver.Resolve(r)
+	fail := func(status int) {
+		w.WriteHeader(status)
+		lo.Ternary(status == http.StatusServiceUnavailable, rp.pages.Error503, rp.pages.Error404)(w)
+	}
+
+	params, err := parseArchiveRequest(r)
 	if err != nil {
-		l.Error("failed to get repo and knot", "err", err)
+		l.Warn("rejecting archive request", "err", err)
+		fail(http.StatusNotFound)
 		return
 	}
 
+	f, err := rp.repoResolver.Resolve(r)
+	if err != nil {
+		l.Error("failed to get repo and knot", "err", err)
+		fail(http.StatusNotFound)
+		return
+	}
+
+	name := gitutil.RepoName(f.Slug())
+	params.Prefix = params.Prefix.OrDefault(name, params.Rev)
+
 	// build the xrpc url
-	query := url.Values{}
-	query.Set("repo", f.RepoDid)
-	query.Set("ref", ref)
-	query.Set("format", format)
-	query.Set("prefix", r.URL.Query().Get("prefix"))
-	xrpcURL := fmt.Sprintf(
-		"%s/xrpc/%s?%s",
-		rp.config.KnotMirror.Url,
-		tangled.GitTempGetArchiveNSID,
-		query.Encode(),
-	)
+	xrpcURL := fmt.Sprintf("%s/xrpc/%s?%s",
+		rp.config.KnotMirror.Url, tangled.GitTempGetArchiveNSID, params.Query(f.RepoDid).Encode())
 
 	// make the get request
-	resp, err := http.Get(xrpcURL)
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, xrpcURL, nil)
+	if err != nil {
+		l.Error("failed to build XRPC repo.archive request", "err", err)
+		fail(http.StatusServiceUnavailable)
+		return
+	}
+	resp, err := rp.archiveClient.Do(req)
 	if err != nil {
 		l.Error("failed to call XRPC repo.archive", "err", err)
-		rp.pages.Error503(w)
+		fail(http.StatusServiceUnavailable)
 		return
 	}
 	defer resp.Body.Close()
 
-	w.Header().Set("Content-Type", archiveContentType(format))
-
-	filename := ""
-	if cd := resp.Header.Get("Content-Disposition"); strings.HasPrefix(cd, "attachment;") {
-		filename = cd // knot has already set the attachment CD
+	if resp.StatusCode != http.StatusOK {
+		l.Error("XRPC repo.archive failed", "status", resp.StatusCode, "ref", params.Rev)
+		overloaded := resp.StatusCode >= http.StatusInternalServerError || resp.StatusCode == http.StatusTooManyRequests
+		fail(lo.Ternary(overloaded, http.StatusServiceUnavailable, http.StatusNotFound))
+		return
 	}
-	if filename == "" {
-		filename = fmt.Sprintf("attachment; filename=\"%s-%s.%s\"", f.Name, ref, format)
-	}
-	w.Header().Set("Content-Disposition", filename)
-	w.Header().Set("X-Content-Type-Options", "nosniff")
 
-	if link := resp.Header.Get("Link"); link != "" {
-		if resolvedRef, err := extractImmutableLink(link); err == nil {
-			newLink := fmt.Sprintf("<%s/%s/archive/%s.%s>; rel=\"immutable\"",
-				rp.config.Core.BaseUrl(), f.RepoIdentifier(), resolvedRef, format)
-			w.Header().Set("Link", newLink)
-		}
+	params.SetHeaders(w.Header(), name)
+
+	if resolvedRev, err := gitutil.ParseImmutableLink(resp.Header.Get("Link")); err == nil {
+		w.Header().Set("Link", gitutil.ImmutableLink(rp.immutableArchiveURL(f, params.WithRev(resolvedRev))))
 	}
 
 	// stream the archive data directly
@@ -71,56 +85,49 @@ func (rp *Repo) DownloadArchive(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func archiveRefAndFormat(ref string, requestedFormat string, userAgent string) (string, string) {
-	switch {
-	case strings.HasSuffix(ref, ".tar.gz"):
-		ref = strings.TrimSuffix(ref, ".tar.gz")
-		if requestedFormat == "" {
-			requestedFormat = "tar.gz"
-		}
-	case strings.HasSuffix(ref, ".zip"):
-		ref = strings.TrimSuffix(ref, ".zip")
-		if requestedFormat == "" {
-			requestedFormat = "zip"
-		}
+func parseArchiveRequest(r *http.Request) (gitutil.ArchiveParams, error) {
+	ref := chi.URLParam(r, "*")
+	if unescaped, err := url.PathUnescape(ref); err == nil && r.URL.RawPath != "" {
+		ref = unescaped
 	}
 
-	switch requestedFormat {
-	case "zip", "tar.gz":
-		return ref, requestedFormat
-	default:
-		if prefersZipArchive(userAgent) {
-			return ref, "zip"
-		}
-		return ref, "tar.gz"
+	suffix, found := lo.Find(gitutil.ArchiveFormats, func(f gitutil.ArchiveFormat) bool {
+		return strings.HasSuffix(ref, "."+f.String())
+	})
+	if found {
+		ref = strings.TrimSuffix(ref, "."+suffix.String())
 	}
-}
 
-func prefersZipArchive(userAgent string) bool {
-	ua := strings.ToLower(userAgent)
-	return strings.Contains(ua, "windows") || strings.Contains(ua, "win64") || strings.Contains(ua, "win32")
-}
-
-func archiveContentType(format string) string {
-	if format == "zip" {
-		return "application/zip"
-	}
-	return "application/gzip"
-}
-
-func extractImmutableLink(linkHeader string) (string, error) {
-	trimmed := strings.TrimPrefix(linkHeader, "<")
-	trimmed = strings.TrimSuffix(trimmed, ">; rel=\"immutable\"")
-
-	parsedLink, err := url.Parse(trimmed)
+	rev, err := gitutil.ParseRev(ref)
 	if err != nil {
-		return "", err
+		return gitutil.ArchiveParams{}, err
 	}
 
-	resolvedRef := parsedLink.Query().Get("ref")
-	if resolvedRef == "" {
-		return "", fmt.Errorf("no ref found in link header")
+	query := r.URL.Query()
+	query.Del("ref")
+	query.Set("format", archiveFormat(query.Get("format"), suffix, r.UserAgent()).String())
+	params, err := gitutil.ParseArchiveParams(query)
+	if err != nil {
+		return gitutil.ArchiveParams{}, err
 	}
+	return params.WithRev(rev), nil
+}
 
-	return resolvedRef, nil
+func archiveFormat(requested string, suffix gitutil.ArchiveFormat, userAgent string) gitutil.ArchiveFormat {
+	if format, err := gitutil.ParseArchiveFormat(requested); err == nil {
+		return format
+	}
+	if suffix != "" {
+		return suffix
+	}
+	ua := strings.ToLower(userAgent)
+	windows := lo.SomeBy([]string{"windows", "win64", "win32"}, func(s string) bool { return strings.Contains(ua, s) })
+	return lo.Ternary(windows, gitutil.ArchiveZip, gitutil.ArchiveTarGz)
+}
+
+func (rp *Repo) immutableArchiveURL(f *models.Repo, params gitutil.ArchiveParams) string {
+	return fmt.Sprintf("%s/%s/archive/%s.%s?%s",
+		rp.config.Core.BaseUrl(), f.RepoIdentifier(),
+		url.PathEscape(params.Rev.String()), params.Format,
+		url.Values{"prefix": {params.Prefix.String()}}.Encode())
 }

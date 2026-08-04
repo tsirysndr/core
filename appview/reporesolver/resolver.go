@@ -40,7 +40,7 @@ func CanonicalRepoPath(handle string, repo *models.Repo) string {
 }
 
 func CanonicalRedirectTarget(req *http.Request, canonical string) string {
-	parts := strings.SplitN(strings.TrimPrefix(req.URL.Path, "/"), "/", 3)
+	parts := strings.SplitN(strings.TrimPrefix(req.URL.EscapedPath(), "/"), "/", 3)
 	target := "/" + canonical
 	if len(parts) == 3 {
 		target += "/" + parts[2]

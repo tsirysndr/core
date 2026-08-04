@@ -68,14 +68,14 @@
 
     <div class="flex gap-2 mt-4">
       <a
-        href="/{{ .RepoInfo.FullName }}/archive/{{ .Ref | urlquery }}?format=tar.gz"
+        href="/{{ .RepoInfo.FullName }}/archive/{{ pathEscape .Ref }}?format=tar.gz"
         class="btn flex-1"
         >
         {{ i "download" "w-4 h-4" }}
         Download tar.gz
       </a>
       <a
-        href="/{{ .RepoInfo.FullName }}/archive/{{ .Ref | urlquery }}?format=zip"
+        href="/{{ .RepoInfo.FullName }}/archive/{{ pathEscape .Ref }}?format=zip"
         class="btn flex-1"
         >
         {{ i "download" "w-4 h-4" }}

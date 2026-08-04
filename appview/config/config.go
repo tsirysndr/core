@@ -69,7 +69,8 @@ type PlcConfig struct {
 }
 
 type KnotMirrorConfig struct {
-	Url string `env:"URL, default=https://mirror.tangled.network"`
+	Url                  string        `env:"URL, default=https://mirror.tangled.network"`
+	ArchiveHeaderTimeout time.Duration `env:"ARCHIVE_HEADER_TIMEOUT, default=60s"`
 }
 
 type JetstreamConfig struct {

@@ -61,6 +61,7 @@ type Repo struct {
 	codesearch   *codesearch.CodeSearch
 
 	knotMirrorXRPC *indigoxrpc.Client
+	archiveClient  *http.Client
 }
 
 func New(
@@ -93,6 +94,7 @@ func New(
 		codesearch:   codesearch,
 
 		knotMirrorXRPC: newKnotMirrorXRPCClient(config.KnotMirror.Url),
+		archiveClient:  newArchiveClient(config.KnotMirror.ArchiveHeaderTimeout),
 	}
 }
 

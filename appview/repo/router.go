@@ -45,9 +45,7 @@ func (rp *Repo) Router(mw *middleware.Middleware) http.Handler {
 	r.Get("/blob/{ref}/*", rp.Blob)
 	r.Get("/raw/{ref}/*", rp.RepoBlobRaw)
 
-	// intentionally doesn't use /* as this isn't
-	// a file path
-	r.Get("/archive/{ref}", rp.DownloadArchive)
+	r.Get(archiveRoute, rp.DownloadArchive)
 
 	r.With(middleware.Paginate).Get("/stars", rp.Stars)
 	r.With(middleware.Paginate).Get("/forks", rp.Forks)
