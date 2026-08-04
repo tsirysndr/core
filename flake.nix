@@ -123,6 +123,7 @@
                 ./Cargo.toml
                 ./Cargo.lock
                 ./lexicons
+                ./crates
                 ./shuttle
                 ./bobbin
                 ./knot2
