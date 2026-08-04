@@ -637,20 +637,26 @@ pub async fn archive_full(world: &World, did: &RepoDid) -> (String, String, Byte
     (etag, last_modified, body)
 }
 
+fn immutable_target(headers: &HeaderMap) -> &str {
+    headers[header::LINK]
+        .to_str()
+        .unwrap()
+        .trim_start_matches('<')
+        .split('>')
+        .next()
+        .unwrap()
+        .strip_prefix(&format!("https://{KNOT_HOST}"))
+        .expect("the immutable link points at this knot")
+}
+
 pub async fn assert_immutable_round_trip(
     world: &World,
     headers: &HeaderMap,
     full: &Bytes,
     etag: &str,
 ) {
-    let link = headers.get(header::LINK).unwrap().to_str().unwrap();
-    let immutable = link
-        .trim_start_matches('<')
-        .split('>')
-        .next()
-        .unwrap()
-        .strip_prefix(&format!("https://{KNOT_HOST}"))
-        .expect("the immutable link points at this knot");
+    let immutable = immutable_target(headers);
+
     let (status, immutable_headers, immutable_body) = get(world, immutable).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
@@ -658,13 +664,30 @@ pub async fn assert_immutable_round_trip(
         "following the immutable link regenerates the very bytes it was attached to"
     );
     assert_eq!(
-        immutable_headers
-            .get(header::ETAG)
-            .unwrap()
-            .to_str()
-            .unwrap(),
+        immutable_headers[header::ETAG],
         etag,
         "the immutable link shares the etag of the response that advertised it"
+    );
+    assert_eq!(
+        immutable_target(&immutable_headers),
+        immutable,
+        "the immutable response advertises the same link, so one commit has one archive URL"
+    );
+    assert_eq!(
+        immutable_headers[header::CONTENT_DISPOSITION],
+        headers[header::CONTENT_DISPOSITION],
+        "the prefix in the URL shapes the filename on both responses"
+    );
+
+    let mut conditional = HeaderMap::new();
+    conditional.insert(header::IF_NONE_MATCH, etag.parse().unwrap());
+    let (status, revalidated, body) = get_with_headers(world, immutable, conditional).await;
+    assert_eq!(status, StatusCode::NOT_MODIFIED);
+    assert!(body.is_empty());
+    assert_eq!(
+        immutable_target(&revalidated),
+        immutable,
+        "the 304 advertises the immutable link too, because a proxy that only revalidates never sees the 200"
     );
 }
 

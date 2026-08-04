@@ -521,7 +521,7 @@ async fn archive_conditional_and_range_semantics() {
             .unwrap()
             .to_str()
             .unwrap(),
-        format!("attachment; filename=\"{did}-main.tar.gz\"")
+        "attachment; filename=\"nautilus-main.tar.gz\""
     );
     let link = headers.get(header::LINK).unwrap().to_str().unwrap();
     assert!(link.contains("rel=\"immutable\""));
@@ -704,6 +704,42 @@ async fn archive_etag_distinguishes_refs_that_share_a_commit() {
         StatusCode::OK,
         "main's etag mustn't satisfy a conditional request for the release archive"
     );
+}
+
+#[tokio::test]
+async fn archive_link_advertises_the_prefix_it_served() {
+    let world = World::new();
+    let (did, _work) = seeded(&world, "periwinkle");
+    let query = |suffix: &str| format!("/xrpc/sh.tangled.repo.archive?repo={did}&ref=main{suffix}");
+
+    for (suffix, prefix, filename) in [
+        ("", "periwinkle-main", "periwinkle-main.tar.gz"),
+        ("&prefix=kelp/uni", "kelp%2Funi", "kelp-uni.tar.gz"),
+        ("&prefix=/kelp//./uni/", "kelp%2Funi", "kelp-uni.tar.gz"),
+    ] {
+        let (status, headers, full) = get(&world, &query(suffix)).await;
+        assert_eq!(status, StatusCode::OK);
+        let link = headers[header::LINK].to_str().unwrap();
+        assert!(
+            link.contains(&format!("prefix={prefix}")),
+            "the link repeats the prefix that the knot served, percent-encoded, since a stem built from the resolved commit would differ: {suffix} gave {link}"
+        );
+        assert_eq!(
+            headers[header::CONTENT_DISPOSITION],
+            format!("attachment; filename=\"{filename}\""),
+            "the filename follows the prefix with the separator flattened, and the knot spells a did-addressed repo with the rkey it registered under"
+        );
+        let etag = headers[header::ETAG].to_str().unwrap().to_string();
+        assert_immutable_round_trip(&world, &headers, &full, &etag).await;
+    }
+
+    for prefix in ["u".repeat(256), "kelp%5Cuni".to_string()] {
+        assert_eq!(
+            get_error(&world, &query(&format!("&prefix={prefix}"))).await,
+            (StatusCode::BAD_REQUEST, "InvalidRequest".to_string()),
+            "prefix {prefix}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -1439,8 +1475,7 @@ async fn archive_rejects_traversal_prefixes_and_sanitizes_the_filename() {
         .to_str()
         .unwrap();
     assert_eq!(
-        disposition,
-        format!("attachment; filename=\"{did}-a-b.tar.gz\""),
+        disposition, "attachment; filename=\"cockle-a-b.tar.gz\"",
         "quote in the ref name mustn't break the header quoting"
     );
 }

@@ -1133,11 +1133,25 @@ struct ArchivePrefixArg(Option<knot_git::ArchivePrefix>);
 impl<'de> Deserialize<'de> for ArchivePrefixArg {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let raw = String::deserialize(deserializer)?;
-        match raw.is_empty() {
+        let cleaned = raw
+            .split('/')
+            .filter(|component| !component.is_empty() && *component != ".")
+            .collect::<Vec<_>>()
+            .join("/");
+        match cleaned.is_empty() {
             true => Ok(Self(None)),
-            false => knot_git::ArchivePrefix::new(raw)
+            false => knot_git::ArchivePrefix::new(cleaned)
+                .ok()
+                .filter(|prefix| {
+                    !prefix.as_str().contains('\\') && !prefix.as_str().contains(char::is_control)
+                })
                 .map(|prefix| Self(Some(prefix)))
-                .map_err(|_| de::Error::custom("archive prefix mustn't escape archive root")),
+                .ok_or_else(|| {
+                    de::Error::custom(format!(
+                        "archive prefix must stay inside the archive root within {} bytes, and mustn't contain a backslash or a control character",
+                        knot_git::ArchivePrefix::MAX_BYTES
+                    ))
+                }),
         }
     }
 }
@@ -1153,21 +1167,18 @@ pub(crate) struct ArchiveParams {
     prefix: ArchivePrefixArg,
 }
 
-fn short_ref(refspec: &str) -> String {
-    refspec
-        .trim_start_matches("refs/heads/")
-        .trim_start_matches("refs/tags/")
-        .trim_start_matches("refs/remotes/")
-        .replace('/', "-")
+fn short_ref(refspec: &str) -> &str {
+    ["refs/heads/", "refs/tags/", "refs/remotes/", "refs/"]
+        .into_iter()
+        .find_map(|prefix| refspec.strip_prefix(prefix))
+        .unwrap_or(refspec)
 }
 
 fn sanitize_filename(name: &str) -> String {
-    name.chars()
-        .map(|c| match c.is_ascii_control() || matches!(c, '"' | '\\') {
-            true => '-',
-            false => c,
-        })
-        .collect()
+    name.replace(
+        |c: char| c.is_ascii_control() || matches!(c, '"' | '\\' | '/'),
+        "-",
+    )
 }
 
 fn rfc5987_encode(name: &str) -> String {
@@ -1259,11 +1270,16 @@ pub(crate) async fn repo_archive<H: HttpTransport, C: Clock>(
     let did = resolve_repo(&state, &params.repo)?;
     let format = params.format;
     let format_name = format.name();
-    let repo_name = params.repo.basename().to_string();
-    let safe_ref = short_ref(params.refspec.as_str());
     let archive_prefix = match &params.prefix.0 {
-        None => format!("{repo_name}-{safe_ref}"),
-        Some(prefix) => prefix.as_str().to_string(),
+        Some(prefix) => prefix.clone(),
+        None => {
+            let registered = state.index.rkey_of(&did);
+            let name = match &registered {
+                Resolved::Ready(Some(rkey)) => rkey.as_str(),
+                _ => params.repo.basename(),
+            };
+            knot_git::ArchivePrefix::stem(name, short_ref(params.refspec.as_str()))
+        }
     };
 
     let (resolved, modified_secs) = run_blocking({
@@ -1282,12 +1298,27 @@ pub(crate) async fn repo_archive<H: HttpTransport, C: Clock>(
     })
     .await?;
 
-    let etag = archive_etag(&did, resolved, format.format(), &archive_prefix);
+    let link = {
+        let mut query = url::form_urlencoded::Serializer::new(String::new());
+        query.append_pair("format", format_name);
+        query.append_pair("prefix", archive_prefix.as_str());
+        query.append_pair("ref", &resolved.to_hex());
+        query.append_pair("repo", &params.repo.to_param());
+        format!(
+            "<{}/xrpc/sh.tangled.repo.archive?{}>; rel=\"immutable\"",
+            state.knot_service_url.as_str(),
+            query.finish()
+        )
+    };
+
+    let etag = archive_etag(&did, resolved, format.format(), archive_prefix.as_str());
+    let disposition = content_disposition(&format!("{}.{format_name}", archive_prefix.as_str()));
     if etag_matches(request.headers(), &etag) {
         return Ok((
             StatusCode::NOT_MODIFIED,
             [
                 (header::ETAG, etag),
+                (header::LINK, link),
                 (header::CACHE_CONTROL, "no-cache".to_string()),
             ],
         )
@@ -1298,8 +1329,7 @@ pub(crate) async fn repo_archive<H: HttpTransport, C: Clock>(
         let layout = state.layout.clone();
         let did = did.clone();
         let archive_limit = state.byte_limits.archive;
-        let tree_prefix = knot_git::ArchivePrefix::new(format!("{archive_prefix}/"))
-            .expect("validated prefix with trailing slash stays valid");
+        let tree_prefix = archive_prefix.into_tree_prefix();
         move || {
             let repo = open(&layout, &did)?;
             let tree = repo.peel_to_tree(resolved)?;
@@ -1333,20 +1363,7 @@ pub(crate) async fn repo_archive<H: HttpTransport, C: Clock>(
     })
     .await?;
 
-    let immutable = {
-        let mut query = url::form_urlencoded::Serializer::new(String::new());
-        query.append_pair("format", format_name);
-        query.append_pair("prefix", &archive_prefix);
-        query.append_pair("ref", &resolved.to_hex());
-        query.append_pair("repo", &params.repo.to_param());
-        format!(
-            "{}/xrpc/sh.tangled.repo.archive?{}",
-            state.knot_service_url.as_str(),
-            query.finish()
-        )
-    };
     let content_type = format.content_type();
-    let disposition = content_disposition(&format!("{repo_name}-{safe_ref}.{format_name}"));
 
     reconcile_if_range(&mut request, &etag, modified_secs);
     let serve_response = ServeFile::new(temp.path())
@@ -1362,10 +1379,7 @@ pub(crate) async fn repo_archive<H: HttpTransport, C: Clock>(
         HeaderValue::from_str(value).map_err(|error| XrpcError::internal(error.to_string()))
     };
     headers.insert(header::CONTENT_DISPOSITION, header_value(&disposition)?);
-    headers.insert(
-        header::LINK,
-        header_value(&format!("<{immutable}>; rel=\"immutable\""))?,
-    );
+    headers.insert(header::LINK, header_value(&link)?);
     headers.insert(header::ETAG, header_value(&etag)?);
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
     Ok(response)

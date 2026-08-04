@@ -2,6 +2,7 @@ package xrpc
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	"tangled.org/core/gitutil"
 	"tangled.org/core/knotmirror/xrpc/gitea"
 )
 
@@ -58,13 +60,14 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 	}
 	defer reader.Close()
 
-	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
-
 	// default to octet-stream for large blobs
 	if size > 1024*1024 { // 1MiB
+		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 		w.Header().Set("Content-Type", "application/octet-stream")
-		if _, err := io.Copy(w, reader); err != nil {
+		body := gitutil.NewResponseBody(w)
+		if _, err := io.Copy(body, reader); err != nil {
 			l.Error("failed to serve the blob", "err", err)
+			body.Fail()
 		}
 		return
 	}
@@ -76,11 +79,12 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	eTag := fmt.Sprintf("\"%x\"", sha256.Sum256(contents))
-	if clientETag := r.Header.Get("If-None-Match"); clientETag == eTag {
+	eTag := blobETag(contents)
+	if gitutil.ETagMatches(r.Header, eTag) {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
+	w.Header().Set("Content-Length", strconv.Itoa(len(contents)))
 	w.Header().Set("ETag", eTag)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 
@@ -111,6 +115,15 @@ func (x *Xrpc) GetBlob(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/octet-stream")
 	}
 	w.Write(contents)
+}
+
+const blobETagDomain = "knotmirror.blob.v1"
+
+func blobETag(contents []byte) string {
+	digest := sha256.New()
+	digest.Write([]byte(blobETagDomain + "\x00"))
+	digest.Write(contents)
+	return fmt.Sprintf("%q", hex.EncodeToString(digest.Sum(nil)))
 }
 
 var textualMimeTypes = []string{

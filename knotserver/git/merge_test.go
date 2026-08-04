@@ -219,7 +219,7 @@ index 0000000..ce01362
 	opts := MergeOptions{
 		CommitMessage:  "Add scallop.txt",
 		CommitterName:  "nel",
-		CommitterEmail: "nel@nel.pet",
+		CommitterEmail: "noreply@nel.pet",
 		FormatPatch:    false,
 	}
 

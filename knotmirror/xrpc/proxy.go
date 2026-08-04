@@ -19,6 +19,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/filemode"
 	"github.com/samber/lo"
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/gitutil"
 	"tangled.org/core/knotmirror/db"
 	"tangled.org/core/knotmirror/models"
 	"tangled.org/core/repoident"
@@ -136,6 +137,7 @@ func (x *Xrpc) proxyToKnot(w http.ResponseWriter, r *http.Request, repoDid synta
 		return false
 	}
 	req.Header.Set(forwardedForHeader, forwardedFor(r))
+	gitutil.ForwardHeaders(req.Header, r.Header, "If-None-Match")
 
 	resp, err := x.httpClient.Do(req)
 	if err != nil {

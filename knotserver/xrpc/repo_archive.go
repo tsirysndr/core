@@ -34,23 +34,23 @@ func (x *Xrpc) RepoArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash := gr.Hash()
-	params.Rev = params.Rev.OrHash(hash)
-	params.Prefix = params.Prefix.OrDefault(resolved.name, params.Rev)
+	hash := gitutil.RevFromHash(gr.Hash())
+	served := params.WithRev(params.Rev.Or(hash)).Serve(resolved.name).WithRev(hash)
 
-	params.SetHeaders(w.Header(), resolved.name)
-	w.Header().Set("Link", gitutil.ImmutableLink(
-		x.archiveURL(repo, params.WithRev(gitutil.RevFromHash(hash))),
-	))
+	served.SetHeaders(w.Header())
+	w.Header().Set("Link", gitutil.ImmutableLink(x.archiveURL(repo, served)))
+	if served.ServeNotModified(w, r, gitutil.RepoIdentity(resolved.path)) {
+		return
+	}
 
-	if err := gitutil.WriteArchive(r.Context(), w, resolved.path, gitutil.RevFromHash(hash), params.Format, params.Prefix); err != nil {
-		// once we start writing to the body we can't report error anymore
-		// so we are only left with logging the error
+	body := gitutil.NewResponseBody(w)
+	if err := gitutil.WriteArchive(r.Context(), body, resolved.path, served); err != nil {
 		x.Logger.Error("writing archive", "error", err.Error(), "format", params.Format)
+		body.Fail()
 	}
 }
 
-func (x *Xrpc) archiveURL(repo string, params gitutil.ArchiveParams) string {
+func (x *Xrpc) archiveURL(repo string, params gitutil.ServedArchive) string {
 	scheme := "https"
 	if x.Config.Server.Dev {
 		scheme = "http"

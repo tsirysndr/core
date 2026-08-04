@@ -12,7 +12,7 @@ mod reads;
 mod repo;
 mod staging;
 
-pub use archive::{ArchiveFormat, ArchiveLimit, ArchivePrefix};
+pub use archive::{ArchiveFormat, ArchiveLimit, ArchivePrefix, TreePrefix};
 pub use bitmap::{reachable_via_bitmap, verbatim_clone_pack, write_bitmap, write_midx_bitmap};
 pub use error::{GitError, SelectionLimit};
 pub use maintenance::{PackRefsReport, ReflogReport};

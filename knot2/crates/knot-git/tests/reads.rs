@@ -627,7 +627,7 @@ fn archives_round_trip_through_tar() {
     bare.write_archive(
         tree,
         knot_git::ArchiveFormat::TarGz,
-        Some(&knot_git::ArchivePrefix::new("squid-main/").unwrap()),
+        Some(&knot_git::TreePrefix::new("squid-main/").unwrap()),
         knot_git::ArchiveLimit::new(u64::MAX),
         &mut out,
     )

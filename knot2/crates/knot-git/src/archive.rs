@@ -41,22 +41,55 @@ impl ArchiveFormat {
     }
 }
 
+fn inside_root(value: String, kind: &'static str, limit: usize) -> Result<String, ParseError> {
+    let safe = value.len() <= limit
+        && !value.contains('\0')
+        && !value.starts_with(['/', '\\'])
+        && value.split(['/', '\\']).all(|component| component != "..");
+    match safe {
+        true => Ok(value),
+        false => Err(ParseError::Invalid { kind, value }),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArchivePrefix(String);
 
 impl ArchivePrefix {
+    pub const MAX_BYTES: usize = 255;
+
     pub fn new(value: impl Into<String>) -> Result<Self, ParseError> {
-        let value = value.into();
-        let safe = !value.contains('\0')
-            && !value.starts_with(['/', '\\'])
-            && value.split(['/', '\\']).all(|component| component != "..");
-        match safe {
-            true => Ok(Self(value)),
-            false => Err(ParseError::Invalid {
-                kind: "archive prefix",
-                value,
-            }),
-        }
+        inside_root(value.into(), "archive prefix", Self::MAX_BYTES).map(Self)
+    }
+
+    pub fn stem(repo_name: &str, safe_ref: &str) -> Self {
+        let joined = format!("{repo_name}-{safe_ref}").replace(['/', '\\', '\0'], "-");
+        Self(
+            joined
+                .char_indices()
+                .take_while(|(offset, character)| offset + character.len_utf8() <= Self::MAX_BYTES)
+                .map(|(_, character)| character)
+                .collect(),
+        )
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn into_tree_prefix(self) -> TreePrefix {
+        TreePrefix(format!("{}/", self.0))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TreePrefix(String);
+
+impl TreePrefix {
+    pub const MAX_BYTES: usize = ArchivePrefix::MAX_BYTES + 1;
+
+    pub fn new(value: impl Into<String>) -> Result<Self, ParseError> {
+        inside_root(value.into(), "archive tree prefix", Self::MAX_BYTES).map(Self)
     }
 
     pub fn as_str(&self) -> &str {
@@ -78,7 +111,7 @@ impl Repo {
         &self,
         tree: Oid,
         format: ArchiveFormat,
-        prefix: Option<&ArchivePrefix>,
+        prefix: Option<&TreePrefix>,
         limit: ArchiveLimit,
         out: impl std::io::Write + std::io::Seek,
     ) -> Result<(), GitError> {
@@ -185,7 +218,7 @@ impl<W: Seek> Seek for BoundedSpool<W> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ArchiveLimit, ArchivePrefix, BoundedSpool};
+    use super::{ArchiveLimit, ArchivePrefix, BoundedSpool, TreePrefix};
     use std::io::{Seek, SeekFrom, Write};
 
     fn spool(limit: u64) -> BoundedSpool<std::io::Cursor<Vec<u8>>> {
@@ -250,6 +283,10 @@ mod tests {
             ArchivePrefix::new("dotted-..-name/").is_ok(),
             "a component that merely contains dot-dot is not a traversal"
         );
+        assert!(
+            TreePrefix::new("dotted-..-name//").is_ok(),
+            "TreePrefix accepts the empty final component that a trailing separator adds"
+        );
     }
 
     #[test]
@@ -257,5 +294,39 @@ mod tests {
         assert!(ArchivePrefix::new("/etc").is_err());
         assert!(ArchivePrefix::new("\\windows").is_err());
         assert!(ArchivePrefix::new("good\0bad").is_err());
+    }
+
+    #[test]
+    fn a_prefix_is_bounded_and_a_stem_always_parses() {
+        let longest = "u".repeat(ArchivePrefix::MAX_BYTES);
+        assert!(ArchivePrefix::new(format!("{longest}u")).is_err());
+
+        let tree = ArchivePrefix::new(longest).unwrap().into_tree_prefix();
+        assert_eq!(tree.as_str().len(), TreePrefix::MAX_BYTES);
+        assert!(TreePrefix::new(tree.as_str()).is_ok());
+        assert!(TreePrefix::new("u".repeat(TreePrefix::MAX_BYTES + 1)).is_err());
+
+        let (long_name, truncated) = ("ü".repeat(400), "ü".repeat(127));
+        for (repo_name, safe_ref, want) in [
+            ("squid", "main", "squid-main"),
+            ("did:plc:limpet", "feat/uni", "did:plc:limpet-feat-uni"),
+            ("kelp/../conch", "..", "kelp-..-conch-.."),
+            ("/etc", "\0", "-etc--"),
+            ("", "", "-"),
+            (long_name.as_str(), "main", truncated.as_str()),
+        ] {
+            let stem = ArchivePrefix::stem(repo_name, safe_ref);
+            assert_eq!(stem.as_str(), want);
+            assert!(
+                ArchivePrefix::new(stem.as_str()).is_ok(),
+                "a stem passes the check that its own constructor skips, within {} bytes and on a char boundary",
+                ArchivePrefix::MAX_BYTES
+            );
+            assert_eq!(
+                stem.into_tree_prefix().as_str(),
+                format!("{want}/"),
+                "into_tree_prefix appends the separator that puts a stem at the archive root"
+            );
+        }
     }
 }

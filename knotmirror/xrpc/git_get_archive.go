@@ -62,18 +62,20 @@ func (x *Xrpc) GetArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := gitutil.RepoName(mirrored.Name)
-	resolvedRev := gitutil.RevFromHash(commit.Hash)
-	params.Rev = params.Rev.OrHash(commit.Hash)
-	params.Prefix = params.Prefix.OrDefault(name, params.Rev)
+	hash := gitutil.RevFromHash(commit.Hash)
+	served := params.WithRev(params.Rev.Or(hash)).Serve(gitutil.RepoName(mirrored.Name)).WithRev(hash)
 
-	params.SetHeaders(w.Header(), name)
+	served.SetHeaders(w.Header())
 	w.Header().Set("Link", gitutil.ImmutableLink(fmt.Sprintf("%s/xrpc/%s?%s",
-		x.cfg.BaseUrl(), tangled.GitTempGetArchiveNSID, params.WithRev(resolvedRev).Query(repo.String()).Encode(),
+		x.cfg.BaseUrl(), tangled.GitTempGetArchiveNSID, served.Query(repo.String()).Encode(),
 	)))
+	if served.ServeNotModified(w, r, gitutil.RepoIdentity(repo.String())) {
+		return
+	}
 
-	if err := gitutil.WriteArchive(ctx, w, repoPath, resolvedRev, params.Format, params.Prefix); err != nil {
+	body := gitutil.NewResponseBody(w)
+	if err := gitutil.WriteArchive(ctx, body, repoPath, served); err != nil {
 		l.Error("writing archive", "err", err.Error(), "format", params.Format)
-		w.WriteHeader(http.StatusInternalServerError)
+		body.Fail()
 	}
 }

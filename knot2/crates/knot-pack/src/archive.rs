@@ -1,6 +1,6 @@
 use std::io::{self, Read, Seek, SeekFrom};
 
-use knot_git::{ArchiveFormat, ArchiveLimit, ArchivePrefix, Repo};
+use knot_git::{ArchiveFormat, ArchiveLimit, Repo, TreePrefix};
 use knot_types::Oid;
 
 use crate::error::PackError;
@@ -9,7 +9,7 @@ use crate::pkt;
 struct Request {
     treeish: String,
     format: ArchiveFormat,
-    prefix: Option<ArchivePrefix>,
+    prefix: Option<TreePrefix>,
 }
 
 pub fn stream(
@@ -85,8 +85,11 @@ fn interpret(args: &[String]) -> Result<Request, PackError> {
         .iter()
         .find_map(|arg| arg.strip_prefix("--prefix="))
         .map(|raw| {
-            ArchivePrefix::new(raw).map_err(|_| {
-                PackError::Protocol("archive prefix must not escape archive root".to_string())
+            TreePrefix::new(raw).map_err(|_| {
+                PackError::Protocol(format!(
+                    "archive prefix mustn't escape archive root or exceed {} bytes",
+                    TreePrefix::MAX_BYTES
+                ))
             })
         })
         .transpose()?;
