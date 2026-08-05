@@ -831,14 +831,7 @@ enum PendingOp {
     ClearCache {
         source: AtUri<DefaultStr>,
     },
-    Upsert {
-        source: AtUri<DefaultStr>,
-        nsid: Nsid<DefaultStr>,
-        parsed: Box<Record>,
-        bytes: Bytes,
-        cid: Option<Cid<DefaultStr>>,
-        edges: Vec<Edge>,
-    },
+    Upsert(Box<UpsertPieces>),
     Parked {
         nsid: Nsid<DefaultStr>,
     },
@@ -864,7 +857,7 @@ struct Resolved {
 
 fn pending_nsid(op: &PendingOp) -> Option<&Nsid<DefaultStr>> {
     match op {
-        PendingOp::Upsert { nsid, .. } => Some(nsid),
+        PendingOp::Upsert(pieces) => Some(&pieces.nsid),
         PendingOp::Delete { nsid, .. } => Some(nsid),
         PendingOp::Parked { nsid, .. } => Some(nsid),
         PendingOp::Noop | PendingOp::ClearCache { .. } => None,
@@ -873,7 +866,7 @@ fn pending_nsid(op: &PendingOp) -> Option<&Nsid<DefaultStr>> {
 
 fn pending_edge_count(op: &PendingOp) -> u64 {
     match op {
-        PendingOp::Upsert { edges, .. } => edges.len() as u64,
+        PendingOp::Upsert(pieces) => pieces.edges.len() as u64,
         _ => 0,
     }
 }
@@ -1103,14 +1096,14 @@ async fn prepare_record<S: SearchSink + 'static>(
                 }
             };
             let _ = ctx.store.intern_source(&source);
-            PendingOp::Upsert {
+            PendingOp::Upsert(Box::new(UpsertPieces {
                 source,
                 nsid,
-                parsed: Box::new(parsed),
+                parsed,
                 bytes,
                 cid: record.cid,
                 edges,
-            }
+            }))
         }
         RecordAction::Delete => {
             evict_from_buffer(ctx.buffer, &source).await;
@@ -1199,51 +1192,15 @@ async fn resolve_pending<S: SearchSink + 'static>(
         op,
     } = pending;
     let op = match op {
-        PendingOp::Upsert {
-            source,
-            nsid,
-            parsed,
-            bytes,
-            cid,
-            edges,
-        } => {
-            let pieces = UpsertPieces {
-                source,
-                nsid,
-                parsed: *parsed,
-                bytes,
-                cid,
-                edges,
-            };
-            let pieces = match try_park_warming(ctx, cursor, pieces).await {
-                ParkOutcome::Parked { nsid } => {
-                    return Pending {
-                        cursor,
-                        signal,
-                        regime,
-                        op: PendingOp::Parked { nsid },
-                    };
-                }
-                ParkOutcome::Passthrough(pieces) => *pieces,
-            };
-            let UpsertPieces {
-                source,
-                nsid,
-                parsed,
-                bytes,
-                cid,
-                edges,
-            } = pieces;
-            let edges = normalize_subjects(edges, ctx.resolver, ctx.coverage, ctx.shadow).await;
-            PendingOp::Upsert {
-                source,
-                nsid,
-                parsed: Box::new(parsed),
-                bytes,
-                cid,
-                edges,
+        PendingOp::Upsert(pieces) => match try_park_warming(ctx, cursor, pieces).await {
+            ParkOutcome::Parked { nsid } => PendingOp::Parked { nsid },
+            ParkOutcome::Passthrough(mut pieces) => {
+                let edges = std::mem::take(&mut pieces.edges);
+                pieces.edges =
+                    normalize_subjects(edges, ctx.resolver, ctx.coverage, ctx.shadow).await;
+                PendingOp::Upsert(pieces)
             }
-        }
+        },
         other => other,
     };
     Pending {
@@ -1284,19 +1241,20 @@ enum ParkOutcome {
 async fn try_park_warming<S: SearchSink + 'static>(
     ctx: &PipelineCtx<'_, S>,
     cursor: HydrantCursor,
-    pieces: UpsertPieces,
+    pieces: Box<UpsertPieces>,
 ) -> ParkOutcome {
     let Some(buffer) = ctx.buffer else {
-        return ParkOutcome::Passthrough(Box::new(pieces));
+        return ParkOutcome::Passthrough(pieces);
     };
     if ctx.coverage.snapshot().is_ready() || buffer.is_sealed() {
-        return ParkOutcome::Passthrough(Box::new(pieces));
+        return ParkOutcome::Passthrough(pieces);
     }
     let deps = collect_unresolved_deps(&pieces.edges, ctx.resolver).await;
     if deps.is_empty() {
-        return ParkOutcome::Passthrough(Box::new(pieces));
+        return ParkOutcome::Passthrough(pieces);
     }
     let nsid = pieces.nsid.clone();
+    let pieces = *pieces;
     let upsert = ParkedUpsert {
         cursor,
         source: pieces.source,
@@ -1385,19 +1343,20 @@ async fn commit_pending<S: SearchSink>(
     match op {
         PendingOp::Noop | PendingOp::Parked { .. } => {}
         PendingOp::ClearCache { source } => records.remove(&source),
-        PendingOp::Upsert {
-            source,
-            nsid: _,
-            parsed,
-            bytes,
-            cid,
-            edges,
-        } => {
+        PendingOp::Upsert(pieces) => {
+            let UpsertPieces {
+                source,
+                nsid: _,
+                parsed,
+                bytes,
+                cid,
+                edges,
+            } = *pieces;
             cache_body(records, &source, cid, bytes);
             store.upsert_source(&source, edges);
             let outcome = apply_record_state(issue_states, pull_statuses, &source, &parsed);
             log_unknown_state_variant(outcome, &source);
-            index_search(search, resolver, &source, *parsed).await;
+            index_search(search, resolver, &source, parsed).await;
         }
         PendingOp::Delete { source, nsid } => {
             store.remove_source(&source);
@@ -1762,7 +1721,7 @@ mod tests {
         let legacy =
             prepare_frame(member_frame(2, "bbbbbbbbbbbbz", "legacy.knot"), &ctx, now()).await;
         assert!(
-            matches!(legacy.op, PendingOp::Upsert { .. }),
+            matches!(legacy.op, PendingOp::Upsert(_)),
             "member record for a legacy knot must be ingested"
         );
         assert!(
