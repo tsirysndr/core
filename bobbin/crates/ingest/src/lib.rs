@@ -19,6 +19,7 @@ use bobbin_types::ids::{RepoIdent, SubjectRef};
 use bobbin_types::knot_acl::KnotHostKey;
 use bobbin_types::record::RecordBody;
 use bobbin_types::search::{SearchSink, SearchableRecord};
+use bobbin_types::sh_tangled::repo::Repo as RepoRecord;
 use bytes::Bytes;
 use futures::StreamExt;
 use jacquard_common::DefaultStr;
@@ -560,12 +561,15 @@ async fn run_session<S: SearchSink + 'static>(
     let processor = tokio::spawn(async move {
         let cancel = processor_runtime.cancel.clone();
         let prep_rt = processor_runtime.clone();
+        let claim_rt = processor_runtime.clone();
         let resolve_rt = processor_runtime.clone();
         let commit_rt = processor_runtime;
 
         let pipeline = ReceiverStream::new(frame_rx)
             .map(move |frame| prep_stage(frame, prep_rt.clone()))
             .buffered(parallelism)
+            // then not buffered, resolve reads what this stage writes
+            .then(move |staged| claim_stage(staged, claim_rt.clone()))
             .map(move |staged| resolve_stage(staged, resolve_rt.clone()))
             .buffered(parallelism)
             .for_each(move |staged| commit_stage(staged, commit_rt.clone(), parallelism));
@@ -887,6 +891,81 @@ async fn prep_stage<S: SearchSink + 'static>(
     }
 }
 
+/// the one stage that writes shared state before commit, so it runs serially
+/// repo claims have to land in cursor order or the parallel resolve below reads a half applied rename
+async fn claim_stage<S: SearchSink + 'static>(staged: Prepared, rt: IngestRuntime<S>) -> Prepared {
+    let ctx = rt.pipeline_ctx();
+    let Prepared {
+        pending,
+        prepare_start,
+        prepare_end,
+    } = staged;
+    Prepared {
+        pending: claim_pending(pending, &ctx).await,
+        prepare_start,
+        prepare_end,
+    }
+}
+
+async fn claim_pending<S: SearchSink + 'static>(
+    mut pending: Pending,
+    ctx: &PipelineCtx<'_, S>,
+) -> Pending {
+    match &mut pending.op {
+        PendingOp::Upsert(pieces) => {
+            evict_from_buffer(ctx.buffer, &pieces.source).await;
+            if let Record::Repo(repo) = &pieces.parsed {
+                pieces.supersedes = claim_repo(&pieces.source, repo, ctx).await;
+            }
+        }
+        PendingOp::ClearCache { source } => evict_from_buffer(ctx.buffer, source).await,
+        PendingOp::Delete { source, nsid } => {
+            evict_from_buffer(ctx.buffer, source).await;
+            if nsid.as_ref() == "sh.tangled.repo"
+                && let Some(ident) = repo_ident_of(source)
+            {
+                ctx.resolver.forget(&ident.owner, &ident.rkey).await;
+            }
+        }
+        PendingOp::Noop | PendingOp::Parked { .. } => {}
+    }
+    pending
+}
+
+/// takes the rkey for this repo and hands back the ident it displaced, if any
+async fn claim_repo<S: SearchSink + 'static>(
+    source: &AtUri<DefaultStr>,
+    repo: &RepoRecord<DefaultStr>,
+    ctx: &PipelineCtx<'_, S>,
+) -> Option<RepoIdent> {
+    let ident = repo_ident_of(source)?;
+    if let Some(shadow) = ctx.shadow {
+        shadow.note_observed(&ident.owner, &ident.rkey).await;
+    }
+    let supersedes = ctx
+        .resolver
+        .observe(
+            ident.owner.clone(),
+            ident.rkey.clone(),
+            repo.repo_did.clone(),
+        )
+        .await;
+    if let Some(prior) = supersedes.as_ref()
+        && let Some(prior_uri) = repo_ident_uri(prior)
+    {
+        evict_from_buffer(ctx.buffer, &prior_uri).await;
+    }
+    finalize_drained(ctx, take_observed(ctx.buffer, &ident).await).await;
+    if let Some(registry) = ctx.knot_registry {
+        let host = KnotHostKey::new(repo.knot.as_ref());
+        match repo.repo_did.clone() {
+            Some(repo_did) => registry.observe_repo(&host, repo_did),
+            None => registry.observe_host(&host),
+        }
+    }
+    supersedes
+}
+
 async fn resolve_stage<S: SearchSink + 'static>(
     staged: Prepared,
     rt: IngestRuntime<S>,
@@ -999,7 +1078,6 @@ async fn prepare_record<S: SearchSink + 'static>(
     };
     match record.action {
         RecordAction::Create | RecordAction::Update => {
-            evict_from_buffer(ctx.buffer, &source).await;
             let Some(raw) = record.record else {
                 debug!(collection = %nsid, "create/update missing record body, clearing cache");
                 return PendingOp::ClearCache { source };
@@ -1034,45 +1112,6 @@ async fn prepare_record<S: SearchSink + 'static>(
                     return PendingOp::ClearCache { source };
                 }
             };
-            if let Record::Repo(repo) = &parsed {
-                if let Some(shadow) = ctx.shadow {
-                    shadow.note_observed(&record.did, &record.rkey).await;
-                }
-                let superseded = ctx
-                    .resolver
-                    .observe(
-                        record.did.clone(),
-                        record.rkey.clone(),
-                        repo.repo_did.clone(),
-                    )
-                    .await;
-                if let Some(prior) = superseded {
-                    let prior_uri = format!(
-                        "at://{}/sh.tangled.repo/{}",
-                        prior.owner.as_ref(),
-                        prior.rkey.as_ref(),
-                    );
-                    if let Ok(prior_at_uri) = AtUri::<DefaultStr>::new_owned(&prior_uri) {
-                        evict_from_buffer(ctx.buffer, &prior_at_uri).await;
-                        ctx.store.remove_source(&prior_at_uri);
-                        ctx.records.remove(&prior_at_uri);
-                        ctx.search.remove(&prior_at_uri).await;
-                    }
-                }
-                if let Some(buffer) = ctx.buffer {
-                    let drained = buffer.take_observed(&record.did, &record.rkey).await;
-                    if !drained.is_empty() {
-                        finalize_drained(ctx, drained).await;
-                    }
-                }
-                if let Some(registry) = ctx.knot_registry {
-                    let host = KnotHostKey::new(repo.knot.as_ref());
-                    match repo.repo_did.clone() {
-                        Some(repo_did) => registry.observe_repo(&host, repo_did),
-                        None => registry.observe_host(&host),
-                    }
-                }
-            }
             match acl_disposition(&parsed, ctx.knot_gate, ctx.knot_registry) {
                 AclDisposition::NativeSkip => {
                     if let Some(registry) = ctx.knot_registry {
@@ -1103,13 +1142,10 @@ async fn prepare_record<S: SearchSink + 'static>(
                 bytes,
                 cid: record.cid,
                 edges,
+                supersedes: None,
             }))
         }
         RecordAction::Delete => {
-            evict_from_buffer(ctx.buffer, &source).await;
-            if nsid.as_ref() == "sh.tangled.repo" {
-                ctx.resolver.forget(&record.did, &record.rkey).await;
-            }
             if nsid.as_ref() == "sh.tangled.knot.member"
                 && let Some(registry) = ctx.knot_registry
             {
@@ -1181,6 +1217,13 @@ async fn evict_from_buffer(buffer: Option<&WarmingBuffer>, source: &AtUri<Defaul
     }
 }
 
+async fn take_observed(buffer: Option<&WarmingBuffer>, ident: &RepoIdent) -> Vec<ParkedUpsert> {
+    match buffer {
+        Some(buffer) => buffer.take_observed(&ident.owner, &ident.rkey).await,
+        None => Vec::new(),
+    }
+}
+
 async fn resolve_pending<S: SearchSink + 'static>(
     pending: Pending,
     ctx: &PipelineCtx<'_, S>,
@@ -1218,6 +1261,7 @@ struct UpsertPieces {
     bytes: Bytes,
     cid: Option<Cid<DefaultStr>>,
     edges: Vec<Edge>,
+    supersedes: Option<RepoIdent>,
 }
 
 impl From<ParkedUpsert> for UpsertPieces {
@@ -1229,6 +1273,7 @@ impl From<ParkedUpsert> for UpsertPieces {
             bytes: u.bytes,
             cid: u.cid,
             edges: u.edges,
+            supersedes: u.supersedes,
         }
     }
 }
@@ -1263,6 +1308,7 @@ async fn try_park_warming<S: SearchSink + 'static>(
         bytes: pieces.bytes,
         cid: pieces.cid,
         edges: pieces.edges,
+        supersedes: pieces.supersedes,
     };
     let deps_for_shadow = ctx.shadow.is_some().then(|| deps.clone());
     match buffer.try_park(upsert, deps).await {
@@ -1300,6 +1346,20 @@ async fn collect_unresolved_deps(edges: &[Edge], resolver: &RepoIdResolver) -> V
         .await
 }
 
+async fn remove_superseded_source<S: SearchSink>(
+    store: &EdgeStore,
+    records: &dyn RecordStore,
+    search: &S,
+    prior: Option<&RepoIdent>,
+) {
+    let Some(prior_uri) = prior.and_then(repo_ident_uri) else {
+        return;
+    };
+    store.remove_source(&prior_uri);
+    records.remove(&prior_uri);
+    search.remove(&prior_uri).await;
+}
+
 async fn finalize_drained<S: SearchSink + 'static>(
     ctx: &PipelineCtx<'_, S>,
     drained: Vec<ParkedUpsert>,
@@ -1313,8 +1373,10 @@ async fn finalize_drained<S: SearchSink + 'static>(
             bytes,
             cid,
             edges,
+            supersedes,
         } = upsert;
         let edges = normalize_subjects(edges, ctx.resolver, ctx.coverage, None).await;
+        remove_superseded_source(ctx.store, ctx.records, ctx.search, supersedes.as_ref()).await;
         cache_body(ctx.records, &source, cid, bytes);
         ctx.store.upsert_source(&source, edges);
         let outcome = apply_record_state(ctx.issue_states, ctx.pull_statuses, &source, &parsed);
@@ -1351,7 +1413,9 @@ async fn commit_pending<S: SearchSink>(
                 bytes,
                 cid,
                 edges,
+                supersedes,
             } = *pieces;
+            remove_superseded_source(store, records, search, supersedes.as_ref()).await;
             cache_body(records, &source, cid, bytes);
             store.upsert_source(&source, edges);
             let outcome = apply_record_state(issue_states, pull_statuses, &source, &parsed);
@@ -1411,7 +1475,7 @@ async fn handle_frame<S: SearchSink + 'static>(
         knot_registry: None,
         knot_gate: None,
     };
-    let pending = prepare_frame(frame, &ctx, now).await;
+    let pending = claim_pending(prepare_frame(frame, &ctx, now).await, &ctx).await;
     let pending = resolve_pending(pending, &ctx).await;
     commit_pending(
         pending,
@@ -1546,6 +1610,14 @@ fn parse_repo_subject_uri(uri: &AtUri<DefaultStr>) -> Option<(Did<DefaultStr>, R
     let owner = Did::new_owned(authority.as_ref()).ok()?;
     let rkey = Rkey::new_owned(rkey.as_ref()).ok()?;
     Some((owner, rkey))
+}
+
+fn repo_ident_uri(ident: &RepoIdent) -> Option<AtUri<DefaultStr>> {
+    AtUri::from_parts_owned(ident.owner.as_ref(), "sh.tangled.repo", ident.rkey.as_ref()).ok()
+}
+
+fn repo_ident_of(uri: &AtUri<DefaultStr>) -> Option<RepoIdent> {
+    parse_repo_subject_uri(uri).map(|(owner, rkey)| RepoIdent::new(owner, rkey))
 }
 
 fn build_source_uri(r: &RecordFrame) -> Result<AtUri<DefaultStr>, IngestError> {
@@ -2654,6 +2726,94 @@ mod tests {
             store.count(&owner_keyed),
             0,
             "owner DID should not collect the edge"
+        );
+    }
+
+    #[tokio::test]
+    async fn out_of_order_repo_preps_cannot_steal_a_rename() {
+        let (store, issue_states, pull_statuses, cov, resolver) = fresh();
+        let search = NoopSearchSink;
+        let records = NoopRecordStore;
+        let ctx = PipelineCtx {
+            resolver: &resolver,
+            store: &store,
+            issue_states: &issue_states,
+            pull_statuses: &pull_statuses,
+            coverage: &cov,
+            records: &records,
+            search: &search,
+            shadow: None,
+            buffer: None,
+            knot_registry: None,
+            knot_gate: None,
+        };
+        let repo_frame = |id: u64, rkey: &str| {
+            parse_frame(json!({
+                "id": id,
+                "type": "record",
+                "record": {
+                    "live": false,
+                    "did": "did:plc:bnuy",
+                    "rev": fresh_tid().as_str(),
+                    "collection": "sh.tangled.repo",
+                    "rkey": rkey,
+                    "action": "create",
+                    "record": {
+                        "$type": "sh.tangled.repo",
+                        "createdAt": "2026-05-01T00:00:00Z",
+                        "knot": "oyster.cafe",
+                        "repoDid": "did:plc:abalone"
+                    }
+                }
+            }))
+        };
+        // prepped out of order on purpose to replicate, cursor 2 will finish before 1
+        let new_pending = prepare_frame(repo_frame(2, "newrename"), &ctx, now()).await;
+        let old_pending = prepare_frame(repo_frame(1, "oldrename"), &ctx, now()).await;
+        let old_pending = claim_pending(old_pending, &ctx).await;
+        let new_pending = claim_pending(new_pending, &ctx).await;
+        let old_pending = resolve_pending(old_pending, &ctx).await;
+        commit_pending(
+            old_pending,
+            &store,
+            &issue_states,
+            &pull_statuses,
+            &cov,
+            &search,
+            &records,
+            &resolver,
+        )
+        .await;
+        let new_pending = resolve_pending(new_pending, &ctx).await;
+        commit_pending(
+            new_pending,
+            &store,
+            &issue_states,
+            &pull_statuses,
+            &cov,
+            &search,
+            &records,
+            &resolver,
+        )
+        .await;
+
+        let owner = Did::new_owned("did:plc:bnuy").unwrap();
+        assert_eq!(
+            resolver
+                .lookup_by_repo_did(&Did::new_owned("did:plc:abalone").unwrap())
+                .await,
+            Some(RepoIdent::new(owner.clone(), rkey("newrename"))),
+            "newrename has the higher cursor so it owns the repoDid. oldrename prepped \
+             second, it would win if prep order decided this",
+        );
+        let key = bobbin_types::ids::EdgeKey::new(
+            Nsid::new_static("sh.tangled.repo").unwrap(),
+            did_subj("did:plc:bnuy"),
+        );
+        assert_eq!(
+            store.sources_for(&key),
+            vec![AtUri::new_owned("at://did:plc:bnuy/sh.tangled.repo/newrename").unwrap(),],
+            "the retained old alias must be evicted when the renamed record commits",
         );
     }
 

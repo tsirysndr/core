@@ -23,6 +23,7 @@ pub struct ParkedUpsert {
     pub bytes: Bytes,
     pub cid: Option<Cid<DefaultStr>>,
     pub edges: Vec<Edge>,
+    pub supersedes: Option<RepoIdent>,
 }
 
 struct EntryState {
@@ -338,6 +339,7 @@ mod tests {
             bytes: Bytes::from_static(star_json),
             cid: None,
             edges: Vec::new(),
+            supersedes: None,
         }
     }
 
