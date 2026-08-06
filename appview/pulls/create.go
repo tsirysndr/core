@@ -118,6 +118,11 @@ func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo
 		oauth.WithLxm(tangled.RepoHiddenRefNSID),
 		oauth.WithDev(s.config.Core.Dev),
 	)
+	if err != nil {
+		l.Error("failed to create service client for the fork's knot", "err", err)
+		s.pages.Notice(w, "pull", "Failed to connect to knot server.")
+		return
+	}
 
 	resp, err := tangled.RepoHiddenRef(
 		r.Context(),
@@ -125,7 +130,7 @@ func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo
 		&tangled.RepoHiddenRef_Input{
 			ForkRef:   sourceBranch,
 			RemoteRef: targetBranch,
-			Repo:      fork.RepoAt().String(),
+			Repo:      knotcompat.RepoArg(r.Context(), fork.Knot, s.config.Core.Dev, fork.RepoDid, fork.RepoAt()),
 		},
 	)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {

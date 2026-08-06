@@ -1,83 +1,80 @@
 package xrpc
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
-)
 
-const (
-	resolveOwnerDid  = "did:plc:akshay"
-	resolveRepoDid   = "did:plc:squid"
-	resolveStoredKey = "squidbot"
+	"github.com/bluesky-social/indigo/atproto/syntax"
+	"tangled.org/core/rbac"
 )
 
 func setupResolveRepo(t *testing.T) (*Xrpc, string) {
 	t.Helper()
-	x := newTestXrpc(t)
+	x, _ := newACLXrpc(t)
 	scanPath := t.TempDir()
 	x.Config.Repo.ScanPath = scanPath
-
-	if err := x.Db.StoreRepoKey(resolveRepoDid, []byte("k256"), resolveOwnerDid, resolveStoredKey); err != nil {
-		t.Fatalf("StoreRepoKey: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Join(scanPath, resolveRepoDid), 0o755); err != nil {
+	seedRepo(t, x)
+	if err := os.MkdirAll(filepath.Join(scanPath, aclRepoDid), 0o755); err != nil {
 		t.Fatalf("mkdir repo dir: %v", err)
 	}
 	return x, scanPath
 }
 
-func TestResolveRepoDID_PrefersRepoOverName(t *testing.T) {
+func TestResolveRepoDID(t *testing.T) {
 	x, scanPath := setupResolveRepo(t)
 
-	repo := resolveRepoDid
-	gotDid, gotPath, err := x.resolveRepoDID(&repo, resolveOwnerDid, "SquidBot")
+	got, err := x.resolveRepoDID(aclRepoDid)
 	if err != nil {
-		t.Fatalf("resolveRepoDID with repo set: %v", err)
+		t.Fatalf("resolveRepoDID: %v", err)
 	}
-	if gotDid != resolveRepoDid {
-		t.Errorf("repoDid = %q, want %q", gotDid, resolveRepoDid)
+	if got.did != aclRepoDid || got.owner != aclOwner {
+		t.Errorf("resolved %q owned by %q, want %q owned by %q", got.did, got.owner, aclRepoDid, aclOwner)
 	}
-	if want := filepath.Join(scanPath, resolveRepoDid); gotPath != want {
-		t.Errorf("repoPath = %q, want %q", gotPath, want)
+	if want := filepath.Join(scanPath, aclRepoDid); got.path != want {
+		t.Errorf("repoPath = %q, want %q", got.path, want)
 	}
-}
 
-func TestResolveRepoDID_RejectsMalformedRepoDid(t *testing.T) {
-	x, _ := setupResolveRepo(t)
-
-	malformed := "not-a-did"
-	if _, _, err := x.resolveRepoDID(&malformed, resolveOwnerDid, resolveStoredKey); err == nil {
-		t.Fatal("resolveRepoDID with malformed repo DID: got nil error, want failure")
+	rejected := map[string]string{
+		"a malformed repo DID":                   "not-a-did",
+		"an empty repo DID":                      "",
+		"a repo DID that this knot doesn't host": "did:plc:conch",
+		"an owner and name instead of a DID":     aclOwner + "/reponame",
 	}
-}
-
-func TestResolveRepoDID_UnknownRepoDidDoesNotFallBackToName(t *testing.T) {
-	x, _ := setupResolveRepo(t)
-
-	unknown := "did:plc:limpet"
-	if _, _, err := x.resolveRepoDID(&unknown, resolveOwnerDid, resolveStoredKey); err == nil {
-		t.Fatal("resolveRepoDID with unknown repo DID and resolvable name: got nil error, want failure")
+	for name, repo := range rejected {
+		t.Run(name, func(t *testing.T) {
+			if _, err := x.resolveRepoDID(repo); err == nil {
+				t.Fatalf("resolveRepoDID(%q): got nil error, want failure", repo)
+			}
+		})
 	}
 }
 
-func TestResolveRepoDID_NameFallbackIsCaseSensitive(t *testing.T) {
+func TestPushableRepoDID(t *testing.T) {
 	x, _ := setupResolveRepo(t)
-
-	if _, _, err := x.resolveRepoDID(nil, resolveOwnerDid, "SquidBot"); err == nil {
-		t.Fatal("resolveRepoDID with mismatched-case name: got nil error, want failure")
+	if err := x.Enforcer.AddRepo(aclOwner, rbac.ThisServer, "did:plc:conch"); err != nil {
+		t.Fatalf("AddRepo: %v", err)
 	}
 
-	empty := ""
-	if _, _, err := x.resolveRepoDID(&empty, resolveOwnerDid, "SquidBot"); err == nil {
-		t.Fatal("resolveRepoDID with empty repo and mismatched-case name: got nil error, want failure")
+	if _, denial := x.pushableRepoDID(aclOwner, aclRepoDid); denial != nil {
+		t.Fatalf("owner denied: %v (status %d), want the repo", denial.err, denial.status)
 	}
 
-	gotDid, _, err := x.resolveRepoDID(nil, resolveOwnerDid, resolveStoredKey)
-	if err != nil {
-		t.Fatalf("resolveRepoDID with exact-case name: %v", err)
+	cases := map[string]struct {
+		actor syntax.DID
+		repo  string
+		want  int
+	}{
+		"we'll 401 a stranger": {aclSubject, aclRepoDid, http.StatusUnauthorized},
+		"we'll 400 a repo that this knot doesn't host before the ACL read": {aclOwner, "did:plc:conch", http.StatusBadRequest},
 	}
-	if gotDid != resolveRepoDid {
-		t.Errorf("repoDid = %q, want %q", gotDid, resolveRepoDid)
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, denial := x.pushableRepoDID(tc.actor, tc.repo)
+			if denial == nil || denial.status != tc.want {
+				t.Fatalf("denial = %v, want status %d", denial, tc.want)
+			}
+		})
 	}
 }

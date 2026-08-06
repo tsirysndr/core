@@ -18,14 +18,14 @@ const (
 type RepoForkSync_Input struct {
 	// branch: Branch to sync
 	Branch string `json:"branch" cborgen:"branch"`
-	// did: DID of the fork owner
-	Did string `json:"did" cborgen:"did"`
-	// name: Name of the forked repository
-	Name string `json:"name" cborgen:"name"`
-	// repo: DID of the repository
-	Repo *string `json:"repo,omitempty" cborgen:"repo,omitempty"`
-	// source: AT-URI of the source repository
-	Source string `json:"source" cborgen:"source"`
+	// did: DID of the fork owner. A knot without the repo-did-input capability reads this and name in place of repo.
+	Did *string `json:"did,omitempty" cborgen:"did,omitempty"`
+	// name: Name of the forked repository. A knot without the repo-did-input capability reads this and DID in place of repo.
+	Name *string `json:"name,omitempty" cborgen:"name,omitempty"`
+	// repo: DID of the fork to sync
+	Repo string `json:"repo" cborgen:"repo"`
+	// source: AT-URI of the source repository. A knot without the repo-did-input capability requires this field without reading it.
+	Source *string `json:"source,omitempty" cborgen:"source,omitempty"`
 }
 
 // RepoForkSync calls the XRPC method "sh.tangled.repo.forkSync".

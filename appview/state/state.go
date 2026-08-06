@@ -617,9 +617,10 @@ func (s *State) NewRepo(w http.ResponseWriter, r *http.Request) {
 					}
 					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 					if dErr := tangled.RepoDelete(ctx, deleteClient, &tangled.RepoDelete_Input{
-						Did:  user.Did,
-						Name: rkey,
-						Rkey: rkey,
+						Repo: repoDid,
+						Did:  &user.Did,
+						Name: &rkey,
+						Rkey: &rkey,
 					}); dErr != nil {
 						cancel()
 						l.Error("failed to clean up repo on knot after rollback", "attempt", attempt+1, "err", dErr)

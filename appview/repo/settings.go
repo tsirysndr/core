@@ -64,7 +64,7 @@ func (rp *Repo) SetDefaultBranch(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 		client,
 		&tangled.RepoSetDefaultBranch_Input{
-			Repo:          f.RepoAt().String(),
+			Repo:          knotcompat.RepoArg(r.Context(), f.Knot, rp.config.Core.Dev, f.RepoDid, f.RepoAt()),
 			DefaultBranch: branch,
 		},
 	)

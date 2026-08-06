@@ -215,7 +215,7 @@ func (s *Pulls) resubmitFork(w http.ResponseWriter, r *http.Request) {
 		&tangled.RepoHiddenRef_Input{
 			ForkRef:   pull.PullSource.Branch,
 			RemoteRef: pull.TargetBranch,
-			Repo:      forkRepo.RepoAt().String(),
+			Repo:      knotcompat.RepoArg(r.Context(), forkRepo.Knot, s.config.Core.Dev, forkRepo.RepoDid, forkRepo.RepoAt()),
 		},
 	)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {

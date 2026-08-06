@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/go-chi/chi/v5"
 	"tangled.org/core/api/tangled"
@@ -54,7 +55,6 @@ func (x *Xrpc) Router() http.Handler {
 		r.Post("/"+tangled.RepoDeleteBranchNSID, x.DeleteBranch)
 		r.Post("/"+tangled.RepoCreateNSID, x.CreateRepo)
 		r.Post("/"+tangled.RepoDeleteNSID, x.DeleteRepo)
-		r.Post("/"+tangled.RepoForkStatusNSID, x.ForkStatus)
 		r.Post("/"+tangled.RepoForkSyncNSID, x.ForkSync)
 		r.Post("/"+tangled.RepoHiddenRefNSID, x.HiddenRef)
 		r.Post("/"+tangled.RepoMergeNSID, x.Merge)
@@ -145,29 +145,64 @@ func (x *Xrpc) resolveRepo(repo string) (resolvedRepo, error) {
 	return resolvedRepo{path: repoPath, name: gitutil.RepoName(repoName)}, nil
 }
 
-func (x *Xrpc) resolveRepoDID(repo *string, ownerDid, name string) (repoident.RepoDid, string, error) {
-	raw, err := x.selectRepoDID(repo, ownerDid, name)
-	if err != nil {
-		return "", "", err
-	}
-
-	repoDid, err := repoident.NewRepoDid(raw)
-	if err != nil {
-		return "", "", err
-	}
-
-	repoPath, _, _, err := x.Db.ResolveRepoDIDOnDisk(x.Config.Repo.ScanPath, repoDid.String())
-	if err != nil {
-		return "", "", err
-	}
-	return repoDid, repoPath, nil
+type resolvedRepoDID struct {
+	did   repoident.RepoDid
+	path  string
+	owner repoident.OwnerDid
 }
 
-func (x *Xrpc) selectRepoDID(repo *string, ownerDid, name string) (string, error) {
-	if repo != nil && *repo != "" {
-		return *repo, nil
+func (x *Xrpc) resolveRepoDID(repo string) (resolvedRepoDID, error) {
+	repoDid, err := repoident.NewRepoDid(repo)
+	if err != nil {
+		return resolvedRepoDID{}, err
 	}
-	return x.Db.GetRepoDid(ownerDid, name)
+
+	repoPath, storedOwner, _, err := x.Db.ResolveRepoDIDOnDisk(x.Config.Repo.ScanPath, repoDid.String())
+	if err != nil {
+		return resolvedRepoDID{}, err
+	}
+	ownerDid, err := repoident.NewOwnerDid(storedOwner)
+	if err != nil {
+		return resolvedRepoDID{}, err
+	}
+	return resolvedRepoDID{did: repoDid, path: repoPath, owner: ownerDid}, nil
+}
+
+type failure struct {
+	err    xrpcerr.XrpcError
+	status int
+}
+
+func (f *failure) send(l *slog.Logger, w http.ResponseWriter) {
+	l.Error("failed", "kind", f.err.Tag, "error", f.err.Message)
+	writeError(w, f.err, f.status)
+}
+
+func badRequest(e xrpcerr.XrpcError) *failure {
+	return &failure{err: e, status: http.StatusBadRequest}
+}
+
+func unauthorized(e xrpcerr.XrpcError) *failure {
+	return &failure{err: e, status: http.StatusUnauthorized}
+}
+
+func conflicted(e xrpcerr.XrpcError) *failure {
+	return &failure{err: e, status: http.StatusConflict}
+}
+
+func serverError(e xrpcerr.XrpcError) *failure {
+	return &failure{err: e, status: http.StatusInternalServerError}
+}
+
+func (x *Xrpc) pushableRepoDID(actor syntax.DID, repo string) (resolvedRepoDID, *failure) {
+	resolved, err := x.resolveRepoDID(repo)
+	if err != nil {
+		return resolvedRepoDID{}, badRequest(xrpcerr.RepoNotFoundError)
+	}
+	if ok, err := x.Enforcer.IsPushAllowed(actor.String(), rbac.ThisServer, resolved.did.String()); !ok || err != nil {
+		return resolvedRepoDID{}, unauthorized(xrpcerr.AccessControlError(actor.String()))
+	}
+	return resolved, nil
 }
 
 func writeError(w http.ResponseWriter, e xrpcerr.XrpcError, status int) {

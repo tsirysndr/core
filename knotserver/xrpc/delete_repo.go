@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
 
@@ -14,40 +13,47 @@ import (
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/rbac"
+	"tangled.org/core/repoident"
 	xrpcerr "tangled.org/core/xrpc/errors"
 )
 
 func (x *Xrpc) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 	l := x.Logger.With("handler", "DeleteRepo")
-	fail := func(e xrpcerr.XrpcError) {
-		l.Error("failed", "kind", e.Tag, "error", e.Message)
-		writeError(w, e, http.StatusBadRequest)
-	}
 
 	actorDid, ok := r.Context().Value(ActorDid).(syntax.DID)
 	if !ok {
-		fail(xrpcerr.MissingActorDidError)
+		badRequest(xrpcerr.MissingActorDidError).send(l, w)
 		return
 	}
 
 	var data tangled.RepoDelete_Input
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-		fail(xrpcerr.GenericError(err))
+		badRequest(xrpcerr.GenericError(err)).send(l, w)
 		return
 	}
 
-	did := data.Did
-	name := data.Name
-	rkey := data.Rkey
+	repoDid, err := repoident.NewRepoDid(data.Repo)
+	if err != nil {
+		badRequest(xrpcerr.InvalidRepoError(data.Repo)).send(l, w)
+		return
+	}
+	repo := repoDid.String()
 
-	if did == "" || name == "" {
-		fail(xrpcerr.GenericError(fmt.Errorf("did and name are required")))
+	ownerDid, rkey, err := x.Db.GetRepoKeyOwner(repo)
+	if errors.Is(err, sql.ErrNoRows) {
+		l.Info("repo already torn down or not found", "repo", repo)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if err != nil {
+		l.Error("failed to look up repo", "error", err.Error())
+		serverError(xrpcerr.GenericError(err)).send(l, w)
 		return
 	}
 
-	ident, err := x.Resolver.ResolveIdent(r.Context(), actorDid.String())
+	ident, err := x.Resolver.ResolveIdent(r.Context(), ownerDid)
 	if err != nil || ident.Handle.IsInvalidHandle() {
-		fail(xrpcerr.GenericError(err))
+		badRequest(xrpcerr.GenericError(err)).send(l, w)
 		return
 	}
 
@@ -56,58 +62,43 @@ func (x *Xrpc) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ensure that the record does not exists
-	_, err = comatproto.RepoGetRecord(r.Context(), &xrpcc, "", tangled.RepoNSID, actorDid.String(), rkey)
+	_, err = comatproto.RepoGetRecord(r.Context(), &xrpcc, "", tangled.RepoNSID, ownerDid, rkey)
 	if err == nil {
-		fail(xrpcerr.RecordExistsError(rkey))
+		badRequest(xrpcerr.RecordExistsError(rkey)).send(l, w)
 		return
 	}
 
-	repoDid, err := x.Db.GetRepoDid(did, name)
-	if errors.Is(err, sql.ErrNoRows) {
-		repoDid, err = x.Db.GetRepoDidByName(did, name)
-		if errors.Is(err, sql.ErrNoRows) {
-			l.Info("repo already torn down or not found", "did", did, "name", name)
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-	}
-	if err != nil {
-		l.Error("failed to look up repo", "error", err.Error())
-		writeError(w, xrpcerr.GenericError(err), http.StatusInternalServerError)
-		return
-	}
-
-	repoPath, joinErr := securejoin.SecureJoin(x.Config.Repo.ScanPath, repoDid)
+	repoPath, joinErr := securejoin.SecureJoin(x.Config.Repo.ScanPath, repo)
 	if joinErr != nil {
-		fail(xrpcerr.GenericError(joinErr))
+		badRequest(xrpcerr.GenericError(joinErr)).send(l, w)
 		return
 	}
 
-	isDeleteAllowed, err := x.Enforcer.IsRepoDeleteAllowed(actorDid.String(), rbac.ThisServer, repoDid)
+	isDeleteAllowed, err := x.Enforcer.IsRepoDeleteAllowed(actorDid.String(), rbac.ThisServer, repo)
 	if err != nil {
-		fail(xrpcerr.GenericError(err))
+		badRequest(xrpcerr.GenericError(err)).send(l, w)
 		return
 	}
 	if !isDeleteAllowed {
-		fail(xrpcerr.AccessControlError(actorDid.String()))
+		badRequest(xrpcerr.AccessControlError(actorDid.String())).send(l, w)
 		return
 	}
 
 	if rmErr := os.RemoveAll(repoPath); rmErr != nil {
 		l.Error("deleting repo", "error", rmErr.Error())
-		writeError(w, xrpcerr.GenericError(rmErr), http.StatusInternalServerError)
+		serverError(xrpcerr.GenericError(rmErr)).send(l, w)
 		return
 	}
 
-	if rbacErr := x.Enforcer.WipeRepoPolicies(rbac.ThisServer, repoDid); rbacErr != nil {
+	if rbacErr := x.Enforcer.WipeRepoPolicies(rbac.ThisServer, repo); rbacErr != nil {
 		l.Error("failed to delete repo from enforcer", "error", rbacErr.Error())
-		writeError(w, xrpcerr.GenericError(rbacErr), http.StatusInternalServerError)
+		serverError(xrpcerr.GenericError(rbacErr)).send(l, w)
 		return
 	}
 
-	if delErr := x.Db.DeleteRepoKey(repoDid); delErr != nil {
+	if delErr := x.Db.DeleteRepoKey(repo); delErr != nil {
 		l.Error("failed to delete repo key", "error", delErr.Error())
-		writeError(w, xrpcerr.GenericError(delErr), http.StatusInternalServerError)
+		serverError(xrpcerr.GenericError(delErr)).send(l, w)
 		return
 	}
 

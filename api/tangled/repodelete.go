@@ -16,14 +16,16 @@ const (
 
 // RepoDelete_Input is the input argument to a sh.tangled.repo.delete call.
 type RepoDelete_Input struct {
-	// did: DID of the repository owner
-	Did string `json:"did" cborgen:"did"`
+	// did: DID of the repository owner. A knot without the repo-did-input capability reads this and name in place of repo.
+	Did *string `json:"did,omitempty" cborgen:"did,omitempty"`
 	// force: Admin-only. Delete even though the repository record still exists on the owner's PDS.
 	Force *bool `json:"force,omitempty" cborgen:"force,omitempty"`
-	// name: Name of the repository to delete
-	Name string `json:"name" cborgen:"name"`
-	// rkey: Rkey of the repository record
-	Rkey string `json:"rkey" cborgen:"rkey"`
+	// name: Name of the repository to delete. A knot without the repo-did-input capability reads this and DID in place of repo.
+	Name *string `json:"name,omitempty" cborgen:"name,omitempty"`
+	// repo: DID of the repository to delete
+	Repo string `json:"repo" cborgen:"repo"`
+	// rkey: Rkey of the repository record. A knot without the repo-did-input capability checks this against the owner's PDS.
+	Rkey *string `json:"rkey,omitempty" cborgen:"rkey,omitempty"`
 }
 
 // RepoDelete calls the XRPC method "sh.tangled.repo.delete".

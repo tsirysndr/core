@@ -72,9 +72,9 @@ func (s *Pulls) MergePull(w http.ResponseWriter, r *http.Request) {
 
 	authorName := ident.Handle.String()
 	mergeInput := &tangled.RepoMerge_Input{
-		Did:           f.Did,
-		Name:          f.Name,
-		Repo:          f.RepoDidPtr(),
+		Repo:          f.RepoDid,
+		Did:           &f.Did,
+		Name:          &f.Name,
 		Branch:        pull.TargetBranch,
 		Patch:         patch,
 		CommitMessage: &pull.Title,

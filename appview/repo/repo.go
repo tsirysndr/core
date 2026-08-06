@@ -1281,9 +1281,10 @@ func (rp *Repo) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 		client,
 		&tangled.RepoDelete_Input{
-			Did:  f.Did,
-			Name: f.Name,
-			Rkey: f.Rkey,
+			Repo: f.RepoDid,
+			Did:  &f.Did,
+			Name: &f.Name,
+			Rkey: &f.Rkey,
 		},
 	)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {
@@ -1358,7 +1359,6 @@ func (rp *Repo) SyncRepoFork(w http.ResponseWriter, r *http.Request) {
 	ref := chi.URLParam(r, "ref")
 	ref, _ = url.PathUnescape(ref)
 
-	user := rp.oauth.GetMultiAccountUser(r)
 	f, err := rp.repoResolver.Resolve(r)
 	if err != nil {
 		l.Error("failed to resolve source repo", "err", err)
@@ -1387,10 +1387,10 @@ func (rp *Repo) SyncRepoFork(w http.ResponseWriter, r *http.Request) {
 			r.Context(),
 			client,
 			&tangled.RepoForkSync_Input{
-				Did:    user.Did,
-				Name:   f.Name,
-				Repo:   f.RepoDidPtr(),
-				Source: f.Source,
+				Repo:   f.RepoDid,
+				Did:    &f.Did,
+				Name:   &f.Name,
+				Source: &f.Source,
 				Branch: ref,
 			},
 		)
@@ -1577,9 +1577,10 @@ func (rp *Repo) ForkRepo(w http.ResponseWriter, r *http.Request) {
 					}
 					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 					if dErr := tangled.RepoDelete(ctx, deleteClient, &tangled.RepoDelete_Input{
-						Did:  user.Did,
-						Name: forkName,
-						Rkey: rkey,
+						Repo: repoDid,
+						Did:  &user.Did,
+						Name: &rkey,
+						Rkey: &rkey,
 					}); dErr != nil {
 						cancel()
 						l.Error("failed to clean up fork on knot after rollback", "attempt", attempt+1, "err", dErr)

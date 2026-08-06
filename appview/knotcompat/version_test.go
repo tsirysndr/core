@@ -1,10 +1,16 @@
 package knotcompat
 
 import (
+	"context"
+	"slices"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/bluesky-social/indigo/atproto/syntax"
+	"github.com/samber/lo"
+	"tangled.org/core/consts"
 )
 
 type fakeLatch struct {
@@ -275,7 +281,7 @@ func TestVersionProbeCacheFreshSkipsProbe(t *testing.T) {
 	c := newProbeCache()
 	now := time.Unix(1_000_000, 0)
 	calls := 0
-	probe := func() (string, bool) { calls++; return "v1.15.0", true }
+	probe := func() (knotIdentity, bool) { calls++; return ident("v1.15.0"), true }
 
 	if !c.supports(now, "knot.nel.pet", 1, 15, false, probe) {
 		t.Fatal("cold probe: want supported")
@@ -294,11 +300,11 @@ func TestVersionProbeCacheFreshSkipsProbe(t *testing.T) {
 func TestVersionProbeCacheServesStaleOnFailure(t *testing.T) {
 	c := newProbeCache()
 	now := time.Unix(1_000_000, 0)
-	if !c.supports(now, "knot.nel.pet", 1, 15, false, func() (string, bool) { return "v1.15.0", true }) {
+	if !c.supports(now, "knot.nel.pet", 1, 15, false, func() (knotIdentity, bool) { return ident("v1.15.0"), true }) {
 		t.Fatal("seed: want supported")
 	}
 
-	failProbe := func() (string, bool) { return "", false }
+	failProbe := func() (knotIdentity, bool) { return knotIdentity{}, false }
 	if !c.supports(now.Add(10*time.Minute), "knot.nel.pet", 1, 15, false, failProbe) {
 		t.Error("a probe failure within the trust window must serve the last-known version, not fail closed")
 	}
@@ -307,7 +313,7 @@ func TestVersionProbeCacheServesStaleOnFailure(t *testing.T) {
 func TestVersionProbeCacheFailsClosedWhenUntrusted(t *testing.T) {
 	c := newProbeCache()
 	now := time.Unix(1_000_000, 0)
-	failProbe := func() (string, bool) { return "", false }
+	failProbe := func() (knotIdentity, bool) { return knotIdentity{}, false }
 	if c.supports(now, "knot.nel.pet", 1, 15, false, failProbe) {
 		t.Error("a cold probe failure on a fail-closed gate must return false")
 	}
@@ -319,10 +325,10 @@ func TestVersionProbeCacheFailsClosedWhenUntrusted(t *testing.T) {
 func TestVersionProbeCacheExpiresTrust(t *testing.T) {
 	c := newProbeCache()
 	now := time.Unix(1_000_000, 0)
-	if !c.supports(now, "knot.nel.pet", 1, 15, false, func() (string, bool) { return "v1.15.0", true }) {
+	if !c.supports(now, "knot.nel.pet", 1, 15, false, func() (knotIdentity, bool) { return ident("v1.15.0"), true }) {
 		t.Fatal("seed: want supported")
 	}
-	if c.supports(now.Add(2*time.Hour), "knot.nel.pet", 1, 15, false, func() (string, bool) { return "", false }) {
+	if c.supports(now.Add(2*time.Hour), "knot.nel.pet", 1, 15, false, func() (knotIdentity, bool) { return knotIdentity{}, false }) {
 		t.Error("a probe failure past the trust window must fail closed")
 	}
 }
@@ -330,10 +336,10 @@ func TestVersionProbeCacheExpiresTrust(t *testing.T) {
 func TestVersionProbeCacheRefreshesAfterFresh(t *testing.T) {
 	c := newProbeCache()
 	now := time.Unix(1_000_000, 0)
-	if c.supports(now, "knot.nel.pet", 1, 15, false, func() (string, bool) { return "v1.14.0", true }) {
+	if c.supports(now, "knot.nel.pet", 1, 15, false, func() (knotIdentity, bool) { return ident("v1.14.0"), true }) {
 		t.Fatal("seed: 1.14 must not satisfy 1.15")
 	}
-	if !c.supports(now.Add(10*time.Minute), "knot.nel.pet", 1, 15, false, func() (string, bool) { return "v1.15.0", true }) {
+	if !c.supports(now.Add(10*time.Minute), "knot.nel.pet", 1, 15, false, func() (knotIdentity, bool) { return ident("v1.15.0"), true }) {
 		t.Error("a re-probe past the fresh window must pick up the upgraded version")
 	}
 }
@@ -341,7 +347,7 @@ func TestVersionProbeCacheRefreshesAfterFresh(t *testing.T) {
 func TestVersionProbeCacheEnforcesHardCap(t *testing.T) {
 	c := newProbeCache()
 	now := time.Unix(1_000_000, 0)
-	probe := func() (string, bool) { return "v1.15.0", true }
+	probe := func() (knotIdentity, bool) { return ident("v1.15.0"), true }
 	for i := 0; i < versionProbeCacheMax+200; i++ {
 		c.supports(now, "knot"+strconv.Itoa(i)+".nel.pet", 1, 15, false, probe)
 	}
@@ -353,7 +359,7 @@ func TestVersionProbeCacheEnforcesHardCap(t *testing.T) {
 func TestVersionProbeCacheEvictsOldestWhenFull(t *testing.T) {
 	c := newProbeCache()
 	base := time.Unix(1_000_000, 0)
-	probe := func() (string, bool) { return "v1.15.0", true }
+	probe := func() (knotIdentity, bool) { return ident("v1.15.0"), true }
 	for i := 0; i < versionProbeCacheMax; i++ {
 		c.supports(base.Add(time.Duration(i)*time.Millisecond), "knot"+strconv.Itoa(i)+".nel.pet", 1, 15, false, probe)
 	}
@@ -367,5 +373,58 @@ func TestVersionProbeCacheEvictsOldestWhenFull(t *testing.T) {
 	}
 	if _, ok := c.get("newcomer.nel.pet"); !ok {
 		t.Error("newcomer must be retained")
+	}
+}
+
+func ident(version string, capabilities ...consts.Capability) knotIdentity {
+	return knotIdentity{
+		version:      version,
+		capabilities: lo.Map(capabilities, func(c consts.Capability, _ int) string { return string(c) }),
+	}
+}
+
+func TestVersionProbeCacheResolveServesOneProbeToEveryReader(t *testing.T) {
+	c, calls := newProbeCache(), 0
+	now := time.Unix(1_000_000, 0)
+	probe := func() (knotIdentity, bool) { calls++; return ident("v1.15.0", consts.CapRepoDidInput), true }
+	if !c.supports(now, "knot.nel.pet", 1, 15, false, probe) {
+		t.Fatal("version check: want supported")
+	}
+	if identity, ok := c.resolve(now.Add(time.Minute), "knot.nel.pet", probe); !ok ||
+		!slices.Contains(identity.capabilities, string(consts.CapRepoDidInput)) {
+		t.Fatalf("capability read = %v (resolved=%v), want the advertised capability", identity.capabilities, ok)
+	}
+	if calls != 1 {
+		t.Errorf("calls = %d, want 1, since both reads must come from the one probe", calls)
+	}
+}
+
+func TestRepoArgSendsTheDidOnlyToAKnotThatAdvertisesIt(t *testing.T) {
+	const atUri = syntax.ATURI("at://did:plc:nel/sh.tangled.repo/periwinkle")
+	const did = "did:plc:periwinkle"
+	takesDid := []consts.Capability{consts.CapRepoDidInput}
+
+	cases := map[string]struct {
+		host       string
+		advertised []consts.Capability
+		repoDid    string
+		want       string
+	}{
+		"we'll send the DID to a knot that advertises repo-did-input":                {"a.nel.pet", takesDid, did, did},
+		"we'll still send the DID to a knot advertising repo-did-input and knot-acl": {"b.nel.pet", []consts.Capability{consts.CapKnotACL, consts.CapRepoDidInput}, did, did},
+		"we'll send the AT-URI to a knot that predates repo-did-input":               {"c.nel.pet", []consts.Capability{consts.CapKnotACL}, did, atUri.String()},
+		"we'll fall back to the AT-URI for an empty capability list":                 {"d.nel.pet", nil, did, atUri.String()},
+		"we'll address a repo that we don't have a DID for by AT-URI":                {"e.nel.pet", takesDid, "", atUri.String()},
+		"we don't assume a knot whose probe fails will read the repo DID":            {"127.0.0.1:1", nil, did, atUri.String()},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if tc.host != "127.0.0.1:1" {
+				probeCache.put(tc.host, ident("v1.15.0", tc.advertised...), time.Now())
+			}
+			if got := RepoArg(context.Background(), tc.host, true, tc.repoDid, atUri); got != tc.want {
+				t.Errorf("RepoArg = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

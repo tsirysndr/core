@@ -11,9 +11,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/consts"
+	"tangled.org/core/repoident"
 )
 
 const (
@@ -23,8 +25,13 @@ const (
 	versionProbeCacheMax = 4096
 )
 
+type knotIdentity struct {
+	version      string
+	capabilities []string
+}
+
 type versionProbeEntry struct {
-	version  string
+	identity knotIdentity
 	probedAt time.Time
 }
 
@@ -40,13 +47,13 @@ func (c *versionProbeCache) get(host string) (versionProbeEntry, bool) {
 	return e, ok
 }
 
-func (c *versionProbeCache) put(host, version string, at time.Time) {
+func (c *versionProbeCache) put(host string, identity knotIdentity, at time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if _, exists := c.entries[host]; !exists && len(c.entries) >= versionProbeCacheMax {
 		c.evictLocked(at)
 	}
-	c.entries[host] = versionProbeEntry{version: version, probedAt: at}
+	c.entries[host] = versionProbeEntry{identity: identity, probedAt: at}
 }
 
 func (c *versionProbeCache) evictLocked(now time.Time) {
@@ -66,18 +73,26 @@ func (c *versionProbeCache) evictLocked(now time.Time) {
 	}
 }
 
-func (c *versionProbeCache) supports(now time.Time, host string, minMajor, minMinor int, failOpen bool, probe func() (string, bool)) bool {
+func (c *versionProbeCache) resolve(now time.Time, host string, probe func() (knotIdentity, bool)) (knotIdentity, bool) {
 	if e, ok := c.get(host); ok && now.Sub(e.probedAt) < versionProbeFresh {
-		return atLeast(e.version, minMajor, minMinor)
+		return e.identity, true
 	}
-	if version, ok := probe(); ok {
-		c.put(host, version, now)
-		return atLeast(version, minMajor, minMinor)
+	if identity, ok := probe(); ok {
+		c.put(host, identity, now)
+		return identity, true
 	}
 	if e, ok := c.get(host); ok && now.Sub(e.probedAt) < versionProbeTrust {
-		return atLeast(e.version, minMajor, minMinor)
+		return e.identity, true
 	}
-	return failOpen
+	return knotIdentity{}, false
+}
+
+func (c *versionProbeCache) supports(now time.Time, host string, minMajor, minMinor int, failOpen bool, probe func() (knotIdentity, bool)) bool {
+	identity, ok := c.resolve(now, host, probe)
+	if !ok {
+		return failOpen
+	}
+	return atLeast(identity.version, minMajor, minMinor)
 }
 
 var probeCache = &versionProbeCache{entries: map[string]versionProbeEntry{}}
@@ -166,6 +181,20 @@ func KnotSupports114(ctx context.Context, host string, dev bool) bool {
 	return knotSupportsVersion(ctx, host, dev, 1, 14, true)
 }
 
+func RepoArg(ctx context.Context, host string, dev bool, repoDid string, legacyAtUri syntax.ATURI) string {
+	rd, err := repoident.NewRepoDid(repoDid)
+	if err != nil {
+		return legacyAtUri.String()
+	}
+	identity, ok := probeCache.resolve(time.Now(), host, func() (knotIdentity, bool) {
+		return probeIdentity(ctx, host, dev)
+	})
+	if !ok || !slices.Contains(identity.capabilities, string(consts.CapRepoDidInput)) {
+		return legacyAtUri.String()
+	}
+	return rd.String()
+}
+
 func KnotCapability(ctx context.Context, host string, dev bool, capability consts.Capability) CapStatus {
 	return nativeProbeGate.status(host, func() CapStatus {
 		return knotDeclares(ctx, host, dev, capability)
@@ -200,12 +229,12 @@ func knotDeclares(ctx context.Context, host string, dev bool, capability consts.
 }
 
 func knotSupportsVersion(ctx context.Context, host string, dev bool, minMajor, minMinor int, failOpen bool) bool {
-	return probeCache.supports(time.Now(), host, minMajor, minMinor, failOpen, func() (string, bool) {
-		return probeVersion(ctx, host, dev)
+	return probeCache.supports(time.Now(), host, minMajor, minMinor, failOpen, func() (knotIdentity, bool) {
+		return probeIdentity(ctx, host, dev)
 	})
 }
 
-func probeVersion(ctx context.Context, host string, dev bool) (string, bool) {
+func probeIdentity(ctx context.Context, host string, dev bool) (knotIdentity, bool) {
 	scheme := "https"
 	if dev {
 		scheme = "http"
@@ -220,9 +249,9 @@ func probeVersion(ctx context.Context, host string, dev bool) (string, bool) {
 
 	resp, err := tangled.KnotVersion(ctx, client)
 	if err != nil || resp == nil {
-		return "", false
+		return knotIdentity{}, false
 	}
-	return resp.Version, true
+	return knotIdentity{version: resp.Version, capabilities: resp.Capabilities}, true
 }
 
 func atLeast(v string, minMajor, minMinor int) bool {

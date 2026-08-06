@@ -81,7 +81,7 @@ var AuthError = func(err error) XrpcError {
 var InvalidRepoError = func(r string) XrpcError {
 	return NewXrpcError(
 		WithTag("InvalidRepo"),
-		WithError(fmt.Errorf("supplied at-uri is not a repo: %s", r)),
+		WithError(fmt.Errorf("supplied repo identifier is invalid: %s", r)),
 	)
 }
 

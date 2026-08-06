@@ -14,6 +14,7 @@ import (
 
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/appview/db"
+	"tangled.org/core/appview/knotcompat"
 	"tangled.org/core/appview/models"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
@@ -461,9 +462,9 @@ func (s *Pulls) composeMergeCheck(ctx context.Context, repo *models.Repo, target
 	xrpcc := s.knotClient(repo.Knot)
 
 	resp, err := tangled.RepoMergeCheck(ctx, xrpcc, &tangled.RepoMergeCheck_Input{
-		Did:    repo.Did,
-		Name:   repo.Name,
-		Repo:   repo.RepoDidPtr(),
+		Repo:   repo.RepoDid,
+		Did:    &repo.Did,
+		Name:   &repo.Name,
 		Branch: targetBranch,
 		Patch:  patch,
 	})
@@ -595,7 +596,7 @@ func (s *Pulls) fetchForkComparison(r *http.Request, forkRepoDid, targetBranch, 
 		&tangled.RepoHiddenRef_Input{
 			ForkRef:   sourceBranch,
 			RemoteRef: targetBranch,
-			Repo:      fork.RepoAt().String(),
+			Repo:      knotcompat.RepoArg(r.Context(), fork.Knot, s.config.Core.Dev, fork.RepoDid, fork.RepoAt()),
 		},
 	)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {

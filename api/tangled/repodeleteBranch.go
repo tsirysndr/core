@@ -17,7 +17,8 @@ const (
 // RepoDeleteBranch_Input is the input argument to a sh.tangled.repo.deleteBranch call.
 type RepoDeleteBranch_Input struct {
 	Branch string `json:"branch" cborgen:"branch"`
-	Repo   string `json:"repo" cborgen:"repo"`
+	// repo: DID of the repository
+	Repo string `json:"repo" cborgen:"repo"`
 }
 
 // RepoDeleteBranch calls the XRPC method "sh.tangled.repo.deleteBranch".

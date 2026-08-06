@@ -30,6 +30,9 @@ func TestAliasResolvesOriginalName(t *testing.T) {
 	if got != "did:plc:repo1" {
 		t.Errorf("repoDid = %q, want did:plc:repo1", got)
 	}
+	if _, err := d.GetRepoDid("did:plc:akshay", "Foo"); err == nil {
+		t.Error("GetRepoDid with a mismatched-case rkey: got nil error, want failure")
+	}
 }
 
 func TestAliasUpsertRespectsRevOrdering(t *testing.T) {

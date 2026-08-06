@@ -93,10 +93,6 @@ type ForkInfo struct {
 	Status ForkStatus
 }
 
-type AncestorCheckResponse struct {
-	Status ForkStatus `json:"status"`
-}
-
 type RepoLanguageDetails struct {
 	Name       string
 	Percentage float32

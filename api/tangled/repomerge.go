@@ -26,14 +26,14 @@ type RepoMerge_Input struct {
 	CommitBody *string `json:"commitBody,omitempty" cborgen:"commitBody,omitempty"`
 	// commitMessage: Merge commit message
 	CommitMessage *string `json:"commitMessage,omitempty" cborgen:"commitMessage,omitempty"`
-	// did: DID of the repository owner
-	Did string `json:"did" cborgen:"did"`
-	// name: Name of the repository
-	Name string `json:"name" cborgen:"name"`
+	// did: DID of the repository owner. A knot without the repo-did-input capability reads this and name in place of repo.
+	Did *string `json:"did,omitempty" cborgen:"did,omitempty"`
+	// name: Name of the repository. A knot without the repo-did-input capability reads this and DID in place of repo.
+	Name *string `json:"name,omitempty" cborgen:"name,omitempty"`
 	// patch: Patch content to merge
 	Patch string `json:"patch" cborgen:"patch"`
 	// repo: DID of the repository
-	Repo *string `json:"repo,omitempty" cborgen:"repo,omitempty"`
+	Repo string `json:"repo" cborgen:"repo"`
 }
 
 // RepoMerge calls the XRPC method "sh.tangled.repo.merge".

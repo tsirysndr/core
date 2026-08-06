@@ -38,7 +38,6 @@ var TangledScopes = []string{
 	"rpc:sh.tangled.repo.create?aud=*",
 	"rpc:sh.tangled.repo.delete?aud=*",
 	"rpc:sh.tangled.repo.deleteBranch?aud=*",
-	"rpc:sh.tangled.repo.forkStatus?aud=*",
 	"rpc:sh.tangled.repo.forkSync?aud=*",
 	"rpc:sh.tangled.repo.hiddenRef?aud=*",
 	"rpc:sh.tangled.repo.listSecrets?aud=*",

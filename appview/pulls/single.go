@@ -410,9 +410,9 @@ func (s *Pulls) mergeCheck(r *http.Request, f *models.Repo, pull *models.Pull, s
 		r.Context(),
 		xrpcc,
 		&tangled.RepoMergeCheck_Input{
-			Did:    f.Did,
-			Name:   f.Name,
-			Repo:   f.RepoDidPtr(),
+			Repo:   f.RepoDid,
+			Did:    &f.Did,
+			Name:   &f.Name,
 			Branch: pull.TargetBranch,
 			Patch:  patch,
 		},

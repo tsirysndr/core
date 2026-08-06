@@ -17,7 +17,8 @@ const (
 // RepoSetDefaultBranch_Input is the input argument to a sh.tangled.repo.setDefaultBranch call.
 type RepoSetDefaultBranch_Input struct {
 	DefaultBranch string `json:"defaultBranch" cborgen:"defaultBranch"`
-	Repo          string `json:"repo" cborgen:"repo"`
+	// repo: DID of the repository
+	Repo string `json:"repo" cborgen:"repo"`
 }
 
 // RepoSetDefaultBranch calls the XRPC method "sh.tangled.repo.setDefaultBranch".

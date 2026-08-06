@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"tangled.org/core/api/tangled"
+	"tangled.org/core/appview/knotcompat"
 	"tangled.org/core/appview/oauth"
 	"tangled.org/core/appview/pages"
 	"tangled.org/core/types"
@@ -71,7 +72,7 @@ func (rp *Repo) DeleteBranch(w http.ResponseWriter, r *http.Request) {
 		client,
 		&tangled.RepoDeleteBranch_Input{
 			Branch: branch,
-			Repo:   f.RepoAt().String(),
+			Repo:   knotcompat.RepoArg(r.Context(), f.Knot, rp.config.Core.Dev, f.RepoDid, f.RepoAt()),
 		},
 	)
 	if xrpcerr := xrpcclient.HandleXrpcErr(err); xrpcerr != nil {

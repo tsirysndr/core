@@ -10,54 +10,34 @@ import (
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/knotserver/git"
 	"tangled.org/core/patchutil"
-	"tangled.org/core/rbac"
 	"tangled.org/core/types"
 	xrpcerr "tangled.org/core/xrpc/errors"
 )
 
 func (x *Xrpc) Merge(w http.ResponseWriter, r *http.Request) {
 	l := x.Logger.With("handler", "Merge")
-	fail := func(e xrpcerr.XrpcError) {
-		l.Error("failed", "kind", e.Tag, "error", e.Message)
-		writeError(w, e, http.StatusBadRequest)
-	}
 
 	actorDid, ok := r.Context().Value(ActorDid).(syntax.DID)
 	if !ok {
-		fail(xrpcerr.MissingActorDidError)
+		badRequest(xrpcerr.MissingActorDidError).send(l, w)
 		return
 	}
 
 	var data tangled.RepoMerge_Input
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-		fail(xrpcerr.GenericError(err))
+		badRequest(xrpcerr.GenericError(err)).send(l, w)
 		return
 	}
 
-	did := data.Did
-	name := data.Name
-
-	if did == "" || name == "" {
-		fail(xrpcerr.GenericError(fmt.Errorf("did and name are required")))
+	repo, denial := x.pushableRepoDID(actorDid, data.Repo)
+	if denial != nil {
+		denial.send(l, w)
 		return
 	}
 
-	repoDid, repoPath, err := x.resolveRepoDID(data.Repo, did, name)
+	gr, err := git.Open(repo.path, data.Branch)
 	if err != nil {
-		l.Error("failed to resolve repo", "err", err)
-		fail(xrpcerr.RepoNotFoundError)
-		return
-	}
-
-	if ok, err := x.Enforcer.IsPushAllowed(actorDid.String(), rbac.ThisServer, repoDid.String()); !ok || err != nil {
-		l.Error("insufficient permissions", "did", actorDid.String(), "repo", repoDid.String())
-		writeError(w, xrpcerr.AccessControlError(actorDid.String()), http.StatusUnauthorized)
-		return
-	}
-
-	gr, err := git.Open(repoPath, data.Branch)
-	if err != nil {
-		fail(xrpcerr.GenericError(fmt.Errorf("failed to open repository: %w", err)))
+		badRequest(xrpcerr.GenericError(fmt.Errorf("failed to open repository: %w", err))).send(l, w)
 		return
 	}
 	if x.Sandbox != nil {
@@ -98,11 +78,11 @@ func (x *Xrpc) Merge(w http.ResponseWriter, r *http.Request) {
 				xrpcerr.WithTag("MergeConflict"),
 				xrpcerr.WithMessage(fmt.Sprintf("Merge failed due to conflicts: %s", mergeErr.Message)),
 			)
-			writeError(w, conflictErr, http.StatusConflict)
+			conflicted(conflictErr).send(l, w)
 			return
 		} else {
 			l.Error("failed to merge", "error", err.Error())
-			writeError(w, xrpcerr.GitError(err), http.StatusInternalServerError)
+			serverError(xrpcerr.GitError(err)).send(l, w)
 			return
 		}
 	}

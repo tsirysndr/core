@@ -20,7 +20,7 @@ type RepoHiddenRef_Input struct {
 	ForkRef string `json:"forkRef" cborgen:"forkRef"`
 	// remoteRef: Remote reference name
 	RemoteRef string `json:"remoteRef" cborgen:"remoteRef"`
-	// repo: AT-URI of the repository
+	// repo: DID of the fork that the hidden ref belongs to
 	Repo string `json:"repo" cborgen:"repo"`
 }
 

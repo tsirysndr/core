@@ -10,4 +10,7 @@ const (
 
 type Capability string
 
-const CapKnotACL Capability = "knot-acl"
+const (
+	CapKnotACL      Capability = "knot-acl"
+	CapRepoDidInput Capability = "repo-did-input"
+)

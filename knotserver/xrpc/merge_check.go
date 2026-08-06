@@ -14,35 +14,23 @@ import (
 
 func (x *Xrpc) MergeCheck(w http.ResponseWriter, r *http.Request) {
 	l := x.Logger.With("handler", "MergeCheck")
-	fail := func(e xrpcerr.XrpcError) {
-		l.Error("failed", "kind", e.Tag, "error", e.Message)
-		writeError(w, e, http.StatusBadRequest)
-	}
 
 	var data tangled.RepoMergeCheck_Input
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-		fail(xrpcerr.GenericError(err))
+		badRequest(xrpcerr.GenericError(err)).send(l, w)
 		return
 	}
 
-	did := data.Did
-	name := data.Name
-
-	if did == "" || name == "" {
-		fail(xrpcerr.GenericError(fmt.Errorf("did and name are required")))
-		return
-	}
-
-	_, repoPath, err := x.resolveRepoDID(data.Repo, did, name)
+	repo, err := x.resolveRepoDID(data.Repo)
 	if err != nil {
 		l.Error("failed to resolve repo", "err", err)
-		fail(xrpcerr.RepoNotFoundError)
+		badRequest(xrpcerr.RepoNotFoundError).send(l, w)
 		return
 	}
 
-	gr, err := git.Open(repoPath, data.Branch)
+	gr, err := git.Open(repo.path, data.Branch)
 	if err != nil {
-		fail(xrpcerr.GenericError(fmt.Errorf("failed to open repository: %w", err)))
+		badRequest(xrpcerr.GenericError(fmt.Errorf("failed to open repository: %w", err))).send(l, w)
 		return
 	}
 	if x.Sandbox != nil {

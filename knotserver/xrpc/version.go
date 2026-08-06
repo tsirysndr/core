@@ -12,7 +12,10 @@ import (
 // version is set during build time.
 var version string
 
-var knotCapabilities = []string{string(consts.CapKnotACL)}
+var knotCapabilities = []string{
+	string(consts.CapKnotACL),
+	string(consts.CapRepoDidInput),
+}
 
 func (x *Xrpc) Version(w http.ResponseWriter, r *http.Request) {
 	if version == "" {
