@@ -45,6 +45,9 @@ const ADD_COLLAB: &str = "sh.tangled.repo.addCollaborator";
 const REMOVE_COLLAB: &str = "sh.tangled.repo.removeCollaborator";
 const SET_DEFAULT: &str = "sh.tangled.repo.setDefaultBranch";
 const DELETE_BRANCH: &str = "sh.tangled.repo.deleteBranch";
+const MERGE: &str = "sh.tangled.repo.merge";
+const FORK_SYNC: &str = "sh.tangled.repo.forkSync";
+const HIDDEN_REF: &str = "sh.tangled.repo.hiddenRef";
 
 type Responder = Box<dyn Fn(&HttpRequest) -> Result<HttpResponse, NetworkError> + Send + Sync>;
 type SharedState = Arc<XrpcState<FakeHttp<Responder>, ManualClock>>;
@@ -57,6 +60,18 @@ fn knot_did() -> KnotId {
 
 fn account(host: &str) -> AccountDid {
     AccountDid::new(format!("did:web:{host}")).unwrap()
+}
+
+struct Actor {
+    signer: K256Signer,
+    did: AccountDid,
+}
+
+fn actor(seed: u64, host: &str) -> Actor {
+    Actor {
+        signer: signer(seed),
+        did: account(host),
+    }
 }
 
 fn signer(seed: u64) -> K256Signer {
@@ -100,22 +115,22 @@ fn repo_did_doc(did: &str, multikey: &str) -> Bytes {
     )
 }
 
-fn mint(signer: &K256Signer, issuer: &AccountDid, method: &str) -> String {
+fn mint(actor: &Actor, nsid: &str) -> String {
     let jti = JTI.fetch_add(1, Ordering::Relaxed);
     let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"ES256K","typ":"JWT"}"#);
     let payload = URL_SAFE_NO_PAD.encode(
         serde_json::to_vec(&json!({
-            "iss": issuer.as_str(),
+            "iss": actor.did.as_str(),
             "aud": format!("did:web:{KNOT_HOST}"),
             "exp": 1_100,
             "iat": 999,
             "jti": format!("nonce-{jti}"),
-            "lxm": method,
+            "lxm": nsid,
         }))
         .unwrap(),
     );
     let signing_input = format!("{header}.{payload}");
-    let signature = signer.sign(signing_input.as_bytes());
+    let signature = actor.signer.sign(signing_input.as_bytes());
     format!(
         "{signing_input}.{}",
         URL_SAFE_NO_PAD.encode(signature.as_bytes())
@@ -152,8 +167,7 @@ async fn json_of(response: Response) -> serde_json::Value {
 async fn call<F, Fut>(
     world: &World,
     handler: F,
-    signer: &K256Signer,
-    host: &str,
+    actor: &Actor,
     nsid: &str,
     value: serde_json::Value,
 ) -> Response
@@ -161,7 +175,7 @@ where
     F: FnOnce(State<SharedState>, HeaderMap, crate::Method, Bytes) -> Fut,
     Fut: std::future::Future<Output = Result<Response, crate::XrpcError>>,
 {
-    let token = mint(signer, &account(host), nsid);
+    let token = mint(actor, nsid);
     into_response(
         handler(
             world.state(),
@@ -183,7 +197,7 @@ where
     F: FnOnce(State<SharedState>, HeaderMap, crate::Method, Bytes) -> Fut,
     Fut: std::future::Future<Output = Result<Response, crate::XrpcError>>,
 {
-    call(world, handler, &world.member, MEMBER_HOST, nsid, value).await
+    call(world, handler, &world.member, nsid, value).await
 }
 
 async fn as_admin<F, Fut>(
@@ -196,7 +210,7 @@ where
     F: FnOnce(State<SharedState>, HeaderMap, crate::Method, Bytes) -> Fut,
     Fut: std::future::Future<Output = Result<Response, crate::XrpcError>>,
 {
-    call(world, handler, &world.admin, ADMIN_HOST, nsid, value).await
+    call(world, handler, &world.admin, nsid, value).await
 }
 
 async fn as_stranger<F, Fut>(
@@ -209,7 +223,7 @@ where
     F: FnOnce(State<SharedState>, HeaderMap, crate::Method, Bytes) -> Fut,
     Fut: std::future::Future<Output = Result<Response, crate::XrpcError>>,
 {
-    call(world, handler, &world.stranger, STRANGER_HOST, nsid, value).await
+    call(world, handler, &world.stranger, nsid, value).await
 }
 
 fn member_owner() -> OwnerDid {
@@ -423,9 +437,9 @@ struct World {
     _dir: TempDir,
     layout: Layout,
     state: SharedState,
-    admin: K256Signer,
-    member: K256Signer,
-    stranger: K256Signer,
+    admin: Actor,
+    member: Actor,
+    stranger: Actor,
     repo_docs: Arc<Mutex<HashMap<String, String>>>,
     pds_records: Arc<Mutex<HashSet<String>>>,
 }
@@ -493,23 +507,23 @@ impl World {
     ) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let (layout, index, meta_path) = bootstrap(&dir, true, object_format);
-        let admin = signer(1);
-        let member = signer(2);
-        let stranger = signer(3);
+        let admin = actor(1, ADMIN_HOST);
+        let member = actor(2, MEMBER_HOST);
+        let stranger = actor(3, STRANGER_HOST);
         let repo_docs: Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(HashMap::new()));
         let pds_records: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
         let pubkeys = HashMap::from([
             (
                 ADMIN_HOST.to_string(),
-                admin.public_key().as_bytes().to_vec(),
+                admin.signer.public_key().as_bytes().to_vec(),
             ),
             (
                 MEMBER_HOST.to_string(),
-                member.public_key().as_bytes().to_vec(),
+                member.signer.public_key().as_bytes().to_vec(),
             ),
             (
                 STRANGER_HOST.to_string(),
-                stranger.public_key().as_bytes().to_vec(),
+                stranger.signer.public_key().as_bytes().to_vec(),
             ),
         ]);
         let responder = world_responder(pubkeys, Arc::clone(&repo_docs), Arc::clone(&pds_records));
@@ -631,30 +645,17 @@ async fn create_repo_helper(world: &World, name: &str) -> RepoDid {
     }
 }
 
-async fn create_status(
-    world: &World,
-    signer: &K256Signer,
-    host: &str,
-    value: serde_json::Value,
-) -> StatusCode {
-    call(
-        world,
-        crate::repos::create_repo,
-        signer,
-        host,
-        CREATE,
-        value,
-    )
-    .await
-    .status()
+async fn create_status(world: &World, actor: &Actor, value: serde_json::Value) -> StatusCode {
+    call(world, crate::repos::create_repo, actor, CREATE, value)
+        .await
+        .status()
 }
 
-async fn reserve_status(world: &World, signer: &K256Signer, host: &str, did: &str) -> StatusCode {
+async fn reserve_status(world: &World, actor: &Actor, did: &str) -> StatusCode {
     call(
         world,
         crate::repos::reserve_key,
-        signer,
-        host,
+        actor,
         RESERVE,
         json!({ "repoDid": did }),
     )
@@ -677,20 +678,13 @@ async fn reserve_repo_key(world: &World, did_web: &str) -> String {
     key
 }
 
-async fn rename_repo_as(
-    world: &World,
-    signer: &K256Signer,
-    host: &str,
-    repo: &RepoDid,
-    rkey: &str,
-) -> StatusCode {
+async fn rename_repo_as(world: &World, actor: &Actor, repo: &RepoDid, rkey: &str) -> StatusCode {
     call(
         world,
         crate::repos::rename_repo,
-        signer,
-        host,
+        actor,
         RENAME,
-        json!({ "repo": repo.as_str(), "rkey": rkey, "name": rkey }),
+        json!({ "repo": repo, "rkey": rkey, "name": rkey }),
     )
     .await
     .status()
@@ -701,14 +695,14 @@ async fn admission_gates_repo_creation() {
     let closed = World::new();
     let make = || json!({ "rkey": "anemone", "name": "anemone" });
     assert_eq!(
-        create_status(&closed, &closed.stranger, STRANGER_HOST, make()).await,
+        create_status(&closed, &closed.stranger, make()).await,
         StatusCode::FORBIDDEN,
         "a closed knot denies a stranger"
     );
 
     let open = World::open();
     assert_eq!(
-        create_status(&open, &open.stranger, STRANGER_HOST, make()).await,
+        create_status(&open, &open.stranger, make()).await,
         StatusCode::OK
     );
     assert!(
@@ -745,7 +739,7 @@ async fn blocklist_lifecycle() {
         Resolved::Ready(true)
     ));
     assert_eq!(
-        create_status(&world, &world.stranger, STRANGER_HOST, make()).await,
+        create_status(&world, &world.stranger, make()).await,
         StatusCode::FORBIDDEN,
         "a banned account cannot create"
     );
@@ -766,7 +760,7 @@ async fn blocklist_lifecycle() {
         Resolved::Ready(false)
     ));
     assert_eq!(
-        create_status(&world, &world.stranger, STRANGER_HOST, make()).await,
+        create_status(&world, &world.stranger, make()).await,
         StatusCode::OK,
         "an unban restores creation"
     );
@@ -894,7 +888,7 @@ async fn add_member_auth_outcomes() {
 
     let world = World::new();
     let lowercase = {
-        let token = mint(&world.admin, &account(ADMIN_HOST), ADD_MEMBER);
+        let token = mint(&world.admin, ADD_MEMBER);
         let mut headers = HeaderMap::new();
         headers.insert(
             AUTHORIZATION,
@@ -904,7 +898,7 @@ async fn add_member_auth_outcomes() {
     };
     let cases = vec![
         Case {
-            headers: bearer(&mint(&world.member, &account(MEMBER_HOST), ADD_MEMBER)),
+            headers: bearer(&mint(&world.member, ADD_MEMBER)),
             body: json!({ "subject": "did:web:olaren.dev" }),
             status: StatusCode::FORBIDDEN,
             why: "a non-admin cannot add a member",
@@ -916,7 +910,7 @@ async fn add_member_auth_outcomes() {
             why: "a request without a token is unauthorized",
         },
         Case {
-            headers: bearer(&mint(&world.admin, &account(ADMIN_HOST), ADD_MEMBER)),
+            headers: bearer(&mint(&world.admin, ADD_MEMBER)),
             body: json!({ "subject": "not-a-did" }),
             status: StatusCode::BAD_REQUEST,
             why: "an invalid DID is rejected at decode by the newtype Deserialize, never reaching a handler",
@@ -957,8 +951,8 @@ async fn a_transient_upstream_identity_failure_is_a_503_named_upstream_unavailab
         })
     });
     let (_dir, state) = build_state(responder, true);
-    let admin = signer(1);
-    let token = mint(&admin, &account(ADMIN_HOST), ADD_MEMBER);
+    let admin = actor(1, ADMIN_HOST);
+    let token = mint(&admin, ADD_MEMBER);
     let response = into_response(
         crate::members::add_member(
             State(state),
@@ -1026,8 +1020,10 @@ async fn re_adding_a_member_under_warming_appends_no_redundant_change() {
     use knot_cobs::{Grant, MembersChange, MembersCob};
     use knot_git::Repo;
 
-    let admin = signer(1);
-    let responder = doc_responder(admin.public_key().as_bytes().to_vec(), || StatusCode::OK);
+    let admin = actor(1, ADMIN_HOST);
+    let responder = doc_responder(admin.signer.public_key().as_bytes().to_vec(), || {
+        StatusCode::OK
+    });
     let (_dir, state) = build_state(responder, false);
 
     let now = state.now();
@@ -1047,7 +1043,7 @@ async fn re_adding_a_member_under_warming_appends_no_redundant_change() {
         )
         .unwrap();
 
-    let token = mint(&admin, &account(ADMIN_HOST), ADD_MEMBER);
+    let token = mint(&admin, ADD_MEMBER);
     assert_eq!(
         into_response(
             crate::members::add_member(
@@ -1096,7 +1092,6 @@ async fn create_mints_a_did_plc_repo_and_refuses_a_duplicate_name() {
         create_status(
             &world,
             &world.member,
-            MEMBER_HOST,
             json!({ "rkey": "anemone", "name": "anemone" })
         )
         .await,
@@ -1123,7 +1118,6 @@ async fn create_and_reserve_reject_bad_identities() {
         create_status(
             &world,
             &world.member,
-            MEMBER_HOST,
             json!({ "rkey": "a", "name": "a", "repoDid": "did:plc:aaaaaaaaaaaaaaaaaaaaaaaa" })
         )
         .await,
@@ -1135,7 +1129,6 @@ async fn create_and_reserve_reject_bad_identities() {
         create_status(
             &world,
             &world.member,
-            MEMBER_HOST,
             json!({ "rkey": "evil", "name": "evil", "repoDid": format!("did:web:{KNOT_HOST}") })
         )
         .await,
@@ -1152,7 +1145,6 @@ async fn create_and_reserve_reject_bad_identities() {
         create_status(
             &world,
             &world.member,
-            MEMBER_HOST,
             json!({ "rkey": "uni", "name": "uni", "repoDid": "did:web:uni.olaren.dev" })
         )
         .await,
@@ -1166,20 +1158,14 @@ async fn create_and_reserve_reject_bad_identities() {
     );
 
     assert_eq!(
-        reserve_status(
-            &world,
-            &world.member,
-            MEMBER_HOST,
-            &format!("did:web:{KNOT_HOST}")
-        )
-        .await,
+        reserve_status(&world, &world.member, &format!("did:web:{KNOT_HOST}")).await,
         StatusCode::BAD_REQUEST,
         "the knot's own DID cannot have a repo key reserved against it"
     );
 
     let unpublished = "did:web:conch.olaren.dev";
     assert_eq!(
-        reserve_status(&world, &world.member, MEMBER_HOST, unpublished).await,
+        reserve_status(&world, &world.member, unpublished).await,
         StatusCode::OK
     );
     let impostor = knot_types::crypto::multikey(0xe7, signer(99).public_key().as_bytes());
@@ -1188,7 +1174,6 @@ async fn create_and_reserve_reject_bad_identities() {
         create_status(
             &world,
             &world.member,
-            MEMBER_HOST,
             json!({ "rkey": "conch", "name": "conch", "repoDid": unpublished })
         )
         .await,
@@ -1214,7 +1199,6 @@ async fn create_and_reserve_reject_bad_identities() {
         create_status(
             &world,
             &world.admin,
-            ADMIN_HOST,
             json!({ "rkey": "victim", "name": "victim", "repoDid": victim })
         )
         .await,
@@ -1231,7 +1215,6 @@ async fn create_and_reserve_reject_bad_identities() {
         create_status(
             &world,
             &world.member,
-            MEMBER_HOST,
             json!({ "rkey": "doomed", "name": "doomed", "defaultBranch": "bad..name" })
         )
         .await,
@@ -1311,7 +1294,6 @@ async fn a_byo_did_web_repo_is_accepted_and_its_key_is_returned() {
         create_status(
             &world,
             &world.member,
-            MEMBER_HOST,
             json!({ "rkey": "anemone", "name": "anemone", "repoDid": squid })
         )
         .await,
@@ -1325,11 +1307,11 @@ async fn a_byo_did_web_repo_is_accepted_and_its_key_is_returned() {
 
 #[tokio::test]
 async fn a_rejected_plc_submission_is_a_bad_gateway() {
-    let admin = signer(1);
-    let key = admin.public_key().as_bytes().to_vec();
+    let admin = actor(1, ADMIN_HOST);
+    let key = admin.signer.public_key().as_bytes().to_vec();
     let responder = doc_responder(key, || StatusCode::BAD_REQUEST);
     let (_dir, state) = build_state(responder, true);
-    let token = mint(&admin, &account(ADMIN_HOST), CREATE);
+    let token = mint(&admin, CREATE);
     let status = into_response(
         crate::repos::create_repo(
             State(Arc::clone(&state)),
@@ -1362,8 +1344,8 @@ async fn a_rejected_plc_submission_is_a_bad_gateway() {
 
 #[tokio::test]
 async fn a_rejected_plc_submission_never_touches_the_registry() {
-    let admin = signer(1);
-    let key = admin.public_key().as_bytes().to_vec();
+    let admin = actor(1, ADMIN_HOST);
+    let key = admin.signer.public_key().as_bytes().to_vec();
     let reject_posts = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let reject = Arc::clone(&reject_posts);
     let responder = doc_responder(key, move || {
@@ -1376,7 +1358,7 @@ async fn a_rejected_plc_submission_never_touches_the_registry() {
     let (_dir, state) = build_state(responder, true);
     let owner = OwnerDid::new(format!("did:web:{ADMIN_HOST}")).unwrap();
 
-    let mint_create = || mint(&admin, &account(ADMIN_HOST), CREATE);
+    let mint_create = || mint(&admin, CREATE);
     let anemone = || body(json!({ "rkey": "anemone", "name": "anemone" }));
     assert_eq!(
         into_response(
@@ -1399,7 +1381,7 @@ async fn a_rejected_plc_submission_never_touches_the_registry() {
         other => panic!("victim repo wasn't registered: {other:?}"),
     };
 
-    let token = mint(&admin, &account(ADMIN_HOST), RENAME);
+    let token = mint(&admin, RENAME);
     assert_eq!(
         into_response(
             crate::repos::rename_repo(
@@ -1454,8 +1436,8 @@ async fn a_rejected_plc_submission_never_touches_the_registry() {
 
 #[tokio::test]
 async fn resolve_by_name_matches_the_rkey_case_sensitively() {
-    let admin = signer(1);
-    let key = admin.public_key().as_bytes().to_vec();
+    let admin = actor(1, ADMIN_HOST);
+    let key = admin.signer.public_key().as_bytes().to_vec();
     let responder = doc_responder(key, || StatusCode::OK);
     let (_dir, state) = build_state(responder, true);
     let owner = OwnerDid::new(format!("did:web:{ADMIN_HOST}")).unwrap();
@@ -1464,7 +1446,7 @@ async fn resolve_by_name_matches_the_rkey_case_sensitively() {
         into_response(
             crate::repos::create_repo(
                 State(Arc::clone(&state)),
-                bearer(&mint(&admin, &account(ADMIN_HOST), CREATE)),
+                bearer(&mint(&admin, CREATE)),
                 crate::Method::from_nsid(CREATE),
                 body(json!({ "rkey": "anemone", "name": "anemone" })),
             )
@@ -1490,17 +1472,17 @@ async fn reserve_key_refuses_once_the_pending_limit_is_reached() {
     add_member_helper(&world).await;
 
     assert_eq!(
-        reserve_status(&world, &world.member, MEMBER_HOST, "did:web:p0.olaren.dev").await,
+        reserve_status(&world, &world.member, "did:web:p0.olaren.dev").await,
         StatusCode::OK,
         "first reservation is within the limit"
     );
     assert_eq!(
-        reserve_status(&world, &world.member, MEMBER_HOST, "did:web:p1.olaren.dev").await,
+        reserve_status(&world, &world.member, "did:web:p1.olaren.dev").await,
         StatusCode::OK,
         "second reservation reaches the limit"
     );
     assert_eq!(
-        reserve_status(&world, &world.member, MEMBER_HOST, "did:web:p2.olaren.dev").await,
+        reserve_status(&world, &world.member, "did:web:p2.olaren.dev").await,
         StatusCode::TOO_MANY_REQUESTS,
         "member cannot grow the sealed store without bound past the pending-reservation limit"
     );
@@ -1515,24 +1497,18 @@ async fn one_account_cannot_exhaust_the_global_reservation_budget() {
     futures::stream::iter(["did:web:m0.olaren.dev", "did:web:m1.olaren.dev"])
         .for_each(|did| async move {
             assert_eq!(
-                reserve_status(world_ref, &world_ref.member, MEMBER_HOST, did).await,
+                reserve_status(world_ref, &world_ref.member, did).await,
                 StatusCode::OK
             );
         })
         .await;
     assert_eq!(
-        reserve_status(&world, &world.member, MEMBER_HOST, "did:web:m2.olaren.dev").await,
+        reserve_status(&world, &world.member, "did:web:m2.olaren.dev").await,
         StatusCode::TOO_MANY_REQUESTS,
         "member is held to its per-actor reservation budget"
     );
     assert_eq!(
-        reserve_status(
-            &world,
-            &world.admin,
-            ADMIN_HOST,
-            "did:web:admin0.olaren.dev"
-        )
-        .await,
+        reserve_status(&world, &world.admin, "did:web:admin0.olaren.dev").await,
         StatusCode::OK,
         "a different account keeps its own budget while global capacity remains"
     );
@@ -1546,7 +1522,7 @@ async fn concurrent_reserve_key_calls_all_succeed() {
     let handles: Vec<_> = (0..24)
         .map(|i| {
             let state = world.state();
-            let token = mint(&world.member, &account(MEMBER_HOST), RESERVE);
+            let token = mint(&world.member, RESERVE);
             let payload = body(json!({ "repoDid": format!("did:web:r{i}.olaren.dev") }));
             tokio::spawn(async move {
                 into_response(
@@ -1580,7 +1556,7 @@ async fn collaborator_lifecycle() {
     let world = World::new();
     add_member_helper(&world).await;
     let repo_did = create_repo_helper(&world, "scallop").await;
-    let subject = || json!({ "repo": repo_did.as_str(), "subject": "did:web:witchcraft.systems" });
+    let subject = || json!({ "repo": repo_did, "subject": "did:web:witchcraft.systems" });
 
     assert_eq!(
         as_member(
@@ -1659,15 +1635,13 @@ async fn repo_management_is_owner_or_collaborator_gated() {
     let world = World::new();
     add_member_helper(&world).await;
     let repo_did = create_repo_helper(&world, "squid").await;
-    let at = format!("at://did:web:{MEMBER_HOST}/sh.tangled.repo/squid");
-    let did = format!("did:web:{MEMBER_HOST}");
 
     assert_eq!(
         as_admin(
             &world,
             crate::collaborators::add_collaborator,
             ADD_COLLAB,
-            json!({ "repo": repo_did.as_str(), "subject": "did:web:isabelroses.com" })
+            json!({ "repo": repo_did, "subject": "did:web:isabelroses.com" })
         )
         .await
         .status(),
@@ -1679,7 +1653,7 @@ async fn repo_management_is_owner_or_collaborator_gated() {
             &world,
             crate::branches::set_default_branch,
             SET_DEFAULT,
-            json!({ "repo": at, "defaultBranch": "trunk" })
+            json!({ "repo": repo_did, "defaultBranch": "trunk" })
         )
         .await
         .status(),
@@ -1691,7 +1665,7 @@ async fn repo_management_is_owner_or_collaborator_gated() {
             &world,
             crate::branches::delete_branch,
             DELETE_BRANCH,
-            json!({ "repo": at, "branch": "trunk" })
+            json!({ "repo": repo_did, "branch": "trunk" })
         )
         .await
         .status(),
@@ -1703,7 +1677,7 @@ async fn repo_management_is_owner_or_collaborator_gated() {
             &world,
             crate::repos::delete_repo,
             DELETE,
-            json!({ "did": did, "name": "squid", "rkey": "squid" })
+            json!({ "repo": repo_did })
         )
         .await
         .status(),
@@ -1712,7 +1686,7 @@ async fn repo_management_is_owner_or_collaborator_gated() {
     );
 
     assert_eq!(
-        rename_repo_as(&world, &world.stranger, STRANGER_HOST, &repo_did, "stolen").await,
+        rename_repo_as(&world, &world.stranger, &repo_did, "stolen").await,
         StatusCode::FORBIDDEN
     );
     assert_eq!(
@@ -1726,34 +1700,34 @@ async fn repo_management_is_owner_or_collaborator_gated() {
             &world,
             crate::collaborators::add_collaborator,
             ADD_COLLAB,
-            json!({ "repo": repo_did.as_str(), "subject": format!("did:web:{STRANGER_HOST}") })
+            json!({ "repo": repo_did, "subject": format!("did:web:{STRANGER_HOST}") })
         )
         .await
         .status(),
         StatusCode::OK
     );
     assert_eq!(
-        rename_repo_as(
-            &world,
-            &world.stranger,
-            STRANGER_HOST,
-            &repo_did,
-            "periwinkle"
-        )
-        .await,
+        rename_repo_as(&world, &world.stranger, &repo_did, "periwinkle").await,
         StatusCode::OK,
         "rename is gated by can_push, so a collaborator may rename"
     );
 }
 
 #[tokio::test]
-async fn the_owner_sets_the_default_branch_through_an_at_uri() {
+async fn the_owner_sets_the_default_branch_by_repo_did() {
     let world = World::new();
     add_member_helper(&world).await;
     let repo_did = create_repo_helper(&world, "mussel").await;
 
     assert_eq!(
-        as_member(&world, crate::branches::set_default_branch, SET_DEFAULT, json!({ "repo": format!("at://did:web:{MEMBER_HOST}/sh.tangled.repo/mussel"), "defaultBranch": "trunk" })).await.status(),
+        as_member(
+            &world,
+            crate::branches::set_default_branch,
+            SET_DEFAULT,
+            json!({ "repo": repo_did, "defaultBranch": "trunk" })
+        )
+        .await
+        .status(),
         StatusCode::OK
     );
 
@@ -1808,12 +1782,26 @@ async fn set_default_branch_rejections() {
     .unwrap();
 
     assert_eq!(
-        as_member(&world, crate::branches::set_default_branch, SET_DEFAULT, json!({ "repo": format!("at://did:web:{MEMBER_HOST}/sh.tangled.notrepo/mussel"), "defaultBranch": "trunk" })).await.status(),
-        StatusCode::BAD_REQUEST,
-        "an at-uri addressing a collection other than sh.tangled.repo is rejected"
+        as_member(
+            &world,
+            crate::branches::set_default_branch,
+            SET_DEFAULT,
+            json!({ "repo": "did:web:squid.oyster.cafe", "defaultBranch": "trunk" })
+        )
+        .await
+        .status(),
+        StatusCode::NOT_FOUND,
+        "we'll reject a repo DID that this knot doesn't host"
     );
     assert_eq!(
-        as_member(&world, crate::branches::set_default_branch, SET_DEFAULT, json!({ "repo": format!("at://did:web:{MEMBER_HOST}/sh.tangled.repo/mussel"), "defaultBranch": "ghost" })).await.status(),
+        as_member(
+            &world,
+            crate::branches::set_default_branch,
+            SET_DEFAULT,
+            json!({ "repo": repo_did, "defaultBranch": "ghost" })
+        )
+        .await
+        .status(),
         StatusCode::NOT_FOUND,
         "a populated repo rejects a default pointing at a branch that doesn't exist"
     );
@@ -1857,13 +1845,12 @@ async fn delete_branch_removes_a_branch_and_refuses_the_default() {
     git.set_head(&RefName::new("refs/heads/main").unwrap())
         .unwrap();
 
-    let at = format!("at://did:web:{MEMBER_HOST}/sh.tangled.repo/periwinkle");
     assert_eq!(
         as_member(
             &world,
             crate::branches::delete_branch,
             DELETE_BRANCH,
-            json!({ "repo": at, "branch": "trunk" })
+            json!({ "repo": repo_did, "branch": "trunk" })
         )
         .await
         .status(),
@@ -1881,7 +1868,7 @@ async fn delete_branch_removes_a_branch_and_refuses_the_default() {
             &world,
             crate::branches::delete_branch,
             DELETE_BRANCH,
-            json!({ "repo": at, "branch": "main" })
+            json!({ "repo": repo_did, "branch": "main" })
         )
         .await
         .status(),
@@ -1913,7 +1900,6 @@ async fn delete_branch_removes_a_branch_and_refuses_the_default() {
 async fn delete_repo_lifecycle_and_guards() {
     let world = World::new();
     add_member_helper(&world).await;
-    let did = format!("did:web:{MEMBER_HOST}");
 
     let plain = create_repo_helper(&world, "whelk").await;
     assert_eq!(
@@ -1921,7 +1907,7 @@ async fn delete_repo_lifecycle_and_guards() {
             &world,
             crate::repos::delete_repo,
             DELETE,
-            json!({ "did": did, "name": "whelk", "rkey": "whelk" })
+            json!({ "repo": plain })
         )
         .await
         .status(),
@@ -1939,7 +1925,7 @@ async fn delete_repo_lifecycle_and_guards() {
 
     let guarded = create_repo_helper(&world, "conch").await;
     world.publish_pds_record("conch");
-    let delete_conch = || json!({ "did": did, "name": "conch", "rkey": "conch" });
+    let delete_conch = || json!({ "repo": guarded });
     assert_eq!(
         as_member(&world, crate::repos::delete_repo, DELETE, delete_conch())
             .await
@@ -1952,7 +1938,7 @@ async fn delete_repo_lifecycle_and_guards() {
         "a refused delete left the repo intact on disk"
     );
 
-    let force_conch = || json!({ "did": did, "name": "conch", "rkey": "conch", "force": true });
+    let force_conch = || json!({ "repo": guarded, "force": true });
     assert_eq!(
         as_member(&world, crate::repos::delete_repo, DELETE, force_conch())
             .await
@@ -1980,7 +1966,7 @@ async fn rename_alias_lifecycle() {
 
     let repo_a = create_repo_helper(&world, "alpha").await;
     assert_eq!(
-        rename_repo_as(&world, &world.member, MEMBER_HOST, &repo_a, "alphanew").await,
+        rename_repo_as(&world, &world.member, &repo_a, "alphanew").await,
         StatusCode::OK
     );
     assert_eq!(
@@ -1999,12 +1985,6 @@ async fn rename_alias_lifecycle() {
         "the new rkey is canonical"
     );
 
-    assert_eq!(
-        as_member(&world, crate::branches::set_default_branch, SET_DEFAULT, json!({ "repo": format!("at://did:web:{MEMBER_HOST}/sh.tangled.repo/alpha"), "defaultBranch": "trunk" })).await.status(),
-        StatusCode::OK,
-        "an at-uri with the pre-rename rkey still reaches the repo"
-    );
-
     let repo_a2 = create_repo_helper(&world, "alpha").await;
     assert_ne!(repo_a2, repo_a, "a brand-new repo DID was minted");
     assert_eq!(
@@ -2020,7 +2000,7 @@ async fn rename_alias_lifecycle() {
 
     let repo_b = create_repo_helper(&world, "beta").await;
     assert_eq!(
-        rename_repo_as(&world, &world.member, MEMBER_HOST, &repo_b, "alpha").await,
+        rename_repo_as(&world, &world.member, &repo_b, "alpha").await,
         StatusCode::CONFLICT,
         "a rename cannot take the canonical rkey of another live repo"
     );
@@ -2032,11 +2012,18 @@ async fn rename_alias_lifecycle() {
 
     let repo_g = create_repo_helper(&world, "gamma").await;
     assert_eq!(
-        rename_repo_as(&world, &world.member, MEMBER_HOST, &repo_g, "gammanew").await,
+        rename_repo_as(&world, &world.member, &repo_g, "gammanew").await,
         StatusCode::OK
     );
     assert_eq!(
-        as_member(&world, crate::repos::delete_repo, DELETE, json!({ "did": format!("did:web:{MEMBER_HOST}"), "name": "gammanew", "rkey": "gammanew" })).await.status(),
+        as_member(
+            &world,
+            crate::repos::delete_repo,
+            DELETE,
+            json!({ "repo": repo_g })
+        )
+        .await
+        .status(),
         StatusCode::OK
     );
     assert!(
@@ -2051,7 +2038,7 @@ async fn rename_alias_lifecycle() {
 
     let ghost = RepoDid::new("did:web:ghost.nel.pet").unwrap();
     assert_eq!(
-        rename_repo_as(&world, &world.member, MEMBER_HOST, &ghost, "kelp").await,
+        rename_repo_as(&world, &world.member, &ghost, "kelp").await,
         StatusCode::NOT_FOUND,
         "renaming a repo this knot doesn't host is 404 instead of 403"
     );
@@ -2059,11 +2046,13 @@ async fn rename_alias_lifecycle() {
 
 #[tokio::test]
 async fn a_rename_against_a_warming_registry_is_unavailable_not_forbidden() {
-    let admin = signer(1);
-    let responder = doc_responder(admin.public_key().as_bytes().to_vec(), || StatusCode::OK);
+    let admin = actor(1, ADMIN_HOST);
+    let responder = doc_responder(admin.signer.public_key().as_bytes().to_vec(), || {
+        StatusCode::OK
+    });
     let (_dir, state) = build_state(responder, false);
 
-    let token = mint(&admin, &account(ADMIN_HOST), RENAME);
+    let token = mint(&admin, RENAME);
     assert_eq!(
         into_response(
             crate::repos::rename_repo(
@@ -2146,14 +2135,14 @@ async fn the_router_binds_each_route_to_its_matched_method_scope() {
         request
     };
 
-    let matched = mint(&world.admin, &account(ADMIN_HOST), ADD_MEMBER);
+    let matched = mint(&world.admin, ADD_MEMBER);
     assert_eq!(
         app.clone().oneshot(post(matched)).await.unwrap().status(),
         StatusCode::OK,
         "a token whose lxm is the route's own method authenticates"
     );
 
-    let sibling = mint(&world.admin, &account(ADMIN_HOST), REMOVE_MEMBER);
+    let sibling = mint(&world.admin, REMOVE_MEMBER);
     assert_eq!(
         app.oneshot(post(sibling)).await.unwrap().status(),
         StatusCode::UNAUTHORIZED,
@@ -2262,7 +2251,6 @@ mod merge_endpoints {
     use knot_types::{Oid, RefName, UnixSeconds};
 
     const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
-    const MERGE: &str = "sh.tangled.repo.merge";
 
     const UNIFIED_PATCH: &str = concat!(
         "diff --git a/reef.txt b/reef.txt\n",
@@ -2368,8 +2356,7 @@ mod merge_endpoints {
                 crate::merge::merge,
                 MERGE,
                 json!({
-                    "did": format!("did:web:{MEMBER_HOST}"),
-                    "name": "kelp",
+                    "repo": repo_did,
                     "branch": "main",
                     "patch": UNIFIED_PATCH,
                     "commitMessage": "Merge tide",
@@ -2445,8 +2432,7 @@ mod merge_endpoints {
                 crate::merge::merge,
                 MERGE,
                 json!({
-                    "did": format!("did:web:{MEMBER_HOST}"),
-                    "name": "kelp",
+                    "repo": repo_did,
                     "branch": "main",
                     "patch": UNIFIED_PATCH,
                     "commitMessage": "Merge tide",
@@ -2516,8 +2502,7 @@ mod merge_endpoints {
                 crate::merge::merge,
                 MERGE,
                 json!({
-                    "did": format!("did:web:{MEMBER_HOST}"),
-                    "name": "limpet",
+                    "repo": repo_did,
                     "branch": "main",
                     "patch": mbox,
                 })
@@ -2555,14 +2540,13 @@ mod merge_endpoints {
         add_member_helper(&world).await;
         let repo_did = create_repo_helper(&world, "scallop").await;
         let base = seed_main(&world, &repo_did, &[("reef.txt", "old line\n")]);
-        let did = format!("did:web:{MEMBER_HOST}");
 
         assert_eq!(
             as_stranger(
                 &world,
                 crate::merge::merge,
                 MERGE,
-                json!({ "did": did, "name": "scallop", "branch": "main", "patch": UNIFIED_PATCH })
+                json!({ "repo": repo_did, "branch": "main", "patch": UNIFIED_PATCH })
             )
             .await
             .status(),
@@ -2575,7 +2559,7 @@ mod merge_endpoints {
                 &world,
                 crate::merge::merge,
                 MERGE,
-                json!({ "did": did, "name": "scallop", "branch": "main", "patch": UNIFIED_PATCH })
+                json!({ "repo": repo_did, "branch": "main", "patch": UNIFIED_PATCH })
             )
             .await
             .status(),
@@ -2589,12 +2573,12 @@ mod merge_endpoints {
         );
 
         assert_eq!(
-            as_member(&world, crate::merge::merge, MERGE, json!({ "did": did, "name": "scallop", "branch": "driftwood", "patch": UNIFIED_PATCH, "commitMessage": "tide" })).await.status(),
+            as_member(&world, crate::merge::merge, MERGE, json!({ "repo": repo_did, "branch": "driftwood", "patch": UNIFIED_PATCH, "commitMessage": "tide" })).await.status(),
             StatusCode::BAD_REQUEST,
             "merging into a branch the repo lacks is an invalid request"
         );
 
-        let response = as_member(&world, crate::merge::merge, MERGE, json!({ "did": did, "name": "scallop", "branch": "main", "patch": CONFLICTING_PATCH, "commitMessage": "tide" })).await;
+        let response = as_member(&world, crate::merge::merge, MERGE, json!({ "repo": repo_did, "branch": "main", "patch": CONFLICTING_PATCH, "commitMessage": "tide" })).await;
         assert_eq!(response.status(), StatusCode::CONFLICT);
         let json = json_of(response).await;
         assert_eq!(json["error"], "MergeConflict");
@@ -2623,8 +2607,7 @@ mod merge_endpoints {
 
         let input = |patch: &str| {
             body(json!({
-                "did": format!("did:web:{MEMBER_HOST}"),
-                "name": "scallop",
+                "repo": repo_did,
                 "branch": "main",
                 "patch": patch,
             }))
@@ -2665,6 +2648,64 @@ mod merge_endpoints {
             "merge check must write nothing into the object database"
         );
         assert_eq!(main_tip(&world, &repo_did), base);
+    }
+
+    #[tokio::test]
+    async fn a_repo_did_addresses_a_repo_whose_rkey_differs_from_its_name() {
+        let world = World::new();
+        add_member_helper(&world).await;
+        assert_eq!(
+            as_member(
+                &world,
+                crate::repos::create_repo,
+                CREATE,
+                json!({ "rkey": "3mjmslfzgwb22", "name": "periwinkle" })
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+        let repo_did = match resolve(&world, "3mjmslfzgwb22") {
+            Resolved::Ready(Some(did)) => did,
+            other => panic!("repo wasn't registered: {other:?}"),
+        };
+        let base = seed_main(&world, &repo_did, &[("reef.txt", "old line\n")]);
+
+        let rejections = [
+            (
+                json!({ "did": format!("did:web:{MEMBER_HOST}"), "name": "periwinkle", "branch": "main", "patch": UNIFIED_PATCH }),
+                StatusCode::BAD_REQUEST,
+                "we'll 400 an owner and a name instead of a repo DID",
+            ),
+            (
+                json!({ "repo": "did:plc:limpet", "branch": "main", "patch": UNIFIED_PATCH }),
+                StatusCode::NOT_FOUND,
+                "we'll 404 a repo DID that this knot doesn't host",
+            ),
+            (
+                json!({ "repo": "periwinkle", "branch": "main", "patch": UNIFIED_PATCH }),
+                StatusCode::BAD_REQUEST,
+                "we'll 400 a repo that isn't a DID",
+            ),
+        ];
+        for (input, want, why) in rejections {
+            let response =
+                into_response(crate::merge::merge_check(world.state(), body(input)).await);
+            assert_eq!(response.status(), want, "{why}");
+        }
+
+        assert_eq!(
+            as_member(
+                &world,
+                crate::merge::merge,
+                MERGE,
+                json!({ "repo": repo_did, "branch": "main", "patch": UNIFIED_PATCH, "commitMessage": "tide" })
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+        assert_ne!(main_tip(&world, &repo_did), base);
     }
 }
 
@@ -2750,13 +2791,13 @@ mod fork_endpoints {
         format!("https://{KNOT_HOST}/did:web:{MEMBER_HOST}/{rkey}")
     }
 
-    async fn fork_repo(world: &World, source: &str, rkey: &str) -> RepoDid {
+    async fn fork_repo(world: &World, source: &str, rkey: &str, name: &str) -> RepoDid {
         assert_eq!(
             as_member(
                 world,
                 crate::repos::create_repo,
                 CREATE,
-                json!({ "rkey": rkey, "name": rkey, "source": source })
+                json!({ "rkey": rkey, "name": name, "source": source })
             )
             .await
             .status(),
@@ -2800,7 +2841,7 @@ mod fork_endpoints {
                 })
                 .unwrap();
         });
-        let fork_did = fork_repo(&world, &source_url("kelp"), "uni").await;
+        let fork_did = fork_repo(&world, &source_url("kelp"), "uni", "uni").await;
         ForkWorld {
             world,
             source_did,
@@ -2809,60 +2850,41 @@ mod fork_endpoints {
         }
     }
 
-    async fn sync_fork(world: &World, signer: &K256Signer, host: &str, branch: &str) -> StatusCode {
+    async fn sync_fork(
+        world: &World,
+        actor: &Actor,
+        fork_did: &RepoDid,
+        branch: &str,
+    ) -> StatusCode {
         call(
             world,
             crate::forks::fork_sync,
-            signer,
-            host,
-            "sh.tangled.repo.forkSync",
-            json!({
-                "did": format!("did:web:{MEMBER_HOST}"),
-                "name": "uni",
-                "source": format!("at://did:web:{MEMBER_HOST}/sh.tangled.repo/kelp"),
-                "branch": branch,
-            }),
+            actor,
+            FORK_SYNC,
+            json!({ "repo": fork_did, "branch": branch }),
         )
         .await
         .status()
     }
 
-    async fn track_hidden(world: &World, fork_ref: &str, remote_ref: &str) -> StatusCode {
+    async fn track_hidden(
+        world: &World,
+        fork_did: &RepoDid,
+        fork_ref: &str,
+        remote_ref: &str,
+    ) -> StatusCode {
         as_member(
             world,
             crate::forks::hidden_ref,
-            "sh.tangled.repo.hiddenRef",
+            HIDDEN_REF,
             json!({
-                "repo": format!("at://did:web:{MEMBER_HOST}/sh.tangled.repo/uni"),
+                "repo": fork_did,
                 "forkRef": fork_ref,
                 "remoteRef": remote_ref,
             }),
         )
         .await
         .status()
-    }
-
-    async fn fork_status(
-        world: &World,
-        branch: &str,
-        hidden_ref: &str,
-    ) -> (StatusCode, Option<u64>) {
-        let response = as_member(
-            world,
-            crate::forks::fork_status,
-            "sh.tangled.repo.forkStatus",
-            json!({
-                "did": format!("did:web:{MEMBER_HOST}"),
-                "name": "uni",
-                "source": source_url("kelp"),
-                "branch": branch,
-                "hiddenRef": hidden_ref,
-            }),
-        )
-        .await;
-        let status = response.status();
-        let value = json_of(response).await;
-        (status, value["status"].as_u64())
     }
 
     #[tokio::test]
@@ -2918,7 +2940,7 @@ mod fork_endpoints {
         let new_tip = advance(&source, &main_ref(), "spray.txt", "salt\n", 1_002);
 
         assert_eq!(
-            sync_fork(&setup.world, &setup.world.member, MEMBER_HOST, "main").await,
+            sync_fork(&setup.world, &setup.world.member, &setup.fork_did, "main").await,
             StatusCode::OK
         );
         let fork = setup.world.layout.open(&setup.fork_did).unwrap();
@@ -2936,7 +2958,7 @@ mod fork_endpoints {
         );
 
         assert_eq!(
-            sync_fork(&setup.world, &setup.world.member, MEMBER_HOST, "main").await,
+            sync_fork(&setup.world, &setup.world.member, &setup.fork_did, "main").await,
             StatusCode::OK,
             "an up-to-date sync is a no-op"
         );
@@ -2947,14 +2969,47 @@ mod fork_endpoints {
         );
 
         assert_eq!(
-            sync_fork(&setup.world, &setup.world.stranger, STRANGER_HOST, "main").await,
+            sync_fork(&setup.world, &setup.world.stranger, &setup.fork_did, "main").await,
             StatusCode::FORBIDDEN,
             "a stranger cannot sync a fork"
         );
         assert_eq!(
-            sync_fork(&setup.world, &setup.world.member, MEMBER_HOST, "driftwood").await,
+            sync_fork(
+                &setup.world,
+                &setup.world.member,
+                &setup.fork_did,
+                "driftwood"
+            )
+            .await,
             StatusCode::NOT_FOUND,
             "syncing a branch the upstream lacks isn't found"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_repo_did_addresses_a_fork_whose_rkey_differs_from_its_name() {
+        let world = World::new();
+        add_member_helper(&world).await;
+        let source_did = create_repo_helper(&world, "kelp").await;
+        let source = world.layout.open(&source_did).unwrap();
+        advance(&source, &main_ref(), "reef.txt", "kelp forest\n", 1_000);
+
+        let fork_did = fork_repo(&world, &source_url("kelp"), "3mjmslfzgwb22", "nautilus").await;
+
+        let new_tip = advance(&source, &main_ref(), "spray.txt", "salt\n", 1_001);
+        assert_eq!(
+            sync_fork(&world, &world.member, &fork_did, "main").await,
+            StatusCode::OK
+        );
+        assert_eq!(
+            world
+                .layout
+                .open(&fork_did)
+                .unwrap()
+                .find_ref(&main_ref())
+                .unwrap(),
+            Some(new_tip),
+            "the fork will sync by repo DID, which the name never has to match"
         );
     }
 
@@ -2965,7 +3020,7 @@ mod fork_endpoints {
         let new_tip = advance(&source, &main_ref(), "spray.txt", "salt\n", 1_002);
 
         assert_eq!(
-            track_hidden(&setup.world, "feature", "main").await,
+            track_hidden(&setup.world, &setup.fork_did, "feature", "main").await,
             StatusCode::OK
         );
 
@@ -2980,7 +3035,7 @@ mod fork_endpoints {
             "a hidden ref must stay out of the public advertisement"
         );
         assert_eq!(
-            track_hidden(&setup.world, "feature", "main").await,
+            track_hidden(&setup.world, &setup.fork_did, "feature", "main").await,
             StatusCode::OK,
             "tracking an already-tracked ref is idempotent"
         );
@@ -3004,7 +3059,7 @@ mod fork_endpoints {
             .unwrap();
         let did_tip = advance(&source, &main_ref(), "spray.txt", "salt\n", 1_002);
         assert_eq!(
-            track_hidden(&setup.world, "feature", "main").await,
+            track_hidden(&setup.world, &setup.fork_did, "feature", "main").await,
             StatusCode::OK
         );
         assert_eq!(
@@ -3030,7 +3085,7 @@ mod fork_endpoints {
             .unwrap();
         let named_tip = advance(&source, &main_ref(), "swell.txt", "tide\n", 1_003);
         assert_eq!(
-            track_hidden(&setup.world, "feature", "main").await,
+            track_hidden(&setup.world, &setup.fork_did, "feature", "main").await,
             StatusCode::OK
         );
         assert_eq!(
@@ -3054,7 +3109,7 @@ mod fork_endpoints {
         fork.set_origin_url(&OriginUrl::new("file:///home/git/did:plc:whelk"))
             .unwrap();
         assert_eq!(
-            track_hidden(&setup.world, "feature", "main").await,
+            track_hidden(&setup.world, &setup.fork_did, "feature", "main").await,
             StatusCode::NOT_FOUND,
             "the knot reports not found for a file origin with an unknown repo did"
         );
@@ -3062,7 +3117,7 @@ mod fork_endpoints {
         fork.set_origin_url(&OriginUrl::new("ssh://knot.nel.pet/did:plc:whelk/ghost"))
             .unwrap();
         assert_eq!(
-            track_hidden(&setup.world, "feature", "main").await,
+            track_hidden(&setup.world, &setup.fork_did, "feature", "main").await,
             StatusCode::INTERNAL_SERVER_ERROR,
             "the knot reports an internal error for a stored origin scheme other than http, https, or file"
         );
@@ -3070,7 +3125,7 @@ mod fork_endpoints {
         fork.set_origin_url(&OriginUrl::new("file:///kelp"))
             .unwrap();
         assert_eq!(
-            track_hidden(&setup.world, "feature", "main").await,
+            track_hidden(&setup.world, &setup.fork_did, "feature", "main").await,
             StatusCode::INTERNAL_SERVER_ERROR,
             "the knot reports an internal error for a file origin whose only path segment isn't a DID"
         );
@@ -3115,58 +3170,6 @@ mod fork_endpoints {
     }
 
     #[tokio::test]
-    async fn fork_status_reports_up_to_date_fast_forwardable_and_conflict() {
-        let setup = forked_world().await;
-        assert_eq!(
-            track_hidden(&setup.world, "feature", "main").await,
-            StatusCode::OK
-        );
-        assert_eq!(
-            fork_status(&setup.world, "main", "refs/hidden/feature/main").await,
-            (StatusCode::OK, Some(0))
-        );
-
-        let source = setup.world.layout.open(&setup.source_did).unwrap();
-        advance(&source, &main_ref(), "spray.txt", "salt\n", 1_002);
-        assert_eq!(
-            track_hidden(&setup.world, "feature", "main").await,
-            StatusCode::OK
-        );
-        assert_eq!(
-            fork_status(&setup.world, "main", "refs/hidden/feature/main").await,
-            (StatusCode::OK, Some(1))
-        );
-
-        let fork = setup.world.layout.open(&setup.fork_did).unwrap();
-        advance(&fork, &main_ref(), "wreck.txt", "barnacle\n", 1_003);
-        assert_eq!(
-            fork_status(&setup.world, "main", "refs/hidden/feature/main").await,
-            (StatusCode::OK, Some(2))
-        );
-
-        assert_eq!(
-            fork_status(&setup.world, "main", "refs/hidden/ghost/main").await,
-            (StatusCode::BAD_REQUEST, None),
-            "an unresolvable revision is an invalid request"
-        );
-    }
-
-    #[tokio::test]
-    async fn fork_status_reports_up_to_date_when_the_fork_is_ahead() {
-        let setup = forked_world().await;
-        assert_eq!(
-            track_hidden(&setup.world, "feature", "main").await,
-            StatusCode::OK
-        );
-        let fork = setup.world.layout.open(&setup.fork_did).unwrap();
-        advance(&fork, &main_ref(), "wreck.txt", "barnacle\n", 1_003);
-        assert_eq!(
-            fork_status(&setup.world, "main", "refs/hidden/feature/main").await,
-            (StatusCode::OK, Some(0))
-        );
-    }
-
-    #[tokio::test]
     async fn a_fork_over_http_takes_the_upstream_object_format_and_conflicts_when_it_changes() {
         let upstream_dir = tempfile::tempdir().unwrap();
         let upstream_path = upstream_dir.path().join("uni.git");
@@ -3204,7 +3207,7 @@ mod fork_endpoints {
         );
 
         let remote = "https://barnacle.nel.pet/did:plc:squid/uni";
-        let fork_did = fork_repo(&world, remote, "uni").await;
+        let fork_did = fork_repo(&world, remote, "uni", "uni").await;
         let fork = world.layout.open(&fork_did).unwrap();
         assert_eq!(
             fork.object_format(),
@@ -3232,7 +3235,7 @@ mod fork_endpoints {
             1_002,
         );
         assert_eq!(
-            sync_fork(&world, &world.member, MEMBER_HOST, "main").await,
+            sync_fork(&world, &world.member, &fork_did, "main").await,
             StatusCode::OK
         );
         assert_eq!(
@@ -3251,7 +3254,7 @@ mod fork_endpoints {
         advance(&sha256, &main_ref(), "reef.txt", "kelp forest\n", 1_000);
         *served.write().unwrap() = replaced;
         assert_eq!(
-            sync_fork(&world, &world.member, MEMBER_HOST, "main").await,
+            sync_fork(&world, &world.member, &fork_did, "main").await,
             StatusCode::CONFLICT,
             "the fork reports a format mismatch as a conflict"
         );

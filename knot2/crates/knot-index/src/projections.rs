@@ -558,6 +558,27 @@ impl RegistryProjection {
         )
     }
 
+    pub(crate) fn ownership(
+        &self,
+        interner: &Interner,
+        repo: &RepoDid,
+    ) -> Resolved<Option<RepoRef>> {
+        if self.coverage.get() == Coverage::Warming {
+            return Resolved::Warming;
+        }
+        let Some(target) = interner.repo(repo) else {
+            return Resolved::Ready(None);
+        };
+        Resolved::Ready(
+            self.records
+                .read_sync(&target, |_, slot| (slot.owner, slot.rkey))
+                .map(|(owner, rkey)| RepoRef {
+                    owner: interner.resolve_owner(owner),
+                    rkey: interner.resolve_rkey(rkey),
+                }),
+        )
+    }
+
     pub(crate) fn hosted_repos(&self, interner: &Interner) -> Vec<RepoDid> {
         let mut repos = BTreeSet::new();
         self.records.iter_sync(|repo, _| {

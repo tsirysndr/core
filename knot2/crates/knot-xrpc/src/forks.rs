@@ -10,24 +10,22 @@ use url::Url;
 
 use knot_events::Reservation;
 use knot_git::{Filter, GitError, Haves, RefUpdate, Repo, Staging, Wants};
-use knot_index::Resolved;
 use knot_pack::{FetchError, HaveOids, PackLimits, UpstreamRefs, WantOids};
 use knot_postreceive::{Actor, Ci};
 use knot_runtime::{Clock, HttpTransport};
 use knot_types::{BranchName, ObjectFormat, Oid, OriginUrl, OwnerDid, RefName, RepoDid, RepoName};
 
-use crate::body::{ForkRef, RemoteRef, RepoAtUri, Revspec, SourceUrl};
-use crate::branches::resolve_at_uri;
+use crate::body::{ForkRef, RemoteRef, SourceUrl};
 use crate::error::XrpcError;
+use crate::reads::{HostedRepo, require_hosted};
 use crate::{XrpcState, decode, ok_empty, run_blocking};
 
-pub(crate) const STATUS_ROUTE: &str = "/xrpc/sh.tangled.repo.forkStatus";
 pub(crate) const SYNC_ROUTE: &str = "/xrpc/sh.tangled.repo.forkSync";
 pub(crate) const HIDDEN_REF_ROUTE: &str = "/xrpc/sh.tangled.repo.hiddenRef";
 
 #[derive(Clone)]
 pub(crate) enum Upstream {
-    Local(RepoDid),
+    Local(HostedRepo),
     Remote(Url),
 }
 
@@ -93,15 +91,9 @@ impl LocalPath {
 fn resolve_local<H: HttpTransport, C: Clock>(
     state: &XrpcState<H, C>,
     path: &LocalPath,
-) -> Result<RepoDid, XrpcError> {
+) -> Result<HostedRepo, XrpcError> {
     match path {
-        LocalPath::Did(did) => match state.index.owner_of(did) {
-            Resolved::Ready(Some(_)) => Ok(did.clone()),
-            Resolved::Ready(None) => Err(XrpcError::not_found(
-                "fork source isn't hosted on this knot",
-            )),
-            Resolved::Warming => Err(XrpcError::warming("registry projection is still warming")),
-        },
+        LocalPath::Did(did) => require_hosted(state, did.clone()),
         LocalPath::Named { owner, name } => crate::merge::resolve_by_name(state, owner, name),
     }
 }
@@ -420,7 +412,7 @@ impl<'a> TargetRef<'a> {
 
 async fn pull_upstream_branch<H: HttpTransport, C: Clock>(
     state: &Arc<XrpcState<H, C>>,
-    repo_did: &RepoDid,
+    repo_did: &HostedRepo,
     source: SourceRef<'_>,
     target: TargetRef<'_>,
 ) -> Result<SyncResult, XrpcError> {
@@ -466,7 +458,7 @@ async fn pull_upstream_branch<H: HttpTransport, C: Clock>(
     let lfs_missing = crate::lfs::mirror_fork_objects(
         Arc::clone(state),
         upstream,
-        repo_did.clone(),
+        repo_did.clone().into_did(),
         WantOids::new(vec![tip]),
         HaveOids::new(haves),
     )
@@ -492,8 +484,7 @@ async fn pull_upstream_branch<H: HttpTransport, C: Clock>(
 
 #[derive(Deserialize)]
 struct ForkSyncInput {
-    did: OwnerDid,
-    name: RepoName,
+    repo: RepoDid,
     branch: BranchName,
 }
 
@@ -505,7 +496,7 @@ pub(crate) async fn fork_sync<H: HttpTransport, C: Clock>(
 ) -> Result<Response, XrpcError> {
     let actor = state.authenticate(&headers, &method).await?;
     let input: ForkSyncInput = decode(&body)?;
-    let repo_did = crate::merge::resolve_by_name(&state, &input.did, &input.name)?;
+    let repo_did = require_hosted(&state, input.repo)?;
     crate::authorize_push(&state, &actor, &repo_did, FORK_DENIED).await?;
     let branch = input.branch.head_ref();
     let sync = pull_upstream_branch(
@@ -535,7 +526,7 @@ pub(crate) async fn fork_sync<H: HttpTransport, C: Clock>(
             let post_actor = Actor {
                 committer: actor,
                 owner,
-                repo: event_repo,
+                repo: event_repo.into_did(),
             };
             knot_postreceive::post_receive(
                 &repo,
@@ -568,7 +559,7 @@ pub(crate) async fn fork_sync<H: HttpTransport, C: Clock>(
 
 #[derive(Deserialize)]
 struct HiddenRefInput {
-    repo: RepoAtUri,
+    repo: RepoDid,
     #[serde(rename = "forkRef")]
     fork_ref: ForkRef,
     #[serde(rename = "remoteRef")]
@@ -592,7 +583,7 @@ pub(crate) async fn hidden_ref<H: HttpTransport, C: Clock>(
 ) -> Result<Response, XrpcError> {
     let actor = state.authenticate(&headers, &method).await?;
     let input: HiddenRefInput = decode(&body)?;
-    let repo_did = resolve_at_uri(&state, input.repo.at_uri())?;
+    let repo_did = require_hosted(&state, input.repo)?;
     crate::authorize_push(&state, &actor, &repo_did, FORK_DENIED).await?;
     let branch = input.remote_ref.head_ref();
     let target = input
@@ -614,118 +605,6 @@ pub(crate) async fn hidden_ref<H: HttpTransport, C: Clock>(
             success: true,
             ref_name: target,
             lfs_missing: sync.lfs_missing,
-        }),
-    )
-        .into_response())
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ForkStatus {
-    UpToDate,
-    FastForwardable,
-    Conflict,
-}
-
-impl ForkStatus {
-    fn code(self) -> u8 {
-        match self {
-            ForkStatus::UpToDate => 0,
-            ForkStatus::FastForwardable => 1,
-            ForkStatus::Conflict => 2,
-        }
-    }
-}
-
-#[derive(Deserialize)]
-struct ForkStatusInput {
-    did: OwnerDid,
-    name: Option<RepoName>,
-    #[serde(default, deserialize_with = "crate::body::optional_source_url")]
-    source: Option<SourceUrl>,
-    branch: Revspec,
-    #[serde(rename = "hiddenRef")]
-    hidden_ref: Revspec,
-}
-
-#[derive(Serialize)]
-struct ForkStatusOutput {
-    status: u8,
-}
-
-fn source_basename(source: &Url) -> Option<RepoName> {
-    source
-        .path_segments()
-        .and_then(|mut segments| segments.rfind(|segment| !segment.is_empty()))
-        .and_then(|segment| RepoName::new(segment).ok())
-}
-
-pub(crate) async fn fork_status<H: HttpTransport, C: Clock>(
-    State(state): State<Arc<XrpcState<H, C>>>,
-    headers: HeaderMap,
-    method: crate::Method,
-    body: Bytes,
-) -> Result<Response, XrpcError> {
-    let actor = state.authenticate(&headers, &method).await?;
-    let input: ForkStatusInput = decode(&body)?;
-    let name = input
-        .name
-        .or_else(|| {
-            input
-                .source
-                .as_ref()
-                .and_then(|source| source_basename(source.as_url()))
-        })
-        .ok_or_else(|| {
-            XrpcError::invalid_request(
-                "the request has neither a name or a source url ending in a repo name",
-            )
-        })?;
-    let repo_did = crate::merge::resolve_by_name(&state, &input.did, &name)?;
-    crate::authorize_push(&state, &actor, &repo_did, FORK_DENIED).await?;
-
-    let layout = state.layout.clone();
-    let status = run_blocking(move || {
-        let repo = layout.open(&repo_did)?;
-        let fork = repo
-            .resolve_revision(input.branch.as_str())
-            .ok_or_else(|| {
-                XrpcError::invalid_request(format!(
-                    "cannot resolve revision {}",
-                    input.branch.as_str()
-                ))
-            })
-            .and_then(|oid| {
-                repo.peel_to_commit(oid)
-                    .map_err(|error| XrpcError::invalid_request(error.to_string()))
-            })?;
-        let source = repo
-            .resolve_revision(input.hidden_ref.as_str())
-            .ok_or_else(|| {
-                XrpcError::invalid_request(format!(
-                    "cannot resolve revision {}",
-                    input.hidden_ref.as_str()
-                ))
-            })
-            .and_then(|oid| {
-                repo.peel_to_commit(oid)
-                    .map_err(|error| XrpcError::invalid_request(error.to_string()))
-            })?;
-        if fork == source {
-            return Ok(ForkStatus::UpToDate);
-        }
-        let base = repo.merge_base(fork, source)?;
-        Ok(match base {
-            Some(base) if base == fork => ForkStatus::FastForwardable,
-            Some(base) if base == source => ForkStatus::UpToDate,
-            _ => ForkStatus::Conflict,
-        })
-    })
-    .await?;
-
-    Ok((
-        http::StatusCode::OK,
-        Json(ForkStatusOutput {
-            status: status.code(),
         }),
     )
         .into_response())

@@ -53,10 +53,7 @@ struct CreateOutput {
 
 #[derive(Deserialize)]
 struct DeleteInput {
-    did: OwnerDid,
-    rkey: RepoRkey,
-    #[serde(rename = "name")]
-    _name: RepoName,
+    repo: RepoDid,
     #[serde(default)]
     force: bool,
 }
@@ -468,11 +465,12 @@ pub(crate) async fn delete_repo<H: HttpTransport, C: Clock>(
 ) -> Result<Response, XrpcError> {
     let actor = state.authenticate(&headers, &method).await?;
     let DeleteInput {
-        did, rkey, force, ..
+        repo: repo_did,
+        force,
     } = decode(&body)?;
 
-    let repo_did = match state.index.resolve_repo(&did, &rkey) {
-        Resolved::Ready(Some(repo_did)) => repo_did,
+    let RepoRef { owner: did, rkey } = match state.index.ownership_of(&repo_did) {
+        Resolved::Ready(Some(found)) => found,
         Resolved::Ready(None) => return Ok(ok_empty()),
         Resolved::Warming => {
             return Err(XrpcError::warming("registry projection is still warming"));

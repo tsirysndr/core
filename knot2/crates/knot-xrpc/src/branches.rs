@@ -8,58 +8,30 @@ use serde::Deserialize;
 
 use knot_events::GitRefUpdate;
 use knot_git::{GitError, RefUpdate};
-use knot_index::Resolved;
 use knot_runtime::{Clock, HttpTransport};
-use knot_types::{AtUri, BranchName, OwnerDid, RepoDid, RepoRkey};
+use knot_types::{BranchName, RepoDid};
 
-use crate::body::RepoAtUri;
 use crate::error::XrpcError;
+use crate::reads::require_hosted;
 use crate::{XrpcState, decode, ok_empty, run_blocking};
 
 pub(crate) const SET_DEFAULT_ROUTE: &str = "/xrpc/sh.tangled.repo.setDefaultBranch";
 pub(crate) const DELETE_ROUTE: &str = "/xrpc/sh.tangled.repo.deleteBranch";
-const REPO_COLLECTION: &str = "sh.tangled.repo";
 
 #[derive(Deserialize)]
 struct SetDefaultBranchInput {
-    repo: RepoAtUri,
+    repo: RepoDid,
     #[serde(rename = "defaultBranch")]
     default_branch: BranchName,
 }
 
 #[derive(Deserialize)]
 struct DeleteBranchInput {
-    repo: RepoAtUri,
+    repo: RepoDid,
     branch: BranchName,
 }
 
 const BRANCH_DENIED: &str = "only repository owner or a collaborator may change its branches";
-
-pub(crate) fn resolve_at_uri<H: HttpTransport, C: Clock>(
-    state: &XrpcState<H, C>,
-    at: &AtUri<String>,
-) -> Result<RepoDid, XrpcError> {
-    let owner = OwnerDid::new(at.authority().as_str())
-        .map_err(|_| XrpcError::invalid_request("at-uri authority must be a DID"))?;
-    if at
-        .collection()
-        .is_none_or(|collection| collection.as_str() != REPO_COLLECTION)
-    {
-        return Err(XrpcError::invalid_request(
-            "at-uri must address an sh.tangled.repo record",
-        ));
-    }
-    let rkey = at
-        .rkey()
-        .ok_or_else(|| XrpcError::invalid_request("at-uri must include a record key"))?;
-    let rkey = RepoRkey::new(rkey.as_str())
-        .map_err(|_| XrpcError::invalid_request("at-uri record key isn't a valid rkey"))?;
-    match state.index.resolve_repo(&owner, &rkey) {
-        Resolved::Ready(Some(repo_did)) => Ok(repo_did),
-        Resolved::Ready(None) => Err(XrpcError::not_found("no such repository on this knot")),
-        Resolved::Warming => Err(XrpcError::warming("registry projection is still warming")),
-    }
-}
 
 pub(crate) async fn set_default_branch<H: HttpTransport, C: Clock>(
     State(state): State<Arc<XrpcState<H, C>>>,
@@ -69,7 +41,7 @@ pub(crate) async fn set_default_branch<H: HttpTransport, C: Clock>(
 ) -> Result<Response, XrpcError> {
     let actor = state.authenticate(&headers, &method).await?;
     let input: SetDefaultBranchInput = decode(&body)?;
-    let repo_did = resolve_at_uri(&state, input.repo.at_uri())?;
+    let repo_did = require_hosted(&state, input.repo)?;
     crate::authorize_push(&state, &actor, &repo_did, BRANCH_DENIED).await?;
     let refname = input.default_branch.head_ref();
 
@@ -89,7 +61,7 @@ pub(crate) async fn set_default_branch<H: HttpTransport, C: Clock>(
     .await?;
 
     let owner = crate::current_owner(&state, &repo_did);
-    reservation.fulfill(&GitRefUpdate::new(repo_did, owner, actor));
+    reservation.fulfill(&GitRefUpdate::new(repo_did.into_did(), owner, actor));
 
     Ok(ok_empty())
 }
@@ -102,7 +74,7 @@ pub(crate) async fn delete_branch<H: HttpTransport, C: Clock>(
 ) -> Result<Response, XrpcError> {
     let actor = state.authenticate(&headers, &method).await?;
     let input: DeleteBranchInput = decode(&body)?;
-    let repo_did = resolve_at_uri(&state, input.repo.at_uri())?;
+    let repo_did = require_hosted(&state, input.repo)?;
     crate::authorize_push(&state, &actor, &repo_did, BRANCH_DENIED).await?;
     let refname = input.branch.head_ref();
 
@@ -135,11 +107,13 @@ pub(crate) async fn delete_branch<H: HttpTransport, C: Clock>(
     .await?;
 
     let owner = crate::current_owner(&state, &repo_did);
-    reservation.fulfill(&GitRefUpdate::new(repo_did, owner, actor).on_ref(
-        deleted_ref,
-        knot_types::RefTransition::Delete { old },
-        format,
-    ));
+    reservation.fulfill(
+        &GitRefUpdate::new(repo_did.into_did(), owner, actor).on_ref(
+            deleted_ref,
+            knot_types::RefTransition::Delete { old },
+            format,
+        ),
+    );
 
     Ok(ok_empty())
 }

@@ -798,8 +798,8 @@ async fn mirror_fork_objects_inner<H: HttpTransport, C: Clock>(
     }
 
     let missing = match upstream {
-        Upstream::Local(source) => {
-            let source = source.clone();
+        Upstream::Local(hosted) => {
+            let source = hosted.clone().into_did();
             let fork = fork.clone();
             let store = Arc::clone(&store);
             let admission = Arc::clone(&admission);

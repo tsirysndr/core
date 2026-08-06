@@ -1,25 +1,8 @@
 use serde::Deserialize;
 use serde::de::{self, Deserializer};
 
-use knot_types::{AtUri, RefName};
+use knot_types::RefName;
 use url::Url;
-
-pub(crate) struct RepoAtUri(AtUri<String>);
-
-impl RepoAtUri {
-    pub(crate) fn at_uri(&self) -> &AtUri<String> {
-        &self.0
-    }
-}
-
-impl<'de> Deserialize<'de> for RepoAtUri {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = String::deserialize(deserializer)?;
-        AtUri::new_owned(raw)
-            .map(RepoAtUri)
-            .map_err(|_| de::Error::custom("repo must be an at-uri"))
-    }
-}
 
 #[derive(Clone)]
 pub(crate) struct SourceUrl(Url);
@@ -69,8 +52,6 @@ knot_types::text_newtype! {
     pub(crate) struct CommitMessage(String) => verbatim;
     pub(crate) struct CommitBody(String) => verbatim;
 }
-
-pub(crate) use crate::query::Revspec;
 
 pub(crate) struct ForkRef(RefName);
 

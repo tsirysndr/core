@@ -13,7 +13,6 @@ use knot_git::{
     PatchParseError, RefUpdate, Repo, StagedChange, Staging, is_format_patch,
     parse_mailbox_bounded, parse_patch_bounded,
 };
-use knot_index::Resolved;
 use knot_postreceive::{Actor, Ci};
 use knot_runtime::{Clock, HttpTransport};
 use knot_types::{
@@ -22,7 +21,8 @@ use knot_types::{
 
 use crate::body::{CommitBody, CommitMessage, Patch};
 use crate::error::XrpcError;
-use crate::reads::{open, repo_not_found, warming};
+use crate::query::RepoArg;
+use crate::reads::{HostedRepo, open, repo_not_found, require_hosted, resolve_repo};
 use crate::{XrpcState, decode, ok_empty, run_blocking};
 
 pub(crate) const MERGE_ROUTE: &str = "/xrpc/sh.tangled.repo.merge";
@@ -39,8 +39,7 @@ pub struct Committer {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct MergeInput {
-    did: OwnerDid,
-    name: RepoName,
+    repo: RepoDid,
     patch: Patch,
     branch: BranchName,
     author_name: Option<AuthorName>,
@@ -51,8 +50,7 @@ struct MergeInput {
 
 #[derive(Deserialize)]
 struct MergeCheckInput {
-    did: OwnerDid,
-    name: RepoName,
+    repo: RepoDid,
     patch: Patch,
     branch: BranchName,
 }
@@ -157,12 +155,10 @@ pub(crate) fn resolve_by_name<H: HttpTransport, C: Clock>(
     state: &XrpcState<H, C>,
     owner: &OwnerDid,
     name: &RepoName,
-) -> Result<RepoDid, XrpcError> {
+) -> Result<HostedRepo, XrpcError> {
     let rkey = RepoRkey::new(name.as_str()).map_err(|_| repo_not_found())?;
-    match state.index.resolve_repo(owner, &rkey) {
-        Resolved::Ready(found) => found.ok_or_else(repo_not_found),
-        Resolved::Warming => Err(warming()),
-    }
+    let owner = owner.clone();
+    resolve_repo(state, &RepoArg::OwnerRkey { owner, rkey })
 }
 
 fn branch_tip(repo: &Repo, refname: &RefName) -> Result<Oid, XrpcError> {
@@ -383,7 +379,7 @@ pub(crate) async fn merge<H: HttpTransport, C: Clock>(
 ) -> Result<Response, XrpcError> {
     let actor = state.authenticate(&headers, &method).await?;
     let input: MergeInput = decode(&body)?;
-    let repo_did = resolve_by_name(&state, &input.did, &input.name)?;
+    let repo_did = require_hosted(&state, input.repo.clone())?;
     crate::authorize_push(
         &state,
         &actor,
@@ -444,7 +440,7 @@ pub(crate) async fn merge<H: HttpTransport, C: Clock>(
                 let post_actor = Actor {
                     committer: actor,
                     owner,
-                    repo: event_repo,
+                    repo: event_repo.into_did(),
                 };
                 knot_postreceive::post_receive(
                     &repo,
@@ -502,7 +498,7 @@ pub(crate) async fn merge_check<H: HttpTransport, C: Clock>(
     body: Bytes,
 ) -> Result<Response, XrpcError> {
     let input: MergeCheckInput = decode(&body)?;
-    let repo_did = resolve_by_name(&state, &input.did, &input.name)?;
+    let repo_did = require_hosted(&state, input.repo)?;
     let refname = input.branch.head_ref();
     let layout = state.layout.clone();
     let max_patch_bytes = state.byte_limits.patch_decompressed.get();

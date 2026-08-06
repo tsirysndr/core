@@ -287,7 +287,6 @@ pub fn router<H: HttpTransport, C: Clock>(state: Arc<XrpcState<H, C>>) -> Router
             branches::DELETE_ROUTE,
             post(branches::delete_branch::<H, C>),
         )
-        .route(forks::STATUS_ROUTE, post(forks::fork_status::<H, C>))
         .route(forks::SYNC_ROUTE, post(forks::fork_sync::<H, C>))
         .route(forks::HIDDEN_REF_ROUTE, post(forks::hidden_ref::<H, C>))
         .route(reads::TREE_ROUTE, get(reads::repo_tree::<H, C>))

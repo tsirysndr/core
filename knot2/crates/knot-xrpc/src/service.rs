@@ -19,7 +19,7 @@ const WIRE_VERSION: &str = "v1.15.0";
 #[derive(Serialize)]
 struct VersionWire {
     version: &'static str,
-    capabilities: [&'static str; 1],
+    capabilities: [&'static str; 2],
 }
 
 #[derive(Serialize)]
@@ -53,7 +53,7 @@ struct OwnerWire {
 pub(crate) async fn version() -> Response {
     Json(VersionWire {
         version: WIRE_VERSION,
-        capabilities: ["knot-acl"],
+        capabilities: ["knot-acl", "repo-did-input"],
     })
     .into_response()
 }

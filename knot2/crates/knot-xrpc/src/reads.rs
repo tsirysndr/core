@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 use tower::ServiceExt;
 use tower_http::services::ServeFile;
 
+use knot_cobs::RepoRef;
 use knot_git::{
     ArchiveFormat, Commit, CommitRange, EntryKind, Layout, LogLimit, LogSkip, Repo, SizedEntry,
     is_public_ref, screens_reserved,
@@ -100,18 +101,46 @@ pub(crate) fn warming() -> XrpcError {
     XrpcError::warming("registry projection is still warming")
 }
 
-fn resolve_repo<H: HttpTransport, C: Clock>(
+#[derive(Clone)]
+pub(crate) struct HostedRepo(RepoDid);
+
+impl HostedRepo {
+    fn registered(did: RepoDid) -> Self {
+        Self(did)
+    }
+
+    pub(crate) fn into_did(self) -> RepoDid {
+        self.0
+    }
+}
+
+impl std::ops::Deref for HostedRepo {
+    type Target = RepoDid;
+
+    fn deref(&self) -> &RepoDid {
+        &self.0
+    }
+}
+
+pub(crate) fn require_hosted<H: HttpTransport, C: Clock>(
+    state: &XrpcState<H, C>,
+    repo: RepoDid,
+) -> Result<HostedRepo, XrpcError> {
+    match state.index.owner_of(&repo) {
+        Resolved::Ready(Some(_)) => Ok(HostedRepo::registered(repo)),
+        Resolved::Ready(None) => Err(repo_not_found()),
+        Resolved::Warming => Err(warming()),
+    }
+}
+
+pub(crate) fn resolve_repo<H: HttpTransport, C: Clock>(
     state: &XrpcState<H, C>,
     repo: &RepoArg,
-) -> Result<RepoDid, XrpcError> {
+) -> Result<HostedRepo, XrpcError> {
     match repo {
-        RepoArg::Did(did) => match state.index.owner_of(did) {
-            Resolved::Ready(Some(_)) => Ok(did.clone()),
-            Resolved::Ready(None) => Err(repo_not_found()),
-            Resolved::Warming => Err(warming()),
-        },
+        RepoArg::Did(did) => require_hosted(state, did.clone()),
         RepoArg::OwnerRkey { owner, rkey } => match state.index.resolve_repo(owner, rkey) {
-            Resolved::Ready(Some(did)) => Ok(did),
+            Resolved::Ready(Some(did)) => Ok(HostedRepo::registered(did)),
             Resolved::Ready(None) => Err(repo_not_found()),
             Resolved::Warming => Err(warming()),
         },
@@ -1510,13 +1539,8 @@ pub(crate) async fn repo_describe_repo<H: HttpTransport, C: Clock>(
     ValidatedQuery(params): ValidatedQuery<DescribeRepoParams>,
 ) -> Result<Response, XrpcError> {
     let did = params.repo_did;
-    let owner = match state.index.owner_of(&did) {
-        Resolved::Ready(Some(owner)) => owner,
-        Resolved::Ready(None) => return Err(repo_not_found()),
-        Resolved::Warming => return Err(warming()),
-    };
-    let rkey = match state.index.rkey_of(&did) {
-        Resolved::Ready(Some(rkey)) => rkey,
+    let RepoRef { owner, rkey } = match state.index.ownership_of(&did) {
+        Resolved::Ready(Some(found)) => found,
         Resolved::Ready(None) => return Err(repo_not_found()),
         Resolved::Warming => return Err(warming()),
     };

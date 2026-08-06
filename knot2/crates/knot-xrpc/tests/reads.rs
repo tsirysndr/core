@@ -1560,8 +1560,7 @@ async fn a_compare_patch_round_trips_through_merge_check() {
         &world,
         "/xrpc/sh.tangled.repo.mergeCheck",
         serde_json::json!({
-            "did": OWNER,
-            "name": "periwinkle",
+            "repo": registered,
             "branch": "main",
             "patch": patch,
         }),
@@ -1578,8 +1577,7 @@ async fn a_compare_patch_round_trips_through_merge_check() {
         &world,
         "/xrpc/sh.tangled.repo.mergeCheck",
         serde_json::json!({
-            "did": OWNER,
-            "name": "periwinkle",
+            "repo": registered,
             "branch": "feature",
             "patch": patch,
         }),
@@ -1765,7 +1763,10 @@ async fn service_metadata_endpoints_answer() {
     let world = World::new();
     let wire = get_json(&world, "/xrpc/sh.tangled.knot.version").await;
     assert_eq!(wire["version"], "v1.15.0");
-    assert_eq!(wire["capabilities"], serde_json::json!(["knot-acl"]));
+    assert_eq!(
+        wire["capabilities"],
+        serde_json::json!(["knot-acl", "repo-did-input"])
+    );
 
     let owner = get_json(&world, "/xrpc/sh.tangled.owner").await;
     assert_eq!(owner["owner"], OWNER);
@@ -1905,7 +1906,7 @@ async fn a_single_peer_cannot_monopolize_the_events_stream() {
 }
 
 #[tokio::test]
-async fn set_default_branch_resolves_an_at_uri_repo_and_an_existing_branch() {
+async fn set_default_branch_resolves_a_repo_did_and_an_existing_branch() {
     let world = World::new();
     let (did, work) = seeded(&world, "coral");
     let bare = world.layout.repo_path(&did).unwrap();
@@ -1920,7 +1921,7 @@ async fn set_default_branch_resolves_an_at_uri_repo_and_an_existing_branch() {
         "/xrpc/sh.tangled.repo.setDefaultBranch",
         OWNER,
         serde_json::json!({
-            "repo": format!("at://{OWNER}/sh.tangled.repo/coral"),
+            "repo": did,
             "defaultBranch": "release",
         }),
     )
@@ -1946,12 +1947,11 @@ async fn delete_branch_removes_a_non_default_branch_then_reports_it_gone() {
         &["push", "-q", bare.to_str().unwrap(), "refs/heads/feature"],
     );
 
-    let at = format!("at://{OWNER}/sh.tangled.repo/kelp");
     let (status, _) = post_authed(
         &world,
         "/xrpc/sh.tangled.repo.deleteBranch",
         OWNER,
-        serde_json::json!({ "repo": at, "branch": "feature" }),
+        serde_json::json!({ "repo": did, "branch": "feature" }),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -1960,7 +1960,7 @@ async fn delete_branch_removes_a_non_default_branch_then_reports_it_gone() {
         &world,
         "/xrpc/sh.tangled.repo.deleteBranch",
         OWNER,
-        serde_json::json!({ "repo": at, "branch": "feature" }),
+        serde_json::json!({ "repo": did, "branch": "feature" }),
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND, "second delete: {body}");
@@ -1975,18 +1975,18 @@ async fn bad_post_bodies_are_invalid_request() {
     let cases: &[(&str, serde_json::Value)] = &[
         (
             "/xrpc/sh.tangled.repo.setDefaultBranch",
-            serde_json::json!({ "repo": "not-an-at-uri", "defaultBranch": "main" }),
+            serde_json::json!({ "repo": "not-a-repo-did", "defaultBranch": "main" }),
         ),
         (
             "/xrpc/sh.tangled.repo.deleteBranch",
             serde_json::json!({
-                "repo": format!("at://{OWNER}/sh.tangled.repo/kelp"),
+                "repo": "did:plc:kelpfixture",
                 "branch": "bad branch",
             }),
         ),
         (
             "/xrpc/sh.tangled.repo.forkSync",
-            serde_json::json!({ "did": OWNER, "name": "barnacle", "branch": "bad branch" }),
+            serde_json::json!({ "repo": "did:plc:barnaclefixture", "branch": "bad branch" }),
         ),
         (
             "/xrpc/sh.tangled.repo.hiddenRef",
@@ -2021,8 +2021,7 @@ async fn merge_applies_a_plain_patch_under_the_supplied_author() {
         "/xrpc/sh.tangled.repo.merge",
         OWNER,
         serde_json::json!({
-            "did": OWNER,
-            "name": "mussel",
+            "repo": registered,
             "branch": "main",
             "patch": patch,
             "authorName": "Teq",

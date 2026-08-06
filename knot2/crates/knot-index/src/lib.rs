@@ -14,7 +14,7 @@ use std::time::Duration;
 use knot_cob::{ChangePayload, CobStore};
 use knot_cobs::{
     BlocklistChange, BlocklistCob, CollaboratorsChange, CollaboratorsCob, Grant, MembersChange,
-    MembersCob, RegistryChange, RepoRegistryCob,
+    MembersCob, RegistryChange, RepoRef, RepoRegistryCob,
 };
 use knot_git::{Layout, Repo};
 use knot_types::{AccountDid, ClonePath, OwnerDid, RepoDid, RepoRkey, UnixSeconds};
@@ -524,6 +524,10 @@ impl Index {
 
     pub fn rkey_of(&self, repo: &RepoDid) -> Resolved<Option<RepoRkey>> {
         self.registry.rkey_of(&self.interner, repo)
+    }
+
+    pub fn ownership_of(&self, repo: &RepoDid) -> Resolved<Option<RepoRef>> {
+        self.registry.ownership(&self.interner, repo)
     }
 
     pub fn hosted_repos(&self) -> Vec<RepoDid> {
