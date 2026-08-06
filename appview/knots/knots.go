@@ -403,6 +403,11 @@ func (k *Knots) retry(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if errors.Is(err, xrpcclient.ErrXrpcNotFound) {
+			k.Pages.Notice(w, noticeId, "Failed to verify knot, its owner query returned 404. Check that this domain reaches your knot.")
+			return
+		}
+
 		if e, ok := err.(*serververify.OwnerMismatch); ok {
 			k.Pages.Notice(w, noticeId, e.Error())
 			return

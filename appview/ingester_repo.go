@@ -9,7 +9,9 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/avast/retry-go/v4"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	jmodels "github.com/bluesky-social/jetstream/pkg/models"
 	"tangled.org/core/api/tangled"
@@ -17,6 +19,7 @@ import (
 	"tangled.org/core/appview/models"
 	"tangled.org/core/orm"
 	"tangled.org/core/repoident"
+	"tangled.org/core/repoverify"
 )
 
 func (i *Ingester) ingestRepo(ctx context.Context, e *jmodels.Event, l *slog.Logger) error {
@@ -418,6 +421,14 @@ func derefString(s *string) string {
 	return *s
 }
 
+const ownershipVerifyAttempts = 3
+
+var rejectionReasons = map[repoverify.Answer]string{
+	repoverify.AnswerNoRoute: "the knot doesn't serve describeRepo, so upgrade it to 1.14 or later",
+	repoverify.AnswerAbsent:  "the knot doesn't host this repoDid",
+	repoverify.AnswerUnset:   "the knot didn't identify an owner for this repoDid",
+}
+
 func (i *Ingester) verifyOwnership(ctx context.Context, l *slog.Logger, repoDid, eventDid, recordKnot string) (bool, error) {
 	if i.Verifier == nil {
 		return false, fmt.Errorf("ingester has no repo ownership verifier configured")
@@ -427,18 +438,37 @@ func (i *Ingester) verifyOwnership(ctx context.Context, l *slog.Logger, repoDid,
 		l.Warn("rejecting repo event: invalid repoDid on record", "repoDid", repoDid, "err", err)
 		return false, nil
 	}
-	result, err := i.Verifier(ctx, rd)
+
+	verifyCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	var result repoverify.Result
+	err = retry.Do(
+		func() (attemptErr error) {
+			result, attemptErr = i.Verifier(verifyCtx, rd)
+			return
+		},
+		retry.Context(verifyCtx),
+		retry.Attempts(ownershipVerifyAttempts),
+		retry.Delay(500*time.Millisecond),
+		retry.DelayType(retry.FixedDelay),
+		retry.RetryIf(repoverify.Retriable),
+		retry.LastErrorOnly(true),
+	)
 	if err != nil {
 		return false, fmt.Errorf("verify repo ownership: %w", err)
 	}
-	if result.OwnerDid == "" {
-		l.Warn("knot lacks RepoDescribeRepo, skipping owner check; upgrade knot to 1.14+",
-			"repoDid", repoDid, "knot", result.KnotURL.String())
-	} else if result.OwnerDid.String() != eventDid {
+	ownership, ok := result.Ownership()
+	if !ok {
+		l.Warn("rejecting repo event", "reason", rejectionReasons[result.Answer()],
+			"repoDid", repoDid, "knot", result.KnotURL.String(), "answer", result.Answer())
+		return false, nil
+	}
+	if ownership.OwnerDid.String() != eventDid {
 		l.Warn("rejecting repo event: owner mismatch",
 			"repoDid", repoDid,
 			"claimedOwner", eventDid,
-			"knotOwner", result.OwnerDid.String(),
+			"knotOwner", ownership.OwnerDid.String(),
 			"knot", result.KnotURL.String(),
 		)
 		return false, nil

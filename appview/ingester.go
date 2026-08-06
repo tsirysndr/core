@@ -131,7 +131,7 @@ func (i *Ingester) Ingest() processFunc {
 		}
 
 		if err != nil {
-			l.Warn("failed to ingest record, skipping", "err", err)
+			l.Error("failed to ingest record, dropping it without retry", "err", err)
 		}
 
 		return nil

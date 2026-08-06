@@ -386,6 +386,11 @@ func (s *Spindles) retry(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if errors.Is(err, xrpcclient.ErrXrpcNotFound) {
+			s.Pages.Notice(w, noticeId, "Failed to verify spindle, its owner query returned 404. Check that this instance reaches your spindle.")
+			return
+		}
+
 		if e, ok := err.(*serververify.OwnerMismatch); ok {
 			s.Pages.Notice(w, noticeId, e.Error())
 			return

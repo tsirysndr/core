@@ -95,11 +95,17 @@ func (x *Xrpc) resolveKnot(ctx context.Context, repoDid syntax.DID) (*knotInfo, 
 		return &knotInfo{baseURL: knotURL, repoIdentifier: repoDid.String()}, nil
 	}
 
+	ownership, ok := described.Ownership()
+	if !ok {
+		x.logger.Warn("serving without a metadata upsert, since describeRepo didn't identify an owner", "knot", knotURL, "repo", repoDid, "answer", described.Answer())
+		return &knotInfo{baseURL: knotURL, repoIdentifier: repoDid.String()}, nil
+	}
+
 	go func() {
 		pending := &models.Repo{
-			Did:        syntax.DID(described.OwnerDid),
-			Rkey:       described.Rkey,
-			Name:       string(described.Rkey),
+			Did:        syntax.DID(ownership.OwnerDid),
+			Rkey:       ownership.Rkey,
+			Name:       string(ownership.Rkey),
 			KnotDomain: knotURL,
 			RepoDid:    repoDid,
 			State:      models.RepoStatePending,

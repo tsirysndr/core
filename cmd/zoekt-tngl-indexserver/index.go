@@ -63,11 +63,15 @@ func loadRepo(ctx context.Context, cfg *Config, dir identity.Directory, repoDID 
 	if err != nil {
 		return nil, err
 	}
+	ownership, ok := described.Ownership()
+	if !ok {
+		return nil, fmt.Errorf("knot %s answered %s for repoDid %s", knot, described.Answer(), repoDID)
+	}
 
 	return &Repo{
 		Did:   repoDID,
-		Owner: described.OwnerDid,
-		Slug:  described.Rkey,
+		Owner: ownership.OwnerDid,
+		Slug:  ownership.Rkey,
 		Knot:  knot,
 	}, nil
 }

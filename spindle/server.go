@@ -581,7 +581,11 @@ func (s *Spindle) resolveSourceRepoInfo(ctx context.Context, repoDid syntax.DID)
 	if err != nil {
 		return nil, fmt.Errorf("verify sourceRepo %s: %w", repoDid, err)
 	}
-	return s.buildTriggerRepoFrom(ctx, res.KnotURL.Host(), res.OwnerDid.String(), res.Rkey.String(), repoDid.String()), nil
+	ownership, ok := res.Ownership()
+	if !ok {
+		return nil, fmt.Errorf("verify sourceRepo %s: knot %s answered %s", repoDid, res.KnotURL, res.Answer())
+	}
+	return s.buildTriggerRepoFrom(ctx, res.KnotURL.Host(), ownership.OwnerDid.String(), ownership.Rkey.String(), repoDid.String()), nil
 }
 
 // runPipeline compiles and enqueues the pipeline for the given revision.

@@ -4,15 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/bluesky-social/indigo/atproto/identity"
+	"github.com/samber/lo"
 	"tangled.org/core/api/tangled"
 	"tangled.org/core/idresolver"
 	"tangled.org/core/repoident"
+	"tangled.org/core/xrpc/xrpcclient"
 )
 
 const (
@@ -55,11 +58,50 @@ func TestNew_DevModeAcceptsHttpKnotEndpointAndStripsThePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dev mode should accept an http knot endpoint: %v", err)
 	}
-	if result.OwnerDid.String() != testOwnerDid {
-		t.Errorf("OwnerDid = %q, want %q", result.OwnerDid, testOwnerDid)
+	ownership, ok := result.Ownership()
+	if !ok {
+		t.Fatalf("Answer = %s, want %s", result.Answer(), AnswerOwner)
+	}
+	if ownership.OwnerDid.String() != testOwnerDid {
+		t.Errorf("OwnerDid = %q, want %q", ownership.OwnerDid, testOwnerDid)
 	}
 	if result.KnotURL.String() != srv.URL {
 		t.Errorf("KnotURL = %q, want %q", result.KnotURL, srv.URL)
+	}
+}
+
+func TestNew_AnswersFromA404(t *testing.T) {
+	cases := map[string]struct {
+		body string
+		want Answer
+	}{
+		"only RepoNotFound will refute the repoDid":                      {`{"error":"RepoNotFound","message":"no such repo"}`, AnswerAbsent},
+		"a knot without the route will answer with an empty body":        {"", AnswerNoRoute},
+		"a 404 body without an error name can't claim the route":         {`{"message":"not found"}`, AnswerNoRoute},
+		"a proxy json-ifying its own 404 will never answer for the knot": {`{"error":"NotFound","message":"no upstream"}`, AnswerNoRoute},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if tc.body != "" {
+					w.Header().Set("Content-Type", "application/json")
+				}
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			t.Cleanup(srv.Close)
+
+			result, err := verifyKnot(t, srv.URL, true)
+			if err != nil {
+				t.Fatalf("a 404 from describeRepo must be an answer: %v", err)
+			}
+			if result.Answer() != tc.want {
+				t.Errorf("Answer = %s, want %s", result.Answer(), tc.want)
+			}
+			if _, ok := result.Ownership(); ok {
+				t.Error("a 404 won't identify an owner")
+			}
+		})
 	}
 }
 
@@ -95,5 +137,25 @@ func TestNew_Rejections(t *testing.T) {
 				t.Errorf("error = %v, want one matching %v", err, tc.sentinel)
 			}
 		})
+	}
+}
+
+func TestRetriable(t *testing.T) {
+	retriable := []error{
+		errors.New("connection refused"),
+		fmt.Errorf("describeRepo: %w", xrpcclient.ErrXrpcFailed),
+	}
+	terminal := append([]error{nil}, lo.Map(terminalErrors, func(e error, _ int) error {
+		return fmt.Errorf("describeRepo: %w", e)
+	})...)
+	for _, err := range retriable {
+		if !Retriable(err) {
+			t.Errorf("Retriable(%v) = false, want true, since the knot may answer the next call", err)
+		}
+	}
+	for _, err := range terminal {
+		if Retriable(err) {
+			t.Errorf("Retriable(%v) = true, want false, since the answer won't change on a retry", err)
+		}
 	}
 }

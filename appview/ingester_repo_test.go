@@ -34,16 +34,30 @@ func acceptOwner(t *testing.T, e *jmodels.Event) repoverify.Verifier {
 	t.Helper()
 	knot := mustKnotURL(t, "https://knot.example")
 	return func(_ context.Context, repoDid repoident.RepoDid) (repoverify.Result, error) {
-		return repoverify.Result{
-			RepoDid:  repoDid,
+		return repoverify.Owned(repoDid, knot, repoverify.Ownership{
 			OwnerDid: repoident.OwnerDid(e.Did),
-			KnotURL:  knot,
-		}, nil
+		}), nil
 	}
+}
+
+func ownedBy(t *testing.T, repoDid, ownerDid string) repoverify.Result {
+	t.Helper()
+	return repoverify.Owned(
+		repoident.RepoDid(repoDid),
+		mustKnotURL(t, "https://knot.example"),
+		repoverify.Ownership{OwnerDid: repoident.OwnerDid(ownerDid)},
+	)
 }
 
 func stubVerifier(result repoverify.Result, err error) repoverify.Verifier {
 	return func(_ context.Context, _ repoident.RepoDid) (repoverify.Result, error) {
+		return result, err
+	}
+}
+
+func countingVerifier(result repoverify.Result, err error, attempts *int) repoverify.Verifier {
+	return func(_ context.Context, _ repoident.RepoDid) (repoverify.Result, error) {
+		*attempts++
 		return result, err
 	}
 }
@@ -559,11 +573,7 @@ func TestIngestRepo_CreateSquatRejected(t *testing.T) {
 		RepoDid: ptr("did:plc:akshays-repo"),
 	})
 
-	withVerifier(ing, stubVerifier(repoverify.Result{
-		RepoDid:  "did:plc:akshays-repo",
-		OwnerDid: "did:plc:akshay",
-		KnotURL:  mustKnotURL(t, "https://knot.example"),
-	}, nil))
+	withVerifier(ing, stubVerifier(ownedBy(t, "did:plc:akshays-repo", "did:plc:akshay"), nil))
 
 	if err := ing.ingestRepo(context.Background(), e, ing.Logger); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
@@ -589,11 +599,7 @@ func TestIngestRepo_CreateHijackExistingRepoRejected(t *testing.T) {
 		RepoDid: ptr("did:plc:akshays-repo"),
 	})
 
-	withVerifier(ing, stubVerifier(repoverify.Result{
-		RepoDid:  "did:plc:akshays-repo",
-		OwnerDid: "did:plc:akshay",
-		KnotURL:  mustKnotURL(t, "https://knot.example"),
-	}, nil))
+	withVerifier(ing, stubVerifier(ownedBy(t, "did:plc:akshays-repo", "did:plc:akshay"), nil))
 
 	if err := ing.ingestRepo(context.Background(), e, ing.Logger); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
@@ -618,11 +624,7 @@ func TestIngestRepo_CreateRenameIgnoresRkeyDrift(t *testing.T) {
 		RepoDid: ptr("did:plc:akshays-repo"),
 	})
 
-	withVerifier(ing, stubVerifier(repoverify.Result{
-		RepoDid:  "did:plc:akshays-repo",
-		OwnerDid: "did:plc:akshay",
-		KnotURL:  mustKnotURL(t, "https://knot.example"),
-	}, nil))
+	withVerifier(ing, stubVerifier(ownedBy(t, "did:plc:akshays-repo", "did:plc:akshay"), nil))
 
 	if err := ing.ingestRepo(context.Background(), e, ing.Logger); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
@@ -637,22 +639,49 @@ func TestIngestRepo_CreateRenameIgnoresRkeyDrift(t *testing.T) {
 	}
 }
 
-func TestIngestRepo_CreateVerifierTransientErrorPropagates(t *testing.T) {
-	ing, spy := newTestIngester(t)
-
-	e := makeEvent(t, jmodels.CommitOperationCreate, "did:plc:akshay", "myrepo", tangled.Repo{
-		Knot:    "knot.example",
-		RepoDid: ptr("did:plc:akshays-repo"),
-	})
-
-	withVerifier(ing, stubVerifier(repoverify.Result{}, errors.New("knot unreachable")))
-
-	err := ing.ingestRepo(context.Background(), e, ing.Logger)
-	if err == nil {
-		t.Fatalf("expected error on transient verifier failure, got nil")
+func TestIngestRepo_CreateTakesOnlyAnIdentifiedOwnerAndRetriesOnlyTheUndecided(t *testing.T) {
+	repoDid := repoident.RepoDid("did:plc:akshays-repo")
+	knot := mustKnotURL(t, "https://knot.example")
+	refused := func(a repoverify.Answer) repoverify.Result { return repoverify.Refused(repoDid, knot, a) }
+	cases := map[string]struct {
+		result       repoverify.Result
+		verifyErr    error
+		wantErr      bool
+		wantAttempts int
+		wantCreates  int
+	}{
+		"we'll retry an unreachable knot before the failure propagates": {verifyErr: errors.New("knot unreachable"), wantErr: true, wantAttempts: ownershipVerifyAttempts},
+		"we won't retry a knot that already answered":                   {verifyErr: repoverify.ErrKnotAnswer, wantErr: true, wantAttempts: 1},
+		"a knot without describeRepo can't confirm the claimed owner":   {result: refused(repoverify.AnswerNoRoute), wantAttempts: 1},
+		"we won't create when the knot doesn't host the repoDid":        {result: refused(repoverify.AnswerAbsent), wantAttempts: 1},
+		"we'll fail closed on a verifier that doesn't pong":             {wantAttempts: 1},
+		"we'll take an identified owner on the first round-trip":        {result: ownedBy(t, repoDid.String(), "did:plc:akshay"), wantAttempts: 1, wantCreates: 1},
 	}
-	if spy.creates != 0 {
-		t.Errorf("NewRepo called %d times despite verifier error", spy.creates)
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			ing, spy := newTestIngester(t)
+			e := makeEvent(t, jmodels.CommitOperationCreate, "did:plc:akshay", "myrepo", tangled.Repo{
+				Knot:    "knot.example",
+				RepoDid: ptr(repoDid.String()),
+			})
+
+			attempts := 0
+			withVerifier(ing, countingVerifier(tc.result, tc.verifyErr, &attempts))
+
+			if err := ing.ingestRepo(context.Background(), e, ing.Logger); (err != nil) != tc.wantErr {
+				t.Fatalf("ingestRepo err = %v, wantErr %v", err, tc.wantErr)
+			}
+			if attempts != tc.wantAttempts {
+				t.Errorf("verifier called %d times, want %d", attempts, tc.wantAttempts)
+			}
+			if spy.creates != tc.wantCreates {
+				t.Errorf("NewRepo called %d times, want %d", spy.creates, tc.wantCreates)
+			}
+			_, err := db.GetRepo(ing.Db, orm.FilterEq("did", "did:plc:akshay"), orm.FilterEq("rkey", "myrepo"))
+			if got, want := err == nil, tc.wantCreates == 1; got != want {
+				t.Fatalf("repo row exists = %v, want %v (err=%v)", got, want, err)
+			}
+		})
 	}
 }
 
@@ -666,11 +695,7 @@ func TestIngestRepo_UpdateRejectsOwnerMismatch(t *testing.T) {
 		RepoDid:     ptr("did:plc:akshays-repo"),
 	})
 
-	withVerifier(ing, stubVerifier(repoverify.Result{
-		RepoDid:  "did:plc:akshays-repo",
-		OwnerDid: "did:plc:akshay",
-		KnotURL:  mustKnotURL(t, "https://knot.example"),
-	}, nil))
+	withVerifier(ing, stubVerifier(ownedBy(t, "did:plc:akshays-repo", "did:plc:akshay"), nil))
 
 	if err := ing.ingestRepo(context.Background(), e, ing.Logger); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
@@ -732,11 +757,7 @@ func TestIngestRepo_CreateRejectsKnotMismatch(t *testing.T) {
 		RepoDid: ptr("did:plc:akshays-repo"),
 	})
 
-	withVerifier(ing, stubVerifier(repoverify.Result{
-		RepoDid:  "did:plc:akshays-repo",
-		OwnerDid: "did:plc:akshay",
-		KnotURL:  mustKnotURL(t, "https://knot.example"),
-	}, nil))
+	withVerifier(ing, stubVerifier(ownedBy(t, "did:plc:akshays-repo", "did:plc:akshay"), nil))
 
 	if err := ing.ingestRepo(context.Background(), e, ing.Logger); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
@@ -762,11 +783,7 @@ func TestIngestRepo_UpdateRejectsKnotMismatch(t *testing.T) {
 		RepoDid:     ptr("did:plc:akshays-repo"),
 	})
 
-	withVerifier(ing, stubVerifier(repoverify.Result{
-		RepoDid:  "did:plc:akshays-repo",
-		OwnerDid: "did:plc:akshay",
-		KnotURL:  mustKnotURL(t, "https://knot.example"),
-	}, nil))
+	withVerifier(ing, stubVerifier(ownedBy(t, "did:plc:akshays-repo", "did:plc:akshay"), nil))
 
 	if err := ing.ingestRepo(context.Background(), e, ing.Logger); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
@@ -790,11 +807,7 @@ func TestIngestRepo_UpdateRejectsRepoDidMutation(t *testing.T) {
 		RepoDid:     ptr("did:plc:other-repo"),
 	})
 
-	withVerifier(ing, stubVerifier(repoverify.Result{
-		RepoDid:  "did:plc:other-repo",
-		OwnerDid: "did:plc:akshay",
-		KnotURL:  mustKnotURL(t, "https://knot.example"),
-	}, nil))
+	withVerifier(ing, stubVerifier(ownedBy(t, "did:plc:other-repo", "did:plc:akshay"), nil))
 
 	if err := ing.ingestRepo(context.Background(), e, ing.Logger); err != nil {
 		t.Fatalf("ingestRepo: %v", err)
