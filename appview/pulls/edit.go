@@ -15,12 +15,23 @@ import (
 func (s *Pulls) EditPull(w http.ResponseWriter, r *http.Request) {
 	l := s.logger.With("handler", "EditPull")
 	user := s.oauth.GetMultiAccountUser(r)
+	if user == nil {
+		l.Error("nil user")
+		s.pages.Notice(w, "pulls", "You must be logged in to edit this pull request.")
+		return
+	}
 	ctx := r.Context()
 
 	pull, ok := r.Context().Value("pull").(*models.Pull)
 	if !ok {
 		l.Error("failed to get pull")
 		s.pages.Error404(w)
+		return
+	}
+
+	if user.Did != pull.OwnerDid {
+		l.Error("unauthorized pull edit", "expectedDid", pull.OwnerDid, "gotDid", user.Did)
+		s.pages.Notice(w, "pulls", "You are not authorized to edit this pull request.")
 		return
 	}
 
@@ -46,7 +57,7 @@ func (s *Pulls) EditPull(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		ex, err := comatproto.RepoGetRecord(r.Context(), client, "", tangled.RepoPullNSID, user.Did, newPull.Rkey)
+		ex, err := comatproto.RepoGetRecord(r.Context(), client, "", tangled.RepoPullNSID, pull.OwnerDid, newPull.Rkey)
 		if err != nil {
 			l.Error("failed to get record", "err", err)
 			s.pages.Notice(w, noticeId, "Failed to edit pull, no record found on PDS.")
@@ -65,7 +76,7 @@ func (s *Pulls) EditPull(w http.ResponseWriter, r *http.Request) {
 		newRecord := newPull.AsRecord()
 		_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 			Collection: tangled.RepoPullNSID,
-			Repo:       user.Did,
+			Repo:       pull.OwnerDid,
 			Rkey:       newPull.Rkey,
 			SwapRecord: ex.Cid,
 			Record: &lexutil.LexiconTypeDecoder{

@@ -42,6 +42,11 @@ func (s *Pulls) ResubmitPull(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		if user == nil || user.Did != pull.OwnerDid {
+			l.Warn("unauthorized user", "actual_user", user, "expected_owner", pull.OwnerDid)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 		s.pages.PullResubmitFragment(w, pages.PullResubmitParams{
 			RepoInfo: s.repoResolver.GetRepoInfo(r, user),
 			Pull:     pull,

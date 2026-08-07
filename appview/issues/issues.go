@@ -239,11 +239,22 @@ func (rp *Issues) SubscribeIssue(w http.ResponseWriter, r *http.Request) {
 func (rp *Issues) EditIssue(w http.ResponseWriter, r *http.Request) {
 	l := rp.logger.With("handler", "EditIssue")
 	user := rp.oauth.GetMultiAccountUser(r)
+	if user == nil {
+		l.Error("nil user")
+		rp.pages.Notice(w, "issues", "You must be logged in to edit this issue.")
+		return
+	}
 
 	issue, ok := r.Context().Value("issue").(*models.Issue)
 	if !ok {
 		l.Error("failed to get issue")
 		rp.pages.Error404(w)
+		return
+	}
+
+	if user.Did != issue.Did {
+		l.Error("unauthorized issue edit", "expectedDid", issue.Did, "gotDid", user.Did)
+		rp.pages.Notice(w, "issues", "You are not authorized to edit this issue.")
 		return
 	}
 
@@ -277,7 +288,7 @@ func (rp *Issues) EditIssue(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		ex, err := comatproto.RepoGetRecord(r.Context(), client, "", tangled.RepoIssueNSID, user.Did, newIssue.Rkey)
+		ex, err := comatproto.RepoGetRecord(r.Context(), client, "", tangled.RepoIssueNSID, issue.Did, newIssue.Rkey)
 		if err != nil {
 			l.Error("failed to get record", "err", err)
 			rp.pages.Notice(w, noticeId, "Failed to edit issue, no record found on PDS.")
@@ -295,7 +306,7 @@ func (rp *Issues) EditIssue(w http.ResponseWriter, r *http.Request) {
 
 		_, err = comatproto.RepoPutRecord(r.Context(), client, &comatproto.RepoPutRecord_Input{
 			Collection: tangled.RepoIssueNSID,
-			Repo:       user.Did,
+			Repo:       issue.Did,
 			Rkey:       newIssue.Rkey,
 			SwapRecord: ex.Cid,
 			Record: &lexutil.LexiconTypeDecoder{
@@ -338,6 +349,13 @@ func (rp *Issues) DeleteIssue(w http.ResponseWriter, r *http.Request) {
 	l := rp.logger.With("handler", "DeleteIssue")
 	noticeId := "issue-actions-error"
 
+	user := rp.oauth.GetMultiAccountUser(r)
+	if user == nil {
+		l.Error("nil user")
+		rp.pages.Notice(w, noticeId, "You must be logged in to delete this issue.")
+		return
+	}
+
 	f, err := rp.repoResolver.Resolve(r)
 	if err != nil {
 		l.Error("failed to get repo and knot", "err", err)
@@ -352,6 +370,11 @@ func (rp *Issues) DeleteIssue(w http.ResponseWriter, r *http.Request) {
 	}
 	l = l.With("did", issue.Did, "rkey", issue.Rkey)
 
+	if user.Did != issue.Did {
+		l.Error("unauthorized issue delete", "expectedDid", issue.Did, "gotDid", user.Did)
+		rp.pages.Notice(w, noticeId, "You are not authorized to delete this issue.")
+		return
+	}
 	tx, err := rp.db.Begin()
 	if err != nil {
 		l.Error("failed to start transaction", "err", err)
