@@ -189,6 +189,12 @@
         zoekt-webserver = self.callPackage ./nix/pkgs/zoekt-webserver.nix {};
         zoekt-tngl-indexserver = self.callPackage ./nix/pkgs/zoekt-tngl-indexserver.nix {};
       });
+
+    spindleNixosFor = system:
+      nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [self.nixosModules.spindle-nixos];
+      };
   in {
     overlays.default = final: prev: {
       inherit
@@ -216,6 +222,8 @@
     packages = forAllSystems (system: let
       pkgs = nixpkgsFor.${system};
       linuxPkgs = nixpkgsFor."x86_64-linux";
+      imageSystem = "${nixpkgs.lib.head (nixpkgs.lib.splitString "-" system)}-linux";
+      imagePkgs = nixpkgsFor.${imageSystem};
       packages = mkPackageSet pkgs;
       staticPackages = mkPackageSet pkgs.pkgsStatic;
       crossPackages = mkPackageSet pkgs.pkgsCross.gnu64.pkgsStatic;
@@ -298,10 +306,10 @@
         };
       };
 
-      spindle-nixos-image = linuxPkgs.callPackage ./nix/pkgs/spindle-nixos-image.nix {
-        nixosSystem = self.nixosConfigurations.spindle-nixos;
+      spindle-nixos-image = imagePkgs.callPackage ./nix/pkgs/spindle-nixos-image.nix {
+        nixosSystem = spindleNixosFor imageSystem;
       };
-      spindle-nixos-image-tarball = linuxPkgs.runCommand "spindle-nixos-image-tarball.tar.gz" {} ''
+      spindle-nixos-image-tarball = imagePkgs.runCommand "spindle-nixos-image-tarball.tar.gz" {} ''
         tar -S -C ${self.packages.${system}.spindle-nixos-image} -h -czf $out .
       '';
 
@@ -695,13 +703,9 @@
 
     formatter = forAllSystems (system: self.packages.${system}.treefmt-wrapper);
 
-    nixosConfigurations = let
-      spindleNixosBase = nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
-        modules = [self.nixosModules.spindle-nixos];
-      };
-    in {
-      spindle-nixos = spindleNixosBase;
+    nixosConfigurations = {
+      spindle-nixos = spindleNixosFor "x86_64-linux";
+      spindle-nixos-aarch64 = spindleNixosFor "aarch64-linux";
     };
   };
 }

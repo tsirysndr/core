@@ -1,7 +1,8 @@
 {...}: {
   microvm = {
     hypervisor = "qemu";
-    qemu.machine = "microvm";
+    # qemu.machine is not set because microvm.nix already defaults it per arch
+    # (microvm on x86_64, virt on aarch64)
 
     optimize.enable = true;
 

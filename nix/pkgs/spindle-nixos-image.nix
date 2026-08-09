@@ -3,8 +3,10 @@
   lib,
   nixosSystem,
 }: let
-  system = nixosSystem.pkgs.stdenv.hostPlatform.qemuArch;
+  guest = nixosSystem.pkgs.stdenv.hostPlatform;
+  system = guest.qemuArch;
   microvm = nixosSystem.config.microvm;
+  inherit (import ./spindle-qemu-runner.nix {inherit lib;}) mkQemuRunner;
   baseConfigHash = lib.pipe nixosSystem.config.system.build.toplevel.outPath [
     (lib.strings.removePrefix "/nix/store/")
     (lib.strings.splitString "-")
@@ -13,15 +15,15 @@
   imageSpecJSON = pkgs.writeText "spec.json" (
     builtins.toJSON {
       arch = system;
-      bootArgs = "earlyprintk=ttyS0 console=hvc0 reboot=t panic=-1 ${lib.concatStringsSep " " microvm.kernelParams}";
+      # earlyprintk is x86-only
+      bootArgs = "${lib.optionalString guest.isx86_64 "earlyprintk=ttyS0 "}console=hvc0 reboot=t panic=-1 ${lib.concatStringsSep " " microvm.kernelParams}";
       kernel = "kernel";
       initrd = "initrd";
       runnerType = "qemu";
-      runnerConfig = {
-        cpu = "host,+x2apic,-sgx";
-        machine = "microvm,accel=kvm:tcg,acpi=on,mem-merge=on,pcie=off,pic=off,pit=off,rtc=on,usb=off";
-        console = "hvc0";
-        extraArgs = [];
+      # the runner has to boot the machine the guest was built for
+      runnerConfig = mkQemuRunner {
+        arch = system;
+        machine = microvm.qemu.machine;
       };
       memoryMiB = microvm.mem;
       storeDisk = "store-disk";
@@ -52,7 +54,7 @@ in
   pkgs.runCommand "spindle-nixos-image-${system}" {} ''
     mkdir -p "$out"
     cp ${imageSpecJSON} "$out/spec.json"
-    ln -s ${microvm.kernel}/bzImage "$out/kernel"
+    ln -s ${microvm.kernel}/${guest.linux-kernel.target} "$out/kernel"
     ln -s ${microvm.initrdPath} "$out/initrd"
     ln -s ${microvm.storeDisk} "$out/store-disk"
   ''

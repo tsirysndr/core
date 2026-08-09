@@ -707,7 +707,6 @@ func addQEMUKVMArgs(b *argBuilder, image ImageSpec) {
 	if image.RunnerConfig.CPU != "" {
 		b.Opt("-cpu", image.RunnerConfig.CPU)
 	}
-	b.Opt("-device", "i8042")
 }
 
 func addQEMUVolumeArgs(b *argBuilder, cfg qemuArgsConfig) error {

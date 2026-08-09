@@ -1,5 +1,6 @@
 {
   pkgsStatic,
+  lib,
   runCommand,
   writeText,
   squashfsTools,
@@ -82,12 +83,7 @@
       kernel = "kernel";
       initrd = "initrd";
       runnerType = "qemu";
-      runnerConfig = {
-        cpu = "host,+x2apic,-sgx";
-        machine = "microvm,accel=kvm:tcg,acpi=on,mem-merge=on,pcie=off,pic=off,pit=off,rtc=on,usb=off";
-        console = "hvc0";
-        extraArgs = [];
-      };
+      runnerConfig = (import ./spindle-qemu-runner.nix {inherit lib;}).mkQemuRunner {inherit arch;};
       memoryMiB = 4096;
       storeDisk = "store-disk";
       storeDiskType = "squashfs";

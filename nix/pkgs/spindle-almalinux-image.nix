@@ -1,6 +1,7 @@
 {
   doas-sudo-shim-src,
   pkgsStatic,
+  lib,
   runCommand,
   writeText,
   python3,
@@ -152,14 +153,11 @@
       kernel = "kernel";
       initrd = "initrd";
       runnerType = "qemu";
-      runnerConfig = {
-        cpu = "host,+x2apic,-sgx";
-        machine = "microvm,accel=kvm:tcg,acpi=on,mem-merge=on,pcie=on,pic=off,pit=off,rtc=on,usb=off";
-        console = "hvc0";
-        extraArgs = [];
-        # RHEL/AlmaLinux kernels are built with CONFIG_VIRTIO_MMIO, so use PCI
-        # instead (this is why pcie=on in the `machine` line above, instead of
-        # `pcie=off` like other VM images)
+      # RHEL/AlmaLinux kernels are built with CONFIG_VIRTIO_MMIO, so use PCI
+      # instead (this is why pcie=on, instead of `pcie=off` like other VM images)
+      runnerConfig = (import ./spindle-qemu-runner.nix {inherit lib;}).mkQemuRunner {
+        inherit arch;
+        pcie = true;
         virtioTransport = "pci";
       };
       memoryMiB = 4096;
