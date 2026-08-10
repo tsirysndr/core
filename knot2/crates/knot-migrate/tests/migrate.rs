@@ -7,6 +7,7 @@ use knot_migrate::casbin;
 use knot_migrate::emit::MasterKeyEnv;
 use knot_migrate::emit::{self, ConfigValues};
 use knot_migrate::mapping::{self, SkipReason};
+use knot_migrate::report;
 use knot_migrate::source::{
     SourceDb, SourceDid, SourceError, SourceRepoDid, SourceRkey, SourceSchema,
 };
@@ -168,6 +169,13 @@ fn fixture(with_collaborators_table: bool) -> Fixture {
 }
 
 fn map(fx: &Fixture) -> mapping::Mapping {
+    map_probing(fx, |did| adopt::probe_source(&fx.source_repos, did))
+}
+
+fn map_probing(
+    fx: &Fixture,
+    probe: impl Fn(&SourceRepoDid) -> adopt::SourceProbe,
+) -> mapping::Mapping {
     let db = SourceDb::open(&fx.db_path).unwrap();
     let repos = db.repos().unwrap();
     let rkeys: BTreeMap<SourceRepoDid, SourceRkey> = repos
@@ -186,7 +194,6 @@ fn map(fx: &Fixture) -> mapping::Mapping {
         )
     }));
     let acl = casbin::decode(&db.acl().unwrap(), &resolver).unwrap();
-    let exists = |did: &SourceRepoDid| adopt::source_is_repo(&fx.source_repos, did);
     match db.schema().unwrap() {
         SourceSchema::Tables => mapping::map_tables(
             &repos,
@@ -194,11 +201,11 @@ fn map(fx: &Fixture) -> mapping::Mapping {
             &db.members().unwrap(),
             &db.collaborators().unwrap(),
             &acl,
-            exists,
+            probe,
         )
         .unwrap(),
         SourceSchema::PreFlip => {
-            mapping::map_preflip(&repos, &rkeys, &db.members().unwrap(), &acl, exists).unwrap()
+            mapping::map_preflip(&repos, &rkeys, &db.members().unwrap(), &acl, probe).unwrap()
         }
     }
 }
@@ -712,4 +719,332 @@ fn host_key_import_preserves_every_algorithm() {
             "{name} must round-trip byte-for-byte so the pinned fingerprint survives"
         );
     });
+}
+
+fn honors_permission_bits(dir: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    let probe = dir.join("permission-probe");
+    std::fs::create_dir(&probe).unwrap();
+    std::fs::set_permissions(&probe, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let denied = std::fs::read_dir(&probe).is_err();
+    std::fs::set_permissions(&probe, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::remove_dir(&probe).unwrap();
+    if !denied {
+        eprintln!(
+            "skipping the permission case: this process reads a 0000 directory, so it's running \
+             as root"
+        );
+    }
+    denied
+}
+
+#[test]
+fn probing_a_source_separates_a_repo_from_an_absence_and_from_an_unreadable_path() {
+    let fx = fixture(true);
+    std::fs::write(fx.source_repos.join("did:plc:mussel"), "").unwrap();
+    let looped = fx.source_repos.join("did:plc:cuttle");
+    std::os::unix::fs::symlink(&looped, &looped).unwrap();
+    let probe = |did: &str| adopt::probe_source(&fx.source_repos, &srepo(did));
+    assert_eq!(probe("did:plc:squid"), adopt::SourceProbe::Repo);
+    assert_eq!(
+        probe("did:plc:kelp"),
+        adopt::SourceProbe::Absent,
+        "a repo whose directory an operator deleted mustn't refuse every future migration"
+    );
+    assert_eq!(
+        probe("did:plc:whelk"),
+        adopt::SourceProbe::Absent,
+        "did:plc:whelk has a readable directory without a HEAD, which the mapping skips on its own"
+    );
+    assert_eq!(
+        probe("did:plc:mussel"),
+        adopt::SourceProbe::Absent,
+        "a regular file where a repo directory belongs isn't a repository either"
+    );
+    assert!(
+        matches!(probe("did:plc:cuttle"), adopt::SourceProbe::Unreadable(_)),
+        "root can't step over a symlink loop, so this case covers the unreadable path under any uid"
+    );
+}
+
+#[test]
+fn a_source_directory_that_the_process_cannot_enter_probes_unreadable() {
+    let fx = fixture(true);
+    if !honors_permission_bits(&fx.source_repos) {
+        return;
+    }
+    use std::os::unix::fs::PermissionsExt;
+    let squid = fx.source_repos.join("did:plc:squid");
+    std::fs::set_permissions(&squid, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let probed = adopt::probe_source(&fx.source_repos, &srepo("did:plc:squid"));
+    std::fs::set_permissions(&squid, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(
+        probed,
+        adopt::SourceProbe::Unreadable(std::io::ErrorKind::PermissionDenied),
+        "secure mode leaves repo trees at a per-owner uid, and that's how a wrong-user migration \
+         sees them"
+    );
+}
+
+#[test]
+fn an_unreadable_source_is_skipped_separately_from_an_absent_source() {
+    let fx = fixture(true);
+    let mapping = map_probing(&fx, |did| match did.as_str() {
+        "did:plc:squid" => adopt::SourceProbe::Unreadable(std::io::ErrorKind::PermissionDenied),
+        "did:plc:limpet" => {
+            adopt::SourceProbe::Unreadable(std::io::ErrorKind::StaleNetworkFileHandle)
+        }
+        _ => adopt::SourceProbe::Repo,
+    });
+    let reason = |wanted: &str| {
+        mapping
+            .skipped
+            .iter()
+            .find(|skip| skip.repo_did.as_str() == wanted)
+            .map(|skip| skip.reason.clone())
+    };
+    assert_eq!(
+        reason("did:plc:squid"),
+        Some(SkipReason::UnreadableSource {
+            kind: std::io::ErrorKind::PermissionDenied
+        }),
+        "the report mustn't call an unreadable repo missing"
+    );
+    assert_eq!(
+        reason("did:plc:limpet"),
+        Some(SkipReason::UnreadableSource {
+            kind: std::io::ErrorKind::StaleNetworkFileHandle
+        }),
+        "an error that isn't a permission error mustn't lose the repo either"
+    );
+    assert_eq!(
+        reason("did:plc:kelp"),
+        None,
+        "did:plc:kelp has an alias and an acl grant without a repo_keys row"
+    );
+    assert_eq!(
+        mapping.unreadable_sources().to_string(),
+        "did:plc:squid, did:plc:limpet"
+    );
+    assert!(!mapping.unreadable_sources().is_empty());
+    let readable = map(&fx);
+    assert!(readable.unreadable_sources().is_empty());
+    assert!(
+        readable
+            .skipped
+            .iter()
+            .any(|skip| skip.reason == SkipReason::NoSourceRepo),
+        "did:plc:whelk has a directory without a HEAD in it, which stays a plain absence"
+    );
+}
+
+#[test]
+fn naming_unreadable_repos_stops_at_five_and_counts_the_rest() {
+    let fx = fixture(true);
+    let mapping = map_probing(&fx, |_| {
+        adopt::SourceProbe::Unreadable(std::io::ErrorKind::PermissionDenied)
+    });
+    let listed = mapping.unreadable_sources().to_string();
+    assert!(
+        listed.starts_with(
+            "did:plc:squid, did:plc:limpet, did:plc:whelk, did:plc:nautilus, did:plc:scallop"
+        ),
+        "{listed}"
+    );
+    assert!(
+        listed.ends_with(", and 1 more"),
+        "did:plc:conch and did:plc:clam are skipped before the probe, so 6 of the 8 rows are \
+         unreadable: {listed}"
+    );
+}
+
+fn set_acl_owner(fx: &Fixture, repo: &str, acl_owner: &str) {
+    rusqlite::Connection::open(&fx.db_path)
+        .unwrap()
+        .execute(
+            "update acl set v0 = ?1 where v2 = ?2 and v3 = 'repo:owner'",
+            rusqlite::params![acl_owner, repo],
+        )
+        .unwrap();
+}
+
+#[test]
+fn two_owners_for_one_repo_are_drift_that_the_report_can_render() {
+    let fx = fixture(true);
+    set_acl_owner(&fx, "did:plc:scallop", "did:plc:teq");
+    let mapping = map(&fx);
+    assert_eq!(
+        mapping.drift.conflicting_owner_markers,
+        vec![mapping::OwnerConflict {
+            repo: SourceRepoDid::from_column("did:plc:scallop"),
+            acl_owner: SourceDid::from_column("did:plc:teq"),
+            key_owner: SourceDid::from_column("did:plc:isabel"),
+        }]
+    );
+    assert_eq!(mapping.conflicting_owners().to_string(), "did:plc:scallop");
+    assert!(
+        !mapping
+            .drift
+            .extra_owner_markers
+            .iter()
+            .any(|(repo, _)| repo.as_str() == "did:plc:scallop"),
+        "a repo recorded with a different owner mustn't also appear as an extra marker: {:?}",
+        mapping.drift.extra_owner_markers
+    );
+    let rendered = report::Report {
+        mapping: &mapping,
+        orphan_alias_count: 0,
+        adoption: None,
+        cobs: None,
+    }
+    .to_string();
+    assert!(
+        rendered.contains("repos recorded with different owners in the acl and repo_keys: 1"),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("did:plc:scallop acl did:plc:teq, repo_keys did:plc:isabel"),
+        "{rendered}"
+    );
+}
+
+#[test]
+fn an_owner_marker_beside_the_repo_keys_owner_is_still_an_extra() {
+    let mapping = map(&fixture(true));
+    assert!(
+        mapping.drift.conflicting_owner_markers.is_empty(),
+        "did:plc:limpet is recorded with did:plc:bailey beside its repo_keys owner: {:?}",
+        mapping.drift.conflicting_owner_markers
+    );
+    assert!(mapping.conflicting_owners().is_empty());
+    assert!(
+        mapping.drift.extra_owner_markers.contains(&(
+            SourceRepoDid::from_column("did:plc:limpet"),
+            SourceDid::from_column("did:plc:bailey")
+        )),
+        "{:?}",
+        mapping.drift.extra_owner_markers
+    );
+}
+
+fn base64_standard(bytes: &[u8]) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.encode(bytes)
+}
+
+fn host_key_file(dir: &Path) -> PathBuf {
+    let path = dir.join("ssh_host_ed25519_key");
+    std::fs::write(&path, HOST_KEY).unwrap();
+    path
+}
+
+fn run_migrate(fx: &Fixture, host_key: &Path, extra: &[&str]) -> std::process::Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_knot-migrate"))
+        .args([
+            "--source-db",
+            fx.db_path.to_str().unwrap(),
+            "--source-repos",
+            fx.source_repos.to_str().unwrap(),
+            "--host-key",
+            host_key.to_str().unwrap(),
+            "--hostname",
+            "knot.oyster.cafe",
+            "--plc-url",
+            "https://plc.directory",
+            "--target",
+            fx.target.to_str().unwrap(),
+        ])
+        .args(extra)
+        .env("KNOT_MASTER_KEY", base64_standard(&[7_u8; 32]))
+        .output()
+        .unwrap()
+}
+
+fn with_unreadable_repo<T>(fx: &Fixture, work: impl FnOnce() -> T) -> Option<T> {
+    use std::os::unix::fs::PermissionsExt;
+    if !honors_permission_bits(&fx.source_repos) {
+        return None;
+    }
+    let limpet = fx.source_repos.join("did:plc:limpet");
+    std::fs::set_permissions(&limpet, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let outcome = work();
+    std::fs::set_permissions(&limpet, std::fs::Permissions::from_mode(0o755)).unwrap();
+    Some(outcome)
+}
+
+#[test]
+fn a_real_run_refuses_an_unreadable_source_until_it_is_told_to_skip_it() {
+    let fx = fixture(true);
+    let dir = tempfile::tempdir().unwrap();
+    let host_key = host_key_file(dir.path());
+    let Some((refused, target_after_refusal, outcome)) = with_unreadable_repo(&fx, || {
+        let refused = run_migrate(&fx, &host_key, &[]);
+        let target_after_refusal = fx.target.exists();
+        (
+            refused,
+            target_after_refusal,
+            run_migrate(&fx, &host_key, &["--skip-unreadable"]),
+        )
+    }) else {
+        return;
+    };
+    let refusal = String::from_utf8_lossy(&refused.stderr).to_string();
+    assert!(!refused.status.success(), "{refusal}");
+    assert!(refusal.contains("did:plc:limpet"), "{refusal}");
+    assert!(
+        !target_after_refusal,
+        "a refused run mustn't leave a half-migrated target behind"
+    );
+    let stdout = String::from_utf8_lossy(&outcome.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&outcome.stderr).to_string();
+    assert!(outcome.status.success(), "{stdout}{stderr}");
+    let adopted = map_probing(&fx, |did| match did.as_str() {
+        "did:plc:limpet" => adopt::SourceProbe::Unreadable(std::io::ErrorKind::PermissionDenied),
+        _ => adopt::probe_source(&fx.source_repos, did),
+    })
+    .repos
+    .len();
+    assert!(
+        stdout.contains(&format!("adopted by copy: {adopted} new")),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("a source path that this process can't read: permission denied"),
+        "{stdout}"
+    );
+    assert!(fx.target.join("config.toml").is_file(), "{stdout}");
+}
+
+#[test]
+fn a_run_refuses_two_owners_for_one_repo_after_it_reports_them() {
+    let fx = fixture(true);
+    set_acl_owner(&fx, "did:plc:scallop", "did:plc:teq");
+    let dir = tempfile::tempdir().unwrap();
+    let host_key = host_key_file(dir.path());
+    [vec![], vec!["--dry-run"], vec!["--skip-unreadable"]]
+        .into_iter()
+        .for_each(|extra| {
+            let outcome = run_migrate(&fx, &host_key, &extra);
+            let stdout = String::from_utf8_lossy(&outcome.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&outcome.stderr).to_string();
+            assert!(!outcome.status.success(), "{extra:?}: {stdout}{stderr}");
+            assert!(
+                stdout.contains("did:plc:scallop acl did:plc:teq, repo_keys did:plc:isabel"),
+                "the report has to be on stdout before the refusal, {extra:?}: {stdout}"
+            );
+            assert!(
+                stderr.contains(
+                    "the acl and repo_keys are recorded with different owners for did:plc:scallop"
+                ),
+                "{extra:?}: {stderr}"
+            );
+            assert!(
+                stderr.contains("repo_keys.owner_did"),
+                "the refusal has to point at the column to fix, {extra:?}: {stderr}"
+            );
+            assert!(
+                !fx.target.exists(),
+                "a refused run mustn't leave a half-migrated target behind, {extra:?}"
+            );
+        });
 }

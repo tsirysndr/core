@@ -7,12 +7,12 @@ use knot_migrate::adopt::{self, AdoptError, SourcePolicy};
 use knot_migrate::casbin::{self, CasbinError};
 use knot_migrate::emit::{self, ConfigValues, EmitError, MasterKeyEnv};
 use knot_migrate::envfile::{EnvFile, EnvFileError};
-use knot_migrate::mapping::{self, Mapping, MappingError};
+use knot_migrate::mapping::{self, Mapping, MappingError, RepoList};
 use knot_migrate::report::Report;
 use knot_migrate::source::{SourceDb, SourceError, SourceRepoDid, SourceRkey, SourceSchema};
 use knot_runtime::OsEntropy;
 use knot_secrets::{MasterKey, SealedStore, SecretsError};
-use knot_types::{AccountDid, KnotHostname, ObjectFormat};
+use knot_types::{AccountDid, KnotHostname, ObjectFormat, RepoDid};
 use url::Url;
 
 // TODO: I wanted to see how well I could work without clap. I shoulda just used clap.
@@ -35,6 +35,8 @@ options:
   --master-key-env <name> env var holding the base64 master key, default KNOT_MASTER_KEY
   --consume-source        move the source repos into place instead of copying them,
                           which empties the source tree and needs one filesystem
+  --skip-unreadable       migrate the rest when knot-migrate can't read a source path,
+                          and leave those repos on the old knot
   --dry-run               print the mapping and reconciliation report, write nothing
 ";
 
@@ -66,11 +68,62 @@ enum MigrateError {
     MissingMasterKey { name: MasterKeyEnv },
     #[error("master key env var {name} isn't base64")]
     MalformedMasterKey { name: MasterKeyEnv },
+    #[error("{0}")]
+    Refused(Refusals),
     #[error("{context}: {source}")]
     Io {
         context: String,
         source: std::io::Error,
     },
+}
+
+#[derive(Debug, thiserror::Error)]
+enum Refusal {
+    #[error(
+        "knot-migrate can't read the source path of {repos}. Each repo is in the skip list above with the error behind it. Re-run as root, or as a user in the group that owns those trees, when that error is permission denied. Pass --skip-unreadable to migrate everything else and leave those repos on the old knot."
+    )]
+    UnreadableSources { repos: RepoList<RepoDid> },
+    #[error(
+        "the acl and repo_keys are recorded with different owners for {repos}. Both DIDs per repo are in the drift section above. Settle each repo in the old knot's database, by deleting the acl rows for the wrong owner or by correcting repo_keys.owner_did, since knot-migrate won't pick a winner for you."
+    )]
+    ConflictingOwners { repos: RepoList<SourceRepoDid> },
+}
+
+#[derive(Debug)]
+struct Refusals(Vec<Refusal>);
+
+impl Refusals {
+    fn gather(mapping: &Mapping, skip_unreadable: bool) -> Self {
+        let conflicting = mapping.conflicting_owners();
+        let unreadable = mapping.unreadable_sources();
+        Self(
+            [
+                (!conflicting.is_empty())
+                    .then_some(Refusal::ConflictingOwners { repos: conflicting }),
+                (!unreadable.is_empty() && !skip_unreadable)
+                    .then_some(Refusal::UnreadableSources { repos: unreadable }),
+            ]
+            .into_iter()
+            .flatten()
+            .collect(),
+        )
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl std::fmt::Display for Refusals {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0
+            .iter()
+            .enumerate()
+            .try_for_each(|(position, refusal)| match position {
+                0 => write!(f, "{refusal}"),
+                _ => write!(f, "\n{refusal}"),
+            })
+    }
 }
 
 struct Args {
@@ -84,6 +137,7 @@ struct Args {
     object_format: ObjectFormat,
     master_key_env: MasterKeyEnv,
     source_policy: SourcePolicy,
+    skip_unreadable: bool,
     dry_run: bool,
 }
 
@@ -91,6 +145,7 @@ struct Args {
 struct Switches {
     dry_run: bool,
     consume_source: bool,
+    skip_unreadable: bool,
 }
 
 const KNOWN_FLAGS: [&str; 9] = [
@@ -132,6 +187,14 @@ fn parse_args(args: &[String]) -> Result<Args, MigrateError> {
                 flags,
                 Switches {
                     consume_source: true,
+                    ..switches
+                },
+                None,
+            )),
+            (None, "--skip-unreadable") => Ok((
+                flags,
+                Switches {
+                    skip_unreadable: true,
                     ..switches
                 },
                 None,
@@ -187,6 +250,7 @@ fn parse_args(args: &[String]) -> Result<Args, MigrateError> {
             true => SourcePolicy::Consume,
             false => SourcePolicy::Preserve,
         },
+        skip_unreadable: switches.skip_unreadable,
         dry_run: switches.dry_run,
     })
 }
@@ -288,7 +352,7 @@ fn run(args: &[String]) -> Result<(), MigrateError> {
         )
     }));
     let acl = casbin::decode(&db.acl()?, &resolver)?;
-    let exists = |repo_did: &SourceRepoDid| adopt::source_is_repo(&source_repos, repo_did);
+    let probe = |repo_did: &SourceRepoDid| adopt::probe_source(&source_repos, repo_did);
     let mapping = match schema {
         SourceSchema::Tables => mapping::map_tables(
             &repos,
@@ -296,11 +360,9 @@ fn run(args: &[String]) -> Result<(), MigrateError> {
             &db.members()?,
             &db.collaborators()?,
             &acl,
-            exists,
+            probe,
         )?,
-        SourceSchema::PreFlip => {
-            mapping::map_preflip(&repos, &rkeys, &db.members()?, &acl, exists)?
-        }
+        SourceSchema::PreFlip => mapping::map_preflip(&repos, &rkeys, &db.members()?, &acl, probe)?,
     };
     env.get("KNOT_SERVER_OWNER")
         .filter(|owner| AccountDid::new(*owner).ok().as_ref() != Some(&mapping.knot_owner))
@@ -312,15 +374,16 @@ fn run(args: &[String]) -> Result<(), MigrateError> {
         })?;
     let orphan_alias_count = db.orphan_alias_count()?;
 
-    let written = match args.dry_run {
-        true => None,
-        false => Some(materialize(
+    let refusals = Refusals::gather(&mapping, args.skip_unreadable);
+    let written = match (args.dry_run, refusals.is_empty()) {
+        (false, true) => Some(materialize(
             &args,
             &hostname,
             &plc_directory,
             &source_repos,
             &mapping,
         )?),
+        _ => None,
     };
     print!(
         "{}",
@@ -331,14 +394,17 @@ fn run(args: &[String]) -> Result<(), MigrateError> {
             cobs: written.as_ref().map(|written| &written.cobs),
         }
     );
-    written.map_or(Ok(()), |written| {
-        println!();
-        println!("knot key identity: {}", written.knot_did);
-        println!("host key algorithm: {}", written.host_key_algorithm);
-        println!("config: {}", written.config_file.display());
-        println!("key archive: {}", written.archive_file.display());
-        Ok(())
-    })
+    match refusals.is_empty() {
+        false => Err(MigrateError::Refused(refusals)),
+        true => written.map_or(Ok(()), |written| {
+            println!();
+            println!("knot key identity: {}", written.knot_did);
+            println!("host key algorithm: {}", written.host_key_algorithm);
+            println!("config: {}", written.config_file.display());
+            println!("key archive: {}", written.archive_file.display());
+            Ok(())
+        }),
+    }
 }
 
 fn timed<T, E>(phase: &str, work: impl FnOnce() -> Result<T, E>) -> Result<T, E> {

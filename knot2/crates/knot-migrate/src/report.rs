@@ -63,6 +63,21 @@ impl Display for Report<'_> {
         )?;
         writeln!(
             f,
+            "repos recorded with different owners in the acl and repo_keys: {}",
+            drift.conflicting_owner_markers.len()
+        )?;
+        drift
+            .conflicting_owner_markers
+            .iter()
+            .try_for_each(|conflict| {
+                writeln!(
+                    f,
+                    "{} acl {}, repo_keys {}",
+                    conflict.repo, conflict.acl_owner, conflict.key_owner
+                )
+            })?;
+        writeln!(
+            f,
             "extra acl owner markers dropped: {}",
             drift.extra_owner_markers.len()
         )?;
@@ -166,5 +181,8 @@ fn describe(reason: &SkipReason) -> String {
             )
         }
         SkipReason::NoSourceRepo => "no git repository at the source path".to_string(),
+        SkipReason::UnreadableSource { kind } => {
+            format!("a source path that this process can't read: {kind}")
+        }
     }
 }

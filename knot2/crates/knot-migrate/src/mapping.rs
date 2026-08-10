@@ -4,6 +4,7 @@ use std::fmt;
 use knot_types::{AccountDid, OwnerDid, ParseError, RepoDid, RepoName, RepoRkey, UnixSeconds};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+use crate::adopt::SourceProbe;
 use crate::casbin::AclRoster;
 use crate::source::{
     CollabRow, MemberRow, RepoRow, SourceDid, SourceKeyType, SourceRepoDid, SourceRepoName,
@@ -47,12 +48,6 @@ pub enum MappingError {
     },
     #[error("acl names no server owner")]
     MissingServerOwner,
-    #[error("acl marks {marker} as owner of {repo} while repo_keys names {owner}")]
-    ConflictingOwnerMarker {
-        repo: SourceRepoDid,
-        marker: SourceDid,
-        owner: SourceDid,
-    },
     #[error("record key {owner}/{rkey} has no single alias-backed holder")]
     AmbiguousRkey { owner: OwnerDid, rkey: RepoRkey },
 }
@@ -98,6 +93,7 @@ pub enum SkipReason {
     Rkey { value: SourceRkey },
     RkeyCollision { rkey: RepoRkey, winner: RepoDid },
     NoSourceRepo,
+    UnreadableSource { kind: std::io::ErrorKind },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,6 +101,13 @@ pub struct SkippedRepo {
     pub repo_did: RepoDid,
     pub reason: SkipReason,
     pub lost_collaborators: Vec<AccountDid>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OwnerConflict {
+    pub repo: SourceRepoDid,
+    pub acl_owner: SourceDid,
+    pub key_owner: SourceDid,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -115,6 +118,7 @@ pub struct Drift {
     pub orphan_collaborator_pairs: Vec<(SourceRepoDid, SourceDid)>,
     pub markerless_owner_repos: Vec<SourceRepoDid>,
     pub orphan_owner_markers: Vec<SourceRepoDid>,
+    pub conflicting_owner_markers: Vec<OwnerConflict>,
     pub extra_owner_markers: Vec<(SourceRepoDid, SourceDid)>,
     pub acl_only_members: Vec<SourceDid>,
     pub table_only_members: Vec<SourceDid>,
@@ -132,13 +136,63 @@ pub struct Mapping {
     pub drift: Drift,
 }
 
+impl Mapping {
+    pub fn unreadable_sources(&self) -> RepoList<RepoDid> {
+        RepoList(
+            self.skipped
+                .iter()
+                .filter(|skip| matches!(skip.reason, SkipReason::UnreadableSource { .. }))
+                .map(|skip| skip.repo_did.clone())
+                .collect(),
+        )
+    }
+
+    pub fn conflicting_owners(&self) -> RepoList<SourceRepoDid> {
+        RepoList(
+            self.drift
+                .conflicting_owner_markers
+                .iter()
+                .map(|conflict| conflict.repo.clone())
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect(),
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepoList<T>(Vec<T>);
+
+impl<T> RepoList<T> {
+    const LISTED: usize = 5;
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl<T: fmt::Display> fmt::Display for RepoList<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.iter().take(Self::LISTED).enumerate().try_for_each(
+            |(position, did)| match position {
+                0 => write!(f, "{did}"),
+                _ => write!(f, ", {did}"),
+            },
+        )?;
+        match self.0.len().saturating_sub(Self::LISTED) {
+            0 => Ok(()),
+            rest => write!(f, ", and {rest} more"),
+        }
+    }
+}
+
 pub fn map_tables(
     repos: &[RepoRow],
     rkeys: &BTreeMap<SourceRepoDid, SourceRkey>,
     members: &[MemberRow],
     collabs: &[CollabRow],
     acl: &AclRoster,
-    exists: impl Fn(&SourceRepoDid) -> bool,
+    probe: impl Fn(&SourceRepoDid) -> SourceProbe,
 ) -> Result<Mapping, MappingError> {
     let knot_owner = server_owner(acl)?;
     let repo_index: BTreeMap<&SourceRepoDid, &RepoRow> =
@@ -260,8 +314,8 @@ pub fn map_tables(
     )?;
     let collab_grants = owner_attributed_grants(&acl_only, &repo_index, true, table_grants)?;
 
-    let owners = owner_drift(repos, &repo_index, acl)?;
-    let (adopted, skipped) = classify(repos, rkeys, &collab_grants, exists)?;
+    let owners = owner_drift(repos, &repo_index, acl);
+    let (adopted, skipped) = classify(repos, rkeys, &collab_grants, probe)?;
 
     Ok(Mapping {
         knot_owner,
@@ -284,6 +338,7 @@ pub fn map_tables(
             orphan_collaborator_pairs: orphan_pairs.into_iter().collect(),
             markerless_owner_repos: owners.markerless,
             orphan_owner_markers: owners.orphans,
+            conflicting_owner_markers: owners.conflicts,
             extra_owner_markers: owners.extras,
             acl_only_members,
             table_only_members,
@@ -299,7 +354,7 @@ pub fn map_preflip(
     rkeys: &BTreeMap<SourceRepoDid, SourceRkey>,
     members: &[MemberRow],
     acl: &AclRoster,
-    exists: impl Fn(&SourceRepoDid) -> bool,
+    probe: impl Fn(&SourceRepoDid) -> SourceProbe,
 ) -> Result<Mapping, MappingError> {
     let knot_owner = server_owner(acl)?;
     let repo_index: BTreeMap<&SourceRepoDid, &RepoRow> =
@@ -357,8 +412,8 @@ pub fn map_preflip(
         live.partition(|(repo, _)| repo_index.contains_key(*repo));
     let collab_grants = owner_attributed_grants(&resolvable, &repo_index, false, BTreeMap::new())?;
 
-    let owners = owner_drift(repos, &repo_index, acl)?;
-    let (adopted, skipped) = classify(repos, rkeys, &collab_grants, exists)?;
+    let owners = owner_drift(repos, &repo_index, acl);
+    let (adopted, skipped) = classify(repos, rkeys, &collab_grants, probe)?;
 
     Ok(Mapping {
         knot_owner,
@@ -372,6 +427,7 @@ pub fn map_preflip(
                 .collect(),
             markerless_owner_repos: owners.markerless,
             orphan_owner_markers: owners.orphans,
+            conflicting_owner_markers: owners.conflicts,
             extra_owner_markers: owners.extras,
             table_only_members,
             slash_owner_markers: acl.slash_owner_markers,
@@ -426,6 +482,7 @@ fn server_owner(acl: &AclRoster) -> Result<AccountDid, MappingError> {
 struct OwnerDrift {
     markerless: Vec<SourceRepoDid>,
     orphans: Vec<SourceRepoDid>,
+    conflicts: Vec<OwnerConflict>,
     extras: Vec<(SourceRepoDid, SourceDid)>,
 }
 
@@ -433,64 +490,59 @@ fn owner_drift(
     repos: &[RepoRow],
     repo_index: &BTreeMap<&SourceRepoDid, &RepoRow>,
     acl: &AclRoster,
-) -> Result<OwnerDrift, MappingError> {
-    repos.iter().try_for_each(|repo| {
-        let conflicting = acl.owner_markers.get(&repo.repo_did).and_then(|markers| {
-            (!markers.contains(&repo.owner_did))
-                .then(|| markers.iter().next().cloned())
-                .flatten()
-        });
-        match conflicting {
-            Some(marker) => Err(MappingError::ConflictingOwnerMarker {
-                repo: repo.repo_did.clone(),
-                marker,
-                owner: repo.owner_did.clone(),
-            }),
-            None => Ok(()),
-        }
-    })?;
-    let markerless = repos
-        .iter()
-        .filter(|repo| !acl.owner_markers.contains_key(&repo.repo_did))
-        .map(|repo| repo.repo_did.clone())
-        .collect();
-    let orphans = acl
-        .owner_markers
-        .keys()
-        .filter(|repo| !repo_index.contains_key(*repo))
-        .cloned()
-        .collect();
-    let extras = repos
+) -> OwnerDrift {
+    let (conflicting, agreeing): (Vec<_>, Vec<_>) = repos
         .iter()
         .filter_map(|repo| {
             acl.owner_markers
                 .get(&repo.repo_did)
                 .map(|markers| (repo, markers))
         })
-        .flat_map(|(repo, markers)| {
-            markers
-                .iter()
-                .filter(move |marker| *marker != &repo.owner_did)
-                .map(move |marker| (repo.repo_did.clone(), marker.clone()))
-        })
-        .collect();
-    Ok(OwnerDrift {
-        markerless,
-        orphans,
-        extras,
-    })
+        .partition(|(repo, markers)| !markers.contains(&repo.owner_did));
+    OwnerDrift {
+        markerless: repos
+            .iter()
+            .filter(|repo| !acl.owner_markers.contains_key(&repo.repo_did))
+            .map(|repo| repo.repo_did.clone())
+            .collect(),
+        orphans: acl
+            .owner_markers
+            .keys()
+            .filter(|repo| !repo_index.contains_key(*repo))
+            .cloned()
+            .collect(),
+        conflicts: conflicting
+            .into_iter()
+            .flat_map(|(repo, markers)| {
+                markers.iter().map(move |marker| OwnerConflict {
+                    repo: repo.repo_did.clone(),
+                    acl_owner: marker.clone(),
+                    key_owner: repo.owner_did.clone(),
+                })
+            })
+            .collect(),
+        extras: agreeing
+            .into_iter()
+            .flat_map(|(repo, markers)| {
+                markers
+                    .iter()
+                    .filter(move |marker| *marker != &repo.owner_did)
+                    .map(move |marker| (repo.repo_did.clone(), marker.clone()))
+            })
+            .collect(),
+    }
 }
 
 fn classify(
     repos: &[RepoRow],
     rkeys: &BTreeMap<SourceRepoDid, SourceRkey>,
     collab_grants: &BTreeMap<SourceRepoDid, Vec<MappedGrant>>,
-    exists: impl Fn(&SourceRepoDid) -> bool,
+    probe: impl Fn(&SourceRepoDid) -> SourceProbe,
 ) -> Result<(Vec<AdoptRepo>, Vec<SkippedRepo>), MappingError> {
     let (adopted, skipped) = repos.iter().try_fold(
         (Vec::new(), Vec::new()),
         |(mut adopted, mut skipped), row| {
-            match classify_one(row, rkeys, collab_grants, &exists)? {
+            match classify_one(row, rkeys, collab_grants, &probe)? {
                 Ok(repo) => adopted.push(repo),
                 Err(skip) => skipped.push(skip),
             }
@@ -580,7 +632,7 @@ fn classify_one(
     row: &RepoRow,
     rkeys: &BTreeMap<SourceRepoDid, SourceRkey>,
     collab_grants: &BTreeMap<SourceRepoDid, Vec<MappedGrant>>,
-    exists: &impl Fn(&SourceRepoDid) -> bool,
+    probe: &impl Fn(&SourceRepoDid) -> SourceProbe,
 ) -> Result<Result<AdoptRepo, SkippedRepo>, MappingError> {
     let did = RepoDid::new(row.repo_did.as_str()).map_err(|source| MappingError::BadRepoDid {
         value: row.repo_did.clone(),
@@ -638,8 +690,12 @@ fn classify_one(
             })));
         }
     };
-    if !exists(&row.repo_did) {
-        return Ok(Err(skip(SkipReason::NoSourceRepo)));
+    match probe(&row.repo_did) {
+        SourceProbe::Absent => return Ok(Err(skip(SkipReason::NoSourceRepo))),
+        SourceProbe::Unreadable(kind) => {
+            return Ok(Err(skip(SkipReason::UnreadableSource { kind })));
+        }
+        SourceProbe::Repo => {}
     }
 
     Ok(Ok(AdoptRepo {

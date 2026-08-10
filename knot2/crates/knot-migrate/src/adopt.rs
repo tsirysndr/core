@@ -74,6 +74,13 @@ pub enum Transfer {
     Copy,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourceProbe {
+    Repo,
+    Absent,
+    Unreadable(std::io::ErrorKind),
+}
+
 impl std::fmt::Display for Transfer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -99,8 +106,20 @@ pub fn source_dir(source_root: &Path, repo_did: &SourceRepoDid) -> PathBuf {
     source_root.join(repo_did.as_str())
 }
 
-pub fn source_is_repo(source_root: &Path, repo_did: &SourceRepoDid) -> bool {
-    source_dir(source_root, repo_did).join("HEAD").is_file()
+pub fn reads_as_absent(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+    )
+}
+
+pub fn probe_source(source_root: &Path, repo_did: &SourceRepoDid) -> SourceProbe {
+    match std::fs::metadata(source_dir(source_root, repo_did).join("HEAD")) {
+        Ok(head) if head.is_file() => SourceProbe::Repo,
+        Ok(_) => SourceProbe::Absent,
+        Err(error) if reads_as_absent(&error) => SourceProbe::Absent,
+        Err(error) => SourceProbe::Unreadable(error.kind()),
+    }
 }
 
 pub fn adopt_all(
