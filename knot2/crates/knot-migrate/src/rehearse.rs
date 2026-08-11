@@ -3,24 +3,35 @@ use std::path::{Path, PathBuf};
 use knot_types::scalar_newtype;
 
 use crate::adopt::{self, AdoptError, SourcePolicy, Transfer};
+use crate::emit::{
+    self, EmitError, HostKeyConflict, HostKeyPlacement, HostKeyPolicy, MasterKeyEnv, MasterKeyError,
+};
 use crate::mapping::AdoptRepo;
+
+#[derive(Debug, thiserror::Error)]
+pub enum HostKeyError {
+    #[error("--host-key is required for the migration")]
+    Unset,
+    #[error(transparent)]
+    Unusable(#[from] EmitError),
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ScanPathError {
     #[error(
-        "the real run will create {path} under {blocked}, which this process can't write: {source}"
+        "the migration will create {path} under {blocked}, which this process can't write: {source}"
     )]
     Uncreatable {
         path: PathBuf,
         blocked: PathBuf,
         source: rustix::io::Errno,
     },
-    #[error("the real run will write repos into {path}, which this process can't write: {source}")]
+    #[error("the migration will write repos into {path}, which this process can't write: {source}")]
     Unwritable {
         path: PathBuf,
         source: rustix::io::Errno,
     },
-    #[error("the real run can't create {path}, which is a symlink to a missing target")]
+    #[error("the migration can't create {path}, which is a symlink to a missing target")]
     Dangling { path: PathBuf },
     #[error("read {path}: {source}")]
     Unreadable {
@@ -89,6 +100,10 @@ pub struct Inputs<'a> {
     pub adopted: &'a [AdoptRepo],
     pub scan_path: &'a Path,
     pub policy: SourcePolicy,
+    pub host_key: Option<&'a Path>,
+    pub host_key_target: &'a Path,
+    pub host_key_policy: HostKeyPolicy,
+    pub master_key: &'a MasterKeyEnv,
 }
 
 pub struct Rehearsal {
@@ -96,12 +111,19 @@ pub struct Rehearsal {
     pub transfer: Result<Transfer, AdoptError>,
     pub scan_path: Result<Occupancy, ScanPathError>,
     pub room: Option<Result<Room, RoomError>>,
+    pub host_key: Result<ssh_key::Algorithm, HostKeyError>,
+    pub host_key_target: Option<Result<HostKeyPlacement, HostKeyConflict>>,
+    pub master_key: Result<MasterKeyEnv, MasterKeyError>,
 }
 
 impl Rehearsal {
     pub fn run(inputs: Inputs<'_>) -> Self {
         let probed = Probed::nearest(inputs.scan_path);
         let transfer = adopt::transfer_mode(inputs.source_repos, probed.existing, inputs.policy);
+        let source_key = inputs
+            .host_key
+            .ok_or(HostKeyError::Unset)
+            .and_then(|path| emit::load_host_key(path).map_err(HostKeyError::Unusable));
         Self {
             fallback: probed.fallback().map(Path::to_path_buf),
             room: match transfer {
@@ -110,12 +132,20 @@ impl Rehearsal {
             },
             transfer,
             scan_path: occupancy(probed),
+            host_key_target: source_key.as_ref().ok().map(|key| {
+                emit::plan_host_key(inputs.host_key_target, key, inputs.host_key_policy)
+            }),
+            host_key: source_key.map(|key| key.algorithm),
+            master_key: inputs.master_key.read().map(|_| inputs.master_key.clone()),
         }
     }
 
     pub fn ready(&self) -> bool {
         self.transfer.is_ok()
             && self.scan_path.is_ok()
+            && self.host_key.is_ok()
+            && self.host_key_target.as_ref().is_none_or(Result::is_ok)
+            && self.master_key.is_ok()
             && self.room.as_ref().is_none_or(|room| {
                 room.as_ref()
                     .is_ok_and(|measured| matches!(measured.fit(), Fit::Clear))

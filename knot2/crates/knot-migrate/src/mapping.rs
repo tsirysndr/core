@@ -110,6 +110,16 @@ pub struct OwnerConflict {
     pub key_owner: SourceDid,
 }
 
+impl fmt::Display for OwnerConflict {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} acl {}, repo_keys {}",
+            self.repo, self.acl_owner, self.key_owner
+        )
+    }
+}
+
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Drift {
     pub acl_only_collaborators: Vec<(SourceRepoDid, SourceDid)>,
@@ -125,6 +135,12 @@ pub struct Drift {
     pub slash_owner_markers: u64,
     pub slash_collab_rows: u64,
     pub unresolved_slash_forms: Vec<String>,
+}
+
+impl Drift {
+    pub fn is_clean(&self) -> bool {
+        self == &Self::default()
+    }
 }
 
 #[derive(Debug)]

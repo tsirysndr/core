@@ -2,8 +2,10 @@ use std::fmt::{self, Display, Formatter};
 
 use crate::adopt::AdoptOutcome;
 use crate::emit::CobSummary;
+use crate::emit::HostKeyPlacement;
 use crate::mapping::{Mapping, SkipReason};
 use crate::rehearse::{Fit, Occupancy, Rehearsal};
+use crate::source::{SourceDid, SourceRepoDid};
 
 pub struct Report<'a> {
     pub mapping: &'a Mapping,
@@ -37,107 +39,73 @@ impl Display for Report<'_> {
                 .sum::<usize>()
         )?;
         writeln!(f)?;
-        writeln!(f, "casbin cross-check drift:")?;
-        writeln!(
-            f,
-            "acl-only collaborator grants unioned in: {}",
-            drift.acl_only_collaborators.len()
-        )?;
-        drift
-            .acl_only_collaborators
-            .iter()
-            .try_for_each(|(repo, did)| writeln!(f, "{repo} <- {did}"))?;
-        writeln!(
-            f,
-            "table-only collaborator grants missing from acl: {}",
-            drift.table_only_collaborators.len()
-        )?;
-        drift
-            .table_only_collaborators
-            .iter()
-            .try_for_each(|(repo, did)| writeln!(f, "{repo} <- {did}"))?;
-        writeln!(
-            f,
-            "repos with no acl owner marker where the owner regains push: {}",
-            drift.markerless_owner_repos.len()
-        )?;
-        drift
-            .markerless_owner_repos
-            .iter()
-            .try_for_each(|repo| writeln!(f, "{repo}"))?;
-        writeln!(
-            f,
-            "orphan owner markers on unknown repos: {}",
-            drift.orphan_owner_markers.len()
-        )?;
-        writeln!(
-            f,
-            "repos recorded with different owners in the acl and repo_keys: {}",
-            drift.conflicting_owner_markers.len()
-        )?;
-        drift
-            .conflicting_owner_markers
-            .iter()
-            .try_for_each(|conflict| {
-                writeln!(
+        match drift.is_clean() && self.orphan_alias_count == 0 {
+            true => writeln!(f, "casbin cross-check: the acl and the tables agree")?,
+            false => {
+                writeln!(f, "casbin cross-check drift:")?;
+                listed(
                     f,
-                    "{} acl {}, repo_keys {}",
-                    conflict.repo, conflict.acl_owner, conflict.key_owner
-                )
-            })?;
-        writeln!(
-            f,
-            "extra acl owner markers dropped: {}",
-            drift.extra_owner_markers.len()
-        )?;
-        drift
-            .extra_owner_markers
-            .iter()
-            .try_for_each(|(repo, did)| writeln!(f, "{repo} <- {did}"))?;
-        writeln!(
-            f,
-            "orphan collaborator pairs on unknown repos: {}",
-            drift.orphan_collaborator_pairs.len()
-        )?;
-        writeln!(
-            f,
-            "acl-only members unioned in: {}",
-            drift.acl_only_members.len()
-        )?;
-        drift
-            .acl_only_members
-            .iter()
-            .try_for_each(|did| writeln!(f, "{did}"))?;
-        writeln!(
-            f,
-            "table-only members missing from acl: {}",
-            drift.table_only_members.len()
-        )?;
-        writeln!(f, "slash-form owner markers: {}", drift.slash_owner_markers)?;
-        writeln!(
-            f,
-            "slash-form collaborator rows: {}",
-            drift.slash_collab_rows
-        )?;
-        writeln!(
-            f,
-            "slash-resolved collaborator grants left out of the union: {}",
-            drift.slash_resolved_collaborators.len()
-        )?;
-        drift
-            .slash_resolved_collaborators
-            .iter()
-            .try_for_each(|(repo, did)| writeln!(f, "{repo} <- {did}"))?;
-        writeln!(
-            f,
-            "unresolved slash forms: {}",
-            drift.unresolved_slash_forms.len()
-        )?;
-        drift
-            .unresolved_slash_forms
-            .iter()
-            .try_for_each(|form| writeln!(f, "{form}"))?;
-        writeln!(f, "orphan aliases: {}", self.orphan_alias_count)?;
+                    "acl-only collaborator grants unioned in",
+                    drift.acl_only_collaborators.iter().map(GrantRow::from),
+                )?;
+                listed(
+                    f,
+                    "table-only collaborator grants missing from acl",
+                    drift.table_only_collaborators.iter().map(GrantRow::from),
+                )?;
+                listed(
+                    f,
+                    "repos with no acl owner marker where the owner regains push",
+                    drift.markerless_owner_repos.iter(),
+                )?;
+                counted(
+                    f,
+                    "orphan owner markers on unknown repos",
+                    drift.orphan_owner_markers.len() as u64,
+                )?;
+                listed(
+                    f,
+                    "repos recorded with different owners in the acl and repo_keys",
+                    drift.conflicting_owner_markers.iter(),
+                )?;
+                listed(
+                    f,
+                    "extra acl owner markers dropped",
+                    drift.extra_owner_markers.iter().map(GrantRow::from),
+                )?;
+                counted(
+                    f,
+                    "orphan collaborator pairs on unknown repos",
+                    drift.orphan_collaborator_pairs.len() as u64,
+                )?;
+                listed(
+                    f,
+                    "acl-only members unioned in",
+                    drift.acl_only_members.iter(),
+                )?;
+                counted(
+                    f,
+                    "table-only members missing from acl",
+                    drift.table_only_members.len() as u64,
+                )?;
+                counted(f, "slash-form owner markers", drift.slash_owner_markers)?;
+                counted(f, "slash-form collaborator rows", drift.slash_collab_rows)?;
+                listed(
+                    f,
+                    "slash-resolved collaborator grants left out of the union",
+                    drift
+                        .slash_resolved_collaborators
+                        .iter()
+                        .map(GrantRow::from),
+                )?;
+                listed(
+                    f,
+                    "unresolved slash forms",
+                    drift.unresolved_slash_forms.iter(),
+                )?;
+                counted(f, "orphan aliases", self.orphan_alias_count)?;
+            }
+        }
         writeln!(f)?;
         writeln!(f, "skipped repos: {}", mapping.skipped.len())?;
         mapping.skipped.iter().try_for_each(|skip| {
@@ -165,7 +133,7 @@ impl Display for Report<'_> {
                     Ok(Occupancy::Fresh) => writeln!(f, "scan path: writable"),
                     Ok(Occupancy::Occupied) => writeln!(
                         f,
-                        "scan path: writable, with repos already in it that the real run will keep"
+                        "scan path: writable, with repos already in it that the migration will keep"
                     ),
                     Err(error) => writeln!(f, "scan path: {error}"),
                 }?;
@@ -183,7 +151,28 @@ impl Display for Report<'_> {
                         ),
                     },
                     Err(error) => writeln!(f, "room to copy: {error}"),
-                })
+                })?;
+                match &rehearsal.host_key {
+                    Ok(algorithm) => writeln!(f, "host key algorithm: {algorithm}"),
+                    Err(error) => writeln!(f, "host key: {error}"),
+                }?;
+                match &rehearsal.host_key_target {
+                    None | Some(Ok(HostKeyPlacement::Fresh)) => Ok(()),
+                    Some(Ok(HostKeyPlacement::Unchanged)) => {
+                        writeln!(f, "host key: the target already has the imported key")
+                    }
+                    Some(Ok(HostKeyPlacement::Replacing)) => {
+                        writeln!(
+                            f,
+                            "host key: the migration will replace the different key at the target"
+                        )
+                    }
+                    Some(Err(error)) => writeln!(f, "host key: {error}"),
+                }?;
+                match &rehearsal.master_key {
+                    Ok(env) => writeln!(f, "master key: {env} decodes to a usable key"),
+                    Err(error) => writeln!(f, "{error}"),
+                }
             }
             Phase::Written { adoption, cobs } => {
                 writeln!(f)?;
@@ -215,6 +204,36 @@ impl Display for Report<'_> {
             }
         }
     }
+}
+
+struct GrantRow<'a>(&'a SourceRepoDid, &'a SourceDid);
+
+impl<'a> From<&'a (SourceRepoDid, SourceDid)> for GrantRow<'a> {
+    fn from((repo, did): &'a (SourceRepoDid, SourceDid)) -> Self {
+        Self(repo, did)
+    }
+}
+
+impl Display for GrantRow<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{} <- {}", self.0, self.1)
+    }
+}
+
+fn counted(f: &mut Formatter<'_>, label: &str, count: u64) -> fmt::Result {
+    match count {
+        0 => Ok(()),
+        count => writeln!(f, "{label}: {count}"),
+    }
+}
+
+fn listed<T: Display>(
+    f: &mut Formatter<'_>,
+    label: &str,
+    mut rows: impl ExactSizeIterator<Item = T>,
+) -> fmt::Result {
+    counted(f, label, rows.len() as u64)?;
+    rows.try_for_each(|row| writeln!(f, "{row}"))
 }
 
 fn describe(reason: &SkipReason) -> String {

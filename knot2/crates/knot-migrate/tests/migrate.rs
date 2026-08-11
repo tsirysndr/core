@@ -722,6 +722,36 @@ fn host_key_import_preserves_every_algorithm() {
     });
 }
 
+#[test]
+fn the_public_half_of_a_host_key_is_refused_with_its_own_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("ssh_host_ed25519_key.pub");
+    let public = ssh_key::PrivateKey::from_openssh(HOST_KEY)
+        .unwrap()
+        .public_key()
+        .to_openssh()
+        .unwrap();
+    std::fs::write(&source, format!("{public}\n")).unwrap();
+    match emit::load_host_key(&source) {
+        Err(error @ emit::EmitError::PublicHostKey { .. }) => assert!(
+            error.to_string().contains("without the .pub"),
+            "the refusal has to point at the private half: {error}"
+        ),
+        other => panic!(
+            "a public key mustn't read as a corrupt private key: {:?}",
+            other.err()
+        ),
+    }
+    std::fs::write(&source, "not a key of any kind\n").unwrap();
+    match emit::load_host_key(&source) {
+        Err(emit::EmitError::HostKey { .. }) => {}
+        other => panic!(
+            "a file that isn't a key of either kind is still a parse failure: {:?}",
+            other.err()
+        ),
+    }
+}
+
 fn honors_permission_bits(dir: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
     let probe = dir.join("permission-probe");
@@ -909,6 +939,57 @@ fn two_owners_for_one_repo_are_drift_that_the_report_can_render() {
 }
 
 #[test]
+fn a_report_names_drift_only_where_there_is_drift() {
+    let render = |drift, orphan_alias_count| {
+        let mapping = mapping::Mapping {
+            knot_owner: AccountDid::new("did:plc:akshay").unwrap(),
+            members: Vec::new(),
+            repos: Vec::new(),
+            skipped: Vec::new(),
+            drift,
+        };
+        report::Report {
+            mapping: &mapping,
+            orphan_alias_count,
+            phase: report::Phase::Refused,
+        }
+        .to_string()
+    };
+
+    let agreed = render(mapping::Drift::default(), 0);
+    assert!(
+        agreed.contains("casbin cross-check: the acl and the tables agree"),
+        "{agreed}"
+    );
+    assert!(
+        !agreed.contains("drift"),
+        "thirteen zeroes are what an operator has to read past to find the one line that matters: \
+         {agreed}"
+    );
+
+    let drifted = render(
+        mapping::Drift {
+            slash_owner_markers: 2,
+            ..mapping::Drift::default()
+        },
+        0,
+    );
+    assert!(drifted.contains("casbin cross-check drift:"), "{drifted}");
+    assert!(drifted.contains("slash-form owner markers: 2"), "{drifted}");
+    assert!(
+        !drifted.contains("acl-only members unioned in"),
+        "{drifted}"
+    );
+
+    let orphaned = render(mapping::Drift::default(), 3);
+    assert!(orphaned.contains("orphan aliases: 3"), "{orphaned}");
+    assert!(
+        !orphaned.contains("the acl and the tables agree"),
+        "orphan aliases are a reconciliation the operator still owes: {orphaned}"
+    );
+}
+
+#[test]
 fn an_owner_marker_beside_the_repo_keys_owner_is_still_an_extra() {
     let mapping = map(&fixture(true));
     assert!(
@@ -942,6 +1023,10 @@ fn rehearse_adopting(
         adopted,
         scan_path,
         policy,
+        host_key: None,
+        host_key_target: &scan_path.with_file_name("ssh_host_key"),
+        host_key_policy: emit::HostKeyPolicy::Keep,
+        master_key: &master_key_env(),
     })
 }
 
@@ -954,7 +1039,7 @@ fn a_rehearsal_plans_its_transfer_and_probes_the_path_that_the_real_run_will_cre
     assert_eq!(
         missing.fallback.as_deref(),
         fx.target.parent(),
-        "the real run will create the scan path, so the filesystem checks use the deepest path \
+        "the migration will create the scan path, so the filesystem checks use the deepest path \
          that exists now"
     );
 
@@ -985,7 +1070,7 @@ fn a_rehearsal_plans_its_transfer_and_probes_the_path_that_the_real_run_will_cre
     assert_eq!(
         relative.fallback.as_deref(),
         Some(Path::new(".")),
-        "probing / instead would answer for a filesystem that the real run never touches"
+        "probing / instead would answer for a filesystem that the migration never touches"
     );
 }
 
@@ -1094,7 +1179,7 @@ fn a_scan_path_that_the_real_run_cannot_reach_is_refused_whichever_user_runs_it(
             looped.scan_path,
             Err(rehearse::ScanPathError::Unwritable { .. })
         ),
-        "a path that this process can't examine mustn't read as a path that the real run will \
+        "a path that this process can't examine mustn't read as a path that the migration will \
          create: {:?}",
         looped.scan_path
     );
@@ -1109,12 +1194,12 @@ fn a_scan_path_that_the_real_run_cannot_reach_is_refused_whichever_user_runs_it(
             Err(rehearse::ScanPathError::Dangling { .. })
         ),
         "std::fs::create_dir_all refuses a symlink to a missing target with AlreadyExists, so the \
-         rehearsal mustn't read it as a path that the real run will create: {:?}",
+         rehearsal mustn't read it as a path that the migration will create: {:?}",
         dangling.scan_path
     );
     assert_eq!(
         dangling.fallback, None,
-        "the symlink itself is what the real run fails on, so the checks stay on it and don't step \
+        "the symlink itself is what the migration fails on, so the checks stay on it and don't step \
          up to its parent"
     );
     [under_a_file, looped, dangling]
@@ -1151,7 +1236,7 @@ fn a_scan_path_that_this_process_cannot_write_is_refused() {
             uncreatable.scan_path,
             Err(rehearse::ScanPathError::Uncreatable { .. })
         ),
-        "the real run will create the scan path, so an unwritable ancestor stops it: {:?}",
+        "the migration will create the scan path, so an unwritable ancestor stops it: {:?}",
         uncreatable.scan_path
     );
     assert!(
@@ -1166,6 +1251,14 @@ fn a_scan_path_that_this_process_cannot_write_is_refused() {
     assert!(!uncreatable.ready() && !unwritable.ready());
 }
 
+fn master_key_env() -> MasterKeyEnv {
+    MasterKeyEnv::new("KNOT_MASTER_KEY").unwrap()
+}
+
+fn unset_master_key_env() -> MasterKeyEnv {
+    MasterKeyEnv::new("KNOT_MASTER_KEY_THAT_NOBODY_SETS").unwrap()
+}
+
 fn ready_rehearsal() -> Rehearsal {
     Rehearsal {
         fallback: None,
@@ -1175,6 +1268,9 @@ fn ready_rehearsal() -> Rehearsal {
             source: rehearse::Bytes::new(1),
             free: rehearse::Bytes::new(2),
         })),
+        host_key: Ok(ssh_key::Algorithm::Ed25519),
+        host_key_target: Some(Ok(emit::HostKeyPlacement::Fresh)),
+        master_key: Ok(master_key_env()),
     }
 }
 
@@ -1197,6 +1293,383 @@ fn a_rehearsal_is_ready_only_once_the_copy_has_room() {
         unmeasured.ready(),
         "a rename doesn't measure room at all, which mustn't read as a copy that won't fit"
     );
+}
+
+#[test]
+fn a_rehearsal_reads_a_usable_host_key_and_reports_an_unusable_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let target_key = dir.path().join("knot/ssh_host_key");
+    let rehearse_host_key = |path: PathBuf| {
+        Rehearsal::run(rehearse::Inputs {
+            source_repos: dir.path(),
+            adopted: &[],
+            scan_path: &dir.path().join("knot/repos"),
+            policy: adopt::SourcePolicy::Preserve,
+            host_key: Some(&path),
+            host_key_target: &target_key,
+            host_key_policy: emit::HostKeyPolicy::Keep,
+            master_key: &master_key_env(),
+        })
+    };
+    assert!(matches!(
+        rehearse_host_key(host_key_file(dir.path())).host_key,
+        Ok(ssh_key::Algorithm::Ed25519)
+    ));
+    let missing = rehearse_host_key(dir.path().join("no-such-key"));
+    assert!(matches!(
+        missing.host_key,
+        Err(rehearse::HostKeyError::Unusable(_))
+    ));
+    assert!(
+        missing.transfer.is_ok() && missing.scan_path.is_ok(),
+        "one unreadable input mustn't take the other checks down with it"
+    );
+    assert!(!missing.ready());
+}
+
+#[test]
+fn a_host_key_already_at_the_target_is_kept_until_the_switchover_is_forced() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = host_key_file(dir.path());
+    let target = dir.path().join("target");
+    std::fs::create_dir_all(&target).unwrap();
+    let destination = target.join("ssh_host_key");
+    let rehearse = |policy| {
+        Rehearsal::run(rehearse::Inputs {
+            source_repos: dir.path(),
+            adopted: &[],
+            scan_path: &target.join("repos"),
+            policy: adopt::SourcePolicy::Preserve,
+            host_key: Some(&source),
+            host_key_target: &destination,
+            host_key_policy: policy,
+            master_key: &master_key_env(),
+        })
+    };
+
+    assert!(matches!(
+        rehearse(emit::HostKeyPolicy::Keep).host_key_target,
+        Some(Ok(emit::HostKeyPlacement::Fresh))
+    ));
+
+    emit::load_host_key(&source)
+        .unwrap()
+        .write_to(&destination)
+        .unwrap();
+    assert!(matches!(
+        rehearse(emit::HostKeyPolicy::Keep).host_key_target,
+        Some(Ok(emit::HostKeyPlacement::Unchanged)),
+    ));
+
+    std::fs::write(&destination, ECDSA_HOST_KEY).unwrap();
+    let clash = rehearse(emit::HostKeyPolicy::Keep);
+    assert!(
+        matches!(
+            clash.host_key_target,
+            Some(Err(emit::HostKeyConflict::Different { .. }))
+        ),
+        "a knot that started before the switchover leaves a key of its own"
+    );
+    assert!(
+        clash.transfer.is_ok() && clash.scan_path.is_ok(),
+        "the conflict mustn't take the other checks down with it"
+    );
+    assert!(matches!(
+        rehearse(emit::HostKeyPolicy::Replace).host_key_target,
+        Some(Ok(emit::HostKeyPlacement::Replacing))
+    ));
+
+    std::fs::write(&destination, b"whatever this file is, it isn't a key").unwrap();
+    assert!(
+        matches!(
+            rehearse(emit::HostKeyPolicy::Keep).host_key_target,
+            Some(Err(emit::HostKeyConflict::Unparsable { .. }))
+        ),
+        "a file that doesn't parse here might still be the key the old knot is serving"
+    );
+    assert!(
+        matches!(
+            rehearse(emit::HostKeyPolicy::Replace).host_key_target,
+            Some(Ok(emit::HostKeyPlacement::Replacing))
+        ),
+        "the file the migration can't read is the one an operator most wants gone"
+    );
+
+    std::fs::remove_file(&destination).unwrap();
+    std::os::unix::fs::symlink(&source, &destination).unwrap();
+    let dangling = target.join("dangling");
+    std::os::unix::fs::symlink(target.join("gone"), &dangling).unwrap();
+    [
+        (emit::HostKeyPolicy::Keep, &destination),
+        (emit::HostKeyPolicy::Replace, &destination),
+        (emit::HostKeyPolicy::Replace, &dangling),
+    ]
+    .into_iter()
+    .for_each(|(policy, path)| {
+        assert!(
+            matches!(
+                Rehearsal::run(rehearse::Inputs {
+                    source_repos: dir.path(),
+                    adopted: &[],
+                    scan_path: &target.join("repos"),
+                    policy: adopt::SourcePolicy::Preserve,
+                    host_key: Some(&source),
+                    host_key_target: path,
+                    host_key_policy: policy,
+                    master_key: &master_key_env(),
+                })
+                .host_key_target,
+                Some(Err(emit::HostKeyConflict::NotAFile { .. }))
+            ),
+            "OpenOptions::open follows a symlink, so the key would go somewhere the operator \
+             never named: {policy:?} {path:?}"
+        );
+    });
+
+    std::fs::remove_file(&destination).unwrap();
+    std::fs::create_dir(&destination).unwrap();
+    assert!(
+        matches!(
+            rehearse(emit::HostKeyPolicy::Replace).host_key_target,
+            Some(Err(emit::HostKeyConflict::NotAFile { .. }))
+        ),
+        "a directory would fail at write time, long after adoption has moved every repo"
+    );
+    std::fs::remove_dir(&destination).unwrap();
+
+    assert!(
+        !Rehearsal {
+            host_key_target: Some(Err(emit::HostKeyConflict::Different {
+                path: destination,
+                fingerprints: Box::new(emit::Fingerprints {
+                    found: emit::load_host_key(&source).unwrap().fingerprint,
+                    importing: emit::load_host_key(&source).unwrap().fingerprint,
+                }),
+            })),
+            ..ready_rehearsal()
+        }
+        .ready()
+    );
+    assert!(
+        Rehearsal {
+            host_key_target: Some(Ok(emit::HostKeyPlacement::Replacing)),
+            ..ready_rehearsal()
+        }
+        .ready()
+    );
+}
+
+#[test]
+fn a_host_key_target_this_process_cannot_write_is_refused_before_adoption() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    if !honors_permission_bits(dir.path()) {
+        return;
+    }
+    let key = emit::load_host_key(&host_key_file(dir.path())).unwrap();
+    let target = dir.path().join("target");
+    std::fs::create_dir(&target).unwrap();
+    let destination = target.join("ssh_host_key");
+    std::fs::write(&destination, ECDSA_HOST_KEY).unwrap();
+    let chmod = |path: &Path, mode| {
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).unwrap()
+    };
+
+    chmod(&destination, 0o000);
+    assert!(
+        matches!(
+            emit::plan_host_key(&destination, &key, emit::HostKeyPolicy::Keep),
+            Err(emit::HostKeyConflict::Unreadable { .. })
+        ),
+        "a key this process can't open is not a key it has read and found unparsable"
+    );
+    assert!(
+        matches!(
+            emit::plan_host_key(&destination, &key, emit::HostKeyPolicy::Replace),
+            Err(emit::HostKeyConflict::Unwritable { .. })
+        ),
+        "forcing this would otherwise fail at write time, long after adoption has moved every repo"
+    );
+
+    chmod(&destination, 0o200);
+    assert!(
+        matches!(
+            emit::plan_host_key(&destination, &key, emit::HostKeyPolicy::Replace),
+            Ok(emit::HostKeyPlacement::Replacing)
+        ),
+        "a file this process can write is one that --force-host-key can still land on"
+    );
+    chmod(&destination, 0o600);
+
+    let sealed = dir.path().join("sealed");
+    std::fs::create_dir(&sealed).unwrap();
+    chmod(&sealed, 0o500);
+    assert!(
+        matches!(
+            emit::plan_host_key(&sealed.join("ssh_host_key"), &key, emit::HostKeyPolicy::Keep),
+            Err(emit::HostKeyConflict::Uncreatable { .. })
+        ),
+        "an absent key under a directory nobody can write is a write that fails after adoption"
+    );
+    chmod(&sealed, 0o700);
+
+    assert!(
+        matches!(
+            emit::plan_host_key(
+                &dir.path().join("nothing/here/ssh_host_key"),
+                &key,
+                emit::HostKeyPolicy::Keep
+            ),
+            Ok(emit::HostKeyPlacement::Fresh)
+        ),
+        "a target directory that doesn't exist yet belongs to create_dir_all, which runs seconds \
+         later and long before adoption"
+    );
+}
+
+#[test]
+fn a_symlink_where_a_private_file_goes_is_never_followed() {
+    let dir = tempfile::tempdir().unwrap();
+    let key = emit::load_host_key(&host_key_file(dir.path())).unwrap();
+    let decoy = dir.path().join("decoy");
+    let archive = dir.path().join("repo-signing-keys.json");
+    let planted = dir.path().join("ssh_host_key");
+    std::fs::write(&decoy, "untouched").unwrap();
+    std::os::unix::fs::symlink(&decoy, &archive).unwrap();
+    std::os::unix::fs::symlink(&decoy, &planted).unwrap();
+
+    assert!(
+        emit::write_key_archive(&archive, &[]).is_err(),
+        "every repo's signing key would land wherever the symlink points, and chmod 0600 would \
+         dress up the wrong file"
+    );
+    assert!(
+        key.write_to(&planted).is_err(),
+        "plan_host_key refuses a symlink long before the write, which is check-then-use unless the \
+         open refuses it too"
+    );
+    assert_eq!(std::fs::read_to_string(&decoy).unwrap(), "untouched");
+}
+
+#[test]
+fn a_rehearsal_report_names_what_the_key_at_the_target_costs() {
+    let mapping = mapping::Mapping {
+        knot_owner: AccountDid::new("did:plc:akshay").unwrap(),
+        members: Vec::new(),
+        repos: Vec::new(),
+        skipped: Vec::new(),
+        drift: mapping::Drift::default(),
+    };
+    let render = |host_key_target: Option<Result<emit::HostKeyPlacement, emit::HostKeyConflict>>| {
+        let rehearsal = Rehearsal {
+            host_key_target,
+            ..ready_rehearsal()
+        };
+        report::Report {
+            mapping: &mapping,
+            orphan_alias_count: 0,
+            phase: report::Phase::Rehearsed(&rehearsal),
+        }
+        .to_string()
+    };
+
+    [None, Some(Ok(emit::HostKeyPlacement::Fresh))]
+        .into_iter()
+        .for_each(|quiet| {
+            let rendered = render(quiet);
+            assert!(
+                rendered.contains("host key algorithm: ") && !rendered.contains("host key: "),
+                "a target with no key on it costs the operator nothing to read: {rendered}"
+            );
+        });
+
+    let unchanged = render(Some(Ok(emit::HostKeyPlacement::Unchanged)));
+    assert!(
+        unchanged.contains("host key: the target already has the imported key"),
+        "{unchanged}"
+    );
+
+    let replacing = render(Some(Ok(emit::HostKeyPlacement::Replacing)));
+    assert!(
+        replacing
+            .contains("host key: the migration will replace the different key at the target"),
+        "{replacing}"
+    );
+
+    let unwritable = render(Some(Err(emit::HostKeyConflict::Unwritable {
+        path: PathBuf::from("/srv/knot/ssh_host_key"),
+        source: rustix::io::Errno::ACCESS,
+    })));
+    assert!(
+        unwritable.contains("host key: the migration will write the host key over \
+                             /srv/knot/ssh_host_key, which this process can't write"),
+        "{unwritable}"
+    );
+
+    let not_a_file = render(Some(Err(emit::HostKeyConflict::NotAFile {
+        path: PathBuf::from("/srv/knot/ssh_host_key"),
+    })));
+    assert!(
+        not_a_file.contains("host key: /srv/knot/ssh_host_key isn't a regular file"),
+        "{not_a_file}"
+    );
+}
+
+#[test]
+fn a_rehearsal_states_the_inputs_that_the_real_run_still_needs() {
+    let fx = fixture(true);
+    let mapping = map(&fx);
+    let rehearsal = Rehearsal::run(rehearse::Inputs {
+        source_repos: &fx.source_repos,
+        adopted: &mapping.repos,
+        scan_path: &fx.target.join("repos"),
+        policy: adopt::SourcePolicy::Preserve,
+        host_key: None,
+        host_key_target: &fx.target.join("ssh_host_key"),
+        host_key_policy: emit::HostKeyPolicy::Keep,
+        master_key: &unset_master_key_env(),
+    });
+    assert!(!rehearsal.ready());
+    let rendered = report::Report {
+        mapping: &mapping,
+        orphan_alias_count: 0,
+        phase: report::Phase::Rehearsed(&rehearsal),
+    }
+    .to_string();
+    assert!(rendered.contains("transfer mode: copy"), "{rendered}");
+    assert!(rendered.contains("scan path: writable"), "{rendered}");
+    assert!(rendered.contains("room to copy: "), "{rendered}");
+    assert!(
+        rendered.contains(", since the scan path doesn't exist yet"),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("host key: --host-key is required for the migration"),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("master key env var KNOT_MASTER_KEY_THAT_NOBODY_SETS isn't set"),
+        "{rendered}"
+    );
+}
+
+#[test]
+fn a_master_key_reads_from_its_env_var_and_refuses_a_weak_or_malformed_value() {
+    assert!(matches!(
+        unset_master_key_env().read(),
+        Err(emit::MasterKeyError::Unset(_))
+    ));
+    let padded = format!("  {}\n", base64_standard(&[7_u8; 32]));
+    assert!(master_key_env().decode(&padded).is_ok());
+    let short = master_key_env().decode(&base64_standard(&[7_u8; 31]));
+    assert!(
+        matches!(short, Err(emit::MasterKeyError::Weak { .. })),
+        "{short:?}"
+    );
+    assert!(matches!(
+        master_key_env().decode("not base64 at all!"),
+        Err(emit::MasterKeyError::NotBase64(_))
+    ));
 }
 
 fn base64_standard(bytes: &[u8]) -> String {
@@ -1242,6 +1715,56 @@ fn with_unreadable_repo<T>(fx: &Fixture, work: impl FnOnce() -> T) -> Option<T> 
     let outcome = work();
     std::fs::set_permissions(&limpet, std::fs::Permissions::from_mode(0o755)).unwrap();
     Some(outcome)
+}
+
+#[test]
+fn a_real_run_refuses_the_key_at_the_target_before_it_touches_a_repo() {
+    let fx = fixture(true);
+    let dir = tempfile::tempdir().unwrap();
+    let host_key = host_key_file(dir.path());
+    std::fs::create_dir_all(&fx.target).unwrap();
+    let destination = fx.target.join("ssh_host_key");
+    std::fs::write(&destination, ECDSA_HOST_KEY).unwrap();
+
+    let importing = emit::load_host_key(&host_key).unwrap().fingerprint;
+    let found = emit::load_host_key(&destination).unwrap().fingerprint;
+
+    let refused = run_migrate(&fx, &host_key, &[]);
+    let refusal = String::from_utf8_lossy(&refused.stderr).to_string();
+    assert!(!refused.status.success(), "{refusal}");
+    assert!(refusal.contains("your users already trust"), "{refusal}");
+    assert!(
+        refusal.contains(&format!("whose fingerprint {found} your users already trust"))
+            && refusal.contains(&importing.to_string()),
+        "an operator deciding whether to force needs both fingerprints, not the word: {refusal}"
+    );
+    assert!(
+        !fx.target.join("repos").exists() && !fx.target.join("sealed-keys").exists(),
+        "the refusal has to come before adoption, which moves every repo"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&destination).unwrap(),
+        ECDSA_HOST_KEY,
+        "a refused run mustn't touch the key it refused"
+    );
+
+    let forced = run_migrate(&fx, &host_key, &["--force-host-key"]);
+    let stdout = String::from_utf8_lossy(&forced.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&forced.stderr).to_string();
+    assert!(forced.status.success(), "{stdout}{stderr}");
+    assert_eq!(
+        std::fs::read(&destination).unwrap(),
+        std::fs::read(&host_key).unwrap(),
+        "--force-host-key has to leave the imported key at the target"
+    );
+    assert!(
+        stdout.contains("host key: the migration replaced the different key at the target"),
+        "an operator who forced the switchover has to read what it cost: {stdout}"
+    );
+    assert!(
+        stdout.contains(&format!("host key fingerprint: {importing}")),
+        "the fingerprint everybody has to trust now is the one worth printing: {stdout}"
+    );
 }
 
 #[test]
@@ -1354,12 +1877,19 @@ fn consuming_a_source_that_this_process_cannot_write_is_refused() {
     if !honors_permission_bits(&fx.source_repos) {
         return;
     }
+    let dir = tempfile::tempdir().unwrap();
+    let host_key = host_key_file(dir.path());
     std::fs::set_permissions(&fx.source_repos, std::fs::Permissions::from_mode(0o555)).unwrap();
-    let rehearsal = rehearse_scan_path(
-        &fx.source_repos,
-        &fx.target.join("repos"),
-        adopt::SourcePolicy::Consume,
-    );
+    let rehearsal = Rehearsal::run(rehearse::Inputs {
+        source_repos: &fx.source_repos,
+        adopted: &[],
+        scan_path: &fx.target.join("repos"),
+        policy: adopt::SourcePolicy::Consume,
+        host_key: Some(&host_key),
+        host_key_target: &fx.target.join("ssh_host_key"),
+        host_key_policy: emit::HostKeyPolicy::Keep,
+        master_key: &master_key_env(),
+    });
     let preserving = rehearse_scan_path(
         &fx.source_repos,
         &fx.target.join("repos"),

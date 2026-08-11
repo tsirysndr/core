@@ -7,11 +7,13 @@ use knot_cobs::{
 };
 use knot_git::{GitError, Layout};
 use knot_runtime::Signer;
+use knot_secrets::{MasterKey, SecretsError};
 use knot_types::{AccountDid, ActorId, KnotHostname, KnotId, ObjectFormat, RepoDid, RepoName};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use url::Url;
 
+use crate::adopt;
 use crate::mapping::{AdoptRepo, MappedGrant, Mapping};
 
 #[derive(Debug, thiserror::Error)]
@@ -37,6 +39,15 @@ pub enum EmitError {
         path: PathBuf,
         source: std::io::Error,
     },
+    #[error("read host key {path}: {source}")]
+    ReadHostKey {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error(
+        "host key {path} is the public half of a key pair. Point --host-key at the private key, usually the same path without the .pub."
+    )]
+    PublicHostKey { path: PathBuf },
     #[error("host key {path} doesn't parse as an OpenSSH private key: {source}")]
     HostKey {
         path: PathBuf,
@@ -335,6 +346,7 @@ pub fn write_key_archive(path: &Path, repos: &[AdoptRepo]) -> Result<(), EmitErr
 pub struct HostKey {
     bytes: zeroize::Zeroizing<Vec<u8>>,
     pub algorithm: ssh_key::Algorithm,
+    pub fingerprint: ssh_key::Fingerprint,
 }
 
 impl HostKey {
@@ -343,15 +355,180 @@ impl HostKey {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HostKeyPolicy {
+    Keep,
+    Replace,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HostKeyPlacement {
+    Fresh,
+    Unchanged,
+    Replacing,
+}
+
+#[derive(Debug)]
+pub struct Fingerprints {
+    pub found: ssh_key::Fingerprint,
+    pub importing: ssh_key::Fingerprint,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum HostKeyConflict {
+    #[error(
+        "the migration will replace the different host key at {path}, whose fingerprint {} your users already trust, with {}",
+        .fingerprints.found,
+        .fingerprints.importing
+    )]
+    Different {
+        path: PathBuf,
+        fingerprints: Box<Fingerprints>,
+    },
+    #[error("the migration won't write over the key already at the target: {source}")]
+    Unparsable { source: EmitError },
+    #[error(
+        "read {path}, which this process can't examine and the old knot might still be serving: {source}"
+    )]
+    Unreadable {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("{path} isn't a regular file, so the migration won't write the host key over it")]
+    NotAFile { path: PathBuf },
+    #[error("examine {path}: {source}")]
+    Unexaminable {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error(
+        "the migration will write the host key over {path}, which this process can't write: {source}"
+    )]
+    Unwritable {
+        path: PathBuf,
+        source: rustix::io::Errno,
+    },
+    #[error(
+        "the migration will write the host key to {path} under {blocked}, which this process can't write: {source}"
+    )]
+    Uncreatable {
+        path: PathBuf,
+        blocked: PathBuf,
+        source: rustix::io::Errno,
+    },
+}
+
+enum Occupant {
+    Absent,
+    NotAFile,
+    Unexaminable(std::io::Error),
+    Unreadable(std::io::Error),
+    Unparsable(EmitError),
+    SameKey,
+    DifferentKey(ssh_key::Fingerprint),
+}
+
+fn occupant(destination: &Path, key: &HostKey) -> Occupant {
+    match std::fs::symlink_metadata(destination) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Occupant::Absent,
+        Err(error) => Occupant::Unexaminable(error),
+        Ok(metadata) if !metadata.is_file() => Occupant::NotAFile,
+        Ok(_) => match load_host_key(destination) {
+            Err(EmitError::ReadHostKey { source, .. }) => Occupant::Unreadable(source),
+            Err(error) => Occupant::Unparsable(error),
+            Ok(found) => match found.fingerprint == key.fingerprint {
+                true => Occupant::SameKey,
+                false => Occupant::DifferentKey(found.fingerprint),
+            },
+        },
+    }
+}
+
+pub fn plan_host_key(
+    destination: &Path,
+    key: &HostKey,
+    policy: HostKeyPolicy,
+) -> Result<HostKeyPlacement, HostKeyConflict> {
+    let path = destination.to_path_buf();
+    let placement = match (occupant(destination, key), policy) {
+        (Occupant::Absent, _) => Ok(HostKeyPlacement::Fresh),
+        (Occupant::SameKey, _) => Ok(HostKeyPlacement::Unchanged),
+        (
+            Occupant::DifferentKey(_) | Occupant::Unparsable(_) | Occupant::Unreadable(_),
+            HostKeyPolicy::Replace,
+        ) => Ok(HostKeyPlacement::Replacing),
+        (Occupant::DifferentKey(found), HostKeyPolicy::Keep) => Err(HostKeyConflict::Different {
+            path,
+            fingerprints: Box::new(Fingerprints {
+                found,
+                importing: key.fingerprint,
+            }),
+        }),
+        (Occupant::Unparsable(source), HostKeyPolicy::Keep) => {
+            Err(HostKeyConflict::Unparsable { source })
+        }
+        (Occupant::Unreadable(source), HostKeyPolicy::Keep) => {
+            Err(HostKeyConflict::Unreadable { path, source })
+        }
+        (Occupant::NotAFile, _) => Err(HostKeyConflict::NotAFile { path }),
+        (Occupant::Unexaminable(source), _) => Err(HostKeyConflict::Unexaminable { path, source }),
+    }?;
+    writable_target(destination, placement).map(|()| placement)
+}
+
+fn writable_target(
+    destination: &Path,
+    placement: HostKeyPlacement,
+) -> Result<(), HostKeyConflict> {
+    match placement {
+        HostKeyPlacement::Fresh => {
+            let blocked = match destination.parent() {
+                Some(parent) if !parent.as_os_str().is_empty() => parent,
+                _ => Path::new("."),
+            };
+            match adopt::writable(blocked) {
+                Ok(()) => Ok(()),
+                Err(source) if source == rustix::io::Errno::NOENT => Ok(()),
+                Err(source) => Err(HostKeyConflict::Uncreatable {
+                    path: destination.to_path_buf(),
+                    blocked: blocked.to_path_buf(),
+                    source,
+                }),
+            }
+        }
+        HostKeyPlacement::Unchanged | HostKeyPlacement::Replacing => rustix::fs::accessat(
+            rustix::fs::CWD,
+            destination,
+            rustix::fs::Access::WRITE_OK,
+            rustix::fs::AtFlags::EACCESS,
+        )
+        .map_err(|source| HostKeyConflict::Unwritable {
+            path: destination.to_path_buf(),
+            source,
+        }),
+    }
+}
+
 pub fn load_host_key(source: &Path) -> Result<HostKey, EmitError> {
-    let bytes = zeroize::Zeroizing::new(std::fs::read(source).map_err(|error| EmitError::Io {
-        path: source.to_path_buf(),
-        source: error,
-    })?);
+    let bytes =
+        zeroize::Zeroizing::new(
+            std::fs::read(source).map_err(|error| EmitError::ReadHostKey {
+                path: source.to_path_buf(),
+                source: error,
+            })?,
+        );
     let key = ssh_key::PrivateKey::from_openssh(bytes.as_slice()).map_err(|error| {
-        EmitError::HostKey {
-            path: source.to_path_buf(),
-            source: error,
+        match std::str::from_utf8(bytes.as_slice())
+            .ok()
+            .is_some_and(|text| ssh_key::PublicKey::from_openssh(text).is_ok())
+        {
+            true => EmitError::PublicHostKey {
+                path: source.to_path_buf(),
+            },
+            false => EmitError::HostKey {
+                path: source.to_path_buf(),
+                source: error,
+            },
         }
     })?;
     if key.is_encrypted() {
@@ -361,6 +538,7 @@ pub fn load_host_key(source: &Path) -> Result<HostKey, EmitError> {
     }
     Ok(HostKey {
         algorithm: key.algorithm(),
+        fingerprint: key.fingerprint(ssh_key::HashAlg::Sha256),
         bytes,
     })
 }
@@ -377,6 +555,7 @@ fn write_private(path: &Path, bytes: &[u8]) -> Result<(), EmitError> {
     {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
+        options.custom_flags(rustix::fs::OFlags::NOFOLLOW.bits() as i32);
     }
     let mut file = options.open(path).map_err(io)?;
     #[cfg(unix)]
@@ -413,6 +592,44 @@ impl MasterKeyEnv {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    pub fn read(&self) -> Result<MasterKey, MasterKeyError> {
+        let value = zeroize::Zeroizing::new(
+            std::env::var_os(&self.0)
+                .ok_or_else(|| MasterKeyError::Unset(self.clone()))?
+                .into_string()
+                .map_err(|_| MasterKeyError::NotText(self.clone()))?,
+        );
+        self.decode(&value)
+    }
+
+    pub fn decode(&self, value: &str) -> Result<MasterKey, MasterKeyError> {
+        use base64::Engine;
+        let bytes = zeroize::Zeroizing::new(
+            base64::engine::general_purpose::STANDARD
+                .decode(value.trim())
+                .map_err(|_| MasterKeyError::NotBase64(self.clone()))?,
+        );
+        MasterKey::new(bytes.as_slice()).map_err(|source| MasterKeyError::Weak {
+            env: self.clone(),
+            source,
+        })
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum MasterKeyError {
+    #[error("master key env var {0} isn't set")]
+    Unset(MasterKeyEnv),
+    #[error("master key env var {0} is set to bytes that aren't text")]
+    NotText(MasterKeyEnv),
+    #[error("master key env var {0} isn't base64")]
+    NotBase64(MasterKeyEnv),
+    #[error("{source}, decoded from master key env var {env}")]
+    Weak {
+        env: MasterKeyEnv,
+        source: SecretsError,
+    },
 }
 
 impl std::fmt::Display for MasterKeyEnv {

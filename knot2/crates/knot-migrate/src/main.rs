@@ -2,17 +2,19 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use base64::Engine;
 use knot_migrate::adopt::{self, AdoptError, SourcePolicy};
 use knot_migrate::casbin::{self, CasbinError};
-use knot_migrate::emit::{self, ConfigValues, EmitError, MasterKeyEnv};
+use knot_migrate::emit::{
+    self, ConfigValues, EmitError, HostKeyConflict, HostKeyPlacement, HostKeyPolicy, MasterKeyEnv,
+    MasterKeyError,
+};
 use knot_migrate::envfile::{EnvFile, EnvFileError};
 use knot_migrate::mapping::{self, Mapping, MappingError, RepoList};
 use knot_migrate::rehearse::{self, Rehearsal};
 use knot_migrate::report::{Phase, Report};
 use knot_migrate::source::{SourceDb, SourceError, SourceRepoDid, SourceRkey, SourceSchema};
 use knot_runtime::OsEntropy;
-use knot_secrets::{MasterKey, SealedStore, SecretsError};
+use knot_secrets::{SealedStore, SecretsError};
 use knot_types::{AccountDid, KnotHostname, ObjectFormat, RepoDid};
 use url::Url;
 
@@ -38,6 +40,8 @@ options:
                           which empties the source tree and needs one filesystem
   --skip-unreadable       migrate the rest when knot-migrate can't read a source path,
                           and leave those repos on the old knot
+  --force-host-key        replace the host key already at the target,
+                          whose fingerprint your users already trust
   --dry-run               print the mapping and reconciliation report, leave the target
                           alone, and exit non-zero while an input is still missing
 ";
@@ -55,6 +59,8 @@ enum MigrateError {
     #[error(transparent)]
     Emit(#[from] EmitError),
     #[error(transparent)]
+    HostKeyConflict(#[from] HostKeyConflict),
+    #[error(transparent)]
     EnvFile(#[from] EnvFileError),
     #[error(transparent)]
     Git(#[from] knot_git::GitError),
@@ -66,13 +72,11 @@ enum MigrateError {
     OwnerMismatch { env: String, acl: String },
     #[error("--hostname {flag} doesn't match the env file's KNOT_SERVER_HOSTNAME {env}")]
     HostnameMismatch { flag: String, env: String },
-    #[error("master key env var {name} isn't set")]
-    MissingMasterKey { name: MasterKeyEnv },
-    #[error("master key env var {name} isn't base64")]
-    MalformedMasterKey { name: MasterKeyEnv },
+    #[error(transparent)]
+    MasterKey(#[from] MasterKeyError),
     #[error("{0}")]
     Refused(Refusals),
-    #[error("the rehearsal lists what the real run still needs")]
+    #[error("the rehearsal lists what the migration still needs")]
     RehearsalIncomplete,
     #[error("{context}: {source}")]
     Io {
@@ -141,6 +145,7 @@ struct Args {
     object_format: ObjectFormat,
     master_key_env: MasterKeyEnv,
     source_policy: SourcePolicy,
+    host_key_policy: HostKeyPolicy,
     skip_unreadable: bool,
     dry_run: bool,
 }
@@ -150,6 +155,7 @@ struct Switches {
     dry_run: bool,
     consume_source: bool,
     skip_unreadable: bool,
+    force_host_key: bool,
 }
 
 const KNOWN_FLAGS: [&str; 9] = [
@@ -199,6 +205,14 @@ fn parse_args(args: &[String]) -> Result<Args, MigrateError> {
                 flags,
                 Switches {
                     skip_unreadable: true,
+                    ..switches
+                },
+                None,
+            )),
+            (None, "--force-host-key") => Ok((
+                flags,
+                Switches {
+                    force_host_key: true,
                     ..switches
                 },
                 None,
@@ -253,6 +267,10 @@ fn parse_args(args: &[String]) -> Result<Args, MigrateError> {
         source_policy: match switches.consume_source {
             true => SourcePolicy::Consume,
             false => SourcePolicy::Preserve,
+        },
+        host_key_policy: match switches.force_host_key {
+            true => HostKeyPolicy::Replace,
+            false => HostKeyPolicy::Keep,
         },
         skip_unreadable: switches.skip_unreadable,
         dry_run: switches.dry_run,
@@ -387,6 +405,10 @@ fn run(args: &[String]) -> Result<(), MigrateError> {
                     adopted: &mapping.repos,
                     scan_path: &repos_dir(&args.target),
                     policy: args.source_policy,
+                    host_key: args.host_key.as_deref(),
+                    host_key_target: &host_key_file(&args.target),
+                    host_key_policy: args.host_key_policy,
+                    master_key: &args.master_key_env,
                 })
             });
             report(&mapping, orphan_alias_count, Phase::Rehearsed(&rehearsal));
@@ -418,6 +440,16 @@ fn run(args: &[String]) -> Result<(), MigrateError> {
             println!();
             println!("knot key identity: {}", written.knot_did);
             println!("host key algorithm: {}", written.host_key_algorithm);
+            println!("host key fingerprint: {}", written.host_key_fingerprint);
+            match written.host_key_placement {
+                HostKeyPlacement::Fresh => (),
+                HostKeyPlacement::Unchanged => {
+                    println!("host key: this key was already at the target")
+                }
+                HostKeyPlacement::Replacing => {
+                    println!("host key: the migration replaced the different key at the target")
+                }
+            }
             println!("config: {}", written.config_file.display());
             println!("key archive: {}", written.archive_file.display());
             Ok(())
@@ -427,6 +459,10 @@ fn run(args: &[String]) -> Result<(), MigrateError> {
 
 fn repos_dir(target: &Path) -> PathBuf {
     target.join("repos")
+}
+
+fn host_key_file(target: &Path) -> PathBuf {
+    target.join("ssh_host_key")
 }
 
 fn report<'a>(mapping: &'a Mapping, orphan_alias_count: u64, phase: Phase<'a>) {
@@ -452,6 +488,8 @@ struct Written {
     cobs: emit::CobSummary,
     knot_did: knot_types::KnotId,
     host_key_algorithm: ssh_key::Algorithm,
+    host_key_fingerprint: ssh_key::Fingerprint,
+    host_key_placement: HostKeyPlacement,
     config_file: PathBuf,
     archive_file: PathBuf,
 }
@@ -463,11 +501,15 @@ fn materialize(
     source_repos: &Path,
     mapping: &Mapping,
 ) -> Result<Written, MigrateError> {
-    let host_key_source = args
-        .host_key
-        .as_deref()
-        .ok_or_else(|| MigrateError::Usage("--host-key is required for a real run".to_string()))?;
+    let host_key_source = args.host_key.as_deref().ok_or_else(|| {
+        MigrateError::Usage("--host-key is required for the migration".to_string())
+    })?;
     let host_key = emit::load_host_key(host_key_source)?;
+    let host_key_placement = emit::plan_host_key(
+        &host_key_file(&args.target),
+        &host_key,
+        args.host_key_policy,
+    )?;
     std::fs::create_dir_all(&args.target).map_err(|source| MigrateError::Io {
         context: format!("create {}", args.target.display()),
         source,
@@ -481,25 +523,13 @@ fn materialize(
         })?;
     let scan_path = repos_dir(&target);
     let sealed_key_file = target.join("sealed-keys");
-    let host_key_file = target.join("ssh_host_key");
+    let host_key_destination = host_key_file(&target);
     let archive_file = target.join("repo-signing-keys.json");
     let config_file = target.join("config.toml");
 
     let knot_did = hostname.knot_did();
 
-    let master_key_value =
-        zeroize::Zeroizing::new(std::env::var(args.master_key_env.as_str()).map_err(|_| {
-            MigrateError::MissingMasterKey {
-                name: args.master_key_env.clone(),
-            }
-        })?);
-    let master_key = MasterKey::new(
-        base64::engine::general_purpose::STANDARD
-            .decode(master_key_value.trim())
-            .map_err(|_| MigrateError::MalformedMasterKey {
-                name: args.master_key_env.clone(),
-            })?,
-    )?;
+    let master_key = args.master_key_env.read()?;
     let secrets = SealedStore::open(sealed_key_file.clone(), &master_key, Box::new(OsEntropy))?;
     secrets.ensure(&knot_did)?;
     let signer = secrets.signer(&knot_did)?;
@@ -514,13 +544,13 @@ fn materialize(
         emit::write_cobs(&layout, &knot_did, mapping, &signer)
     })?;
     emit::write_key_archive(&archive_file, &mapping.repos)?;
-    host_key.write_to(&host_key_file)?;
+    host_key.write_to(&host_key_destination)?;
 
     let config = emit::render_config(&ConfigValues {
         hostname: hostname.clone(),
         admins: vec![mapping.knot_owner.clone()],
         scan_path,
-        ssh_host_key_file: host_key_file,
+        ssh_host_key_file: host_key_destination,
         sealed_key_file,
         master_key_env: args.master_key_env.clone(),
         object_format: args.object_format,
@@ -536,6 +566,8 @@ fn materialize(
         cobs,
         knot_did,
         host_key_algorithm: host_key.algorithm,
+        host_key_fingerprint: host_key.fingerprint,
+        host_key_placement,
         config_file,
         archive_file,
     })
@@ -567,6 +599,32 @@ mod tests {
     }
 
     #[test]
+    fn every_switch_is_off_until_it_is_named() {
+        let off = parse(&["--source-db=/db", "--target=/t"]).unwrap();
+        assert!(!off.dry_run);
+        assert!(!off.skip_unreadable);
+        assert_eq!(off.source_policy, SourcePolicy::Preserve);
+        assert_eq!(
+            off.host_key_policy,
+            HostKeyPolicy::Keep,
+            "a fingerprint your users already trust survives a migration nobody asked to force"
+        );
+        let on = parse(&[
+            "--source-db=/db",
+            "--target=/t",
+            "--dry-run",
+            "--consume-source",
+            "--skip-unreadable",
+            "--force-host-key",
+        ])
+        .unwrap();
+        assert!(on.dry_run);
+        assert!(on.skip_unreadable);
+        assert_eq!(on.source_policy, SourcePolicy::Consume);
+        assert_eq!(on.host_key_policy, HostKeyPolicy::Replace);
+    }
+
+    #[test]
     fn rejects_duplicates_missing_values_and_unknown_flags() {
         [
             &[
@@ -579,6 +637,7 @@ mod tests {
             &["--source-db", "--target"],
             &["--mystery=1", "--source-db=/data/knotserver.db"],
             &["--object-format=blake3", "--source-db=/db", "--target=/t"],
+            &["--force-host-key=yes", "--source-db=/db", "--target=/t"],
         ]
         .into_iter()
         .for_each(|args| {
