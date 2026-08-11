@@ -476,10 +476,7 @@ pub fn plan_host_key(
     writable_target(destination, placement).map(|()| placement)
 }
 
-fn writable_target(
-    destination: &Path,
-    placement: HostKeyPlacement,
-) -> Result<(), HostKeyConflict> {
+fn writable_target(destination: &Path, placement: HostKeyPlacement) -> Result<(), HostKeyConflict> {
     match placement {
         HostKeyPlacement::Fresh => {
             let blocked = match destination.parent() {

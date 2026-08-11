@@ -682,7 +682,6 @@
       imports = [./nix/modules/knot-rs.nix];
 
       services.tangled.knot-rs.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.knot-rs;
-      services.tangled.knot-rs.migratePackage = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.knot-migrate;
     };
     nixosModules.spindle = {
       lib,

@@ -82,20 +82,6 @@ in {
       description = "Package providing the knot-server binary";
     };
 
-    migratePackage = mkOption {
-      type = types.package;
-      description = "Package providing the knot-migrate binary";
-    };
-
-    installMigrateTool = mkOption {
-      type = types.bool;
-      default = false;
-      description = ''
-        Whether to instlal {option}`migratePackage` system-wide.
-        Only needed if doing a one-time migration from the Go knot.
-      '';
-    };
-
     user = mkOption {
       type = types.str;
       default = "knot";
@@ -186,8 +172,8 @@ in {
 
             ssh_host_key_file = mkOption {
               type = absPathType;
-              default = "${cfg.stateDir}/ssh_host_ed25519_key";
-              defaultText = literalExpression ''"''${stateDir}/ssh_host_ed25519_key"'';
+              default = "${cfg.stateDir}/ssh_host_key";
+              defaultText = literalExpression ''"''${stateDir}/ssh_host_key"'';
               description = ''
                 Private ssh host key the knot presents.
                 The knot creates one on first start when the file is absent,
@@ -219,8 +205,8 @@ in {
           secrets = {
             sealed_key_file = mkOption {
               type = absPathType;
-              default = "${cfg.stateDir}/knot.sealed";
-              defaultText = literalExpression ''"''${stateDir}/knot.sealed"'';
+              default = "${cfg.stateDir}/sealed-keys";
+              defaultText = literalExpression ''"''${stateDir}/sealed-keys"'';
               description = ''
                 Sealed store for the knot signing key.
                 The knot creates one on first start when the file is absent,
@@ -397,9 +383,7 @@ in {
       lib.optional (tls.acme_enabled && listenPort != 443)
       "services.tangled.knot-rs validates over TLS-ALPN-01, which a certificate authority reaches on TCP 443, and settings.server.listen_addr uses port ${toString listenPort}. Map 443 to that port.";
 
-    environment.systemPackages =
-      [cfg.package]
-      ++ lib.optional cfg.installMigrateTool cfg.migratePackage;
+    environment.systemPackages = [cfg.package];
 
     environment.etc."knot/config.toml".source = configFile;
 

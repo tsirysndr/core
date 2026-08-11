@@ -20,6 +20,13 @@ Back to knot 2 today:
 
 Have fun!
 
+Already running the Go knot and want this instead?
+Stop it once and point `knot-migrate` at its database.
+Afterwards the knot will serve the same hostname with the same repos,
+owners, members and collaborators.
+Upgrading the Go knot won't do a magic upgrade for you.
+The walkthrough is in [the docs](https://tangled.org/did:plc:j5hmlfdrwkvtxm7cjmu7j2is/blob/master/docs/DOCS.md#migrating-to-knot-2).
+
 # Running a knot2
 
 The following is how I actually run `knot.oyster.cafe`. Please treat it as one possible setup.
@@ -90,22 +97,33 @@ If the reader is nodding along instead of saying "no Lewis I won't change the re
 
 Moving sshd is something that can lock one out of one's own server, so do it in this order:
 
-1. Open a second SSH session to the server and keep it open for this whole procedure. If step 4 goes wrong, having this session open might be the saving grace.
-2. Edit `/etc/ssh/sshd_config` and set `Port 2200` or whatever free port one likes. Leave `Port 22` in place as well for now, so sshd listens on both.
-3. Open the new port in the firewall if there is one. On ufw that's `ufw allow 2200/tcp` (I think!! Untested). On a cloud provider one will probably also have to deal with it / open it in their proprietary config.
-4. Restart sshd, and **from the local computer, in a third terminal**, confirm `ssh -p 2200 root@the.server` works before continuing.
-5. Once confirmed, only now remove `Port 22` from `sshd_config`, restart sshd once more, & give the port to the knot. When running the binary directly, that means `ssh_listen_addr = "[::]:22"`. Comparatively, in a container it entails publishing the container's 2222 as the host's 22, which is what the compose file example below does.
+1. Open a second SSH session to the server and keep it open for this whole procedure. If step 5 goes wrong, having this session open might be the saving grace.
+2. Find out which thing owns the port with `systemctl is-enabled ssh.socket`, since each answer sends you to a different file in step 3:
+    - `enabled`: edit the socket unit. A `Port` line in `sshd_config` does nothing at all here, and editing it is the usual way to lose an afternoon. Ask me how I know.
+    - `disabled`, or no systemd: edit `Port` in `sshd_config`; sshd holds the port itself.
+3. Edit `/etc/ssh/sshd_config` and set `Port 2200` or whatever free port one likes. Leave `Port 22` in place as well for now, so sshd listens on both. Under the socket unit, `systemctl edit ssh.socket` takes a `[Socket]` section with `ListenStream=2200` instead, such that the new port joins whatever's already listening.
+4. Open the new port in the firewall if there is one. On ufw that's `ufw allow 2200/tcp` (I think!! Untested). On a cloud provider one will probably also have to deal with it / open it in their proprietary config.
+5. Restart sshd, or `systemctl restart ssh.socket` for the socket unit, and **from the local computer, in a third terminal**, confirm `ssh -p 2200 root@the.server` works before continuing.
+6. Once confirmed, only now remove `Port 22` from `sshd_config`, restart sshd once more, & give the port to the knot. Under the socket unit that's an empty `ListenStream=` above the `ListenStream=2200`, since a drop-in only adds to the port it inherits. When running the binary directly, that means `ssh_listen_addr = "[::]:22"`. Comparatively, in a container it entails publishing the container's 2222 as the host's 22, which is what the compose file example below does.
 
 If one would rather not move sshd at all, another cool option for having knot2 on port 22 is a second IP address on the remote computer. Bind sshd to one with `ListenAddress`, bind the knot to the other with `ssh_listen_addr = "<second-ip>:22"`, and just put the knot's DNS record on that second address. Leaving the knot on `[::]:22` would wildcard-bind every address on the box and would collide with sshd no matter which single IP that sshd listens on.
 
 HTTP can stay on 5555 behind a reverse proxy, or move to 443 if one wants the knot to terminate TLS itself.
 
+## Running under systemd
+
+`systemd/knot.service` at the repository root is the unit I'd install to `/etc/systemd/system/` for running the binary straight on the machine, then `systemctl enable --now knot`.
+
+It runs the knot as `git` from `/usr/local/bin/knot-server`, so edit `User=`, `Group=` and `ExecStart=` if one's setup differs. `ProtectSystem=strict` and `ReadWritePaths=/var/lib/knot` mean anything the knot writes outside the tree gets its own `ReadWritePaths=` entry, an LFS store or an ACME cache on another disk being the usual suspects. `ProtectHome=true` has to go if any of the paths is under `/home`. The two `CAP_NET_BIND_SERVICE` lines let it bind a port below 1024, and both can go when SSH stays on 2222 and HTTP on 5555.
+
 ## Running with containers
 
-The `Containerfile` at project root builds a distroless image with just the `knot-server` binary in it:
+`knot2/Containerfile` will build a distroless image with `knot-server` and `knot-migrate` in `/usr/local/bin`.
+Its `COPY` lines start at the workspace root,
+so build it from the repository root and point `-f` at it:
 
 ```sh
-podman build -t knot-oyster:latest .
+podman build -f knot2/Containerfile -t knot-oyster:latest .
 ```
 
 I personally run it with a composefile. This is the file from `knot.oyster.cafe` with a few opsec adjustments:
@@ -171,13 +189,58 @@ mkdir -p repos ssh secrets lfs
 podman-compose up -d
 ```
 
-The `mkdir` is necessary, since the knot won't start unless the repo and LFS directories are present/writable. Podman would create the bind-mount sources for the operator, but then they belong to whichever unix user podman has rather than to the operator.
+The `mkdir` is necessary, since the knot won't start unless the repo and LFS directories are present/writable. Podman would create the bind-mount sources for the operator, but then they belong to whichever unix user podman has.
 
 The knot creates the SSH host key on the first run at mode 600, aaand the sealed store on that same first run, because the knot's own signing key needs sealing before any repo exists. The knot purposefully won't load a host key that is group or other readable, so don't loosen those please.
 
-Note that this (my) config turns LFS on, since `lfs.store_path` is set. One can drop that whole `[lfs]` block if one doesn't want it. The floor of 30GiB is what I have judged for my disk (of 500GiB, doing other things at the same time), so pick something that suits one's own rather than copying mine.
+Note that this (my) config turns LFS on, since `lfs.store_path` is set. One can drop that whole `[lfs]` block if one doesn't want it. The floor of 30GiB is what I have judged for my disk (of 500GiB, doing other things at the same time), so pick something that suits one's own instead of copying mine.
 
 Speaking of LFS, I made the directory different in the first place so that we could specify a whole separate storage medium if wanted. For example, let's say I want my actual git repos to be wicked fast, so everything *else* is on an SSD, and *only* LFS is on a massive-but-relatively-cheap HDD cluster. Wouldn't want terabytes and terabytes of massive files taking up precious SSD space in this economy!
+
+## NixOS
+
+`nixosModules.knot-rs` renders the config file, defines the same hardened unit as above, and creates the state directory. A `config.toml` the operator writes goes unread under the module. Add the flake as an input, import the module, and write a `knot.nix`:
+
+```nix
+{
+  inputs.tangled.url = "git+https://tangled.org/did:plc:j5hmlfdrwkvtxm7cjmu7j2is";
+  outputs = {nixpkgs, tangled, ...}: {
+    nixosConfigurations.knot = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [tangled.nixosModules.knot-rs ./knot.nix];
+    };
+  };
+}
+```
+
+```nix
+{
+  services.tangled.knot-rs = {
+    enable = true;
+    environmentFile = "/etc/knot/knot.env";
+    settings = {
+      server = {
+        hostname = "knot.oyster.cafe";
+        admins = ["did:plc:nel"];
+        ssh_listen_addr = "[::]:22";
+      };
+      atproto.plc_directory = "https://plc.directory";
+      xrpc = {
+        trusted_proxy_header = "x-forwarded-for";
+        trusted_proxies = ["127.0.0.1" "::1"];
+      };
+    };
+  };
+
+  services.openssh.ports = [2200];
+}
+```
+
+- `environmentFile` is where `KNOT_MASTER_KEY=` goes, and the module refuses to build without it. Write the path, never the value, so the key stays out of the nix store. Every `KNOT_*` variable the file sets overrides the matching key in `settings`.
+- Moving `services.openssh` to another port frees 22 for the knot, per the port dance above, and the module asserts the collision instead of starting two services on one port. It adds `CAP_NET_BIND_SERVICE` itself once a listen address is below 1024. Confirm a session on the new port before rebuilding, since a rebuild that moves sshd and takes 22 in one go will lock one out if the port is wrong.
+- `openFirewall` defaults to true and opens the port of each listen address that isn't loopback, so the knot's 22 opens while the default `listen_addr = "127.0.0.1:5555"` stays shut for a proxy on the same host. `services.openssh` opens its own port.
+- `stateDir` defaults to `/var/lib/knot`, and `systemd.tmpfiles` creates it and its `repos` at mode 0750 for the `knot` user. `settings.secrets.sealed_key_file` and `settings.server.ssh_host_key_file` default to `sealed-keys` and `ssh_host_key` inside it, and the module works out `ReadWritePaths=` from wherever the operator puts them.
+- The module installs the knot and nothing else. [Migrating from the Go knot](https://tangled.org/did:plc:j5hmlfdrwkvtxm7cjmu7j2is/blob/master/docs/DOCS.md#migrating-to-knot-2) runs `knot-migrate` out of `nix build`, before the module is on the machine at all.
 
 ## TLS
 
@@ -277,7 +340,7 @@ git clone https://knot.oyster.cafe/did:plc:barnacle
 
 Push works over both, of course . For HTTP pushing, it is up to the user to find a good Tangled-CLI or something that can put the right things in the git credential helper such that a service auth token is minted and used on push.
 
-A trailing `.git` on the repo name is optional, so `did:plc:nel/squid.git` goes to the same repo as `did:plc:nel/squid`. That only applies to the repo name variant though - `did:plc:barnacle.git` is read as a DID rather than as a repo-DID with a suffix, and it won't resolve. This would be made better from better DID parsing, since a `did:plc` can't have dots, only a `did:web` can.
+A trailing `.git` on the repo name is optional, so `did:plc:nel/squid.git` goes to the same repo as `did:plc:nel/squid`. That only applies to the repo name variant though - `did:plc:barnacle.git` is read as a DID with a `.git` on the end of it, and it won't resolve. This would be made better from better DID parsing, since a `did:plc` can't have dots, only a `did:web` can.
 
 ## Things worth knowing before one commits (get it?) to a config
 
@@ -315,11 +378,56 @@ Back these things up or don't come cryin' to me!
 
 ## Updating
 
-// TODO: publish to ATCR, maybe nix something something.
+Pre-built images are at `atcr.io/tangled.org/knot:2`,
+with `knot-server` and `knot-migrate` in them.
+The image comes from [@tangled.org/knot-docker](https://tangled.org/did:plc:f5s5la5wlofsxidb3zemdune) instead of the `Containerfile` here.
+It's a Debian build, with its binaries in `/usr/bin`,
+and the `:latest` tag over there is still the Go knot,
+so one has to ask for `:2` on purpose.
+My composefile above points at a locally built image under `pull_policy: never`.
+Switching to the published image means editing the `image:` line,
+or tagging the pulled image with the name the compose file already has:
+
+```sh
+podman pull atcr.io/tangled.org/knot:2
+podman tag atcr.io/tangled.org/knot:2 localhost/knot-oyster:latest
+podman-compose up -d
+```
+
+The published image bakes `KNOT_SCAN_PATH`,
+`KNOT_SEALED_KEY_FILE`,
+`KNOT_SSH_HOST_KEY_FILE` and `KNOT_MASTER_KEY_ENV` into itself,
+and an environment variable overrides the config file.
+The knot will then look for the sealed store at `/data/sealed-keys` and the host key at `/data/ssh_host_key`,
+whatever the mounted `config.toml` sets,
+find neither,
+and generate a new identity and a new host key on a path that isn't mounted by anything.
+Put my two paths back in the compose environment before switching to the published image:
+
+```yaml
+    environment:
+      KNOT_SEALED_KEY_FILE: /data/secrets/sealed.bin
+      KNOT_SSH_HOST_KEY_FILE: /data/ssh/host_key
+```
+
+The published image also runs as its own `knot` user at uid 1000,
+where the distroless image here runs as root,
+so chown the four bind mounts before the first start:
+
+```sh
+sudo chown -R 1000:1000 repos ssh secrets lfs
+```
+
+Skipping the chown will stop the knot at startup with `repo.scan_path /data/repos isn't writable`,
+since root wrote every one of the directories.
+`user: "0:0"` in the compose file is the other way out,
+at the cost of running the knot as root.
+
+Building it oneself is the same three lines as always:
 
 ```sh
 git pull
-podman build -t knot-oyster:latest .
+podman build -f knot2/Containerfile -t knot-oyster:latest .
 podman-compose up -d
 ```
 

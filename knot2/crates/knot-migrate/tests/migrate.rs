@@ -1506,7 +1506,11 @@ fn a_host_key_target_this_process_cannot_write_is_refused_before_adoption() {
     chmod(&sealed, 0o500);
     assert!(
         matches!(
-            emit::plan_host_key(&sealed.join("ssh_host_key"), &key, emit::HostKeyPolicy::Keep),
+            emit::plan_host_key(
+                &sealed.join("ssh_host_key"),
+                &key,
+                emit::HostKeyPolicy::Keep
+            ),
             Err(emit::HostKeyConflict::Uncreatable { .. })
         ),
         "an absent key under a directory nobody can write is a write that fails after adoption"
@@ -1560,18 +1564,19 @@ fn a_rehearsal_report_names_what_the_key_at_the_target_costs() {
         skipped: Vec::new(),
         drift: mapping::Drift::default(),
     };
-    let render = |host_key_target: Option<Result<emit::HostKeyPlacement, emit::HostKeyConflict>>| {
-        let rehearsal = Rehearsal {
-            host_key_target,
-            ..ready_rehearsal()
+    let render =
+        |host_key_target: Option<Result<emit::HostKeyPlacement, emit::HostKeyConflict>>| {
+            let rehearsal = Rehearsal {
+                host_key_target,
+                ..ready_rehearsal()
+            };
+            report::Report {
+                mapping: &mapping,
+                orphan_alias_count: 0,
+                phase: report::Phase::Rehearsed(&rehearsal),
+            }
+            .to_string()
         };
-        report::Report {
-            mapping: &mapping,
-            orphan_alias_count: 0,
-            phase: report::Phase::Rehearsed(&rehearsal),
-        }
-        .to_string()
-    };
 
     [None, Some(Ok(emit::HostKeyPlacement::Fresh))]
         .into_iter()
@@ -1591,8 +1596,7 @@ fn a_rehearsal_report_names_what_the_key_at_the_target_costs() {
 
     let replacing = render(Some(Ok(emit::HostKeyPlacement::Replacing)));
     assert!(
-        replacing
-            .contains("host key: the migration will replace the different key at the target"),
+        replacing.contains("host key: the migration will replace the different key at the target"),
         "{replacing}"
     );
 
@@ -1601,8 +1605,10 @@ fn a_rehearsal_report_names_what_the_key_at_the_target_costs() {
         source: rustix::io::Errno::ACCESS,
     })));
     assert!(
-        unwritable.contains("host key: the migration will write the host key over \
-                             /srv/knot/ssh_host_key, which this process can't write"),
+        unwritable.contains(
+            "host key: the migration will write the host key over \
+                             /srv/knot/ssh_host_key, which this process can't write"
+        ),
         "{unwritable}"
     );
 
@@ -1734,8 +1740,9 @@ fn a_real_run_refuses_the_key_at_the_target_before_it_touches_a_repo() {
     assert!(!refused.status.success(), "{refusal}");
     assert!(refusal.contains("your users already trust"), "{refusal}");
     assert!(
-        refusal.contains(&format!("whose fingerprint {found} your users already trust"))
-            && refusal.contains(&importing.to_string()),
+        refusal.contains(&format!(
+            "whose fingerprint {found} your users already trust"
+        )) && refusal.contains(&importing.to_string()),
         "an operator deciding whether to force needs both fingerprints, not the word: {refusal}"
     );
     assert!(

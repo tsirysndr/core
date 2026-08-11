@@ -264,6 +264,12 @@ async fn main() -> anyhow::Result<()> {
             .context("decode master key as base64")?,
     )
     .context("master key from environment")?;
+    if !config.secrets.sealed_key_file.exists() {
+        tracing::info!(
+            path = %config.secrets.sealed_key_file.display(),
+            "the knot will seal a new signing identity, since it can't find a key store at this path"
+        );
+    }
     let secrets = Arc::new(
         SealedStore::open(
             &config.secrets.sealed_key_file,
@@ -374,6 +380,13 @@ async fn main() -> anyhow::Result<()> {
         max_objects: ObjectCount::from(config.pack.selection_max_objects),
         time_budget: Duration::from_secs(config.pack.selection_time_budget_secs),
     });
+    if !config.server.ssh_host_key_file.exists() {
+        tracing::info!(
+            path = %config.server.ssh_host_key_file.display(),
+            "the knot will generate an ssh host key, since it can't find a key at this path. \
+             Anyone who already has this knot's fingerprint cached will see it change"
+        );
+    }
     let host_key = knot_ssh::load_or_create_host_key(&config.server.ssh_host_key_file)
         .context("load or create SSH host key")?;
 

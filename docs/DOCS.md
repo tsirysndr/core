@@ -387,6 +387,9 @@ So you want to run your own knot server? Great! Here are a few prerequisites:
 2. A (sub)domain name. People generally use `knot.example.com`.
 3. A valid SSL certificate for your domain.
 
+Already running a knot and want to move it to knot 2?
+See [Migrating to knot 2](#migrating-to-knot-2).
+
 ## NixOS
 
 Refer to the [knot
@@ -721,6 +724,383 @@ Reload `sshd` after making this change.
 > **Note:** the server will refuse to start in Secure Mode if any
 > repositories have not yet been isolation-migrated. Re-run
 > `migrate-isolation` if you see this error.
+
+## Migrating to Knot 2
+
+Knot 2 is a second implementation of the knot concept.
+It serves the same repositories under the same hostname and the same `did:web`,
+and every clone URL and every `at://` reference will keep on working.
+You'll move to it by running one offline tool while the knot is stopped.
+Upgrading the old knot won't do a magic upgrade to knot 2 for you.
+This is intentional; we don't want to give anyone a nasty surprise
+if we'd switch out implementations under you or accidentally
+brick someone's janky-but-working setup by attempting to shift
+a jenga block underneath them.
+
+Here's what a switchover involves:
+
+- **Rehearsals:** try as many as you like, with the old knot still serving.
+- **Downtime:** from the `systemctl disable` in step 1 to `listening on` in step 5,
+  mostly the copying, depending on how large your repositories are and how fast the disk is.
+- **Parity:** the same knot on the same hostname,
+  with the same owners, members, & collaborators.
+- **Untouched stuff for reversion:** the old database,
+  and under the default-copy-mode, the old repositories too.
+
+What do you get for upgrading?
+
+- Knot 2 doesn't have a SQLite database. Git is the only database,
+  so your members, collaborators, & repository owners will be stored in git itself.
+- Knot 2 will serve SSH in-process, so you no longer need `sshd`,
+  the `AuthorizedKeysCommand`, or the unix `git` account.
+- Knot 2 will read SSH keys live from each user's PDS.
+- Repositories created from now on will stay SHA-1, matching what you already have.
+  Pass `--object-format sha256` to the migration if you'd rather modernize.
+
+The repo directories will come across whole, hooks and commit-graphs included.
+Knot 2 doesn't do repo hooks,
+and it will rewrite commit-graphs on its own maintenance schedule.
+
+### Before we begin
+
+Get tools handy! Install both binaries:
+
+```
+git clone https://tangled.org/did:plc:j5hmlfdrwkvtxm7cjmu7j2is
+cd core
+nix build .#knot-rs && sudo install -m755 result/bin/knot-server /usr/local/bin/
+nix build .#knot-migrate && sudo install -m755 result/bin/knot-migrate /usr/local/bin/
+```
+
+On NixOS, the `knot-rs` module will write the config file, the service unit,
+& the state directory for you,
+so read [Migrating on NixOS](#migrating-on-nixos) alongside this guide.
+Run `./result/bin/knot-migrate` straight out of `nix build` instead of installing it.
+The knot never runs the migrator, so the module leaves it off the system entirely.
+
+Make the dir that knot 2 will use, owned by the same user that the old knot runs as,
+then write a master key for unsealing the per-repository signing keys:
+
+```
+sudo install -d -o git -g git /var/lib/knot
+sudo install -d -m 700 /etc/knot
+printf 'KNOT_MASTER_KEY=%s\n' "$(openssl rand -base64 32)" | sudo tee /etc/knot/knot.env > /dev/null
+sudo chmod 600 /etc/knot/knot.env
+```
+
+That writes `/etc/knot/knot.env`, readable only by root:
+
+```
+KNOT_MASTER_KEY=Xm9x2t2m2WNSVJ+9v0Cq0ftFhwEuLW/8x0aeCcaHiWM=
+```
+
+**Back it up somewhere off the server.**
+Seriously.
+Seriously seriously.
+The sealed key store is useless without it,
+and the keys that it seals will sign every record that the migration writes.
+
+### Dress rehearsal, with old knot still serving requests
+
+`knot-migrate` will open its source database read-only,
+so you can rehearse as often as you like without stopping anything.
+Run it as root, since it'll read your `sshd` host key and the master key alongside the database:
+
+```
+sudo sh -c 'set -a; . /etc/knot/knot.env; set +a; exec knot-migrate \
+  --source-db /home/git/knotserver.db \
+  --env-file  /home/git/.knot.env \
+  --host-key  /etc/ssh/ssh_host_ed25519_key \
+  --plc-url   https://plc.directory \
+  --target    /var/lib/knot \
+  --dry-run'
+```
+
+The `--env-file` gives your hostname and repository scan path,
+so you don't have to repeat them.
+`--dry-run` won't touch the target,
+though SQLite will still add `knotserver.db-shm` and `knotserver.db-wal`
+beside a write-ahead-log database even to read it.
+Rehearse until the exit code is 0 and the last block of the report reads
+`scan path: writable`, `host key algorithm: ssh-ed25519`,
+and `master key: KNOT_MASTER_KEY decodes to a usable key`.
+Any line in the block with an error in it will stop the switchover.
+
+Mount each host directory at the same location inside the container if you'd rather run it that way,
+such that every path in the command is still a host path.
+Mount the target too, even though the rehearsal won't write there,
+since it will measure the free space and the write permission on the target.
+The `atcr.io` image runs as its own unprivileged `knot` user,
+so pass `--user 0:0` to read the host key.
+An image that you built yourself from `knot2/Containerfile` is distroless,
+with its binaries in `/usr/local/bin` instead:
+
+```
+sudo sh -c 'set -a; . /etc/knot/knot.env; set +a; exec docker run --rm \
+  --user 0:0 -v /home/git:/home/git -v /etc/ssh:/etc/ssh:ro \
+  -v /var/lib/knot:/var/lib/knot -e KNOT_MASTER_KEY \
+  --entrypoint /usr/bin/knot-migrate atcr.io/tangled.org/knot:2 \
+    <the same flags as above>'
+```
+
+The `:ro` on `/home/git` will work only while the old knot is still running.
+Mount it writably from step 1 onward, rehearsals included,
+even though the migration only ever reads your database.
+SQLite will create an index file beside a write-ahead-log database to read it at all.
+Under a `:ro` mount, with the knot stopped and its log checkpointed, it can't,
+and `knot-migrate` errors out with `unable to open database file`.
+`--consume-source` will move the repositories out of it, so mount it writably for that too.
+
+### Reading the report
+
+Then read what the report says!
+
+```
+knot owner: did:plc:akshay
+members to grant: 3
+repos to adopt: 5
+collaborator grants: 4
+
+casbin cross-check drift:
+acl-only collaborator grants unioned in: 1
+did:plc:squid <- did:plc:boltless
+table-only collaborator grants missing from acl: 1
+did:plc:octopus <- did:plc:dawn
+repos with no acl owner marker where the owner regains push: 1
+did:plc:scallop
+
+skipped repos: 2
+did:plc:conch unrepresentable name "Test knot"
+drops collaborator grant for did:plc:boltless
+did:plc:tuna no git repository at the source path
+
+transfer mode: copy
+the filesystem checks used /var/lib/knot, since the scan path doesn't exist yet
+scan path: writable
+room to copy: 89.1GiB free is enough for the 580.0KiB that adoption will copy
+host key algorithm: ssh-ed25519
+master key: KNOT_MASTER_KEY decodes to a usable key
+
+we left the target alone. Re-run without --dry-run to migrate.
+```
+
+At the top is what's coming across,
+`repos to adopt`, `members to grant`, and `collaborator grants`,
+and they should match what you think you have.
+Under them is every repository that `knot-migrate` will skip, each with its reason.
+The last block is the preflight on the target,
+where `transfer mode: copy` and `room to copy: ... is enough`
+join the three lines you rehearsed against.
+
+**Skips.** If `repos to adopt` is lower than you expect, the skip list is where the rest went:
+a name with a slash, a backslash, whitespace, a control character, `..`,
+a bare `.`, or more than 100 bytes, and a record key with anything outside letters,
+digits and `.-_:~`. Rename those on tangled.org and rehearse again, or accept losing them.
+
+**Owner drift.** `knot-migrate` will refuse the whole switchover
+when the `acl` table and `repo_keys` are recorded with different owners for a repository.
+The drift section prints both DIDs, one repository per line, as `<repo> acl <did>, repo_keys <did>`.
+Settle each repository in the old knot's database,
+either by deleting the `acl` rows for the wrong owner or by correcting `repo_keys.owner_did`,
+then rehearse again.
+An extra `acl` owner marker beside the owner in `repo_keys` won't stop anything,
+since `knot-migrate` reports it and discards it.
+
+**Room on disk.** Every disk measurement happens at `<target>/repos`,
+where your repositories end up.
+Point `--target` at a directory whose parent already exists,
+and mount or create the disk you mean to fill before you rehearse.
+A rehearsal against your root filesystem measures your root filesystem.
+Under `copy`, the default, your existing repositories stay where they are,
+and `room to copy` counts a second copy of every repository it adopts.
+`--consume-source` will move them instead, in seconds, with no extra room on disk,
+and only where source and target are on one filesystem
+and this process can write the old scan path.
+Once they've moved, only a filesystem snapshot taken beforehand will bring them back,
+even from a switchover that stopped halfway.
+`knot-migrate` will refuse before it writes anything,
+so your repos never end up split across two trees.
+
+> 🦪 **Note:** if you ran Secure Mode, each repo tree has a per-owner uid,
+> so any one owner can read only their own. Root can read all of them.
+> `knot-migrate` will refuse outright when it can't read a source path,
+> and every repository is in the skip list with the error behind it.
+> It will rehearse everything else first either way,
+> and report that you need root alongside whatever else is outstanding.
+> It skips a path that isn't there at all, as usual.
+> `--skip-unreadable` will migrate the rest and leave those repositories on the old knot,
+> which is what you want when root can't read them either,
+> as with a dead disk or a stale network mount.
+> `--consume-source` will empty the old scan path of every repository that it could read,
+> so running it alongside `--skip-unreadable` leaves only the unreadable repositories on the old knot.
+
+### Doing the thing
+
+**Step 1.** Stop the knot and disable it,
+so SQLite checkpoints its WAL and no restart of the machine can take port 5555 back from knot 2.
+Leave it installed though, for "Going back":
+
+```
+sudo systemctl disable --now knotserver
+```
+
+**Step 2.** Copy database through a read-only connection, so the log stays untouched,
+and keep the copy until the switchover is settled.
+`knot-migrate` will never write to the source database.
+The copy is there for everything else that can go wrong on the day,
+and "Going back" has a restore-command:
+
+```
+sudo sqlite3 "file:/home/git/knotserver.db?mode=ro" \
+  ".backup /var/tmp/knotserver-cutover.db"
+```
+
+**Step 3.** Run the same command that you rehearsed, without `--dry-run`,
+then give the tree to the user that the service runs as, since root wrote all of it:
+
+```
+sudo chown -R git:git /var/lib/knot
+```
+
+`knot-migrate` will write your repositories, a `config.toml`, the imported host key,
+the sealed key store, and `repo-signing-keys.json`.
+That last file is every repository's private key in the clear,
+the same keys that your old database stored,
+so move it somewhere safe and off the server once the migration is done.
+Towards the end of the copy, install
+[`knot.service`](https://tangled.org/did:plc:j5hmlfdrwkvtxm7cjmu7j2is/blob/master/systemd/knot.service)
+to `/etc/systemd/system/`, so step 5 is only a start.
+
+**Step 4.** Give port 22 to the knot,
+if you want SSH clone URLs to keep working without a port number in them.
+The order to do that in is under "Ports, Taylor's version" in the [knot 2 README](https://tangled.org/did:plc:j5hmlfdrwkvtxm7cjmu7j2is/blob/master/knot2/README.md),
+since getting it wrong will lock you out of your own server.
+Two moves there are migration-only:
+move `/etc/ssh/sshd_config.d/authorized_keys_command.conf` outside `sshd_config.d`,
+keeping it for going back,
+and uncomment `ssh_listen_addr` in `/var/lib/knot/config.toml` to set it to `"[::]:22"`.
+
+**Step 5.** Start it and follow the log, watching the index rebuild from the meta-repo,
+until `index ready` and then `listening on`:
+
+```
+sudo systemctl enable --now knot
+sudo journalctl -fu knot
+```
+
+The knot rebuilds the index before it takes a connection.
+The README's systemd section covers editing the unit for a different user,
+a different binary path, or an LFS store outside `/var/lib/knot`.
+
+Both knots serve HTTP on port 5555 by default,
+so you don't have to touch a reverse proxy already aimed at the old knot.
+Configure the proxy in the knot anyway.
+The knot will rate-limit by the address that a request arrives from,
+and every one of your users arrives from the proxy until you do.
+In `/var/lib/knot/config.toml`,
+set `xrpc.trusted_proxy_header` to the header that your proxy appends,
+and `xrpc.trusted_proxies` to the address that it connects from.
+The README's TLS section spells both out at length.
+An empty `trusted_proxies` leaves the knot honoring the header from every address,
+so fill it in whenever anything but your proxy can connect to port 5555,
+and keep 5555 off the public internet either way.
+
+### Migrating on NixOS
+
+> 🦪
+>
+> NixOS is not my forte. Please read this and absolutely second-guess me.
+> I have of course tested this, but still, a boy gets paranoid.
+
+Steps 1 and 2 read the same, and the `knot-rs` module replaces the rest,
+so configure it as the [knot 2 README](https://tangled.org/did:plc:j5hmlfdrwkvtxm7cjmu7j2is/blob/master/knot2/README.md) describes.
+Set `settings.git.object_format` to whatever you passed `--object-format`,
+since the module defaults to `sha256` where the migration defaults to `sha1`.
+
+Run the migration before your first rebuild.
+A knot that starts on an empty state directory won't serve any repositories,
+and it will generate a host key of its own,
+which `knot-migrate` will then refuse to overwrite.
+A rebuild starts the knot the moment the module is on,
+so if you want the module in place before you migrate, add this line first:
+
+```
+systemd.services.knot-rs.wantedBy = lib.mkForce [];
+```
+
+The knot then stays stopped until you start it by hand.
+Migrate, `chown`, run `systemctl start knot-rs`, and delete the line at your next rebuild.
+
+If the knot already started once, `--force-host-key` writes the imported key over the one it generated.
+The fingerprint everybody cached under the old knot is the one that comes back,
+so it only surprises whoever connected while knot 2 was serving a key of its own.
+The `config.toml` that `knot-migrate` writes is only a record of what it chose,
+because the file the knot reads is the module's.
+
+Then run the migration and hand the tree to the module's user,
+`knot`, where the Go module used `git`, and rebuild.
+The `--source-repos` and `--hostname` flags replace the `--env-file` above,
+since the Go module configures the old knot through systemd and will never write an env file.
+Append `--dry-run` to rehearse it first, as often as you like:
+
+```
+nix build .#knot-migrate
+sudo sh -c 'set -a; . /etc/knot/knot.env; set +a; exec ./result/bin/knot-migrate \
+  --source-db    /home/git/knotserver.db \
+  --source-repos /home/git \
+  --hostname     knot.example.com \
+  --host-key     /etc/ssh/ssh_host_ed25519_key \
+  --plc-url      https://plc.directory \
+  --target       /var/lib/knot'
+sudo chown -R knot:knot /var/lib/knot
+sudo nixos-rebuild switch
+```
+
+The source paths above are the Go module's defaults,
+where `stateDir` is `/home/git` and `repo.scanPath` is the state directory itself,
+so read your own out of `services.tangled.knot` if you moved either.
+"Check it worked" and everything after it apply unchanged,
+with `systemctl status knot-rs` in place of `knot`.
+
+### Checking that it worked
+
+```
+curl -s https://knot.example.com/xrpc/_health
+curl -s https://knot.example.com/xrpc/sh.tangled.owner
+ssh-keyscan -t ed25519 your.knot.com
+```
+
+The health endpoint should answer `{"version":"knot 2.0.0"}`,
+`sh.tangled.owner` should answer with your own DID,
+and the keyscan should match the fingerprint that your users already have.
+Then clone a repository anonymously, and push to a repository that you own.
+
+> 🦪
+>
+> knot 2 will take SSH keys from each user's PDS on an hour's lease,
+> where the old knot kept a copy that could outlive the record.
+> So when someone's push stops working: is their key record still in their PDS?
+> Have they re-added the key in their Tangled settings, which writes it back?
+> Have they waited out the lease since?
+> Lower `keyfill.ttl_secs` if an hour is too long for you.
+
+### Going back in case of emergency
+
+If you ran the migration in its default copy mode,
+your old data is exactly where it was.
+Put `sshd` back on 22, move `authorized_keys_command.conf` back into `sshd_config.d`,
+and start the old knot:
+
+```
+sudo systemctl disable --now knot
+sudo systemctl enable --now knotserver
+```
+
+Restore `/var/tmp/knotserver-cutover.db` over `/home/git/knotserver.db` only if something wrote to the original,
+which the migration itself never will.
+If you used `--consume-source`, your repositories moved instead of being copied,
+and only a filesystem snapshot taken before the migration
+or your own little dir-reverse script would bring repos back.
 
 ## Troubleshooting
 
