@@ -29,6 +29,13 @@ pub enum AdoptError {
     Vanished { repo: RepoDid },
     #[error("consuming the source needs {scan_path} and {target} on one filesystem")]
     CrossDeviceConsume { scan_path: PathBuf, target: PathBuf },
+    #[error(
+        "consuming the source will move the repos out of {scan_path}, which this process can't write: {source}"
+    )]
+    UnwritableSource {
+        scan_path: PathBuf,
+        source: std::io::Error,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -145,7 +152,7 @@ pub fn adopt_all(
     })
 }
 
-fn transfer_mode(
+pub fn transfer_mode(
     source_root: &Path,
     target_root: &Path,
     policy: SourcePolicy,
@@ -159,15 +166,30 @@ fn transfer_mode(
                 source,
             })
     };
-    let one_filesystem = device(source_root)? == device(target_root)?;
-    match (policy, one_filesystem) {
-        (SourcePolicy::Consume, true) => Ok(Transfer::Rename),
-        (SourcePolicy::Consume, false) => Err(AdoptError::CrossDeviceConsume {
-            scan_path: source_root.to_path_buf(),
-            target: target_root.to_path_buf(),
-        }),
-        (SourcePolicy::Preserve, _) => Ok(Transfer::Copy),
+    match policy {
+        SourcePolicy::Preserve => Ok(Transfer::Copy),
+        SourcePolicy::Consume => match device(source_root)? == device(target_root)? {
+            true => writable(source_root)
+                .map(|()| Transfer::Rename)
+                .map_err(|source| AdoptError::UnwritableSource {
+                    scan_path: source_root.to_path_buf(),
+                    source: source.into(),
+                }),
+            false => Err(AdoptError::CrossDeviceConsume {
+                scan_path: source_root.to_path_buf(),
+                target: target_root.to_path_buf(),
+            }),
+        },
     }
+}
+
+pub fn writable(path: &Path) -> Result<(), rustix::io::Errno> {
+    rustix::fs::accessat(
+        rustix::fs::CWD,
+        path,
+        rustix::fs::Access::WRITE_OK | rustix::fs::Access::EXEC_OK,
+        rustix::fs::AtFlags::EACCESS,
+    )
 }
 
 fn in_lanes<'items, T, R, F>(items: &'items [T], work: F) -> Result<Vec<R>, AdoptError>

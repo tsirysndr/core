@@ -3,12 +3,21 @@ use std::fmt::{self, Display, Formatter};
 use crate::adopt::AdoptOutcome;
 use crate::emit::CobSummary;
 use crate::mapping::{Mapping, SkipReason};
+use crate::rehearse::{Fit, Occupancy, Rehearsal};
 
 pub struct Report<'a> {
     pub mapping: &'a Mapping,
     pub orphan_alias_count: u64,
-    pub adoption: Option<&'a AdoptOutcome>,
-    pub cobs: Option<&'a CobSummary>,
+    pub phase: Phase<'a>,
+}
+
+pub enum Phase<'a> {
+    Refused,
+    Rehearsed(&'a Rehearsal),
+    Written {
+        adoption: &'a AdoptOutcome,
+        cobs: &'a CobSummary,
+    },
 }
 
 impl Display for Report<'_> {
@@ -137,36 +146,74 @@ impl Display for Report<'_> {
                 .iter()
                 .try_for_each(|did| writeln!(f, "drops collaborator grant for {did}"))
         })?;
-        self.adoption.map_or(Ok(()), |adoption| {
-            writeln!(f)?;
-            writeln!(
-                f,
-                "adopted by {}: {} new, {} already present, {} sha1, {} sha256",
-                adoption.transfer,
-                adoption.adopted,
-                adoption.already_present,
-                adoption.sha1,
-                adoption.sha256
-            )
-        })?;
-        self.cobs.map_or(Ok(()), |cobs| {
-            writeln!(f)?;
-            writeln!(
-                f,
-                "member grants: {} appended, {} already present",
-                cobs.members.appended, cobs.members.already_present
-            )?;
-            writeln!(
-                f,
-                "registrations: {} appended, {} already present",
-                cobs.registrations.appended, cobs.registrations.already_present
-            )?;
-            writeln!(
-                f,
-                "collaborator grants: {} appended, {} already present",
-                cobs.collaborators.appended, cobs.collaborators.already_present
-            )
-        })
+        match self.phase {
+            Phase::Refused => Ok(()),
+            Phase::Rehearsed(rehearsal) => {
+                writeln!(f)?;
+                match &rehearsal.transfer {
+                    Err(error) => writeln!(f, "transfer mode: {error}"),
+                    Ok(transfer) => writeln!(f, "transfer mode: {transfer}"),
+                }?;
+                rehearsal.fallback.as_ref().map_or(Ok(()), |fallback| {
+                    writeln!(
+                        f,
+                        "the filesystem checks used {}, since the scan path doesn't exist yet",
+                        fallback.display()
+                    )
+                })?;
+                match &rehearsal.scan_path {
+                    Ok(Occupancy::Fresh) => writeln!(f, "scan path: writable"),
+                    Ok(Occupancy::Occupied) => writeln!(
+                        f,
+                        "scan path: writable, with repos already in it that the real run will keep"
+                    ),
+                    Err(error) => writeln!(f, "scan path: {error}"),
+                }?;
+                rehearsal.room.as_ref().map_or(Ok(()), |room| match room {
+                    Ok(room) => match room.fit() {
+                        Fit::Clear => writeln!(
+                            f,
+                            "room to copy: {} free is enough for the {} that adoption will copy",
+                            room.free, room.source
+                        ),
+                        Fit::Short => writeln!(
+                            f,
+                            "room to copy: {} free isn't enough for the {} that adoption will copy",
+                            room.free, room.source
+                        ),
+                    },
+                    Err(error) => writeln!(f, "room to copy: {error}"),
+                })
+            }
+            Phase::Written { adoption, cobs } => {
+                writeln!(f)?;
+                writeln!(
+                    f,
+                    "adopted by {}: {} new, {} already present, {} sha1, {} sha256",
+                    adoption.transfer,
+                    adoption.adopted,
+                    adoption.already_present,
+                    adoption.sha1,
+                    adoption.sha256
+                )?;
+                writeln!(f)?;
+                writeln!(
+                    f,
+                    "member grants: {} appended, {} already present",
+                    cobs.members.appended, cobs.members.already_present
+                )?;
+                writeln!(
+                    f,
+                    "registrations: {} appended, {} already present",
+                    cobs.registrations.appended, cobs.registrations.already_present
+                )?;
+                writeln!(
+                    f,
+                    "collaborator grants: {} appended, {} already present",
+                    cobs.collaborators.appended, cobs.collaborators.already_present
+                )
+            }
+        }
     }
 }
 

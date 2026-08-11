@@ -7,6 +7,7 @@ use knot_migrate::casbin;
 use knot_migrate::emit::MasterKeyEnv;
 use knot_migrate::emit::{self, ConfigValues};
 use knot_migrate::mapping::{self, SkipReason};
+use knot_migrate::rehearse::{self, Rehearsal};
 use knot_migrate::report;
 use knot_migrate::source::{
     SourceDb, SourceDid, SourceError, SourceRepoDid, SourceRkey, SourceSchema,
@@ -894,8 +895,7 @@ fn two_owners_for_one_repo_are_drift_that_the_report_can_render() {
     let rendered = report::Report {
         mapping: &mapping,
         orphan_alias_count: 0,
-        adoption: None,
-        cobs: None,
+        phase: report::Phase::Refused,
     }
     .to_string();
     assert!(
@@ -924,6 +924,278 @@ fn an_owner_marker_beside_the_repo_keys_owner_is_still_an_extra() {
         )),
         "{:?}",
         mapping.drift.extra_owner_markers
+    );
+}
+
+fn rehearse_scan_path(source: &Path, scan_path: &Path, policy: adopt::SourcePolicy) -> Rehearsal {
+    rehearse_adopting(source, &[], scan_path, policy)
+}
+
+fn rehearse_adopting(
+    source: &Path,
+    adopted: &[mapping::AdoptRepo],
+    scan_path: &Path,
+    policy: adopt::SourcePolicy,
+) -> Rehearsal {
+    Rehearsal::run(rehearse::Inputs {
+        source_repos: source,
+        adopted,
+        scan_path,
+        policy,
+    })
+}
+
+#[test]
+fn a_rehearsal_plans_its_transfer_and_probes_the_path_that_the_real_run_will_create() {
+    let fx = fixture(true);
+    let scan_path = fx.target.join("repos");
+    let missing = rehearse_scan_path(&fx.source_repos, &scan_path, adopt::SourcePolicy::Consume);
+    assert_eq!(missing.transfer.unwrap(), adopt::Transfer::Rename);
+    assert_eq!(
+        missing.fallback.as_deref(),
+        fx.target.parent(),
+        "the real run will create the scan path, so the filesystem checks use the deepest path \
+         that exists now"
+    );
+
+    std::fs::create_dir_all(&scan_path).unwrap();
+    let fresh = rehearse_scan_path(&fx.source_repos, &scan_path, adopt::SourcePolicy::Consume);
+    assert_eq!(fresh.transfer.unwrap(), adopt::Transfer::Rename);
+    assert_eq!(fresh.fallback, None);
+    assert_eq!(fresh.scan_path.unwrap(), rehearse::Occupancy::Fresh);
+    assert!(
+        fresh.room.is_none(),
+        "a rename doesn't need a second copy of anything"
+    );
+
+    std::fs::create_dir(scan_path.join("did:plc:squid")).unwrap();
+    let occupied = rehearse_scan_path(&fx.source_repos, &scan_path, adopt::SourcePolicy::Preserve);
+    assert_eq!(
+        occupied.transfer.unwrap(),
+        adopt::Transfer::Copy,
+        "the default policy copies, so it will never compare the two filesystems"
+    );
+    assert_eq!(occupied.scan_path.unwrap(), rehearse::Occupancy::Occupied);
+
+    let relative = rehearse_scan_path(
+        &fx.source_repos,
+        Path::new("knot-migrate-nowhere/repos"),
+        adopt::SourcePolicy::Preserve,
+    );
+    assert_eq!(
+        relative.fallback.as_deref(),
+        Some(Path::new(".")),
+        "probing / instead would answer for a filesystem that the real run never touches"
+    );
+}
+
+fn on_another_filesystem(reference: &Path) -> Option<tempfile::TempDir> {
+    use std::os::unix::fs::MetadataExt;
+    let device = |path: &Path| std::fs::metadata(path).ok().map(|meta| meta.dev());
+    tempfile::TempDir::new_in("/dev/shm")
+        .ok()
+        .filter(|elsewhere| device(elsewhere.path()) != device(reference))
+}
+
+#[test]
+fn rehearsing_a_cross_filesystem_consume_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let Some(elsewhere) = on_another_filesystem(dir.path()) else {
+        eprintln!("skipping the cross-filesystem case: /dev/shm is on this tempdir's filesystem");
+        return;
+    };
+    assert!(matches!(
+        rehearse_scan_path(dir.path(), elsewhere.path(), adopt::SourcePolicy::Consume).transfer,
+        Err(adopt::AdoptError::CrossDeviceConsume { .. })
+    ));
+    assert_eq!(
+        rehearse_scan_path(dir.path(), elsewhere.path(), adopt::SourcePolicy::Preserve)
+            .transfer
+            .unwrap(),
+        adopt::Transfer::Copy,
+        "the default policy copies, so two filesystems suit it fine"
+    );
+}
+
+#[test]
+fn a_rehearsal_measures_the_room_that_adoption_will_copy() {
+    let fx = fixture(true);
+    let mapping = map(&fx);
+    let measure = || {
+        rehearse_adopting(
+            &fx.source_repos,
+            &mapping.repos,
+            &fx.target.join("repos"),
+            adopt::SourcePolicy::Preserve,
+        )
+        .room
+        .unwrap()
+        .unwrap()
+    };
+    let measured = measure();
+    assert!(measured.source > rehearse::Bytes::new(0), "{measured:?}");
+    assert_eq!(measured.fit(), rehearse::Fit::Clear, "{measured:?}");
+    std::fs::write(
+        fx.source_repos.join("did:plc:whelk/stray.pack"),
+        vec![0_u8; 1 << 20],
+    )
+    .unwrap();
+    assert_eq!(
+        measure().source,
+        measured.source,
+        "did:plc:whelk doesn't have a HEAD and stays out of the mapping, so adoption will never \
+         read a byte of it"
+    );
+    let fit = |source: u64, free: u64| {
+        rehearse::Room {
+            source: rehearse::Bytes::new(source),
+            free: rehearse::Bytes::new(free),
+        }
+        .fit()
+    };
+    assert_eq!(fit(1_000, 999), rehearse::Fit::Short);
+    assert_eq!(fit(1_000, 1_000), rehearse::Fit::Clear);
+    assert_eq!(
+        fit(0, 0),
+        rehearse::Fit::Clear,
+        "a rehearsal that won't adopt a repo doesn't need room"
+    );
+}
+
+fn scan_path_refusal(build: impl FnOnce(&Path) -> PathBuf) -> Rehearsal {
+    let dir = tempfile::tempdir().unwrap();
+    let scan_path = build(dir.path());
+    rehearse_scan_path(dir.path(), &scan_path, adopt::SourcePolicy::Preserve)
+}
+
+#[test]
+fn a_scan_path_that_the_real_run_cannot_reach_is_refused_whichever_user_runs_it() {
+    let under_a_file = scan_path_refusal(|dir| {
+        let blocker = dir.join("not-a-directory");
+        std::fs::write(&blocker, "").unwrap();
+        blocker.join("knot/repos")
+    });
+    assert!(
+        matches!(
+            under_a_file.scan_path,
+            Err(rehearse::ScanPathError::Uncreatable { .. })
+        ),
+        "root can't traverse a regular file either, so this case covers the refusal under any uid: \
+         {:?}",
+        under_a_file.scan_path
+    );
+    let looped = scan_path_refusal(|dir| {
+        let loop_path = dir.join("loop");
+        std::os::unix::fs::symlink(&loop_path, &loop_path).unwrap();
+        loop_path.join("repos")
+    });
+    assert!(
+        matches!(
+            looped.scan_path,
+            Err(rehearse::ScanPathError::Unwritable { .. })
+        ),
+        "a path that this process can't examine mustn't read as a path that the real run will \
+         create: {:?}",
+        looped.scan_path
+    );
+    let dangling = scan_path_refusal(|dir| {
+        let scan_path = dir.join("repos");
+        std::os::unix::fs::symlink(dir.join("nowhere"), &scan_path).unwrap();
+        scan_path
+    });
+    assert!(
+        matches!(
+            dangling.scan_path,
+            Err(rehearse::ScanPathError::Dangling { .. })
+        ),
+        "std::fs::create_dir_all refuses a symlink to a missing target with AlreadyExists, so the \
+         rehearsal mustn't read it as a path that the real run will create: {:?}",
+        dangling.scan_path
+    );
+    assert_eq!(
+        dangling.fallback, None,
+        "the symlink itself is what the real run fails on, so the checks stay on it and don't step \
+         up to its parent"
+    );
+    [under_a_file, looped, dangling]
+        .iter()
+        .for_each(|rehearsal| assert!(!rehearsal.ready()));
+}
+
+#[test]
+fn a_scan_path_that_this_process_cannot_write_is_refused() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    if !honors_permission_bits(dir.path()) {
+        return;
+    }
+    let closed = |name: &str| {
+        let path = dir.path().join(name);
+        std::fs::create_dir(&path).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o555)).unwrap();
+        path
+    };
+    let parent = closed("parent");
+    let existing = closed("repos");
+    let uncreatable = rehearse_scan_path(
+        dir.path(),
+        &parent.join("knot/repos"),
+        adopt::SourcePolicy::Preserve,
+    );
+    let unwritable = rehearse_scan_path(dir.path(), &existing, adopt::SourcePolicy::Preserve);
+    [&parent, &existing].iter().for_each(|path| {
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    });
+    assert!(
+        matches!(
+            uncreatable.scan_path,
+            Err(rehearse::ScanPathError::Uncreatable { .. })
+        ),
+        "the real run will create the scan path, so an unwritable ancestor stops it: {:?}",
+        uncreatable.scan_path
+    );
+    assert!(
+        matches!(
+            unwritable.scan_path,
+            Err(rehearse::ScanPathError::Unwritable { .. })
+        ),
+        "a scan path that already exists doesn't need creating, so the refusal mustn't blame its \
+         parent: {:?}",
+        unwritable.scan_path
+    );
+    assert!(!uncreatable.ready() && !unwritable.ready());
+}
+
+fn ready_rehearsal() -> Rehearsal {
+    Rehearsal {
+        fallback: None,
+        transfer: Ok(adopt::Transfer::Copy),
+        scan_path: Ok(rehearse::Occupancy::Fresh),
+        room: Some(Ok(rehearse::Room {
+            source: rehearse::Bytes::new(1),
+            free: rehearse::Bytes::new(2),
+        })),
+    }
+}
+
+#[test]
+fn a_rehearsal_is_ready_only_once_the_copy_has_room() {
+    assert!(ready_rehearsal().ready());
+    let cramped = Rehearsal {
+        room: Some(Ok(rehearse::Room {
+            source: rehearse::Bytes::new(2),
+            free: rehearse::Bytes::new(1),
+        })),
+        ..ready_rehearsal()
+    };
+    assert!(!cramped.ready());
+    let unmeasured = Rehearsal {
+        room: None,
+        ..ready_rehearsal()
+    };
+    assert!(
+        unmeasured.ready(),
+        "a rename doesn't measure room at all, which mustn't read as a copy that won't fit"
     );
 }
 
@@ -1047,4 +1319,65 @@ fn a_run_refuses_two_owners_for_one_repo_after_it_reports_them() {
                 "a refused run mustn't leave a half-migrated target behind, {extra:?}"
             );
         });
+}
+
+#[test]
+fn a_rehearsal_reports_an_unreadable_source_and_a_second_owner_together() {
+    use std::os::unix::fs::PermissionsExt;
+    let fx = fixture(true);
+    if !honors_permission_bits(&fx.source_repos) {
+        return;
+    }
+    set_acl_owner(&fx, "did:plc:scallop", "did:plc:teq");
+    let dir = tempfile::tempdir().unwrap();
+    let host_key = host_key_file(dir.path());
+    let limpet = fx.source_repos.join("did:plc:limpet");
+    std::fs::set_permissions(&limpet, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let outcome = run_migrate(&fx, &host_key, &["--dry-run"]);
+    std::fs::set_permissions(&limpet, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let stderr = String::from_utf8_lossy(&outcome.stderr).to_string();
+    assert!(!outcome.status.success(), "{stderr}");
+    assert!(
+        stderr.contains("different owners for did:plc:scallop"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("can't read the source path of did:plc:limpet"),
+        "both refusals have to appear together: {stderr}"
+    );
+}
+
+#[test]
+fn consuming_a_source_that_this_process_cannot_write_is_refused() {
+    use std::os::unix::fs::PermissionsExt;
+    let fx = fixture(true);
+    if !honors_permission_bits(&fx.source_repos) {
+        return;
+    }
+    std::fs::set_permissions(&fx.source_repos, std::fs::Permissions::from_mode(0o555)).unwrap();
+    let rehearsal = rehearse_scan_path(
+        &fx.source_repos,
+        &fx.target.join("repos"),
+        adopt::SourcePolicy::Consume,
+    );
+    let preserving = rehearse_scan_path(
+        &fx.source_repos,
+        &fx.target.join("repos"),
+        adopt::SourcePolicy::Preserve,
+    );
+    std::fs::set_permissions(&fx.source_repos, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(
+        matches!(
+            rehearsal.transfer,
+            Err(adopt::AdoptError::UnwritableSource { .. })
+        ),
+        "a rename will move every repo out of the source, so the source has to be writable: {:?}",
+        rehearsal.transfer
+    );
+    assert!(!rehearsal.ready());
+    assert_eq!(
+        preserving.transfer.unwrap(),
+        adopt::Transfer::Copy,
+        "a copy will read the source and write elsewhere, so it doesn't need write permission there"
+    );
 }

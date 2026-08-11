@@ -8,7 +8,8 @@ use knot_migrate::casbin::{self, CasbinError};
 use knot_migrate::emit::{self, ConfigValues, EmitError, MasterKeyEnv};
 use knot_migrate::envfile::{EnvFile, EnvFileError};
 use knot_migrate::mapping::{self, Mapping, MappingError, RepoList};
-use knot_migrate::report::Report;
+use knot_migrate::rehearse::{self, Rehearsal};
+use knot_migrate::report::{Phase, Report};
 use knot_migrate::source::{SourceDb, SourceError, SourceRepoDid, SourceRkey, SourceSchema};
 use knot_runtime::OsEntropy;
 use knot_secrets::{MasterKey, SealedStore, SecretsError};
@@ -37,7 +38,8 @@ options:
                           which empties the source tree and needs one filesystem
   --skip-unreadable       migrate the rest when knot-migrate can't read a source path,
                           and leave those repos on the old knot
-  --dry-run               print the mapping and reconciliation report, write nothing
+  --dry-run               print the mapping and reconciliation report, leave the target
+                          alone, and exit non-zero while an input is still missing
 ";
 
 #[derive(Debug, thiserror::Error)]
@@ -70,6 +72,8 @@ enum MigrateError {
     MalformedMasterKey { name: MasterKeyEnv },
     #[error("{0}")]
     Refused(Refusals),
+    #[error("the rehearsal lists what the real run still needs")]
+    RehearsalIncomplete,
     #[error("{context}: {source}")]
     Io {
         context: String,
@@ -375,39 +379,68 @@ fn run(args: &[String]) -> Result<(), MigrateError> {
     let orphan_alias_count = db.orphan_alias_count()?;
 
     let refusals = Refusals::gather(&mapping, args.skip_unreadable);
-    let written = match (args.dry_run, refusals.is_empty()) {
-        (false, true) => Some(materialize(
-            &args,
-            &hostname,
-            &plc_directory,
-            &source_repos,
-            &mapping,
-        )?),
-        _ => None,
-    };
-    print!(
-        "{}",
-        Report {
-            mapping: &mapping,
-            orphan_alias_count,
-            adoption: written.as_ref().map(|written| &written.adoption),
-            cobs: written.as_ref().map(|written| &written.cobs),
+    match (args.dry_run, refusals.is_empty()) {
+        (true, ready) => {
+            let rehearsal = timed("rehearsal", || {
+                Rehearsal::run(rehearse::Inputs {
+                    source_repos: &source_repos,
+                    adopted: &mapping.repos,
+                    scan_path: &repos_dir(&args.target),
+                    policy: args.source_policy,
+                })
+            });
+            report(&mapping, orphan_alias_count, Phase::Rehearsed(&rehearsal));
+            match ready {
+                false => Err(MigrateError::Refused(refusals)),
+                true => rehearsal
+                    .ready()
+                    .then(|| {
+                        println!();
+                        println!("we left the target alone. Re-run without --dry-run to migrate.");
+                    })
+                    .ok_or(MigrateError::RehearsalIncomplete),
+            }
         }
-    );
-    match refusals.is_empty() {
-        false => Err(MigrateError::Refused(refusals)),
-        true => written.map_or(Ok(()), |written| {
+        (false, false) => {
+            report(&mapping, orphan_alias_count, Phase::Refused);
+            Err(MigrateError::Refused(refusals))
+        }
+        (false, true) => {
+            let written = materialize(&args, &hostname, &plc_directory, &source_repos, &mapping)?;
+            report(
+                &mapping,
+                orphan_alias_count,
+                Phase::Written {
+                    adoption: &written.adoption,
+                    cobs: &written.cobs,
+                },
+            );
             println!();
             println!("knot key identity: {}", written.knot_did);
             println!("host key algorithm: {}", written.host_key_algorithm);
             println!("config: {}", written.config_file.display());
             println!("key archive: {}", written.archive_file.display());
             Ok(())
-        }),
+        }
     }
 }
 
-fn timed<T, E>(phase: &str, work: impl FnOnce() -> Result<T, E>) -> Result<T, E> {
+fn repos_dir(target: &Path) -> PathBuf {
+    target.join("repos")
+}
+
+fn report<'a>(mapping: &'a Mapping, orphan_alias_count: u64, phase: Phase<'a>) {
+    print!(
+        "{}",
+        Report {
+            mapping,
+            orphan_alias_count,
+            phase,
+        }
+    );
+}
+
+fn timed<T>(phase: &str, work: impl FnOnce() -> T) -> T {
     let started = std::time::Instant::now();
     let outcome = work();
     eprintln!("{phase}: {:.1}s", started.elapsed().as_secs_f64());
@@ -446,7 +479,7 @@ fn materialize(
             context: format!("canonicalize {}", args.target.display()),
             source,
         })?;
-    let scan_path = target.join("repos");
+    let scan_path = repos_dir(&target);
     let sealed_key_file = target.join("sealed-keys");
     let host_key_file = target.join("ssh_host_key");
     let archive_file = target.join("repo-signing-keys.json");
