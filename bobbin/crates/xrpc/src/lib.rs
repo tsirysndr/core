@@ -35,7 +35,7 @@ use bobbin_search::{
     SearchCursor, SearchError, SearchFilters, SearchHit, SearchOffset, SearchReader,
 };
 use bobbin_slingshot_client::{SlingshotClient, SlingshotError};
-use bobbin_types::ids::{EdgeKey, SubjectRef, nsid_static};
+use bobbin_types::ids::{EdgeKey, SubjectRef, nsid_static, owner_did_from_aturi};
 use bobbin_types::knot_acl::{KnotOwnedSource, decode_knot_owned_source, knot_did_host};
 use bobbin_types::record::RecordBody;
 use bobbin_types::search::SearchableRecord;
@@ -404,6 +404,10 @@ pub fn router(state: AppState) -> Router {
         .route("/xrpc/sh.tangled.string.countStrings", get(count_strings))
         .route("/xrpc/sh.tangled.search.query", get(search_query))
         .route("/xrpc/sh.tangled.bobbin.getCoverage", get(get_coverage))
+        .route(
+            "/xrpc/org.tangled.temp.notification.listRecipients",
+            get(list_recipients),
+        )
         .route(
             "/xrpc/com.bad-example.identity.resolveMiniDoc",
             get(resolve_mini_doc),
@@ -2499,6 +2503,51 @@ async fn resolve_mini_doc(
 
 async fn get_coverage(State(state): State<AppState>) -> Json<CoverageEnvelope> {
     Json(state.coverage.snapshot().into())
+}
+
+#[derive(Deserialize)]
+#[allow(dead_code)]
+struct ListRecipientsQuery {
+    subject: String,
+}
+
+#[derive(Serialize)]
+struct ListRecipientsResponse {
+    dids: Vec<String>,
+}
+
+async fn list_recipients(
+    State(state): State<AppState>,
+    XrpcQuery(q): XrpcQuery<ListRecipientsQuery>,
+) -> Result<Json<ListRecipientsResponse>, XrpcError> {
+    use std::collections::BTreeSet;
+
+    let subject_ref = if let Ok(uri) = AtUri::<DefaultStr>::new_owned(&q.subject) {
+        SubjectRef::Uri(uri)
+    } else if let Ok(did) = Did::<DefaultStr>::new_owned(&q.subject) {
+        SubjectRef::Did(did)
+    } else {
+        return Err(XrpcError::InvalidParams(
+            "subject must be an at-uri or did".into(),
+        ));
+    };
+
+    let key = EdgeKey::new(
+        nsid_static("sh.tangled.feed.subscription"),
+        subject_ref,
+    );
+    let sources = state.edges.sources_for(&key);
+    let mut seen = BTreeSet::new();
+    let mut dids = Vec::new();
+    for src in &sources {
+        if let Some(did) = owner_did_from_aturi(src) {
+            if seen.insert(did.to_string()) {
+                dids.push(did.to_string());
+            }
+        }
+    }
+
+    Ok(Json(ListRecipientsResponse { dids }))
 }
 
 async fn search_query(

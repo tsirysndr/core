@@ -2202,3 +2202,78 @@ async fn knot_owned_collaborator_lists_by_subject_did() {
     assert_eq!(items[0]["value"]["repo"], json!("did:plc:scallop"));
     assert_eq!(items[0]["value"]["subject"], json!("did:plc:olaren"));
 }
+
+#[tokio::test]
+async fn list_recipients_entity_subject_returns_subscriber_dids() {
+    let h = Harness::new().await;
+    let entity = at("at://did:plc:repo/sh.tangled.repo.issue/abc");
+    let sub = at("at://did:plc:bob/sh.tangled.feed.subscription/rkey1");
+    h.edges.add(Edge {
+        kind: nsid("sh.tangled.feed.subscription"),
+        subject: SubjectRef::Uri(entity.clone()),
+        source: sub.clone(),
+        sort_micros: 1,
+    });
+    let resp = router(h.state.clone())
+        .oneshot(
+            Request::builder()
+                .uri("/xrpc/org.tangled.temp.notification.listRecipients?subject=at://did:plc:repo/sh.tangled.repo.issue/abc")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: Value = serde_json::from_slice(
+        &to_bytes(resp.into_body(), 1 << 20).await.unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["dids"], json!(["did:plc:bob"]));
+}
+
+#[tokio::test]
+async fn list_recipients_repo_subject_returns_repo_subscribers() {
+    let h = Harness::new().await;
+    let repo_did_sub = at("at://did:plc:watcher/sh.tangled.feed.subscription/rkey1");
+    h.edges.add(Edge {
+        kind: nsid("sh.tangled.feed.subscription"),
+        subject: SubjectRef::Did(did("did:plc:targetrepo")),
+        source: repo_did_sub.clone(),
+        sort_micros: 1,
+    });
+    let resp = router(h.state.clone())
+        .oneshot(
+            Request::builder()
+                .uri("/xrpc/org.tangled.temp.notification.listRecipients?subject=did:plc:targetrepo")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: Value = serde_json::from_slice(
+        &to_bytes(resp.into_body(), 1 << 20).await.unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["dids"], json!(["did:plc:watcher"]));
+}
+
+#[tokio::test]
+async fn list_recipients_empty_for_unknown_subject() {
+    let h = Harness::new().await;
+    let resp = router(h.state.clone())
+        .oneshot(
+            Request::builder()
+                .uri("/xrpc/org.tangled.temp.notification.listRecipients?subject=at://did:plc:repo/sh.tangled.repo.issue/nonexistent")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: Value = serde_json::from_slice(
+        &to_bytes(resp.into_body(), 1 << 20).await.unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["dids"], json!([]));
+}
