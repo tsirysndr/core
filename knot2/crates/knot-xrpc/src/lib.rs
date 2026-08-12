@@ -129,6 +129,17 @@ impl Default for ByteLimits {
     }
 }
 
+const BINARY_RESPONSE_SHARE: u64 = 4;
+const BINARY_WIRE_COPIES: u64 = 3;
+
+impl ByteLimits {
+    pub fn binary_patch(self) -> knot_git::BinaryBudget {
+        knot_git::BinaryBudget::new(
+            self.response.get() as u64 / BINARY_RESPONSE_SHARE / BINARY_WIRE_COPIES,
+        )
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Budgets {
     pub tree_last_commit: TreeReadBudget,

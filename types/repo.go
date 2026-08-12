@@ -39,6 +39,7 @@ type RepoFormatPatchResponse struct {
 	FormatPatchRaw   string          `json:"patch,omitempty"`
 	CombinedPatch    []*gitdiff.File `json:"combined_patch,omitempty"`
 	CombinedPatchRaw string          `json:"combined_patch_raw,omitempty"`
+	BinaryOmitted    bool            `json:"binary_omitted,omitempty"`
 }
 
 type TagReference struct {

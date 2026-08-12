@@ -1,10 +1,37 @@
 use std::path::Path;
 
-use knot_git::{CommitRange, EntryKind, FileChange, Layout, LineCount, LogLimit, LogSkip, Repo};
+use knot_git::{
+    BinaryBudget, BinaryDiff, CommitRange, EntryKind, FileChange, FilePatch, Layout, LineCount,
+    LogLimit, LogSkip, PatchBody, Repo,
+};
 use knot_types::{Listing, Oid, RefName, RepoDid, RepoPath};
 
 fn rp(path: &str) -> RepoPath {
     RepoPath::new(path).unwrap()
+}
+
+fn patches_of(
+    bare: &Repo,
+    base: Option<Oid>,
+    head: Oid,
+    budget: &mut BinaryBudget,
+) -> Vec<FilePatch> {
+    bare.commit_patches(knot_git::PatchRange { base, head }, budget)
+        .unwrap()
+}
+
+fn named<'a>(patches: &'a [FilePatch], path: &str) -> &'a FilePatch {
+    patches
+        .iter()
+        .find(|patch| patch.path.as_str() == path)
+        .unwrap()
+}
+
+fn binary_diff(patch: &FilePatch) -> &BinaryDiff {
+    match &patch.body {
+        PatchBody::Binary(diff) => diff,
+        PatchBody::Text(_) => panic!("expected a binary patch for {}, found text", patch.path),
+    }
 }
 
 mod common;
@@ -289,19 +316,14 @@ fn typed_reads_over_a_rich_repo() {
         git(work, &["log", "-1", "--format=%H", "--", "src/lib.rs"])
     );
 
-    let patches = bare
-        .commit_patches(knot_git::PatchRange {
-            base: Some(parent),
-            head,
-        })
-        .unwrap();
+    let patches = patches_of(&bare, Some(parent), head, &mut BinaryBudget::Omit);
     assert_eq!(patches.len(), 1);
     let patch = &patches[0];
     assert_eq!(patch.path.as_str(), "src/lib.rs");
     assert_eq!(patch.status, knot_git::PatchStatus::Modified);
-    assert!(!patch.is_binary);
-    assert_eq!(patch.hunks.len(), 1);
-    let hunk = &patch.hunks[0];
+    assert!(!patch.is_binary());
+    assert_eq!(patch.hunks().len(), 1);
+    let hunk = &patch.hunks()[0];
     assert_eq!(
         (
             hunk.old_start.get(),
@@ -321,20 +343,15 @@ fn typed_reads_over_a_rich_repo() {
         vec!["pub fn nel() {}\n", "pub fn teq() {}\n"]
     );
 
-    let initial = bare
-        .commit_patches(knot_git::PatchRange {
-            base: None,
-            head: root,
-        })
-        .unwrap();
+    let initial = patches_of(&bare, None, root, &mut BinaryBudget::Omit);
     assert_eq!(initial.len(), 1);
     assert_eq!(initial[0].status, knot_git::PatchStatus::Added);
     assert_eq!(
-        initial[0].hunks[0].old_start.get(),
+        initial[0].hunks()[0].old_start.get(),
         0,
         "added file hunk starts at -0,0"
     );
-    assert_eq!(initial[0].hunks[0].old_lines.get(), 0);
+    assert_eq!(initial[0].hunks()[0].old_lines.get(), 0);
 
     let tag_commit = bare.peel_to_commit(tag_object).unwrap();
     assert_eq!(
@@ -595,23 +612,29 @@ fn extended_history_reads() {
     let bare = layout.open(&did).unwrap();
     let head = Oid::from_hex(&git(work, &["rev-parse", "HEAD"])).unwrap();
     let parent = Oid::from_hex(&git(work, &["rev-parse", "HEAD~1"])).unwrap();
-    let patches = bare
-        .commit_patches(knot_git::PatchRange {
-            base: Some(parent),
-            head,
-        })
+    let patches = patches_of(&bare, Some(parent), head, &mut BinaryBudget::new(1024));
+    let blob = binary_diff(named(&patches, "blob.bin"));
+    assert!(
+        matches!(blob, BinaryDiff::Encoded { .. }),
+        "a blob under the budget is encoded"
+    );
+    let mut thin = BinaryBudget::new(5);
+    let thinned = patches_of(&bare, Some(parent), head, &mut thin);
+    let starved = binary_diff(named(&thinned, "blob.bin"));
+    assert!(
+        matches!(starved, BinaryDiff::Omitted(_)),
+        "a blob past the budget is omitted"
+    );
+    assert!(thin.omitted(), "omitted is true once a blob is left out");
+    assert_eq!(
+        [blob.sizes(), starved.sizes()].map(|sizes| (sizes.old, sizes.new)),
+        [(0, 6); 2],
+        "a new file has an empty pre-image, encoded or omitted"
+    );
+    let last = named(&patches, "noeol.txt").hunks()[0]
+        .lines
+        .last()
         .unwrap();
-    let binary = patches
-        .iter()
-        .find(|patch| patch.path.as_str() == "blob.bin")
-        .unwrap();
-    assert!(binary.is_binary);
-    assert!(binary.hunks.is_empty());
-    let noeol = patches
-        .iter()
-        .find(|patch| patch.path.as_str() == "noeol.txt")
-        .unwrap();
-    let last = noeol.hunks[0].lines.last().unwrap();
     assert_eq!(last.text, b"no newline at end".to_vec());
 }
 
@@ -764,19 +787,19 @@ fn an_oversized_blob_diffs_as_binary_without_loading_it() {
     let bare = layout.open(&did).unwrap();
     let head = Oid::from_hex(&git(&clone, &["rev-parse", "HEAD"])).unwrap();
     let parent = Oid::from_hex(&git(&clone, &["rev-parse", "HEAD~1"])).unwrap();
-    let patches = bare
-        .commit_patches(knot_git::PatchRange {
-            base: Some(parent),
-            head,
-        })
-        .unwrap();
-    let huge = patches
-        .iter()
-        .find(|patch| patch.path.as_str() == "huge.txt")
-        .unwrap();
+    let patches = patches_of(&bare, Some(parent), head, &mut BinaryBudget::new(u64::MAX));
+    let huge = named(&patches, "huge.txt");
     assert!(
-        huge.is_binary,
+        huge.is_binary() && huge.hunks().is_empty(),
         "blob past diff budget falls back to binary instead of being loaded"
     );
-    assert!(huge.hunks.is_empty());
+    assert!(
+        matches!(binary_diff(huge), BinaryDiff::Omitted(_)),
+        "a blob nobody read has no bytes to encode, whatever the budget allows"
+    );
+    assert_eq!(
+        binary_diff(huge).sizes().new,
+        knot_git::MAX_DIFF_BLOB_BYTES + 1,
+        "the size comes from the blob header the knot did read"
+    );
 }

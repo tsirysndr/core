@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::collections::BTreeSet;
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -448,25 +449,13 @@ pub fn commit_file(work: &Path, file: &str, contents: &[u8], message: &str, when
 }
 
 pub fn seeded(world: &World, rkey: &str) -> (RepoDid, tempfile::TempDir) {
-    seeded_with_format(world, rkey, ObjectFormat::SHA1)
-}
-
-pub fn seeded_with_format(
-    world: &World,
-    rkey: &str,
-    object_format: ObjectFormat,
-) -> (RepoDid, tempfile::TempDir) {
     let did = RepoDid::new(format!("did:plc:{rkey}fixture")).unwrap();
-    world.layout.create(&did).unwrap();
+    let object_format = world.layout.create(&did).unwrap().object_format();
     world.register(&did, rkey);
     let bare = world.layout.repo_path(&did).unwrap();
     let work_dir = tempfile::tempdir().unwrap();
     let work = work_dir.path();
-    let init = match object_format == ObjectFormat::SHA256 {
-        true => vec!["init", "-q", "--object-format=sha256", "-b", "main"],
-        false => vec!["init", "-q", "-b", "main"],
-    };
-    sh_git(work, &init);
+    sh_git(work, &init_args(object_format));
     commit_file(
         work,
         "README.md",
@@ -508,9 +497,16 @@ pub fn seeded_with_format(
     (did, work_dir)
 }
 
+fn init_args(object_format: ObjectFormat) -> Vec<&'static str> {
+    match object_format == ObjectFormat::SHA256 {
+        true => vec!["init", "-q", "--object-format=sha256", "-b", "main"],
+        false => vec!["init", "-q", "-b", "main"],
+    }
+}
+
 pub fn empty_repo(world: &World, rkey: &str) -> (RepoDid, String, tempfile::TempDir) {
     let did = RepoDid::new(format!("did:plc:{rkey}fixture")).unwrap();
-    world.layout.create(&did).unwrap();
+    let object_format = world.layout.create(&did).unwrap().object_format();
     world.register(&did, rkey);
     let bare = world
         .layout
@@ -520,39 +516,75 @@ pub fn empty_repo(world: &World, rkey: &str) -> (RepoDid, String, tempfile::Temp
         .unwrap()
         .to_string();
     let work_dir = tempfile::tempdir().unwrap();
-    sh_git(work_dir.path(), &["init", "-q", "-b", "main"]);
+    sh_git(work_dir.path(), &init_args(object_format));
     (did, bare, work_dir)
+}
+
+fn shell_bytes(seed: u8) -> Vec<u8> {
+    let stream = std::iter::successors(Some(seed as u32), |state| {
+        Some(state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223))
+    })
+    .map(|state| (state >> 16) as u8);
+    std::iter::once(0).chain(stream).take(4096).collect()
+}
+
+fn at(clock: &str) -> String {
+    format!("2026-06-01T{clock}+02:00")
 }
 
 pub fn seeded_feature_branch(world: &World, rkey: &str) -> (RepoDid, Oid, Oid) {
     let (did, bare, work_dir) = empty_repo(world, rkey);
     let work = work_dir.path();
-    commit_file(
-        work,
-        "reef.txt",
-        b"one\ntwo\n",
-        "base",
-        "2026-06-01T12:30:00+02:00",
-    );
+    let commits = |list: Vec<(&str, Vec<u8>, &str, &str)>| {
+        list.into_iter().for_each(|(file, bytes, message, minute)| {
+            commit_file(work, file, &bytes, message, &at(minute))
+        });
+    };
+    commits(vec![
+        ("reef.txt", b"one\ntwo\n".into(), "base", "12:30:00"),
+        ("shell.bin", shell_bytes(0), "add shell", "12:30:10"),
+        ("anchor.bin", shell_bytes(211), "add anchor", "12:30:20"),
+        ("hull.bin", shell_bytes(159), "add hull", "12:30:30"),
+    ]);
     sh_git(work, &["checkout", "-q", "-b", "feature"]);
-    commit_file(
+    std::fs::set_permissions(
+        work.join("hull.bin"),
+        std::fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    sh_git_at(work, &at("12:30:40"), &["add", "-A"]);
+    sh_git_at(
         work,
-        "reef.txt",
-        b"one\nTWO\n",
-        "capitalize two\n\nbecause waves",
-        "2026-06-01T12:31:00+02:00",
+        &at("12:30:40"),
+        &["commit", "-q", "-m", "make hull runnable"],
     );
-    commit_file(
+    commits(vec![
+        (
+            "reef.txt",
+            b"one\nTWO\n".into(),
+            "capitalize two\n\nbecause waves",
+            "12:31:00",
+        ),
+        ("kelp.txt", b"frond\n".into(), "add kelp", "12:31:10"),
+        ("shell.bin", shell_bytes(97), "reshape shell", "12:31:20"),
+        ("pearl.bin", vec![0, 255, 12, 0, 9], "add pearl", "12:31:30"),
+        (
+            "deep water.bin",
+            shell_bytes(43),
+            "add deep water",
+            "12:31:40",
+        ),
+    ]);
+    std::fs::remove_file(work.join("anchor.bin")).unwrap();
+    sh_git_at(work, &at("12:32:00"), &["add", "-A"]);
+    sh_git_at(
         work,
-        "kelp.txt",
-        b"frond\n",
-        "add kelp",
-        "2026-06-01T12:32:00+02:00",
+        &at("12:32:00"),
+        &["commit", "-q", "-m", "drop anchor"],
     );
     sh_git(work, &["push", "-q", &bare, "main", "feature"]);
-    let main = Oid::from_hex(&sh_git(work, &["rev-parse", "main"])).unwrap();
-    let feature = Oid::from_hex(&sh_git(work, &["rev-parse", "feature"])).unwrap();
-    (did, main, feature)
+    let tip = |name: &str| Oid::from_hex(&sh_git(work, &["rev-parse", name])).unwrap();
+    (did, tip("main"), tip("feature"))
 }
 
 pub async fn get_with_headers(

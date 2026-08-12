@@ -1,8 +1,15 @@
-use knot_git::{Commit, FilePatch, Hunk, LineCount, LineNumber, LineOp, PatchStatus};
+use knot_git::{
+    BinaryDiff, Commit, EntryKind, FilePatch, Hunk, LineCount, LineNumber, LineOp, PatchBody,
+    PatchStatus, quote_path,
+};
 
 use crate::wire::{entry_mode_octal, fold_subject, message_body, rfc2822};
 
 const GRAPH_WIDTH: usize = 60;
+
+fn entry_mode(kind: Option<EntryKind>) -> String {
+    kind.map(entry_mode_octal).unwrap_or_default()
+}
 
 fn span(start: LineNumber, lines: LineCount) -> String {
     match lines.get() {
@@ -31,66 +38,58 @@ fn render_hunk(out: &mut String, hunk: &Hunk) {
 }
 
 fn render_file(out: &mut String, patch: &FilePatch) {
-    let (a, b) = (&patch.path, &patch.path);
-    out.push_str(&format!("diff --git a/{a} b/{b}\n"));
+    let old_side = quote_path(&format!("a/{}", patch.path));
+    let new_side = quote_path(&format!("b/{}", patch.path));
+    let index = format!(
+        "index {}..{}",
+        patch.old_oid.to_hex(),
+        patch.new_oid.to_hex()
+    );
+    out.push_str(&format!("diff --git {old_side} {new_side}\n"));
     match patch.status {
-        PatchStatus::Added => {
-            let mode = patch.new_kind.map(entry_mode_octal).unwrap_or_default();
-            out.push_str(&format!("new file mode {mode}\n"));
-            out.push_str(&format!(
-                "index {}..{}\n",
-                patch.old_oid.to_hex(),
-                patch.new_oid.to_hex()
-            ));
-        }
-        PatchStatus::Deleted => {
-            let mode = patch.old_kind.map(entry_mode_octal).unwrap_or_default();
-            out.push_str(&format!("deleted file mode {mode}\n"));
-            out.push_str(&format!(
-                "index {}..{}\n",
-                patch.old_oid.to_hex(),
-                patch.new_oid.to_hex()
-            ));
+        PatchStatus::Added => out.push_str(&format!(
+            "new file mode {}\n{index}\n",
+            entry_mode(patch.new_kind)
+        )),
+        PatchStatus::Deleted => out.push_str(&format!(
+            "deleted file mode {}\n{index}\n",
+            entry_mode(patch.old_kind)
+        )),
+        PatchStatus::Modified if patch.old_kind == patch.new_kind => {
+            out.push_str(&format!("{index} {}\n", entry_mode(patch.old_kind)))
         }
         PatchStatus::Modified => {
-            if patch.old_kind == patch.new_kind {
-                let mode = patch.old_kind.map(entry_mode_octal).unwrap_or_default();
-                out.push_str(&format!(
-                    "index {}..{} {mode}\n",
-                    patch.old_oid.to_hex(),
-                    patch.new_oid.to_hex()
-                ));
-            } else {
-                let old = patch.old_kind.map(entry_mode_octal).unwrap_or_default();
-                let new = patch.new_kind.map(entry_mode_octal).unwrap_or_default();
-                out.push_str(&format!("old mode {old}\nnew mode {new}\n"));
-                out.push_str(&format!(
-                    "index {}..{}\n",
-                    patch.old_oid.to_hex(),
-                    patch.new_oid.to_hex()
-                ));
+            out.push_str(&format!(
+                "old mode {}\nnew mode {}\n",
+                entry_mode(patch.old_kind),
+                entry_mode(patch.new_kind)
+            ));
+            match patch.old_oid == patch.new_oid {
+                true => {}
+                false => out.push_str(&format!("{index}\n")),
             }
         }
     }
     let old_label = match patch.status {
-        PatchStatus::Added => "/dev/null".to_string(),
-        _ => format!("a/{a}"),
+        PatchStatus::Added => "/dev/null",
+        _ => old_side.as_str(),
     };
     let new_label = match patch.status {
-        PatchStatus::Deleted => "/dev/null".to_string(),
-        _ => format!("b/{b}"),
+        PatchStatus::Deleted => "/dev/null",
+        _ => new_side.as_str(),
     };
-    if patch.is_binary {
-        out.push_str(&format!(
+    match &patch.body {
+        PatchBody::Binary(BinaryDiff::Encoded { text, .. }) => out.push_str(text),
+        PatchBody::Binary(BinaryDiff::Omitted(_)) => out.push_str(&format!(
             "Binary files {old_label} and {new_label} differ\n"
-        ));
-        return;
+        )),
+        PatchBody::Binary(BinaryDiff::Unchanged(_)) => {}
+        PatchBody::Text(hunks) if hunks.is_empty() => {}
+        PatchBody::Text(hunks) => {
+            out.push_str(&format!("--- {old_label}\n+++ {new_label}\n"));
+            hunks.iter().for_each(|hunk| render_hunk(out, hunk));
+        }
     }
-    if patch.hunks.is_empty() {
-        return;
-    }
-    out.push_str(&format!("--- {old_label}\n+++ {new_label}\n"));
-    patch.hunks.iter().for_each(|hunk| render_hunk(out, hunk));
 }
 
 pub(crate) fn render_patches(patches: &[FilePatch]) -> String {
@@ -101,7 +100,7 @@ pub(crate) fn render_patches(patches: &[FilePatch]) -> String {
 }
 
 fn stat_counts(patch: &FilePatch) -> (usize, usize) {
-    patch.hunks.iter().fold((0, 0), |(added, deleted), hunk| {
+    patch.hunks().iter().fold((0, 0), |(added, deleted), hunk| {
         (
             added + hunk.added().get() as usize,
             deleted + hunk.deleted().get() as usize,
@@ -120,24 +119,26 @@ fn graph(added: usize, deleted: usize) -> String {
 }
 
 fn diffstat(patches: &[FilePatch]) -> String {
-    let width = patches
+    let named: Vec<(String, &FilePatch)> = patches
         .iter()
-        .map(|patch| patch.path.as_str().len())
-        .max()
-        .unwrap_or(0);
-    let rows: String = patches
+        .map(|patch| (quote_path(patch.path.as_str()), patch))
+        .collect();
+    let width = named.iter().map(|(name, _)| name.len()).max().unwrap_or(0);
+    let rows: String = named
         .iter()
-        .map(|patch| {
-            if patch.is_binary {
-                format!(" {:<width$} | Bin\n", patch.path)
-            } else {
-                let (added, deleted) = stat_counts(patch);
+        .map(|(name, patch)| match &patch.body {
+            PatchBody::Binary(BinaryDiff::Unchanged(_)) => format!(" {name:<width$} | Bin\n"),
+            PatchBody::Binary(binary) => {
+                let sizes = binary.sizes();
                 format!(
-                    " {:<width$} | {} {}\n",
-                    patch.path,
-                    added + deleted,
-                    graph(added, deleted)
+                    " {name:<width$} | Bin {} -> {} bytes\n",
+                    sizes.old, sizes.new
                 )
+            }
+            PatchBody::Text(_) => {
+                let (added, deleted) = stat_counts(patch);
+                let total = added + deleted;
+                format!(" {name:<width$} | {total} {}\n", graph(added, deleted))
             }
         })
         .collect();
@@ -160,29 +161,21 @@ fn diffstat(patches: &[FilePatch]) -> String {
         ));
     }
     summary.push('\n');
-    let created: String = patches
+    let modes: String = named
         .iter()
-        .filter(|patch| patch.status == PatchStatus::Added)
-        .map(|patch| {
-            format!(
-                " create mode {} {}\n",
-                patch.new_kind.map(entry_mode_octal).unwrap_or_default(),
-                patch.path
-            )
+        .filter_map(|(name, patch)| {
+            let (old, new) = (entry_mode(patch.old_kind), entry_mode(patch.new_kind));
+            match patch.status {
+                PatchStatus::Added => Some(format!(" create mode {new} {name}\n")),
+                PatchStatus::Deleted => Some(format!(" delete mode {old} {name}\n")),
+                PatchStatus::Modified if patch.old_kind != patch.new_kind => {
+                    Some(format!(" mode change {old} => {new} {name}\n"))
+                }
+                PatchStatus::Modified => None,
+            }
         })
         .collect();
-    let deleted_rows: String = patches
-        .iter()
-        .filter(|patch| patch.status == PatchStatus::Deleted)
-        .map(|patch| {
-            format!(
-                " delete mode {} {}\n",
-                patch.old_kind.map(entry_mode_octal).unwrap_or_default(),
-                patch.path
-            )
-        })
-        .collect();
-    format!("{rows}{summary}{created}{deleted_rows}")
+    format!("{rows}{summary}{modes}")
 }
 
 pub(crate) fn render_format_patch(commit: &Commit, patches: &[FilePatch]) -> String {

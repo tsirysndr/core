@@ -1,15 +1,22 @@
 use std::convert::Infallible;
+use std::fmt::Write as _;
+use std::io::Write;
 use std::ops::ControlFlow;
 
+use flate2::Compression;
+use flate2::write::ZlibEncoder;
 use gix::diff::blob::unified_diff::{ConsumeHunk, ContextSize, DiffLineKind, HunkHeader};
 use gix::diff::blob::{Algorithm, Diff, InternedInput, UnifiedDiff};
 use knot_types::{ChangedFiles, ChangedFilesBudget, Listing, Oid, RepoPath};
 
+use crate::base85;
 use crate::error::{GitError, backend};
 use crate::objects::EntryKind;
 use crate::repo::Repo;
 
 const BINARY_SNIFF_BYTES: usize = 8000;
+const BLOCK_HEADER_MAX: usize = "literal 18446744073709551615\n".len();
+const BINARY_PATCH_HEADER: &str = "GIT binary patch\n";
 pub const MAX_DIFF_BLOB_BYTES: u64 = 25 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,6 +81,113 @@ pub enum PatchStatus {
     Modified,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BinarySizes {
+    pub old: u64,
+    pub new: u64,
+}
+
+impl BinarySizes {
+    fn of(old: &[u8], new: &[u8]) -> Self {
+        Self {
+            old: old.len() as u64,
+            new: new.len() as u64,
+        }
+    }
+
+    fn wire_bound(self) -> u64 {
+        let block = |inflated: u64| {
+            let deflated = inflated
+                .saturating_add(inflated.div_ceil(8))
+                .saturating_add(inflated.div_ceil(64))
+                .saturating_add(11);
+            base85::encoded_len(deflated).saturating_add(BLOCK_HEADER_MAX as u64 + 1)
+        };
+        block(self.old)
+            .saturating_add(block(self.new))
+            .saturating_add(BINARY_PATCH_HEADER.len() as u64)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinaryBudget {
+    Omit,
+    Spend { remaining: u64, omitted: bool },
+}
+
+impl BinaryBudget {
+    pub fn new(bytes: u64) -> Self {
+        Self::Spend {
+            remaining: bytes,
+            omitted: false,
+        }
+    }
+
+    pub fn omitted(self) -> bool {
+        matches!(self, Self::Spend { omitted: true, .. })
+    }
+
+    fn admit(&mut self, sizes: BinarySizes) -> bool {
+        match self {
+            Self::Omit => false,
+            Self::Spend { remaining, omitted } => match remaining.checked_sub(sizes.wire_bound()) {
+                Some(rest) => {
+                    *remaining = rest;
+                    true
+                }
+                None => {
+                    *omitted = true;
+                    false
+                }
+            },
+        }
+    }
+}
+
+fn literal_block(content: &[u8], out: &mut String) -> Result<(), GitError> {
+    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
+    encoder.write_all(content).map_err(backend)?;
+    writeln!(out, "literal {}", content.len()).expect("formatting into a String never fails");
+    base85::encode(&encoder.finish().map_err(backend)?, out);
+    out.push('\n');
+    Ok(())
+}
+
+fn encode_binary(old: &[u8], new: &[u8]) -> Result<BinaryDiff, GitError> {
+    let mut text = String::from(BINARY_PATCH_HEADER);
+    literal_block(new, &mut text)?;
+    literal_block(old, &mut text)?;
+    Ok(BinaryDiff::Encoded {
+        sizes: BinarySizes::of(old, new),
+        text,
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BinaryDiff {
+    Encoded { sizes: BinarySizes, text: String },
+    Omitted(BinarySizes),
+    Unchanged(u64),
+}
+
+impl BinaryDiff {
+    pub fn sizes(&self) -> BinarySizes {
+        match self {
+            Self::Encoded { sizes, .. } | Self::Omitted(sizes) => *sizes,
+            Self::Unchanged(bytes) => BinarySizes {
+                old: *bytes,
+                new: *bytes,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PatchBody {
+    Text(Vec<Hunk>),
+    Binary(BinaryDiff),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FilePatch {
     pub status: PatchStatus,
@@ -82,8 +196,20 @@ pub struct FilePatch {
     pub new_oid: Oid,
     pub old_kind: Option<EntryKind>,
     pub new_kind: Option<EntryKind>,
-    pub is_binary: bool,
-    pub hunks: Vec<Hunk>,
+    pub body: PatchBody,
+}
+
+impl FilePatch {
+    pub fn is_binary(&self) -> bool {
+        matches!(self.body, PatchBody::Binary(_))
+    }
+
+    pub fn hunks(&self) -> &[Hunk] {
+        match &self.body {
+            PatchBody::Text(hunks) => hunks,
+            PatchBody::Binary(_) => &[],
+        }
+    }
 }
 
 fn is_binary(content: &[u8]) -> bool {
@@ -169,28 +295,45 @@ impl Side {
     }
 }
 
+fn subproject_line(oid: Oid) -> Vec<u8> {
+    format!("Subproject commit {}\n", oid.to_hex()).into_bytes()
+}
+
 impl Repo {
     fn patch_content(&self, side: &Side) -> Result<Vec<u8>, GitError> {
         match side {
             Side::Absent => Ok(Vec::new()),
             Side::Present { oid, kind } => match kind {
-                EntryKind::Commit => {
-                    Ok(format!("Subproject commit {}\n", oid.to_hex()).into_bytes())
-                }
+                EntryKind::Commit => Ok(subproject_line(*oid)),
                 EntryKind::Tree => Ok(Vec::new()),
                 _ => self.read_blob(*oid),
             },
         }
     }
 
-    fn side_within_diff_budget(&self, side: &Side) -> Result<bool, GitError> {
-        match side {
+    fn sides_past_diff_budget(
+        &self,
+        old: &Side,
+        new: &Side,
+    ) -> Result<Option<BinarySizes>, GitError> {
+        let size = |side: &Side| match side {
+            Side::Absent
+            | Side::Present {
+                kind: EntryKind::Tree,
+                ..
+            } => Ok(None),
             Side::Present {
                 oid,
-                kind: EntryKind::Blob | EntryKind::BlobExecutable | EntryKind::Link,
-            } => Ok(self.blob_size(*oid)? <= MAX_DIFF_BLOB_BYTES),
-            _ => Ok(true),
-        }
+                kind: EntryKind::Commit,
+            } => Ok(Some(subproject_line(*oid).len() as u64)),
+            Side::Present { oid, .. } => self.blob_size(*oid).map(Some),
+        };
+        let (old, new) = (size(old)?, size(new)?);
+        let past = |bytes: Option<u64>| bytes.is_some_and(|bytes| bytes > MAX_DIFF_BLOB_BYTES);
+        Ok((past(old) || past(new)).then(|| BinarySizes {
+            old: old.unwrap_or(0),
+            new: new.unwrap_or(0),
+        }))
     }
 
     fn file_patch(
@@ -199,20 +342,31 @@ impl Repo {
         path: RepoPath,
         old: Side,
         new: Side,
+        budget: &mut BinaryBudget,
     ) -> Result<FilePatch, GitError> {
-        let within_budget =
-            self.side_within_diff_budget(&old)? && self.side_within_diff_budget(&new)?;
-        let (binary, hunks) = match within_budget {
-            false => (true, Vec::new()),
-            true => {
+        let same_content = matches!(
+            (&old, &new),
+            (Side::Present { oid: before, .. }, Side::Present { oid: after, .. })
+                if before == after
+        );
+        let body = match self.sides_past_diff_budget(&old, &new)? {
+            Some(sizes) => PatchBody::Binary(BinaryDiff::Omitted(sizes)),
+            None => {
                 let old_content = self.patch_content(&old)?;
                 let new_content = self.patch_content(&new)?;
-                let binary = is_binary(&old_content) || is_binary(&new_content);
-                let hunks = match binary {
-                    true => Vec::new(),
-                    false => text_hunks(&old_content, &new_content)?,
-                };
-                (binary, hunks)
+                match is_binary(&old_content) || is_binary(&new_content) {
+                    true => {
+                        let sizes = BinarySizes::of(&old_content, &new_content);
+                        PatchBody::Binary(match same_content {
+                            true => BinaryDiff::Unchanged(sizes.new),
+                            false => match budget.admit(sizes) {
+                                true => encode_binary(&old_content, &new_content)?,
+                                false => BinaryDiff::Omitted(sizes),
+                            },
+                        })
+                    }
+                    false => PatchBody::Text(text_hunks(&old_content, &new_content)?),
+                }
             }
         };
         Ok(FilePatch {
@@ -222,8 +376,7 @@ impl Repo {
             new_oid: new.oid(self.object_format().null_oid()),
             old_kind: old.kind(),
             new_kind: new.kind(),
-            is_binary: binary,
-            hunks,
+            body,
         })
     }
 
@@ -296,7 +449,11 @@ impl Repo {
         }
     }
 
-    pub fn commit_patches(&self, range: PatchRange) -> Result<Vec<FilePatch>, GitError> {
+    pub fn commit_patches(
+        &self,
+        range: PatchRange,
+        budget: &mut BinaryBudget,
+    ) -> Result<Vec<FilePatch>, GitError> {
         let (old_tree, new_tree) = self.diff_trees(range)?;
         let mut sides: Vec<(PatchStatus, String, Side, Side)> = Vec::new();
         old_tree
@@ -383,8 +540,56 @@ impl Repo {
             .map(|(status, path, old, new)| {
                 let path =
                     RepoPath::new(path).map_err(|error| GitError::Decode(error.to_string()))?;
-                self.file_patch(status, path, old, new)
+                self.file_patch(status, path, old, new, budget)
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_wire_bound_covers_every_byte_the_patch_writes() {
+        let payload = |len: usize, fill: fn(usize) -> u8| (0..len).map(fill).collect::<Vec<u8>>();
+        [0usize, 1, 3, 4, 51, 52, 53, 1000, 65_536]
+            .into_iter()
+            .flat_map(|len| {
+                let noise = payload(len, |index| (index as u8).wrapping_mul(37) ^ 0x5a);
+                [(payload(len, |_| 0), noise.clone()), (noise, Vec::new())]
+            })
+            .for_each(|(old, new)| {
+                let BinaryDiff::Encoded { sizes, text } = encode_binary(&old, &new).unwrap() else {
+                    panic!("encode_binary returns Encoded for every payload");
+                };
+                assert!(
+                    text.len() as u64 <= sizes.wire_bound(),
+                    "payload of {} bytes: expected at most {}, wrote {}",
+                    old.len().max(new.len()),
+                    sizes.wire_bound(),
+                    text.len()
+                );
+            });
+    }
+
+    #[test]
+    fn the_budget_reports_the_first_payload_it_refuses() {
+        let sizes = BinarySizes { old: 0, new: 4096 };
+        let mut budget = BinaryBudget::new(sizes.wire_bound());
+        assert!(budget.admit(sizes));
+        assert!(
+            !budget.omitted(),
+            "omitted is false while admit returns true"
+        );
+        assert!(!budget.admit(sizes));
+        assert!(budget.omitted(), "omitted is true once admit returns false");
+
+        let mut omit = BinaryBudget::Omit;
+        assert!(!omit.admit(sizes));
+        assert!(
+            !omit.omitted(),
+            "omitted is false under Omit, where admit always returns false"
+        );
     }
 }

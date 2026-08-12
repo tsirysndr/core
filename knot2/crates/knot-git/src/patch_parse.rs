@@ -1,9 +1,9 @@
 use std::io::Read;
-use std::sync::LazyLock;
 
 use base64::Engine;
 use knot_types::{AuthorName, Email, Oid};
 
+use crate::base85;
 use crate::objects::{CommitChangeId, EntryKind};
 use crate::patch::{Hunk, HunkLine, LineCount, LineNumber, LineOp, MAX_DIFF_BLOB_BYTES};
 
@@ -200,6 +200,35 @@ fn unquote(raw: &str) -> Result<String, PatchParseError> {
     }
 }
 
+const PRINTABLE_ASCII: std::ops::Range<u8> = 0x20..0x7f;
+
+fn needs_quoting(byte: u8) -> bool {
+    !PRINTABLE_ASCII.contains(&byte) || matches!(byte, b'"' | b'\\')
+}
+
+pub fn quote_path(path: &str) -> String {
+    match path.bytes().any(needs_quoting) {
+        false => path.to_string(),
+        true => {
+            let mut quoted = path.bytes().fold(String::from("\""), |mut out, byte| {
+                match byte {
+                    b'\n' => out.push_str("\\n"),
+                    b'\t' => out.push_str("\\t"),
+                    b'"' => out.push_str("\\\""),
+                    b'\\' => out.push_str("\\\\"),
+                    other if !PRINTABLE_ASCII.contains(&other) => {
+                        out.push_str(&format!("\\{other:03o}"))
+                    }
+                    other => out.push(other as char),
+                }
+                out
+            });
+            quoted.push('"');
+            quoted
+        }
+    }
+}
+
 fn strip_level(path: &str) -> String {
     path.split_once('/')
         .map(|(_, rest)| rest.to_string())
@@ -224,13 +253,21 @@ fn diff_paths(rest: &str) -> Option<(String, String)> {
             let (new, _) = take_path_token(after.strip_prefix(' ')?)?;
             Some((strip_level(&old), strip_level(&new)))
         }
-        false => {
-            let split = rest.rfind(" b/")?;
-            let old = rest.get(..split)?.strip_prefix("a/")?;
-            let new = rest.get(split + 3..)?;
-            Some((old.to_string(), new.to_string()))
-        }
+        false => unquoted_diff_paths(rest),
     }
+}
+
+fn unquoted_diff_paths(rest: &str) -> Option<(String, String)> {
+    let split_at = |at: usize| {
+        let old = rest.get(..at)?.strip_prefix("a/")?;
+        let new = rest.get(at + " b/".len()..)?;
+        Some((old, new))
+    };
+    rest.match_indices(" b/")
+        .filter_map(|(at, _)| split_at(at))
+        .find(|(old, new)| old == new)
+        .or_else(|| split_at(rest.rfind(" b/")?))
+        .map(|(old, new)| (old.to_string(), new.to_string()))
 }
 
 fn take_path_token(rest: &str) -> Option<(String, &str)> {
@@ -248,7 +285,7 @@ fn take_path_token(rest: &str) -> Option<(String, &str)> {
 }
 
 fn full_oid(hex: &str) -> Option<Oid> {
-    (hex.len() == 40).then(|| Oid::from_hex(hex).ok()).flatten()
+    Oid::from_hex(hex).ok()
 }
 
 fn parse_hunk_header(line: &str) -> Option<(LineNumber, LineCount, LineNumber, LineCount)> {
@@ -344,46 +381,6 @@ fn parse_hunks(cursor: &mut Cursor<'_>, budget: &mut Budget) -> Result<Vec<Hunk>
     .collect()
 }
 
-static BASE85: LazyLock<[i16; 256]> = LazyLock::new(|| {
-    const ALPHABET: &[u8] =
-        b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~";
-    std::array::from_fn(|byte| {
-        ALPHABET
-            .iter()
-            .position(|&c| c as usize == byte)
-            .map(|digit| digit as i16)
-            .unwrap_or(-1)
-    })
-});
-
-fn decode_base85_line(line: &str, out: &mut Vec<u8>) -> Result<(), PatchParseError> {
-    let bad = || malformed("bad base85 line in binary patch");
-    let (len_char, data) = line.as_bytes().split_first().ok_or_else(bad)?;
-    let line_len = match len_char {
-        b'A'..=b'Z' => (len_char - b'A' + 1) as usize,
-        b'a'..=b'z' => (len_char - b'a' + 27) as usize,
-        _ => return Err(bad()),
-    };
-    if data.len() != line_len.div_ceil(4) * 5 {
-        return Err(bad());
-    }
-    data.chunks(5)
-        .enumerate()
-        .try_for_each(|(group, chunk)| -> Result<(), PatchParseError> {
-            let acc = chunk
-                .iter()
-                .try_fold(0u64, |acc, &c| {
-                    let digit = BASE85[c as usize];
-                    (digit >= 0).then(|| acc * 85 + digit as u64)
-                })
-                .filter(|&acc| acc <= u32::MAX as u64)
-                .ok_or_else(bad)?;
-            let take = (line_len - group * 4).min(4);
-            out.extend_from_slice(&(acc as u32).to_be_bytes()[..take]);
-            Ok(())
-        })
-}
-
 fn parse_binary_block(
     cursor: &mut Cursor<'_>,
     budget: &mut Budget,
@@ -414,7 +411,10 @@ fn parse_binary_block(
             .is_some_and(|line| !line.is_empty())
             .then(|| cursor.next().expect("peeked line is present"))
     })
-    .try_for_each(|line| decode_base85_line(line, &mut packed))?;
+    .try_for_each(|line| {
+        base85::decode_line(line, &mut packed)
+            .map_err(|_| malformed("invalid base85 line in binary patch"))
+    })?;
     cursor.next();
     let mut inflated: Vec<u8> = Vec::new();
     flate2::read::ZlibDecoder::new(packed.as_slice())
@@ -971,6 +971,99 @@ mod tests {
     }
 
     #[test]
+    fn a_plain_path_stays_bare_and_a_quoted_one_unquotes_back() {
+        [
+            "a/reef.txt",
+            "a/~tilde",
+            "a/{brace}",
+            "a/sp ace.txt",
+            "a/b/ b/c",
+        ]
+        .into_iter()
+        .for_each(|plain| {
+            assert_eq!(quote_path(plain), plain, "git leaves {plain} bare too");
+        });
+        [
+            "a/quote\".txt",
+            "a/back\\slash",
+            "a/tab\there",
+            "a/new\nline",
+            "a/é",
+            "a/\u{7f}del",
+        ]
+        .into_iter()
+        .for_each(|awkward| {
+            let quoted = quote_path(awkward);
+            assert!(quoted.starts_with('"'), "{awkward} must come out quoted");
+            assert_eq!(
+                unquote(&quoted).unwrap(),
+                awkward,
+                "{awkward} must unquote back to itself"
+            );
+        });
+    }
+
+    #[test]
+    fn diff_paths_splits_a_header_whose_path_holds_the_separator() {
+        [
+            ("a/b/ b/c.bin b/b/ b/c.bin", "b/ b/c.bin", "b/ b/c.bin"),
+            (
+                "\"a/quote\\\".bin\" \"b/quote\\\".bin\"",
+                "quote\".bin",
+                "quote\".bin",
+            ),
+            (
+                "a/old name.txt b/new name.txt",
+                "old name.txt",
+                "new name.txt",
+            ),
+        ]
+        .into_iter()
+        .for_each(|(header, old, new)| {
+            assert_eq!(
+                diff_paths(header),
+                Some((old.to_string(), new.to_string())),
+                "the a-side and b-side must agree on the split: {header}"
+            );
+        });
+    }
+
+    #[test]
+    fn a_binary_file_named_around_the_separator_keeps_its_path() {
+        let patch = concat!(
+            "diff --git a/b/ b/c.bin b/b/ b/c.bin\n",
+            "index 1111111111111111111111111111111111111111..2222222222222222222222222222222222222222 100644\n",
+            "GIT binary patch\n",
+            "literal 4\n",
+            "LcmZRms;UA20^k8}\n",
+            "\n",
+            "literal 5\n",
+            "Mcmb<mNK8rw00gH2p8x;=\n",
+            "\n",
+        );
+        assert_eq!(
+            parse_patch(patch).unwrap()[0].path.as_str(),
+            "b/ b/c.bin",
+            "a binary file has no --- or +++ label, so the header is all the parser gets"
+        );
+    }
+
+    #[test]
+    fn an_index_line_yields_an_oid_at_either_hash_width() {
+        [40usize, 64].into_iter().for_each(|width| {
+            assert!(
+                full_oid(&"a".repeat(width)).is_some(),
+                "{width} hex digits is a full oid"
+            );
+        });
+        assert_eq!(
+            full_oid("1111111"),
+            None,
+            "7 hex digits is short of a full oid"
+        );
+    }
+
+    #[test]
     fn a_mailbox_splits_into_individual_patches() {
         let mbox = concat!(
             "From 1111111111111111111111111111111111111111 Mon Sep 17 00:00:00 2001\n",
@@ -1020,19 +1113,6 @@ mod tests {
             Some(CommitChangeId::new("I0123456789abcdef").unwrap())
         );
         assert_eq!(mails[1].files[0].intent, FileIntent::Modify);
-    }
-
-    #[test]
-    fn base85_decodes_lengths_and_rejects_garbage() {
-        let mut out = Vec::new();
-        decode_base85_line("D00000", &mut out).unwrap();
-        assert_eq!(out, vec![0, 0, 0, 0]);
-        let mut out = Vec::new();
-        decode_base85_line("B00000", &mut out).unwrap();
-        assert_eq!(out, vec![0, 0]);
-        assert!(decode_base85_line("D0000", &mut Vec::new()).is_err());
-        assert!(decode_base85_line("D0\"000", &mut Vec::new()).is_err());
-        assert!(decode_base85_line("?00000", &mut Vec::new()).is_err());
     }
 
     #[test]

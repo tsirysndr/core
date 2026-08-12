@@ -394,7 +394,7 @@ pub(crate) struct DiffWire {
 impl DiffWire {
     pub fn of(patch: &FilePatch) -> Self {
         let fragments: Vec<TextFragmentWire> =
-            patch.hunks.iter().map(TextFragmentWire::of).collect();
+            patch.hunks().iter().map(TextFragmentWire::of).collect();
         Self {
             name: DiffNameWire {
                 old: match patch.status {
@@ -407,7 +407,7 @@ impl DiffWire {
                 },
             },
             text_fragments: (!fragments.is_empty()).then_some(fragments),
-            is_binary: patch.is_binary,
+            is_binary: patch.is_binary(),
             is_new: patch.status == PatchStatus::Added,
             is_delete: patch.status == PatchStatus::Deleted,
             is_copy: false,
@@ -435,12 +435,12 @@ pub(crate) fn nice_diff(commit: &Commit, patches: &[FilePatch]) -> NiceDiffWire 
     let stat = DiffStatWire {
         insertions: patches
             .iter()
-            .flat_map(|patch| patch.hunks.iter())
+            .flat_map(|patch| patch.hunks().iter())
             .map(|hunk| hunk.added().get() as i64)
             .sum(),
         deletions: patches
             .iter()
-            .flat_map(|patch| patch.hunks.iter())
+            .flat_map(|patch| patch.hunks().iter())
             .map(|hunk| hunk.deleted().get() as i64)
             .sum(),
         files_changed: patches.len() as i64,
@@ -558,7 +558,7 @@ pub(crate) struct FileWire {
 impl FileWire {
     pub fn of(patch: &FilePatch) -> Self {
         let fragments: Vec<TextFragmentWire> =
-            patch.hunks.iter().map(TextFragmentWire::of).collect();
+            patch.hunks().iter().map(TextFragmentWire::of).collect();
         let same_mode = patch.old_kind.is_some() && patch.old_kind == patch.new_kind;
         Self {
             old_name: match patch.status {
@@ -589,7 +589,7 @@ impl FileWire {
             new_oid_prefix: patch.new_oid.to_hex(),
             score: 0,
             text_fragments: (!fragments.is_empty()).then_some(fragments),
-            is_binary: patch.is_binary,
+            is_binary: patch.is_binary(),
             binary_fragment: None,
             reverse_binary_fragment: None,
         }

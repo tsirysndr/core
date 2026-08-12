@@ -10,14 +10,13 @@ use http::{HeaderMap, StatusCode, header};
 use tokio_tungstenite::tungstenite;
 
 use knot_events::{EventCursor, GitRefUpdate};
-use knot_types::{AccountDid, ObjectFormat, Oid, OwnerDid, RepoDid};
+use knot_types::{AccountDid, Oid, OwnerDid, RepoDid};
 use knot_xrpc::{ArchiveLimit, ResponseLimit};
 
 use common::{
     OWNER, World, archive_full, assert_immutable_round_trip, assert_post_rejected, assert_warming,
     commit_file, empty_repo, get, get_error, get_json, get_with_headers, git_run, post_authed,
-    post_json, ref_names, repo_dids, seeded, seeded_feature_branch, seeded_with_format, sh_git,
-    sh_git_at,
+    post_json, ref_names, repo_dids, seeded, seeded_feature_branch, sh_git, sh_git_at,
 };
 
 #[tokio::test]
@@ -790,7 +789,7 @@ async fn archive_link_advertises_the_prefix_it_served() {
 #[tokio::test]
 async fn archive_serves_a_sha256_repo_with_a_stable_etag() {
     let world = World::sha256();
-    let (did, _work) = seeded_with_format(&world, "nautilus", ObjectFormat::SHA256);
+    let (did, _work) = seeded(&world, "nautilus");
 
     let (status, headers, full) = get(
         &world,
@@ -1588,51 +1587,100 @@ async fn languages_omit_files_with_zero_size() {
 
 #[tokio::test]
 async fn a_compare_patch_round_trips_through_merge_check() {
-    let world = World::new();
-    let (_did, main_sha, feature_sha) = seeded_feature_branch(&world, "periwinkle");
-    let registered = RepoDid::new("did:plc:periwinklefixture").unwrap();
+    compare_round_trip(World::new()).await;
+}
+
+#[tokio::test]
+async fn a_sha256_compare_patch_round_trips_through_merge_check() {
+    compare_round_trip(World::sha256()).await;
+}
+
+async fn compare_round_trip(world: World) {
+    let (did, main_sha, feature_sha) = seeded_feature_branch(&world, "periwinkle");
 
     let compared = get_json(
         &world,
-        &format!(
-            "/xrpc/sh.tangled.repo.compare?repo={registered}&rev1={main_sha}&rev2={feature_sha}"
-        ),
+        &format!("/xrpc/sh.tangled.repo.compare?repo={did}&rev1={main_sha}&rev2={feature_sha}"),
     )
     .await;
     let patch = compared["patch"].as_str().unwrap();
+    let combined = compared["combined_patch_raw"].as_str().unwrap();
 
-    let (status, check) = post_json(
-        &world,
-        "/xrpc/sh.tangled.repo.mergeCheck",
-        serde_json::json!({
-            "repo": registered,
-            "branch": "main",
-            "patch": patch,
-        }),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
+    let checks = stream::iter([("main", patch), ("main", combined), ("feature", patch)])
+        .then(|(branch, candidate)| {
+            post_json(
+                &world,
+                "/xrpc/sh.tangled.repo.mergeCheck",
+                serde_json::json!({
+                    "repo": did,
+                    "branch": branch,
+                    "patch": candidate,
+                }),
+            )
+        })
+        .collect::<Vec<_>>()
+        .await;
     assert_eq!(
-        check["is_conflicted"],
-        serde_json::Value::Bool(false),
-        "knot's own compare output must pass its own merge check: {check}"
+        checks
+            .iter()
+            .map(|(status, check)| (*status, check["is_conflicted"].clone()))
+            .collect::<Vec<_>>(),
+        [false, false, true]
+            .map(|conflicted| (StatusCode::OK, serde_json::Value::Bool(conflicted)))
+            .to_vec(),
+        "main takes both patches and feature already has them: {checks:?}"
     );
 
-    let (status, stale) = post_json(
-        &world,
-        "/xrpc/sh.tangled.repo.mergeCheck",
-        serde_json::json!({
-            "repo": registered,
-            "branch": "feature",
-            "patch": patch,
-        }),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
+    [
+        "GIT binary patch",
+        " shell.bin | Bin 4096 -> 4096 bytes\n",
+        "deleted file mode 100644\n",
+        " delete mode 100644 anchor.bin\n",
+        "diff --git a/deep water.bin b/deep water.bin\n",
+        "old mode 100644\nnew mode 100755\n",
+        " mode change 100644 => 100755 hull.bin\n",
+        " hull.bin | Bin\n",
+    ]
+    .into_iter()
+    .for_each(|needle| {
+        assert!(
+            patch.contains(needle),
+            "the format patch is missing {needle:?}: {patch}"
+        )
+    });
+    assert!(
+        combined.contains("GIT binary patch"),
+        "the combined patch is missing its binary payloads: {combined}"
+    );
+    assert!(
+        !patch.contains("new mode 100755\nindex "),
+        "a mode change leaves both sides at the same oid, so git prints no index line: {patch}"
+    );
     assert_eq!(
-        stale["is_conflicted"],
-        serde_json::Value::Bool(true),
-        "re-applying an already-landed patch must conflict: {stale}"
+        compared.get("binary_omitted"),
+        None,
+        "binary_omitted is absent when every payload was embedded: {compared}"
+    );
+
+    let applied = tempfile::tempdir().unwrap();
+    let bare = world.layout.repo_path(&did).unwrap();
+    sh_git(
+        applied.path(),
+        &["clone", "-q", bare.to_str().unwrap(), "."],
+    );
+    sh_git(applied.path(), &["checkout", "-q", "main"]);
+    std::fs::write(applied.path().join("knot.patch"), patch).unwrap();
+    sh_git(applied.path(), &["am", "knot.patch"]);
+    assert_eq!(
+        sh_git(applied.path(), &["rev-parse", "HEAD^{tree}"]),
+        sh_git(applied.path(), &["rev-parse", "origin/feature^{tree}"]),
+        "git am of the knot's own patch rebuilds the tree the branch already has"
+    );
+    assert!(
+        !applied.path().join("anchor.bin").exists()
+            && applied.path().join("deep water.bin").exists()
+            && sh_git(applied.path(), &["ls-files", "-s", "hull.bin"]).starts_with("100755 "),
+        "git am dropped anchor.bin, wrote deep water.bin and kept the exec bit on hull.bin"
     );
 }
 
@@ -2047,7 +2095,7 @@ async fn bad_post_bodies_are_invalid_request() {
 }
 
 #[tokio::test]
-async fn merge_applies_a_plain_patch_under_the_supplied_author() {
+async fn merge_applies_a_patch_under_the_supplied_author() {
     let world = World::new();
     let (_did, main_sha, feature_sha) = seeded_feature_branch(&world, "mussel");
     let registered = RepoDid::new("did:plc:musselfixture").unwrap();

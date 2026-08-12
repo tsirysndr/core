@@ -13,8 +13,8 @@ use tower_http::services::ServeFile;
 
 use knot_cobs::RepoRef;
 use knot_git::{
-    ArchiveFormat, Commit, CommitRange, EntryKind, Layout, LogLimit, LogSkip, Repo, SizedEntry,
-    is_public_ref, screens_reserved,
+    ArchiveFormat, BinaryBudget, Commit, CommitRange, EntryKind, Layout, LogLimit, LogSkip, Repo,
+    SizedEntry, is_public_ref, screens_reserved,
 };
 use knot_index::{Coverage, Resolved};
 use knot_runtime::{Clock, HttpTransport};
@@ -901,10 +901,13 @@ pub(crate) async fn repo_diff<H: HttpTransport, C: Clock>(
         let repo = open(&layout, &did)?;
         let target = commit_for(&repo, &params.refspec)?;
         let commit = repo.find_commit(target)?;
-        let patches = repo.commit_patches(knot_git::PatchRange {
-            base: commit.parents.first().copied(),
-            head: target,
-        })?;
+        let patches = repo.commit_patches(
+            knot_git::PatchRange {
+                base: commit.parents.first().copied(),
+                head: target,
+            },
+            &mut BinaryBudget::Omit,
+        )?;
         json(
             DiffOut {
                 refspec: params.refspec.as_str().to_string(),
@@ -939,6 +942,8 @@ struct CompareOut {
     combined_patch: Option<Vec<FileWire>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     combined_patch_raw: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    binary_omitted: Option<bool>,
 }
 
 fn format_patch_entry(
@@ -1009,6 +1014,8 @@ pub(crate) async fn repo_compare<H: HttpTransport, C: Clock>(
     }
     let layout = state.layout.clone();
     let limit = state.byte_limits.response.get();
+    let mut series_binary = state.byte_limits.binary_patch();
+    let mut combined_binary = state.byte_limits.binary_patch();
     run_blocking(move || {
         let repo = open(&layout, &did)?;
         let resolve = |rev: &str| {
@@ -1069,10 +1076,13 @@ pub(crate) async fn repo_compare<H: HttpTransport, C: Clock>(
         let entries: Vec<(FormatPatchWire, String)> = commits
             .iter()
             .map(|commit| {
-                repo.commit_patches(knot_git::PatchRange {
-                    base: commit.parents.first().copied(),
-                    head: commit.id,
-                })
+                repo.commit_patches(
+                    knot_git::PatchRange {
+                        base: commit.parents.first().copied(),
+                        head: commit.id,
+                    },
+                    &mut series_binary,
+                )
                 .map(|patches| {
                     let raw = render_format_patch(commit, &patches);
                     (format_patch_entry(commit, &patches, &raw), raw)
@@ -1080,14 +1090,20 @@ pub(crate) async fn repo_compare<H: HttpTransport, C: Clock>(
             })
             .collect::<Result<Vec<_>, _>>()
             .map_err(compare_error)?;
-        let patch_raw: String = entries.iter().map(|(_, raw)| format!("{raw}\n")).collect();
+        let patch_raw: String = entries
+            .iter()
+            .flat_map(|(_, raw)| [raw.as_str(), "\n"])
+            .collect();
         let merge_base = repo.merge_base(base, head).ok().flatten();
-        let (combined_patch, combined_patch_raw) = match (entries.len() >= 2, merge_base) {
+        let (combined_patch, combined_patch_raw) = match (commits.len() >= 2, merge_base) {
             (true, Some(merge_base)) => repo
-                .commit_patches(knot_git::PatchRange {
-                    base: Some(merge_base),
-                    head,
-                })
+                .commit_patches(
+                    knot_git::PatchRange {
+                        base: Some(merge_base),
+                        head,
+                    },
+                    &mut combined_binary,
+                )
                 .ok()
                 .map(|patches| {
                     (
@@ -1107,6 +1123,8 @@ pub(crate) async fn repo_compare<H: HttpTransport, C: Clock>(
                 patch_raw,
                 combined_patch,
                 combined_patch_raw,
+                binary_omitted: (series_binary.omitted() || combined_binary.omitted())
+                    .then_some(true),
             },
             limit,
         )

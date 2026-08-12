@@ -3408,4 +3408,24 @@ mod legacy_admin_route {
             "past the burst the knot sheds the guess flood before it reaches the secret comparison, got {statuses:?}"
         );
     }
+
+    #[test]
+    fn every_wire_copy_of_an_embedded_payload_fits_a_quarter_of_the_response() {
+        let limits = crate::ByteLimits::default();
+        assert_eq!(limits.response.get(), 5 * 1024 * 1024);
+        let response = limits.response.get() as u64;
+        assert_eq!(
+            limits.binary_patch(),
+            knot_git::BinaryBudget::new(response / 4 / 3),
+            "a compare serialises the series twice and the combined patch once"
+        );
+        let per_pass = match limits.binary_patch() {
+            knot_git::BinaryBudget::Spend { remaining, .. } => remaining,
+            knot_git::BinaryBudget::Omit => panic!("binary_patch spends, it doesn't omit"),
+        };
+        assert!(
+            per_pass * 3 <= response / 4,
+            "three copies of {per_pass} bytes must stay inside a quarter of {response}"
+        );
+    }
 }

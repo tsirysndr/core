@@ -1,4 +1,5 @@
 mod archive;
+mod base85;
 mod bitmap;
 mod error;
 #[cfg(feature = "instrument")]
@@ -22,8 +23,8 @@ pub use objects::{
     ShallowPlan, Tree, TreeDepth, TreeEntry, Wants,
 };
 pub use patch::{
-    FilePatch, Hunk, HunkLine, LineCount, LineNumber, LineOp, MAX_DIFF_BLOB_BYTES, PatchRange,
-    PatchStatus,
+    BinaryBudget, BinaryDiff, BinarySizes, FilePatch, Hunk, HunkLine, LineCount, LineNumber,
+    LineOp, MAX_DIFF_BLOB_BYTES, PatchBody, PatchRange, PatchStatus,
 };
 pub use patch_apply::{
     ApplyError, ApplyOutcome, Conflict, ConflictReason, NewCommit, PatchApplier, StagedAction,
@@ -31,7 +32,7 @@ pub use patch_apply::{
 };
 pub use patch_parse::{
     FileIntent, MailPatch, ParsedFile, PatchParseError, PatchPayload, is_format_patch,
-    parse_mailbox, parse_mailbox_bounded, parse_patch, parse_patch_bounded,
+    parse_mailbox, parse_mailbox_bounded, parse_patch, parse_patch_bounded, quote_path,
 };
 pub use reads::{
     AnnotatedTag, BranchInfo, BranchTip, LastCommit, LogLimit, LogSkip, PathEntry, SizedEntry,

@@ -9,6 +9,12 @@
                 {{ end }}
             </div>
         {{ else }}
+            {{ if .Comparison.BinaryOmitted }}
+                <div class="flex items-start gap-2 p-4 border border-amber-200 dark:border-amber-500 rounded bg-amber-50 dark:bg-amber-900 text-sm text-amber-600 dark:text-amber-50">
+                    {{ i "triangle-alert" "w-4 h-4 flex-shrink-0 mt-0.5" }}
+                    <span>Some binary files are too large to carry in this patch. The pull request will open, but merging it will leave those files untouched.</span>
+                </div>
+            {{ end }}
             {{ $commits := .Comparison.FormatPatch }}
             {{ if $commits }}
                 <div class="flex flex-col gap-2">

@@ -68,6 +68,10 @@ func (s *Pulls) handleBranchBasedPull(
 		return
 	}
 
+	if comparison.BinaryOmitted {
+		l.Warn("knot left binary payloads out of the compare, so this patch won't apply cleanly", "knot", repo.Knot, "repo", repo.RepoIdentifier())
+	}
+
 	sourceRev := comparison.Rev2
 	patch := comparison.FormatPatchRaw
 	combined := comparison.CombinedPatchRaw
@@ -178,6 +182,10 @@ func (s *Pulls) handleForkBasedPull(w http.ResponseWriter, r *http.Request, repo
 	if len(comparison.FormatPatch) == 0 {
 		s.pages.Notice(w, "pull", "No commits between target and source.")
 		return
+	}
+
+	if comparison.BinaryOmitted {
+		l.Warn("knot left binary payloads out of the compare, so this patch won't apply cleanly", "knot", fork.Knot, "repo", fork.RepoIdentifier(), "hidden_ref", hiddenRef)
 	}
 
 	sourceRev := comparison.Rev2
