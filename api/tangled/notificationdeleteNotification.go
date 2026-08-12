@@ -16,8 +16,8 @@ const (
 
 // TempNotificationDeleteNotification_Input is the input argument to a org.tangled.temp.notification.deleteNotification call.
 type TempNotificationDeleteNotification_Input struct {
-	// id: ID of the notification to delete.
-	Id int64 `json:"id" cborgen:"id"`
+	// uri: at-uri of the notification to delete.
+	Uri string `json:"uri" cborgen:"uri"`
 }
 
 // TempNotificationDeleteNotification calls the XRPC method "org.tangled.temp.notification.deleteNotification".

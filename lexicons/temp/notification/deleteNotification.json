@@ -9,11 +9,12 @@
         "encoding": "application/json",
         "schema": {
           "type": "object",
-          "required": ["id"],
+          "required": ["uri"],
           "properties": {
-            "id": {
-              "type": "integer",
-              "description": "ID of the notification to delete."
+            "uri": {
+              "type": "string",
+              "format": "at-uri",
+              "description": "at-uri of the notification to delete."
             }
           }
         }

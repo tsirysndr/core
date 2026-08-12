@@ -21,8 +21,6 @@ type TempNotificationListNotifications_Notification struct {
 	// category: Broad category: 'social' or 'work'.
 	Category  string `json:"category" cborgen:"category"`
 	CreatedAt string `json:"createdAt" cborgen:"createdAt"`
-	// id: Stable numeric ID for this notification.
-	Id int64 `json:"id" cborgen:"id"`
 	// issueAt: AT-URI of the related org.tangled.issue.issue record, if applicable.
 	IssueAt *string `json:"issueAt,omitempty" cborgen:"issueAt,omitempty"`
 	// pullAt: AT-URI of the related org.tangled.pulls.pull record, if applicable.
@@ -32,6 +30,8 @@ type TempNotificationListNotifications_Notification struct {
 	RepoDid *string `json:"repoDid,omitempty" cborgen:"repoDid,omitempty"`
 	// type: Notification type: repo_starred, issue_created, issue_commented, issue_closed, issue_reopen, issue_assigned, issue_unassigned, pull_created, pull_commented, pull_merged, pull_closed, pull_reopen, pull_assigned, pull_unassigned, followed, user_mentioned.
 	Type string `json:"type" cborgen:"type"`
+	// uri: at-uri of this notification; the stable key for read/unread state.
+	Uri string `json:"uri" cborgen:"uri"`
 }
 
 // TempNotificationListNotifications_Output is the output of a org.tangled.temp.notification.listNotifications call.

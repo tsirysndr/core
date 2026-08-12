@@ -16,9 +16,9 @@ const (
 
 // TempNotificationUpdateSeen_Input is the input argument to a org.tangled.temp.notification.updateSeen call.
 type TempNotificationUpdateSeen_Input struct {
-	// id: ID of the notification to update.
-	Id   int64 `json:"id" cborgen:"id"`
-	Read bool  `json:"read" cborgen:"read"`
+	Read bool `json:"read" cborgen:"read"`
+	// uri: at-uri of the notification to update.
+	Uri string `json:"uri" cborgen:"uri"`
 }
 
 // TempNotificationUpdateSeen calls the XRPC method "org.tangled.temp.notification.updateSeen".
