@@ -363,6 +363,37 @@ services:
         condition: service_completed_successfully
     networks: [tngl]
 
+  deliberi:
+    build:
+      context: .
+      dockerfile: localinfra/deliberi.Dockerfile
+    restart: unless-stopped
+    environment:
+      DELIBERI_DEV: "true"
+      DELIBERI_HOSTNAME: deliberi.tngl.boltless.dev
+      DELIBERI_LISTEN_ADDR: 0.0.0.0:6565
+      DELIBERI_DB_PATH: /var/lib/deliberi/deliberi.db
+      DELIBERI_PLC_URL: https://plc.tngl.boltless.dev
+      DELIBERI_JETSTREAM_ENDPOINT: wss://jetstream.tngl.boltless.dev/subscribe
+      DELIBERI_BOBBIN_API_URL: http://bobbin:8090
+      DELIBERI_BASE_URL: https://tngl.boltless.dev
+      DELIBERI_PDS_HOST: https://pds.tngl.boltless.dev
+    volumes:
+      - deliberi-data:/var/lib/deliberi
+      - ./localinfra/certs/root.crt:/usr/local/share/ca-certificates/caddy.crt:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:6565/xrpc/_health"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+    ports:
+      - "6565:6565"
+    depends_on:
+      pds:
+        condition: service_healthy
+    networks: [tngl]
+
   pdsls:
     build:
       context: .
@@ -418,6 +449,7 @@ volumes:
   go-cache:
   go-mod-cache:
   appview-data:
+  deliberi-data:
 
 networks:
   tngl:

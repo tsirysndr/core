@@ -185,6 +185,7 @@
         dolly = self.callPackage ./nix/pkgs/dolly.nix {};
         tap = self.callPackage ./nix/pkgs/tap.nix {};
         knotmirror = self.callPackage ./nix/pkgs/knotmirror.nix {};
+        deliberi = self.callPackage ./nix/pkgs/deliberi.nix {};
         bobbin = self.callPackage ./nix/pkgs/bobbin.nix {};
         zoekt-webserver = self.callPackage ./nix/pkgs/zoekt-webserver.nix {};
         zoekt-tngl-indexserver = self.callPackage ./nix/pkgs/zoekt-tngl-indexserver.nix {};
@@ -213,6 +214,7 @@
         dolly
         tap
         knotmirror
+        deliberi
         bobbin
         zoekt-webserver
         zoekt-tngl-indexserver
@@ -254,6 +256,7 @@
         dolly
         tap
         knotmirror
+        deliberi
         bobbin
         zoekt-webserver
         zoekt-tngl-indexserver
@@ -644,6 +647,15 @@
       imports = [./nix/modules/appview.nix];
 
       services.tangled.appview.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.appview;
+    };
+    nixosModules.deliberi = {
+      lib,
+      pkgs,
+      ...
+    }: {
+      imports = [./nix/modules/deliberi.nix];
+
+      services.tangled.deliberi.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.deliberi;
     };
     nixosModules.knotmirror = {
       lib,

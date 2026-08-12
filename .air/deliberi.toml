@@ -1,0 +1,10 @@
+root = "."
+tmp_dir = "out"
+
+[build]
+cmd = "go build -tags libsqlite3 -o out/deliberi.out cmd/deliberi/main.go"
+bin = "out/deliberi.out"
+
+include_ext = ["go"]
+exclude_dir = ["avatar", "camo", "sites", "indexes", "nix", "tmp"]
+stop_on_error = true
