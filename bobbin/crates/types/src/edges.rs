@@ -12,6 +12,7 @@ use crate::sh_tangled::actor::profile::Profile;
 use crate::sh_tangled::feed::comment::Comment as FeedCommentRecord;
 use crate::sh_tangled::feed::reaction::Reaction;
 use crate::sh_tangled::feed::star::Star;
+use crate::sh_tangled::feed::subscription::Subscription;
 use crate::sh_tangled::git::ref_update::RefUpdate;
 use crate::sh_tangled::graph::follow::Follow;
 use crate::sh_tangled::graph::vouch::Vouch;
@@ -57,6 +58,7 @@ pub enum Record {
     FeedComment(FeedCommentRecord<DefaultStr>),
     Reaction(Reaction<DefaultStr>),
     Star(Star<DefaultStr>),
+    Subscription(Subscription<DefaultStr>),
     RefUpdate(RefUpdate<DefaultStr>),
     Follow(Follow<DefaultStr>),
     Vouch(Vouch<DefaultStr>),
@@ -102,6 +104,7 @@ impl Record {
             "sh.tangled.feed.comment" => parse!(FeedComment),
             "sh.tangled.feed.reaction" => parse!(Reaction),
             "sh.tangled.feed.star" => parse!(Star),
+            "sh.tangled.feed.subscription" => parse!(Subscription),
             "sh.tangled.git.refUpdate" => parse!(RefUpdate),
             "sh.tangled.graph.follow" => parse!(Follow),
             "sh.tangled.graph.vouch" => parse!(Vouch),
@@ -132,6 +135,7 @@ impl Record {
             Self::FeedComment(_) => "sh.tangled.feed.comment",
             Self::Reaction(_) => "sh.tangled.feed.reaction",
             Self::Star(_) => "sh.tangled.feed.star",
+            Self::Subscription(_) => "sh.tangled.feed.subscription",
             Self::RefUpdate(_) => "sh.tangled.git.refUpdate",
             Self::Follow(_) => "sh.tangled.graph.follow",
             Self::Vouch(_) => "sh.tangled.graph.vouch",
@@ -184,6 +188,7 @@ impl Record {
             Self::FeedComment(r) => Some(&r.created_at),
             Self::Reaction(r) => Some(&r.created_at),
             Self::Star(r) => Some(&r.created_at),
+            Self::Subscription(r) => Some(&r.created_at),
             Self::RefUpdate(_) => None,
             Self::Follow(r) => Some(&r.created_at),
             Self::Vouch(r) => Some(&r.created_at),
@@ -210,6 +215,7 @@ impl Record {
     fn primary_edges(&self, source: &AtUri<DefaultStr>) -> Result<Vec<Edge>, ExtractError> {
         match self {
             Self::Star(r) => star_edges(source, r),
+            Self::Subscription(r) => subscription_edges(source, r),
             Self::FeedComment(r) => feed_comment_edges(source, r),
             Self::Reaction(r) => reaction_edges(source, r),
             Self::Follow(r) => follow_edges(source, r),
@@ -355,6 +361,23 @@ fn star_edges(
         }
     };
     Ok(one_edge("sh.tangled.feed.star", subject, source))
+}
+
+fn subscription_edges(
+    source: &AtUri<DefaultStr>,
+    record: &Subscription<DefaultStr>,
+) -> Result<Vec<Edge>, ExtractError> {
+    use crate::sh_tangled::feed::subscription::SubscriptionSubject;
+    let subject = match &record.subject {
+        SubscriptionSubject::Uri(v) => {
+            let Some(subject) = uri_subject_for_record(&v.uri) else {
+                return Ok(Vec::new());
+            };
+            subject
+        }
+        SubscriptionSubject::Repo(v) => SubjectRef::Did(v.did.clone()),
+    };
+    Ok(one_edge("sh.tangled.feed.subscription", subject, source))
 }
 
 fn reaction_edges(

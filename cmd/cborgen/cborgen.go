@@ -6,7 +6,6 @@ import (
 )
 
 func main() {
-
 	genCfg := cbg.Gen{
 		MaxStringLength: 1_000_000,
 	}
@@ -29,6 +28,9 @@ func main() {
 		tangled.FeedStar{},
 		tangled.FeedStar_Repo{},
 		tangled.FeedStar_String{},
+		tangled.FeedSubscription{},
+		tangled.FeedSubscription_Uri{},
+		tangled.FeedSubscription_Repo{},
 		tangled.GitRefUpdate{},
 		tangled.GitRefUpdate_CommitCountBreakdown{},
 		tangled.GitRefUpdate_IndividualEmailCommitCount{},
@@ -73,5 +75,4 @@ func main() {
 	); err != nil {
 		panic(err)
 	}
-
 }

@@ -65,6 +65,7 @@ impl SearchableRecord {
             Record::LabelDefinition(r) => Some(Self::LabelDefinition(r)),
             Record::Reaction(_)
             | Record::Star(_)
+            | Record::Subscription(_)
             | Record::RefUpdate(_)
             | Record::Follow(_)
             | Record::Vouch(_)
