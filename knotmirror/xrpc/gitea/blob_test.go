@@ -26,6 +26,8 @@ func initRepo(t *testing.T) (string, func(args ...string) []byte) {
 	runGit("init")
 	runGit("config", "user.name", "nel")
 	runGit("config", "user.email", "nel@oyster.cafe")
+	runGit("config", "maintenance.auto", "false")
+	runGit("config", "gc.autoDetach", "false")
 	return repo, runGit
 }
 
