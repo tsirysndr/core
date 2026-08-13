@@ -87,7 +87,7 @@ func (i *Ingester) process(ctx context.Context, e *jmodels.Event) error {
 		if err := deldb.PutEntityTitle(i.db, entityAt, rec.Title); err != nil {
 			i.logger.Warn("caching entity title", "err", err, "uri", entityAt)
 		}
-		i.notifyEntity(ctx, actorDid, entityAt, entityAt, rec.Repo, models.NotificationTypeIssueCreated, rec.Title, rec.Mentions)
+		i.notifyEntity(ctx, actorDid, entityAt, entityAt, rec.Repo, models.NotificationTypeIssueCreated, rec.Title, rec.Mentions, "sh.tangled.repo.issue")
 
 	case tangled.RepoPullNSID:
 		var rec tangled.RepoPull
@@ -102,7 +102,7 @@ func (i *Ingester) process(ctx context.Context, e *jmodels.Event) error {
 		if err := deldb.PutEntityTitle(i.db, entityAt, rec.Title); err != nil {
 			i.logger.Warn("caching entity title", "err", err, "uri", entityAt)
 		}
-		i.notifyEntity(ctx, actorDid, entityAt, entityAt, repoDid, models.NotificationTypePullCreated, rec.Title, rec.Mentions)
+		i.notifyEntity(ctx, actorDid, entityAt, entityAt, repoDid, models.NotificationTypePullCreated, rec.Title, rec.Mentions, "sh.tangled.repo.pull")
 
 	case tangled.FeedCommentNSID:
 		var rec tangled.FeedComment
@@ -125,7 +125,8 @@ func (i *Ingester) process(ctx context.Context, e *jmodels.Event) error {
 		}
 		// comment carries no repo did and no mentions field; leave both empty.
 		title := deldb.GetEntityTitle(i.db, subjectUri)
-		i.notifyEntity(ctx, actorDid, entityAt, subjectUri, "", t, title, nil)
+		collection := syntax.ATURI(subjectUri).Collection().String()
+		i.notifyEntity(ctx, actorDid, entityAt, subjectUri, "", t, title, nil, collection)
 
 	case tangled.FeedStarNSID:
 		var rec tangled.FeedStar
@@ -160,10 +161,10 @@ func (i *Ingester) process(ctx context.Context, e *jmodels.Event) error {
 	return nil
 }
 
-func (i *Ingester) notifyEntity(ctx context.Context, actorDid, sourceAt, entityAt, repoDid string, t models.NotificationType, title string, mentions []string) {
+func (i *Ingester) notifyEntity(ctx context.Context, actorDid, sourceAt, entityAt, repoDid string, t models.NotificationType, title string, mentions []string, collection string) {
 	seen := make(map[string]struct{})
 
-	subscribers, err := i.recipients.ListRecipients(ctx, entityAt)
+	subscribers, err := i.recipients.ListRecipients(ctx, entityAt, collection)
 	if err != nil {
 		i.logger.Warn("listing recipients", "err", err, "entity", entityAt)
 	}

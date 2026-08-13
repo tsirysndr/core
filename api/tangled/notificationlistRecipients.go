@@ -21,11 +21,15 @@ type TempNotificationListRecipients_Output struct {
 
 // TempNotificationListRecipients calls the XRPC method "org.tangled.temp.notification.listRecipients".
 //
+// collection: Optional collection NSID to filter subscribers by subscription scope. Only subscribers with no collection filter or a filter containing this NSID are returned.
 // subject: at-uri of the entity (for entity-level subscribers) or a repo DID (for repo-level subscribers).
-func TempNotificationListRecipients(ctx context.Context, c util.LexClient, subject string) (*TempNotificationListRecipients_Output, error) {
+func TempNotificationListRecipients(ctx context.Context, c util.LexClient, collection string, subject string) (*TempNotificationListRecipients_Output, error) {
 	var out TempNotificationListRecipients_Output
 
 	params := map[string]interface{}{}
+	if collection != "" {
+		params["collection"] = collection
+	}
 	params["subject"] = subject
 	if err := c.LexDo(ctx, util.Query, "", "org.tangled.temp.notification.listRecipients", params, nil, &out); err != nil {
 		return nil, err

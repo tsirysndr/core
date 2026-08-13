@@ -27,7 +27,7 @@ type fakeResolver struct {
 	ownerCalls *int
 }
 
-func (f fakeResolver) ListRecipients(ctx context.Context, uri string) ([]string, error) {
+func (f fakeResolver) ListRecipients(ctx context.Context, uri string, collection string) ([]string, error) {
 	return f.dids, f.err
 }
 
@@ -89,7 +89,7 @@ func countFor(t *testing.T, i *Ingester, did string) int64 {
 
 func TestNotifyEntitySubscriberGetsRow(t *testing.T) {
 	i := newTestIngester(t, fakeResolver{dids: []string{"did:sub"}})
-	i.notifyEntity(context.Background(), "did:actor", "at://src", "at://entity", "did:repo", models.NotificationTypeIssueCreated, "title", nil)
+	i.notifyEntity(context.Background(), "did:actor", "at://src", "at://entity", "did:repo", models.NotificationTypeIssueCreated, "title", nil, "")
 	if got := countFor(t, i, "did:sub"); got != 1 {
 		t.Fatalf("subscriber rows = %d, want 1", got)
 	}
@@ -97,7 +97,7 @@ func TestNotifyEntitySubscriberGetsRow(t *testing.T) {
 
 func TestActorNeverNotified(t *testing.T) {
 	i := newTestIngester(t, fakeResolver{dids: []string{"did:actor"}})
-	i.notifyEntity(context.Background(), "did:actor", "at://src", "at://entity", "did:repo", models.NotificationTypeIssueCreated, "title", []string{"did:actor"})
+	i.notifyEntity(context.Background(), "did:actor", "at://src", "at://entity", "did:repo", models.NotificationTypeIssueCreated, "title", []string{"did:actor"}, "")
 	if got := countFor(t, i, "did:actor"); got != 0 {
 		t.Fatalf("actor rows = %d, want 0", got)
 	}
@@ -105,7 +105,7 @@ func TestActorNeverNotified(t *testing.T) {
 
 func TestMentionDeliveredOnResolverError(t *testing.T) {
 	i := newTestIngester(t, fakeResolver{err: io.ErrUnexpectedEOF})
-	i.notifyEntity(context.Background(), "did:actor", "at://src", "at://entity", "did:repo", models.NotificationTypeIssueCreated, "title", []string{"did:mention"})
+	i.notifyEntity(context.Background(), "did:actor", "at://src", "at://entity", "did:repo", models.NotificationTypeIssueCreated, "title", []string{"did:mention"}, "")
 	if got := countFor(t, i, "did:mention"); got != 1 {
 		t.Fatalf("mention rows = %d, want 1", got)
 	}
@@ -113,8 +113,8 @@ func TestMentionDeliveredOnResolverError(t *testing.T) {
 
 func TestCreateNotificationDedupe(t *testing.T) {
 	i := newTestIngester(t, fakeResolver{dids: []string{"did:sub"}})
-	i.notifyEntity(context.Background(), "did:actor", "at://src", "at://entity", "did:repo", models.NotificationTypeIssueCreated, "title", nil)
-	i.notifyEntity(context.Background(), "did:actor", "at://src", "at://entity", "did:repo", models.NotificationTypeIssueCreated, "title", nil)
+	i.notifyEntity(context.Background(), "did:actor", "at://src", "at://entity", "did:repo", models.NotificationTypeIssueCreated, "title", nil, "")
+	i.notifyEntity(context.Background(), "did:actor", "at://src", "at://entity", "did:repo", models.NotificationTypeIssueCreated, "title", nil, "")
 	if got := countFor(t, i, "did:sub"); got != 1 {
 		t.Fatalf("deduped rows = %d, want 1", got)
 	}
@@ -268,7 +268,7 @@ func TestDisabledPrefSuppressesRow(t *testing.T) {
 	if err := deldb.UpsertNotificationPreferences(i.db, prefs); err != nil {
 		t.Fatalf("upsert prefs: %v", err)
 	}
-	i.notifyEntity(context.Background(), "did:actor", "at://src", "at://entity", "did:repo", models.NotificationTypeIssueCreated, "title", nil)
+	i.notifyEntity(context.Background(), "did:actor", "at://src", "at://entity", "did:repo", models.NotificationTypeIssueCreated, "title", nil, "")
 	if got := countFor(t, i, "did:sub"); got != 0 {
 		t.Fatalf("disabled-pref rows = %d, want 0", got)
 	}

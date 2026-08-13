@@ -12,6 +12,11 @@
           "subject": {
             "type": "string",
             "description": "at-uri of the entity (for entity-level subscribers) or a repo DID (for repo-level subscribers)."
+          },
+          "collection": {
+            "type": "string",
+            "format": "nsid",
+            "description": "Optional collection NSID to filter subscribers by subscription scope. Only subscribers with no collection filter or a filter containing this NSID are returned."
           }
         }
       },

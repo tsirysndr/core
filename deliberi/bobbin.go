@@ -14,7 +14,7 @@ import (
 )
 
 type recipientResolver interface {
-	ListRecipients(ctx context.Context, uri string) ([]string, error)
+	ListRecipients(ctx context.Context, uri string, collection string) ([]string, error)
 	RepoOwner(ctx context.Context, repoDid string) (ownerDid, name string, err error)
 }
 
@@ -31,8 +31,8 @@ func newBobbinClient(apiUrl string) *bobbinClient {
 	}
 }
 
-func (c *bobbinClient) ListRecipients(ctx context.Context, uri string) ([]string, error) {
-	out, err := tangled.TempNotificationListRecipients(ctx, c.xc, uri)
+func (c *bobbinClient) ListRecipients(ctx context.Context, uri string, collection string) ([]string, error) {
+	out, err := tangled.TempNotificationListRecipients(ctx, c.xc, collection, uri)
 	if err != nil {
 		return nil, fmt.Errorf("calling %s: %w", tangled.TempNotificationListRecipientsNSID, err)
 	}
