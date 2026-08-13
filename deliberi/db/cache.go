@@ -21,11 +21,14 @@ func GetRepoOwner(e Execer, repoDid string) string {
 	return owner
 }
 
-func PutEntityTitle(e Execer, atUri, title string) error {
+func PutEntityTitle(e Execer, atUri, title, repoDid string) error {
 	_, err := e.Exec(
-		`insert into entity_titles (at_uri, title) values (?, ?)
-		 on conflict(at_uri) do update set title = excluded.title`,
-		atUri, title,
+		// a blank repo_did means unknown, so never overwrite a stored one.
+		`insert into entity_titles (at_uri, title, repo_did) values (?, ?, ?)
+		 on conflict(at_uri) do update set
+			title = excluded.title,
+			repo_did = case when excluded.repo_did != '' then excluded.repo_did else entity_titles.repo_did end`,
+		atUri, title, repoDid,
 	)
 	return err
 }
@@ -34,4 +37,10 @@ func GetEntityTitle(e Execer, atUri string) string {
 	var title string
 	_ = e.QueryRow(`select title from entity_titles where at_uri = ?`, atUri).Scan(&title)
 	return title
+}
+
+func GetEntityRepo(e Execer, atUri string) string {
+	var repoDid string
+	_ = e.QueryRow(`select repo_did from entity_titles where at_uri = ?`, atUri).Scan(&repoDid)
+	return repoDid
 }

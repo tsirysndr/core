@@ -5,12 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"time"
 
+	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	indigoxrpc "github.com/bluesky-social/indigo/xrpc"
 	jmodels "github.com/bluesky-social/jetstream/pkg/models"
 	"tangled.org/core/api/tangled"
 	deldb "tangled.org/core/deliberi/db"
 	models "tangled.org/core/deliberi/models"
+	"tangled.org/core/idresolver"
 	js "tangled.org/core/jetstream"
 )
 
@@ -18,6 +23,7 @@ type Ingester struct {
 	db         *deldb.DB
 	recipients recipientResolver
 	jc         *js.JetstreamClient
+	idResolver *idresolver.Resolver
 	logger     *slog.Logger
 }
 
@@ -30,7 +36,7 @@ var ingestCollections = []string{
 	tangled.GraphFollowNSID,
 }
 
-func NewIngester(database *deldb.DB, recipients recipientResolver, endpoint, ident string, logger *slog.Logger) (*Ingester, error) {
+func NewIngester(database *deldb.DB, recipients recipientResolver, idRes *idresolver.Resolver, endpoint, ident string, logger *slog.Logger) (*Ingester, error) {
 	jc, err := js.NewJetstreamClient(endpoint, ident, ingestCollections, nil, logger, database, false, false)
 	if err != nil {
 		return nil, fmt.Errorf("creating jetstream client: %w", err)
@@ -39,6 +45,7 @@ func NewIngester(database *deldb.DB, recipients recipientResolver, endpoint, ide
 		db:         database,
 		recipients: recipients,
 		jc:         jc,
+		idResolver: idRes,
 		logger:     logger,
 	}, nil
 }
@@ -84,7 +91,7 @@ func (i *Ingester) process(ctx context.Context, e *jmodels.Event) error {
 			i.logger.Warn("decoding issue record", "err", err, "uri", entityAt)
 			return nil
 		}
-		if err := deldb.PutEntityTitle(i.db, entityAt, rec.Title); err != nil {
+		if err := deldb.PutEntityTitle(i.db, entityAt, rec.Title, rec.Repo); err != nil {
 			i.logger.Warn("caching entity title", "err", err, "uri", entityAt)
 		}
 		i.notifyEntity(ctx, actorDid, entityAt, entityAt, rec.Repo, models.NotificationTypeIssueCreated, rec.Title, rec.Mentions, "sh.tangled.repo.issue")
@@ -99,7 +106,7 @@ func (i *Ingester) process(ctx context.Context, e *jmodels.Event) error {
 		if rec.Target != nil {
 			repoDid = rec.Target.Repo
 		}
-		if err := deldb.PutEntityTitle(i.db, entityAt, rec.Title); err != nil {
+		if err := deldb.PutEntityTitle(i.db, entityAt, rec.Title, repoDid); err != nil {
 			i.logger.Warn("caching entity title", "err", err, "uri", entityAt)
 		}
 		i.notifyEntity(ctx, actorDid, entityAt, entityAt, repoDid, models.NotificationTypePullCreated, rec.Title, rec.Mentions, "sh.tangled.repo.pull")
@@ -114,8 +121,9 @@ func (i *Ingester) process(ctx context.Context, e *jmodels.Event) error {
 			return nil
 		}
 		subjectUri := rec.Subject.Uri
+		collection := syntax.ATURI(subjectUri).Collection().String()
 		var t models.NotificationType
-		switch syntax.ATURI(subjectUri).Collection().String() {
+		switch collection {
 		case tangled.RepoIssueNSID:
 			t = models.NotificationTypeIssueCommented
 		case tangled.RepoPullNSID:
@@ -123,10 +131,9 @@ func (i *Ingester) process(ctx context.Context, e *jmodels.Event) error {
 		default:
 			return nil
 		}
-		// comment carries no repo did and no mentions field; leave both empty.
-		title := deldb.GetEntityTitle(i.db, subjectUri)
-		collection := syntax.ATURI(subjectUri).Collection().String()
-		i.notifyEntity(ctx, actorDid, entityAt, subjectUri, "", t, title, nil, collection)
+		// comments carry no mentions field.
+		title, repoDid := i.hydrateEntity(ctx, subjectUri, collection)
+		i.notifyEntity(ctx, actorDid, entityAt, subjectUri, repoDid, t, title, nil, collection)
 
 	case tangled.FeedStarNSID:
 		var rec tangled.FeedStar
@@ -164,9 +171,18 @@ func (i *Ingester) process(ctx context.Context, e *jmodels.Event) error {
 func (i *Ingester) notifyEntity(ctx context.Context, actorDid, sourceAt, entityAt, repoDid string, t models.NotificationType, title string, mentions []string, collection string) {
 	seen := make(map[string]struct{})
 
-	subscribers, err := i.recipients.ListRecipients(ctx, entityAt, collection)
-	if err != nil {
-		i.logger.Warn("listing recipients", "err", err, "entity", entityAt)
+	// bobbin matches subjects exactly, so ask at both levels.
+	var subscribers []string
+	for _, subject := range []string{entityAt, repoDid} {
+		if subject == "" {
+			continue
+		}
+		dids, err := i.recipients.ListRecipients(ctx, subject, collection)
+		if err != nil {
+			i.logger.Warn("listing recipients", "err", err, "subject", subject)
+			continue
+		}
+		subscribers = append(subscribers, dids...)
 	}
 
 	for _, dids := range [][]string{subscribers, mentions} {
@@ -209,6 +225,73 @@ func (i *Ingester) hydrateRepoOwner(ctx context.Context, repoDid string) string 
 		i.logger.Warn("caching repo owner", "err", err, "repoDid", repoDid)
 	}
 	return owner
+}
+
+// hydrateEntity reads the entity cache, falling back to the parent's pds on a
+// miss so comments on entities the ingester never saw still resolve.
+func (i *Ingester) hydrateEntity(ctx context.Context, uri, collection string) (title, repoDid string) {
+	title = deldb.GetEntityTitle(i.db, uri)
+	repoDid = deldb.GetEntityRepo(i.db, uri)
+	if repoDid != "" || i.idResolver == nil {
+		return title, repoDid
+	}
+
+	fetchedTitle, fetchedRepoDid, err := i.fetchEntity(ctx, uri, collection)
+	if err != nil {
+		i.logger.Warn("hydrating parent entity", "err", err, "uri", uri)
+		return title, repoDid
+	}
+	if title == "" {
+		title = fetchedTitle
+	}
+	repoDid = fetchedRepoDid
+	if err := deldb.PutEntityTitle(i.db, uri, title, repoDid); err != nil {
+		i.logger.Warn("caching hydrated entity", "err", err, "uri", uri)
+	}
+	return title, repoDid
+}
+
+func (i *Ingester) fetchEntity(ctx context.Context, uri, collection string) (string, string, error) {
+	at := syntax.ATURI(uri)
+	ident, err := i.idResolver.ResolveIdent(ctx, at.Authority().String())
+	if err != nil {
+		return "", "", fmt.Errorf("resolving %s: %w", at.Authority(), err)
+	}
+
+	xc := &indigoxrpc.Client{
+		Host:   ident.PDSEndpoint(),
+		Client: &http.Client{Timeout: 10 * time.Second},
+	}
+	out, err := comatproto.RepoGetRecord(ctx, xc, "", collection, ident.DID.String(), at.RecordKey().String())
+	if err != nil {
+		return "", "", fmt.Errorf("getting record: %w", err)
+	}
+	if out == nil || out.Value == nil {
+		return "", "", fmt.Errorf("record has no value")
+	}
+	raw, err := out.Value.MarshalJSON()
+	if err != nil {
+		return "", "", fmt.Errorf("re-encoding record: %w", err)
+	}
+
+	switch collection {
+	case tangled.RepoIssueNSID:
+		var rec tangled.RepoIssue
+		if err := json.Unmarshal(raw, &rec); err != nil {
+			return "", "", fmt.Errorf("decoding issue: %w", err)
+		}
+		return rec.Title, rec.Repo, nil
+	case tangled.RepoPullNSID:
+		var rec tangled.RepoPull
+		if err := json.Unmarshal(raw, &rec); err != nil {
+			return "", "", fmt.Errorf("decoding pull: %w", err)
+		}
+		if rec.Target == nil {
+			return rec.Title, "", nil
+		}
+		return rec.Title, rec.Target.Repo, nil
+	}
+	return "", "", fmt.Errorf("unsupported collection %s", collection)
 }
 
 func (i *Ingester) notifyOne(ctx context.Context, recipientDid, actorDid, sourceAt, entityAt, repoDid string, t models.NotificationType, title string) {

@@ -30,7 +30,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	resolver := idresolver.DefaultResolver(cfg.PlcUrl)
 
 	bobbin := newBobbinClient(cfg.BobbinApiUrl)
-	ingester, err := NewIngester(database, bobbin, cfg.JetstreamEndpoint, cfg.Hostname, log.SubLogger(logger, "ingest"))
+	ingester, err := NewIngester(database, bobbin, resolver, cfg.JetstreamEndpoint, cfg.Hostname, log.SubLogger(logger, "ingest"))
 	if err != nil {
 		return fmt.Errorf("creating ingester: %w", err)
 	}

@@ -106,9 +106,11 @@ create table if not exists repo_names (
 	name text not null,
 	owner_did text not null default ''
 );
+-- repo_did lets a comment find its parent's repo.
 create table if not exists entity_titles (
 	at_uri text primary key,
-	title text not null
+	title text not null,
+	repo_did text not null default ''
 );
 
 create table if not exists jetstream_cursor (

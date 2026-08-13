@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	comatprototypes "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	jmodels "github.com/bluesky-social/jetstream/pkg/models"
 	"tangled.org/core/api/tangled"
@@ -17,7 +18,9 @@ import (
 
 type fakeResolver struct {
 	dids []string
-	err  error
+	// bySubject, when set, answers per subject instead of unconditionally.
+	bySubject map[string][]string
+	err       error
 
 	// repo owner lookups, keyed by repo did.
 	owners    map[string]string
@@ -28,6 +31,9 @@ type fakeResolver struct {
 }
 
 func (f fakeResolver) ListRecipients(ctx context.Context, uri string, collection string) ([]string, error) {
+	if f.bySubject != nil {
+		return f.bySubject[uri], f.err
+	}
 	return f.dids, f.err
 }
 
@@ -258,6 +264,128 @@ func TestRepoHandlerSeedsOwner(t *testing.T) {
 	// Owner DID alone should NOT resolve as a repo name (it's not the key).
 	if got := deldb.GetRepoName(db, ownerDid); got != "" {
 		t.Fatalf("GetRepoName(ownerDid) = %q, want empty (owner is not the cache key)", got)
+	}
+}
+
+func TestCommentNotifiesRepoSubscriber(t *testing.T) {
+	const (
+		repoDid  = "did:plc:therepo"
+		repoName = "my-repo"
+		issueUri = "at://did:plc:bob/sh.tangled.repo.issue/issue1"
+	)
+
+	// subscribed to the repo, not the issue, so a row proves the repo lookup ran.
+	i := newTestIngester(t, fakeResolver{bySubject: map[string][]string{
+		repoDid: {"did:sub"},
+	}})
+
+	if err := deldb.PutRepoName(i.db, repoDid, "did:plc:bob", repoName); err != nil {
+		t.Fatalf("PutRepoName: %v", err)
+	}
+	if err := deldb.PutEntityTitle(i.db, issueUri, "the issue", repoDid); err != nil {
+		t.Fatalf("PutEntityTitle: %v", err)
+	}
+
+	raw, err := json.Marshal(tangled.FeedComment{
+		CreatedAt: "2026-01-01T00:00:00Z",
+		Subject:   &comatprototypes.RepoStrongRef{Uri: issueUri, Cid: "bafyfake"},
+	})
+	if err != nil {
+		t.Fatalf("marshal comment: %v", err)
+	}
+	ev := &jmodels.Event{
+		Did:  "did:plc:alice",
+		Kind: jmodels.EventKindCommit,
+		Commit: &jmodels.Commit{
+			Operation:  jmodels.CommitOperationCreate,
+			Collection: tangled.FeedCommentNSID,
+			RKey:       "comment1",
+			Record:     raw,
+		},
+	}
+	if err := i.process(context.Background(), ev); err != nil {
+		t.Fatalf("process: %v", err)
+	}
+
+	if got := countFor(t, i, "did:sub"); got != 1 {
+		t.Fatalf("repo subscriber rows = %d, want 1", got)
+	}
+
+	var gotRepoDid, gotTitle string
+	err = i.db.QueryRow(
+		`select repo_did, entity_title from notifications where recipient_did = ?`,
+		"did:sub",
+	).Scan(&gotRepoDid, &gotTitle)
+	if err != nil {
+		t.Fatalf("scan notification: %v", err)
+	}
+	if gotRepoDid != repoDid {
+		t.Errorf("repo_did = %q, want %q", gotRepoDid, repoDid)
+	}
+	if gotTitle != "the issue" {
+		t.Errorf("entity_title = %q, want %q", gotTitle, "the issue")
+	}
+}
+
+func TestCommentNotifiesEntitySubscriber(t *testing.T) {
+	const (
+		repoDid  = "did:plc:therepo"
+		issueUri = "at://did:plc:bob/sh.tangled.repo.issue/issue1"
+	)
+
+	i := newTestIngester(t, fakeResolver{bySubject: map[string][]string{
+		issueUri: {"did:entitysub"},
+	}})
+	if err := deldb.PutEntityTitle(i.db, issueUri, "the issue", repoDid); err != nil {
+		t.Fatalf("PutEntityTitle: %v", err)
+	}
+
+	raw, err := json.Marshal(tangled.FeedComment{
+		CreatedAt: "2026-01-01T00:00:00Z",
+		Subject:   &comatprototypes.RepoStrongRef{Uri: issueUri, Cid: "bafyfake"},
+	})
+	if err != nil {
+		t.Fatalf("marshal comment: %v", err)
+	}
+	ev := &jmodels.Event{
+		Did:  "did:plc:alice",
+		Kind: jmodels.EventKindCommit,
+		Commit: &jmodels.Commit{
+			Operation:  jmodels.CommitOperationCreate,
+			Collection: tangled.FeedCommentNSID,
+			RKey:       "comment1",
+			Record:     raw,
+		},
+	}
+	if err := i.process(context.Background(), ev); err != nil {
+		t.Fatalf("process: %v", err)
+	}
+
+	if got := countFor(t, i, "did:entitysub"); got != 1 {
+		t.Fatalf("entity subscriber rows = %d, want 1", got)
+	}
+}
+
+func TestPutEntityTitleKeepsRepoDid(t *testing.T) {
+	database, err := deldb.Make(context.Background(), filepath.Join(t.TempDir(), "x.db"))
+	if err != nil {
+		t.Fatalf("make db: %v", err)
+	}
+	t.Cleanup(func() { database.Close() })
+
+	const uri = "at://did:plc:bob/sh.tangled.repo.issue/issue1"
+	if err := deldb.PutEntityTitle(database, uri, "t1", "did:plc:therepo"); err != nil {
+		t.Fatalf("first put: %v", err)
+	}
+	// a later write that does not know the repo must not erase it.
+	if err := deldb.PutEntityTitle(database, uri, "t2", ""); err != nil {
+		t.Fatalf("second put: %v", err)
+	}
+	if got := deldb.GetEntityRepo(database, uri); got != "did:plc:therepo" {
+		t.Errorf("repo did = %q, want it preserved", got)
+	}
+	if got := deldb.GetEntityTitle(database, uri); got != "t2" {
+		t.Errorf("title = %q, want %q", got, "t2")
 	}
 }
 
