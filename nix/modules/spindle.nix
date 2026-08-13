@@ -348,6 +348,33 @@ in
             };
           };
         };
+        mill = {
+          jumpListenAddr = mkOption {
+            type = types.str;
+            default = "";
+            example = "0.0.0.0:22";
+            description = "Address for the mill's restricted debug SSH jump server.";
+          };
+
+          jumpHostKeyPath = mkOption {
+            type = with types; nullOr path;
+            default = null;
+            example = "/var/lib/spindle/debug_jump_host_key";
+            description = "Path to the debug SSH jump server host key.";
+          };
+
+          debugExecutorPort = mkOption {
+            type = types.port;
+            default = 2223;
+            description = "Private debug SSH port shared by executors.";
+          };
+
+          maxJumpConnections = mkOption {
+            type = types.ints.positive;
+            default = 128;
+            description = "Maximum concurrent connections to the mill's debug SSH jump server.";
+          };
+        };
 
         environmentFile = mkOption {
           type = with types; nullOr path;
@@ -458,6 +485,10 @@ in
               "SPINDLE_ARTIFACT_STORES_S3_BUCKET=${cfg.artifactStores.s3.bucket}"
               "SPINDLE_ARTIFACT_STORES_S3_REGION=${cfg.artifactStores.s3.region}"
               "SPINDLE_MILL_ARTIFACT_STORE=s3"
+              "SPINDLE_MILL_JUMP_LISTEN_ADDR=${cfg.mill.jumpListenAddr}"
+              "SPINDLE_MILL_JUMP_HOST_KEY_PATH=${optionalString (cfg.mill.jumpHostKeyPath != null) (toString cfg.mill.jumpHostKeyPath)}"
+              "SPINDLE_MILL_DEBUG_EXECUTOR_PORT=${toString cfg.mill.debugExecutorPort}"
+              "SPINDLE_MILL_MAX_JUMP_CONNECTIONS=${toString cfg.mill.maxJumpConnections}"
             ];
             ExecStart = "${cfg.package}/bin/spindle";
             Restart = "always";

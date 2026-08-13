@@ -243,14 +243,26 @@ SSH credentials or the destination store itself.
 ### Debug ssh
 
 When a workflow fails, spindle can keep its microVM alive for a configured grace
-window (`MicroVMPipelines.SSH`) and print an `ssh` invocation so you can poke at
-the failed VM interactively. Spindle terminates the ssh connection itself and
-bridges a pty into the live guest over the agent's vsock; the guest stays
-keyless and never runs an ssh daemon.
+window (`MicroVMPipelines.DebugSSH.GracePeriod`) and print an `ssh` invocation
+so you can poke at the failed VM interactively. Spindle terminates the ssh
+connection itself and bridges a pty into the live guest over the agent's
+vsock; the guest stays keyless and never runs an ssh daemon.
 
 Access mirrors a git push: the ssh username is the job id, and the offered
 public key is sent to the job's repo knot (`sh.tangled.repo.checkPushAllowed`).
 The session is accepted only if that key is allowed to push to the job's repo.
+
+In a mill fleet, the printed command can use `ssh -J` through the mill's
+restricted jump listener. The inner SSH connection still terminates on the
+executor, so the mill only forwards an encrypted TCP stream to a live,
+operator-registered executor route.
+
+`SPINDLE_MILL_MAX_JUMP_CONNECTIONS` limits concurrent outer SSH connections.
+
+Configure each executor's debug host as its registered executor name. The jump
+listener checks that the name has a live authenticated mill session and dials
+it on the configured private debug port. The registered name must therefore
+resolve on the mill's private network.
 
 The shell is deliberately not configurable from either end. It always:
 - runs as the `spindle-workflow` user (the ssh username selects the *job*, not a

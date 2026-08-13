@@ -322,6 +322,10 @@ func (s *Spindle) Start(ctx context.Context) error {
 		go s.exec.Connect(ctx)
 	}
 
+	if s.mill != nil && s.cfg.Mill.JumpListenAddr != "" {
+		go s.mill.ServeJump(ctx, s.cfg.Mill.JumpListenAddr, s.cfg.Mill.JumpHostKeyPath, s.cfg.Mill.DebugExecutorPort, s.cfg.Mill.MaxJumpConnections)
+	}
+
 	if stopper, ok := s.vault.(secrets.Stopper); ok {
 		defer stopper.Stop()
 	}

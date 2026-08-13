@@ -250,6 +250,13 @@ func (m *Mill) sessionReady(sess *millSession) {
 	m.notifyChange()
 }
 
+func (m *Mill) hasLiveExecutor(nodeID string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	sess := m.sessions[nodeID]
+	return sess != nil && sess.live(m.cfg.ReconnectGrace)
+}
+
 func (m *Mill) cancelledLeasesForNode(nodeID string) []*RemoteLease {
 	m.mu.Lock()
 	var candidates []*RemoteLease

@@ -203,7 +203,7 @@ services:
       - label=disable
       - seccomp=unconfined
     ports:
-      - "2223:2223"
+      - "127.0.0.1:2223:2223"
     volumes:
       - spindle-data:/var/lib/spindle
       - spindle-logs:/var/log/spindle

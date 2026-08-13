@@ -138,13 +138,17 @@ const (
 
 // fields are selectively active depending on the role
 type Mill struct {
-	URL            string        `env:"URL"`                          // mill websocket endpoint dialled by the executor
-	SharedSecret   string        `env:"SHARED_SECRET"`                // the executor's token for dialing the mill
-	MaxPending     int           `env:"MAX_PENDING, default=100"`     // mill pending job queue limit
-	ReconnectGrace time.Duration `env:"RECONNECT_GRACE, default=45s"` // reconnect window before leases are failed
-	Seats          int           `env:"SEATS, default=4"`             // executor seats advertised to the mill
-	Labels         []string      `env:"LABELS"`                       // executor capability labels
-	ArtifactStore  string        `env:"ARTIFACT_STORE"`               // store shared by mill and its executors
+	URL                string        `env:"URL"`                          // mill websocket endpoint dialled by the executor
+	SharedSecret       string        `env:"SHARED_SECRET"`                // the executor's token for dialing the mill
+	MaxPending         int           `env:"MAX_PENDING, default=100"`     // mill pending job queue limit
+	ReconnectGrace     time.Duration `env:"RECONNECT_GRACE, default=45s"` // reconnect window before leases are failed
+	Seats              int           `env:"SEATS, default=4"`             // executor seats advertised to the mill
+	Labels             []string      `env:"LABELS"`                       // executor capability labels
+	ArtifactStore      string        `env:"ARTIFACT_STORE"`               // store shared by mill and its executors
+	JumpListenAddr     string        `env:"JUMP_LISTEN_ADDR"`
+	JumpHostKeyPath    string        `env:"JUMP_HOST_KEY_PATH"`
+	DebugExecutorPort  uint32        `env:"DEBUG_EXECUTOR_PORT, default=2223"`
+	MaxJumpConnections int           `env:"MAX_JUMP_CONNECTIONS, default=128"`
 }
 
 type Config struct {
@@ -173,6 +177,17 @@ func (c *Config) validate() error {
 		}
 	default:
 		return fmt.Errorf("unknown SPINDLE_ROLE %q (want standalone, mill, or executor)", c.Role)
+	}
+	if c.Mill.JumpListenAddr != "" {
+		if c.Role != RoleMill {
+			return fmt.Errorf("SPINDLE_MILL_JUMP_LISTEN_ADDR requires SPINDLE_ROLE=mill")
+		}
+		if c.Mill.JumpHostKeyPath == "" {
+			return fmt.Errorf("SPINDLE_MILL_JUMP_LISTEN_ADDR requires SPINDLE_MILL_JUMP_HOST_KEY_PATH")
+		}
+		if c.Mill.MaxJumpConnections <= 0 {
+			return fmt.Errorf("SPINDLE_MILL_MAX_JUMP_CONNECTIONS must be greater than zero")
+		}
 	}
 	return nil
 }
