@@ -542,11 +542,15 @@ func AddRepo(tx *sql.Tx, repo *models.Repo) error {
 	if repo.RepoDid != "" {
 		repoDid = &repo.RepoDid
 	}
+	var spindle *string
+	if repo.Spindle != "" {
+		spindle = &repo.Spindle
+	}
 	result, err := tx.Exec(
 		`insert into repos
-		(did, name, knot, rkey, at_uri, description, website, topics, source, repo_did)
-		values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		repo.Did, repo.Name, repo.Knot, repo.Rkey, repo.RepoAt().String(), repo.Description, repo.Website, repo.TopicStr(), repo.Source, repoDid,
+		(did, name, knot, rkey, at_uri, description, website, topics, source, repo_did, spindle)
+		values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		repo.Did, repo.Name, repo.Knot, repo.Rkey, repo.RepoAt().String(), repo.Description, repo.Website, repo.TopicStr(), repo.Source, repoDid, spindle,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert repo: %w", err)
