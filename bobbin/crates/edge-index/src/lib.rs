@@ -29,6 +29,7 @@ use bobbin_types::edges::Edge;
 use bobbin_types::ids::EdgeKey;
 use either::Either;
 use jacquard_common::DefaultStr;
+use jacquard_common::deps::smol_str::SmolStr;
 use jacquard_common::types::string::AtUri;
 use lasso::{Key, Spur, ThreadedRodeo};
 use scc::HashMap as SccMap;
@@ -427,6 +428,7 @@ pub struct EdgeStore {
     next_key_id: AtomicU32,
     forward: SccMap<EdgeKeyId, Sources, RuntimeHasher>,
     reverse: SccMap<SourceId, SmallVec<[ReverseEntry; 1]>, RuntimeHasher>,
+    source_collections: SccMap<SourceId, Vec<SmolStr>, RuntimeHasher>,
     hasher: RuntimeHasher,
     writer: Mutex<()>,
 }
@@ -441,6 +443,7 @@ impl EdgeStore {
             next_key_id: AtomicU32::new(0),
             forward: SccMap::with_hasher(hasher.clone()),
             reverse: SccMap::with_hasher(hasher.clone()),
+            source_collections: SccMap::with_hasher(hasher.clone()),
             hasher,
             writer: Mutex::new(()),
         }
@@ -494,6 +497,39 @@ impl EdgeStore {
         self.clear_source_locked(source);
     }
 
+    /// Store collection filters for a source. None or empty = all collections (removes entry).
+    /// Call only after the source has been interned via add/upsert_source.
+    pub fn set_source_collections(
+        &self,
+        source: &AtUri<DefaultStr>,
+        collections: Option<Vec<SmolStr>>,
+    ) {
+        let author = source_authority_did(source)
+            .and_then(|s| self.did_interner.get(s))
+            .map(AuthorId::from_spur);
+        let Some(spur) = self.source_interner.get(self.source_key(source, author)) else {
+            return;
+        };
+        let id = SourceId::from_spur(spur);
+        if let Some(cols) = collections
+            && !cols.is_empty()
+        {
+            let _ = self.source_collections.insert_sync(id, cols);
+        } else {
+            self.source_collections.remove_sync(&id);
+        }
+    }
+
+    /// Returns None if no collection filter is stored (meaning all collections).
+    pub fn source_collections_for(&self, source: &AtUri<DefaultStr>) -> Option<Vec<SmolStr>> {
+        let author = source_authority_did(source)
+            .and_then(|s| self.did_interner.get(s))
+            .map(AuthorId::from_spur);
+        let spur = self.source_interner.get(self.source_key(source, author))?;
+        let id = SourceId::from_spur(spur);
+        self.source_collections.read_sync(&id, |_, cols| cols.clone())
+    }
+
     fn add_locked(&self, edge: Edge) {
         let author = self.intern_author(&edge.source);
         let source_key = self.source_key(&edge.source, author);
@@ -540,6 +576,7 @@ impl EdgeStore {
             return;
         };
         let id = SourceId::from_spur(source_spur);
+        self.source_collections.remove_sync(&id);
         let Some((_, entries)) = self.reverse.remove_sync(&id) else {
             return;
         };
@@ -1613,5 +1650,63 @@ mod tests {
         );
         store.remove_source(&at("at://did:plc:nel/sh.tangled.feed.star/r99"));
         assert_eq!(store.count_distinct_authors(&key), 4, "nel fully removed");
+    }
+
+    #[test]
+    fn source_collections_set_and_clear() {
+        let store = store();
+        let source = at("at://did:plc:bob/sh.tangled.feed.subscription/r1");
+        let edge = Edge {
+            kind: nsid("sh.tangled.feed.subscription"),
+            subject: did_subj("did:plc:repo"),
+            source: source.clone(),
+            sort_micros: 1,
+        };
+        store.add(edge);
+
+        // Initially no filter
+        assert_eq!(store.source_collections_for(&source), None);
+
+        // Set a filter
+        store.set_source_collections(&source, Some(vec![
+            SmolStr::new_static("sh.tangled.repo.issue"),
+        ]));
+        let stored = store.source_collections_for(&source).unwrap();
+        assert_eq!(stored, vec![SmolStr::new_static("sh.tangled.repo.issue")]);
+
+        // Update to empty = unrestricted
+        store.set_source_collections(&source, Some(vec![]));
+        assert_eq!(store.source_collections_for(&source), None);
+
+        // Set a different filter
+        store.set_source_collections(&source, Some(vec![
+            SmolStr::new_static("sh.tangled.repo.pull"),
+        ]));
+        let stored = store.source_collections_for(&source).unwrap();
+        assert_eq!(stored, vec![SmolStr::new_static("sh.tangled.repo.pull")]);
+
+        // Set to None = unrestricted
+        store.set_source_collections(&source, None);
+        assert_eq!(store.source_collections_for(&source), None);
+    }
+
+    #[test]
+    fn remove_source_cleans_up_collection_filter() {
+        let store = store();
+        let source = at("at://did:plc:bob/sh.tangled.feed.subscription/r1");
+        let edge = Edge {
+            kind: nsid("sh.tangled.feed.subscription"),
+            subject: did_subj("did:plc:repo"),
+            source: source.clone(),
+            sort_micros: 1,
+        };
+        store.add(edge);
+        store.set_source_collections(&source, Some(vec![
+            SmolStr::new_static("sh.tangled.repo.issue"),
+        ]));
+        assert!(store.source_collections_for(&source).is_some());
+
+        store.remove_source(&source);
+        assert_eq!(store.source_collections_for(&source), None);
     }
 }

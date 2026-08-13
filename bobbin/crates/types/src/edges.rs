@@ -1,6 +1,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
+use jacquard_common::deps::smol_str::SmolStr;
 use jacquard_common::types::did::Did;
 use jacquard_common::types::nsid::Nsid;
 use jacquard_common::types::string::{AtStrError, AtUri, Datetime};
@@ -165,6 +166,15 @@ impl Record {
         let mut primary = self.primary_edges(source)?;
         primary.iter_mut().for_each(|e| e.sort_micros = sort_micros);
         Ok(append_mirror_edges(primary, source))
+    }
+
+    /// None = not a subscription. Some(None/Some([])) = unrestricted (all collections).
+    /// Some(Some(non_empty)) = filtered to those collection NSIDs.
+    pub fn subscription_collections(&self) -> Option<Option<Vec<SmolStr>>> {
+        match self {
+            Self::Subscription(r) => Some(r.collections.clone()),
+            _ => None,
+        }
     }
 
     pub fn sort_micros_for(&self, source: &AtUri<DefaultStr>) -> u64 {
@@ -664,6 +674,44 @@ mod tests {
             }),
         );
         assert!(edges.is_empty());
+    }
+
+    #[test]
+    fn subscription_collections_tri_state() {
+        // Non-subscription record (Star) → None
+        let star = Record::from_json_value(
+            &nsid("sh.tangled.feed.star"),
+            json!({
+                "$type": "sh.tangled.feed.star",
+                "createdAt": "2026-05-01T00:00:00Z",
+                "subject": { "$type": "sh.tangled.feed.star#repo", "did": "did:plc:abalone" },
+            }),
+        ).unwrap();
+        assert_eq!(star.subscription_collections(), None);
+
+        // Unrestricted subscription (no collections field) → Some(None)
+        let sub_none = Record::from_json_value(
+            &nsid("sh.tangled.feed.subscription"),
+            json!({
+                "$type": "sh.tangled.feed.subscription",
+                "createdAt": "2026-05-01T00:00:00Z",
+                "subject": { "$type": "sh.tangled.feed.subscription#repo", "did": "did:plc:repo" },
+            }),
+        ).unwrap();
+        assert_eq!(sub_none.subscription_collections(), Some(None));
+
+        // Filtered subscription → Some(Some(vec))
+        let sub_filtered = Record::from_json_value(
+            &nsid("sh.tangled.feed.subscription"),
+            json!({
+                "$type": "sh.tangled.feed.subscription",
+                "createdAt": "2026-05-01T00:00:00Z",
+                "subject": { "$type": "sh.tangled.feed.subscription#repo", "did": "did:plc:repo" },
+                "collections": ["sh.tangled.repo.issue"],
+            }),
+        ).unwrap();
+        let cols = sub_filtered.subscription_collections();
+        assert_eq!(cols, Some(Some(vec![SmolStr::new_static("sh.tangled.repo.issue")])));
     }
 
     #[test]

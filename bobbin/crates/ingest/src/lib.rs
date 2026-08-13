@@ -1379,6 +1379,9 @@ async fn finalize_drained<S: SearchSink + 'static>(
         remove_superseded_source(ctx.store, ctx.records, ctx.search, supersedes.as_ref()).await;
         cache_body(ctx.records, &source, cid, bytes);
         ctx.store.upsert_source(&source, edges);
+        if let Some(filter) = parsed.subscription_collections() {
+            ctx.store.set_source_collections(&source, filter);
+        }
         let outcome = apply_record_state(ctx.issue_states, ctx.pull_statuses, &source, &parsed);
         log_unknown_state_variant(outcome, &source);
         index_search(ctx.search, ctx.resolver, &source, parsed).await;
@@ -1418,6 +1421,9 @@ async fn commit_pending<S: SearchSink>(
             remove_superseded_source(store, records, search, supersedes.as_ref()).await;
             cache_body(records, &source, cid, bytes);
             store.upsert_source(&source, edges);
+            if let Some(filter) = parsed.subscription_collections() {
+                store.set_source_collections(&source, filter);
+            }
             let outcome = apply_record_state(issue_states, pull_statuses, &source, &parsed);
             log_unknown_state_variant(outcome, &source);
             index_search(search, resolver, &source, parsed).await;

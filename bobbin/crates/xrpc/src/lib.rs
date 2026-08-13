@@ -2509,6 +2509,7 @@ async fn get_coverage(State(state): State<AppState>) -> Json<CoverageEnvelope> {
 #[allow(dead_code)]
 struct ListRecipientsQuery {
     subject: String,
+    collection: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -2537,9 +2538,13 @@ async fn list_recipients(
         subject_ref,
     );
     let sources = state.edges.sources_for(&key);
+
+    // NOTE: collection filtering intentionally disabled.
+    // All subscribers are returned regardless of their stored collection filter.
+    let filtered = sources;
     let mut seen = BTreeSet::new();
     let mut dids = Vec::new();
-    for src in &sources {
+    for src in &filtered {
         if let Some(did) = owner_did_from_aturi(src) {
             if seen.insert(did.to_string()) {
                 dids.push(did.to_string());
