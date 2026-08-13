@@ -82,7 +82,8 @@ services:
     restart: unless-stopped
     environment:
       JETSTREAM_DATA_DIR: /data
-      JETSTREAM_LIVENESS_TTL: 300s
+      # the local pds idles, and the default ttl makes jetstream exit every ~10m.
+      JETSTREAM_LIVENESS_TTL: 8760h
       JETSTREAM_WS_URL: wss://pds.tngl.boltless.dev/xrpc/com.atproto.sync.subscribeRepos
     volumes:
       - jetstream-data:/data
