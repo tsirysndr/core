@@ -94,7 +94,7 @@ func (r *Resolver) ResolveAtIdentifier(ctx context.Context, input string) (*iden
 		return nil, fmt.Errorf("not a did or handle: %w", err)
 	}
 	handle = handle.Normalize()
-	did, err := r.base.ResolveHandle(ctx, handle)
+	did, err := r.ResolveHandle(ctx, handle)
 	if err != nil {
 		return nil, fmt.Errorf("resolve handle %q: %w", handle, err)
 	}
