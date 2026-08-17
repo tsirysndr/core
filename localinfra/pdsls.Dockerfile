@@ -5,7 +5,7 @@ FROM docker.io/oven/bun:alpine AS build
 RUN apk add --no-cache git patch
 
 WORKDIR /src
-RUN git clone https://tangled.org/pds.ls/pdsls.git . && \
+RUN git clone https://github.com/notjuliet/pdsls . && \
     git checkout b52109b6a98953701aa2bf8038568eabc787251a
 
 COPY localinfra/pdsls.patch ./
