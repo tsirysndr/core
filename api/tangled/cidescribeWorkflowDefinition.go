@@ -18,9 +18,9 @@ const (
 type CiDescribeWorkflowDefinition_Output struct {
 	// derived: Whether the workflow definition is derived from this repository at all. When false, no commit-to-commit comparison is meaningful (e.g. definitions managed externally), and callers should not surface change warnings.
 	Derived bool `json:"derived" cborgen:"derived"`
-	// hash: Opaque fingerprint of the workflow definition as resolved by the spindle; for git-derived spindles this covers the workflow files at the commit, not their post-compilation expansion. Only equality is defined: identical resolved definitions MUST produce identical hashes for a given spindle deployment, and differing definitions SHOULD produce differing hashes. Absent when derived is false.
+	// hash: Fingerprint of the workflow definition as resolved by the spindle. Absent when derived is false.
 	Hash *string `json:"hash,omitempty" cborgen:"hash,omitempty"`
-	// workflows: Names or paths of the effective workflow files that produced the hash, for display purposes.
+	// workflows: Names or paths of the effective workflow files that produced the hash.
 	Workflows []string `json:"workflows,omitempty" cborgen:"workflows,omitempty"`
 }
 
@@ -28,7 +28,7 @@ type CiDescribeWorkflowDefinition_Output struct {
 //
 // repo: Target repository DID the workflow definition belongs to.
 // sha: Commit SHA to resolve the workflow definition at
-// sourceRepo: Repository DID to resolve workflow definitions from, if different from the target repo (e.g. a fork for a fork-based pull request).
+// sourceRepo: Repository DID to resolve workflow definitions from, if different from the target repo
 func CiDescribeWorkflowDefinition(ctx context.Context, c util.LexClient, repo string, sha string, sourceRepo string) (*CiDescribeWorkflowDefinition_Output, error) {
 	var out CiDescribeWorkflowDefinition_Output
 
