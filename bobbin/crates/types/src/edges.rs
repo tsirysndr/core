@@ -686,7 +686,8 @@ mod tests {
                 "createdAt": "2026-05-01T00:00:00Z",
                 "subject": { "$type": "sh.tangled.feed.star#repo", "did": "did:plc:abalone" },
             }),
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(star.subscription_collections(), None);
 
         // Unrestricted subscription (no collections field) → Some(None)
@@ -697,7 +698,8 @@ mod tests {
                 "createdAt": "2026-05-01T00:00:00Z",
                 "subject": { "$type": "sh.tangled.feed.subscription#repo", "did": "did:plc:repo" },
             }),
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(sub_none.subscription_collections(), Some(None));
 
         // Filtered subscription → Some(Some(vec))
@@ -709,9 +711,13 @@ mod tests {
                 "subject": { "$type": "sh.tangled.feed.subscription#repo", "did": "did:plc:repo" },
                 "collections": ["sh.tangled.repo.issue"],
             }),
-        ).unwrap();
+        )
+        .unwrap();
         let cols = sub_filtered.subscription_collections();
-        assert_eq!(cols, Some(Some(vec![SmolStr::new_static("sh.tangled.repo.issue")])));
+        assert_eq!(
+            cols,
+            Some(Some(vec![SmolStr::new_static("sh.tangled.repo.issue")]))
+        );
     }
 
     #[test]

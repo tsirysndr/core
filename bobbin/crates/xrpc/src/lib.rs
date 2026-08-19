@@ -2533,10 +2533,7 @@ async fn list_recipients(
         ));
     };
 
-    let key = EdgeKey::new(
-        nsid_static("sh.tangled.feed.subscription"),
-        subject_ref,
-    );
+    let key = EdgeKey::new(nsid_static("sh.tangled.feed.subscription"), subject_ref);
     let sources = state.edges.sources_for(&key);
 
     // NOTE: collection filtering intentionally disabled.

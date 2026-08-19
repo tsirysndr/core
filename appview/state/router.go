@@ -18,7 +18,6 @@ import (
 	"tangled.org/core/appview/middleware"
 	"tangled.org/core/appview/migration"
 	"tangled.org/core/appview/notifications"
-	whnotify "tangled.org/core/appview/notify/webhook"
 	"tangled.org/core/appview/pipelines"
 	"tangled.org/core/appview/pulls"
 	"tangled.org/core/appview/repo"
@@ -28,10 +27,8 @@ import (
 	"tangled.org/core/appview/state/userutil"
 	avstrings "tangled.org/core/appview/strings"
 	avtimeline "tangled.org/core/appview/timeline"
-	avxrpc "tangled.org/core/appview/xrpc"
 	"tangled.org/core/blog"
 	"tangled.org/core/log"
-	"tangled.org/core/xrpc/serviceauth"
 )
 
 func (s *State) Router() http.Handler {
@@ -300,9 +297,6 @@ func (s *State) StandardRouter(mw *middleware.Middleware) http.Handler {
 	r.Mount("/focus", s.FocusRouter(mw))
 
 	r.Mount("/signup", s.SignupRouter())
-	if s.config.Core.XrpcEnabled {
-		r.Mount("/xrpc", s.XrpcRouter())
-	}
 	r.Mount("/", s.oauth.Router())
 
 	r.Get("/terms", s.TermsOfService)
@@ -485,25 +479,4 @@ func (s *State) FocusRouter(mw *middleware.Middleware) http.Handler {
 func (s *State) SignupRouter() http.Handler {
 	sig := signup.New(s.config, s.db, s.posthog, s.idResolver, s.pages, log.SubLogger(s.logger, "signup"))
 	return sig.Router()
-}
-
-// XrpcRouter serves the org.tangled.* methods owned by the go service; callers
-// authenticate with atproto service auth, audience did:web:<appview host>
-func (s *State) XrpcRouter() http.Handler {
-	audience := serviceauth.DidWeb(s.config.Core.AppviewHost).String()
-	sa := serviceauth.NewServiceAuth(s.logger, s.idResolver.Directory(), audience)
-
-	xlogger := log.SubLogger(s.logger, "xrpc")
-	x := &avxrpc.Xrpc{
-		DB:                  s.db,
-		Config:              s.config,
-		Logger:              xlogger,
-		ServiceAuth:         sa,
-		IdResolver:          s.idResolver,
-		Cloudflare:          s.cfClient,
-		CodeSearch:          s.codesearch,
-		Webhooks:            whnotify.NewNotifier(s.db, s.config.Core.BaseUrl(), s.config.Core.Dev),
-		DisallowedNicknames: userutil.LoadDisallowedNicknames(s.config.Core.DisallowedNicknamesFile, xlogger),
-	}
-	return x.Router()
 }

@@ -2224,10 +2224,8 @@ async fn list_recipients_entity_subject_returns_subscriber_dids() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    let body: Value = serde_json::from_slice(
-        &to_bytes(resp.into_body(), 1 << 20).await.unwrap(),
-    )
-    .unwrap();
+    let body: Value =
+        serde_json::from_slice(&to_bytes(resp.into_body(), 1 << 20).await.unwrap()).unwrap();
     assert_eq!(body["dids"], json!(["did:plc:bob"]));
 }
 
@@ -2244,17 +2242,17 @@ async fn list_recipients_repo_subject_returns_repo_subscribers() {
     let resp = router(h.state.clone())
         .oneshot(
             Request::builder()
-                .uri("/xrpc/org.tangled.temp.notification.listRecipients?subject=did:plc:targetrepo")
+                .uri(
+                    "/xrpc/org.tangled.temp.notification.listRecipients?subject=did:plc:targetrepo",
+                )
                 .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    let body: Value = serde_json::from_slice(
-        &to_bytes(resp.into_body(), 1 << 20).await.unwrap(),
-    )
-    .unwrap();
+    let body: Value =
+        serde_json::from_slice(&to_bytes(resp.into_body(), 1 << 20).await.unwrap()).unwrap();
     assert_eq!(body["dids"], json!(["did:plc:watcher"]));
 }
 
@@ -2271,9 +2269,7 @@ async fn list_recipients_empty_for_unknown_subject() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    let body: Value = serde_json::from_slice(
-        &to_bytes(resp.into_body(), 1 << 20).await.unwrap(),
-    )
-    .unwrap();
+    let body: Value =
+        serde_json::from_slice(&to_bytes(resp.into_body(), 1 << 20).await.unwrap()).unwrap();
     assert_eq!(body["dids"], json!([]));
 }

@@ -527,7 +527,8 @@ impl EdgeStore {
             .map(AuthorId::from_spur);
         let spur = self.source_interner.get(self.source_key(source, author))?;
         let id = SourceId::from_spur(spur);
-        self.source_collections.read_sync(&id, |_, cols| cols.clone())
+        self.source_collections
+            .read_sync(&id, |_, cols| cols.clone())
     }
 
     fn add_locked(&self, edge: Edge) {
@@ -1668,9 +1669,10 @@ mod tests {
         assert_eq!(store.source_collections_for(&source), None);
 
         // Set a filter
-        store.set_source_collections(&source, Some(vec![
-            SmolStr::new_static("sh.tangled.repo.issue"),
-        ]));
+        store.set_source_collections(
+            &source,
+            Some(vec![SmolStr::new_static("sh.tangled.repo.issue")]),
+        );
         let stored = store.source_collections_for(&source).unwrap();
         assert_eq!(stored, vec![SmolStr::new_static("sh.tangled.repo.issue")]);
 
@@ -1679,9 +1681,10 @@ mod tests {
         assert_eq!(store.source_collections_for(&source), None);
 
         // Set a different filter
-        store.set_source_collections(&source, Some(vec![
-            SmolStr::new_static("sh.tangled.repo.pull"),
-        ]));
+        store.set_source_collections(
+            &source,
+            Some(vec![SmolStr::new_static("sh.tangled.repo.pull")]),
+        );
         let stored = store.source_collections_for(&source).unwrap();
         assert_eq!(stored, vec![SmolStr::new_static("sh.tangled.repo.pull")]);
 
@@ -1701,9 +1704,10 @@ mod tests {
             sort_micros: 1,
         };
         store.add(edge);
-        store.set_source_collections(&source, Some(vec![
-            SmolStr::new_static("sh.tangled.repo.issue"),
-        ]));
+        store.set_source_collections(
+            &source,
+            Some(vec![SmolStr::new_static("sh.tangled.repo.issue")]),
+        );
         assert!(store.source_collections_for(&source).is_some());
 
         store.remove_source(&source);
