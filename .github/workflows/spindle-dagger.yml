@@ -1,0 +1,58 @@
+name: spindle dagger engine
+
+on:
+  push:
+    branches: [master, spindle-dagger]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+# a superseded run has nothing to tell us, and this job is long
+concurrency:
+  group: spindle-dagger-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CGO_ENABLED: "1"
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # appview/pages embeds this directory, so it has to exist to build
+      - name: patch static dir
+        run: mkdir -p appview/pages/static && touch appview/pages/static/x
+
+      - name: build spindle
+        run: go build -o spindle.out ./cmd/spindle
+
+      - name: dagger engine unit tests
+        run: go test ./spindle/engines/dagger/...
+
+      # the engine hands this socket to the workflow container it creates, and
+      # the dagger cli provisions its own engine over it. the free space matters
+      # too: a cold run pulls the workflow image, the dagger engine image and
+      # the module's toolchain
+      - name: check docker and disk
+        run: |
+          docker info
+          df -h /
+
+      # drives the engine against a real docker daemon and a real dagger
+      # module: pulls the workflow image, installs the cli, scaffolds a module,
+      # reads its function list and calls one of those functions by name from a
+      # step
+      - name: dagger engine e2e
+        env:
+          SPINDLE_DAGGER_INTEGRATION: "1"
+          SPINDLE_SERVER_DOCKER_SOCKET: /var/run/docker.sock
+        run: go test -v -timeout 40m -run TestDaggerEngineEndToEnd ./spindle/engines/dagger/
