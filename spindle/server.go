@@ -39,6 +39,7 @@ import (
 	"tangled.org/core/spindle/config"
 	"tangled.org/core/spindle/db"
 	"tangled.org/core/spindle/engine"
+	"tangled.org/core/spindle/engines/dagger"
 	"tangled.org/core/spindle/engines/dummy"
 	"tangled.org/core/spindle/engines/nixery"
 	"tangled.org/core/spindle/git"
@@ -419,6 +420,7 @@ func Run(ctx context.Context) error {
 		engines = map[string]models.Engine{
 			"nixery":  mill.NewEngine("nixery", m),
 			"microvm": mill.NewEngine("microvm", m),
+			"dagger":  mill.NewEngine("dagger", m),
 			"dummy":   mill.NewEngine("dummy", m),
 		}
 	} else {
@@ -431,9 +433,14 @@ func Run(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		daggerEng, err := dagger.New(ctx, cfg)
+		if err != nil {
+			return err
+		}
 		engines = map[string]models.Engine{
 			"nixery":  nixeryEng,
 			"microvm": microvmEng,
+			"dagger":  daggerEng,
 			"dummy":   dummy.New(logger),
 		}
 	}
