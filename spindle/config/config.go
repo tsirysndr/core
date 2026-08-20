@@ -58,6 +58,24 @@ type NixeryPipelines struct {
 	MaxConcurrentWorkflows int    `env:"MAX_CONCURRENT_WORKFLOWS, default=8"` // max number of workflow containers running at once (memory cap)
 }
 
+type DaggerPipelines struct {
+	// pins the workflow container image. when empty, one is built from nixery
+	// out of the engine's baseline packages plus the workflow's dependencies
+	Image  string `env:"IMAGE"`
+	Nixery string `env:"NIXERY, default=nixery.tangled.sh"`
+	// default dagger cli version for workflows that don't pin one with
+	// `version:`. empty means the latest release
+	Version string `env:"VERSION"`
+	// an already-running dagger engine for the cli to use, eg.
+	// `docker-container://dagger-engine` or `tcp://dagger:8080`. when empty,
+	// the cli provisions its own engine over SPINDLE_SERVER_DOCKER_SOCKET
+	RunnerHost             string `env:"RUNNER_HOST"`
+	CloudToken             string `env:"CLOUD_TOKEN"` // optional dagger cloud traces
+	WorkflowTimeout        string `env:"WORKFLOW_TIMEOUT, default=15m"`
+	MaxJobMemoryMB         int64  `env:"MAX_JOB_MEMORY_MB, default=6144"`     // per-container memory limit in MiB (default 6 GiB)
+	MaxConcurrentWorkflows int    `env:"MAX_CONCURRENT_WORKFLOWS, default=4"` // max number of workflow containers running at once
+}
+
 type ArtifactStoreDisk struct {
 	Dir string `env:"DIR"`
 }
@@ -156,6 +174,7 @@ type Config struct {
 	Server           Server           `env:",prefix=SPINDLE_SERVER_"`
 	NixeryPipelines  NixeryPipelines  `env:",prefix=SPINDLE_NIXERY_PIPELINES_"`
 	MicroVMPipelines MicroVMPipelines `env:",prefix=SPINDLE_MICROVM_PIPELINES_"`
+	DaggerPipelines  DaggerPipelines  `env:",prefix=SPINDLE_DAGGER_PIPELINES_"`
 	NixCache         NixCache         `env:",prefix=SPINDLE_NIX_CACHE_"`
 	ArtifactStores   ArtifactStores   `env:",prefix=SPINDLE_ARTIFACT_STORES_"`
 	LegacyS3         LegacyS3         `env:",prefix=SPINDLE_S3_"`
