@@ -1,0 +1,58 @@
+when:
+  - event: ["push", "pull_request"]
+    branch: master
+    paths:
+      - "spindle/**"
+      - "cmd/spindle/**"
+      - ".tangled/workflows/spindle-dagger.yml"
+
+engine: microvm
+image: nixos
+
+dependencies:
+  - go
+  - gcc
+  - git
+
+# the dagger engine hands a docker socket to the workflow container it creates,
+# and the dagger cli provisions its own engine over that same socket
+virtualisation:
+  docker: true
+
+environment:
+  CGO_ENABLED: "1"
+  SPINDLE_SERVER_DOCKER_SOCKET: "/var/run/docker.sock"
+
+steps:
+  - name: patch static dir
+    command: |
+      mkdir -p appview/pages/static; touch appview/pages/static/x
+
+  - name: build spindle
+    command: |
+      go build -o spindle.out ./cmd/spindle
+
+  - name: dagger engine unit tests
+    command: |
+      go test ./spindle/engines/dagger/...
+
+  - name: wait for docker
+    command: |
+      set -eu
+      for _ in $(seq 60); do
+        docker info >/dev/null 2>&1 && exit 0
+        sleep 1
+      done
+      echo "dockerd did not come up" >&2
+      docker info
+
+  # drives the engine against a real docker daemon and a real dagger module:
+  # pulls the workflow image, installs the cli, scaffolds a module, reads its
+  # function list and calls one of those functions by name from a step. cold,
+  # this pulls the workflow image, the cli, the dagger engine image and the
+  # module's own toolchain, hence the timeout
+  - name: dagger engine e2e
+    environment:
+      SPINDLE_DAGGER_INTEGRATION: "1"
+    command: |
+      go test -v -timeout 40m -run TestDaggerEngineEndToEnd ./spindle/engines/dagger/
