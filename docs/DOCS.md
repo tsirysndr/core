@@ -1249,6 +1249,11 @@ supported engines are:
   microVM. Has configuration features for NixOS images
   that will let you enable services, do Docker-in-VM, etc.
   See [microVM engine](#microvm-engine).
+- `dagger`: Runs the [Dagger](https://dagger.io) module in
+  your repository. Steps call the module's functions by
+  name, so a pipeline you can already run locally with
+  `dagger call` runs here unchanged.
+  See [Dagger engine](#dagger-engine).
 
 Example:
 
@@ -1813,6 +1818,116 @@ steps:
         -d "$record"
 ```
 
+### Dagger engine
+
+If your repository already has a [Dagger](https://dagger.io)
+module, this engine runs it. Spindle clones the repository,
+finds the module, and puts every function the module exposes
+on `PATH`, so a step calls a function by its name:
+
+```yaml
+engine: dagger
+when:
+  - event: ["push"]
+    branch: ["master"]
+steps:
+  - name: Test
+    command: test --source=.
+  - name: Publish
+    command: publish --tag=latest
+```
+
+`test --source=.` runs `dagger call -m . test --source=.`.
+There's no `dagger call` prefix to write, and no separate
+list of functions to keep in sync with the module: the
+function names come from the module itself, at the commit
+being built.
+
+A function is an ordinary command, so it composes with the
+rest of the step's shell:
+
+```yaml
+steps:
+  - name: Report
+    command: |
+      build --source=. > build.log
+      test --source=. | tee test.log
+      echo "done on $(git rev-parse --short HEAD)"
+```
+
+Anything the module doesn't define is just a normal command,
+which is how `echo` and `git` above still mean what they
+usually do. A function whose name collides with a program in
+the image (or with a shell builtin like `test`) is the one
+case to watch: the function wins over the program, and the
+builtin wins over the function. Calling such a function as
+`dagger call -m . test` always works.
+
+#### Module
+
+The module is detected from the checkout. `dagger init`
+writes a `dagger.json` at the repository root with its
+sources under `.dagger`, and that's what's looked for first;
+a module that keeps its own `dagger.json` inside `.dagger`
+works too.
+
+Point at a module somewhere else with the **optional**
+`module` field, which takes the directory holding the
+module's `dagger.json`:
+
+```yaml
+engine: dagger
+module: ci
+```
+
+#### Version
+
+The **optional** `version` field pins the Dagger CLI:
+
+```yaml
+engine: dagger
+version: 0.18.0
+```
+
+With no `version`, the workflow gets the latest release. A
+leading `v` is accepted, so `v0.18.0` and `0.18.0` mean the
+same thing. Note that the CLI provisions a matching engine
+on first use, so changing this changes what actually runs
+your module.
+
+#### Dependencies
+
+`dependencies` is a flat list of nixpkgs packages added to
+the workflow's image, for tools your steps need alongside
+the module:
+
+```yaml
+engine: dagger
+dependencies:
+  - jq
+  - gh
+steps:
+  - name: Publish
+    command: publish --tag=latest | jq -r .digest
+```
+
+Your module's own toolchain doesn't belong here. Dagger runs
+each function in a container the module itself describes, so
+a Go module needs no `go` in this list.
+
+#### Environment
+
+`environment` works as it does on the other engines, both at
+the workflow level and per step. It's also how secrets reach
+a function, via Dagger's `env://` references:
+
+```yaml
+engine: dagger
+steps:
+  - name: Publish
+    command: publish --token=env://REGISTRY_TOKEN
+```
+
 ## Self-hosting guide
 
 ### Prerequisites
@@ -1823,6 +1938,10 @@ steps:
 - For the **microVM** engine: a Linux host with KVM, plus the
   microVM host dependencies described in [Running microVM
   workflows](#running-microvm-workflows).
+- For the **dagger** engine: Docker, and either
+  `SPINDLE_SERVER_DOCKER_SOCKET` set so the Dagger CLI can
+  provision its own engine, or an engine you already run
+  pointed at by `SPINDLE_DAGGER_PIPELINES_RUNNER_HOST`.
 
 ### Configuration
 
@@ -1838,6 +1957,33 @@ Spindle is configured using environment variables. The following environment var
 - `SPINDLE_SERVER_DOCKER_SOCKET`: Path to Docker socket to expose to invoked Spindle containers (default: `""`).
 - `SPINDLE_NIXERY_PIPELINES_NIXERY`: The Nixery URL (default: `"nixery.tangled.sh"`).
 - `SPINDLE_NIXERY_PIPELINES_WORKFLOW_TIMEOUT`: The default workflow timeout (default: `"5m"`).
+
+For the Dagger engine, the following are also available
+(prefix `SPINDLE_DAGGER_PIPELINES_`):
+
+- `SPINDLE_DAGGER_PIPELINES_RUNNER_HOST`: An existing Dagger
+  engine for the CLI to use, e.g.
+  `docker-container://dagger-engine` or `tcp://dagger:8080`
+  (default: `""`). When empty, the CLI provisions its own
+  engine over `SPINDLE_SERVER_DOCKER_SOCKET`; one of the two
+  is **required** to use the engine.
+- `SPINDLE_DAGGER_PIPELINES_VERSION`: Dagger CLI version for
+  workflows that don't set `version` (default: `""`, meaning
+  the latest release).
+- `SPINDLE_DAGGER_PIPELINES_IMAGE`: Pins the workflow
+  container image (default: `""`, meaning one built from
+  Nixery). An image that already ships the wanted CLI version
+  skips the CLI download.
+- `SPINDLE_DAGGER_PIPELINES_NIXERY`: The Nixery URL used to
+  build that image (default: `"nixery.tangled.sh"`).
+- `SPINDLE_DAGGER_PIPELINES_CLOUD_TOKEN`: Dagger Cloud token
+  for trace upload (default: `""`).
+- `SPINDLE_DAGGER_PIPELINES_WORKFLOW_TIMEOUT`: Default
+  workflow timeout (default: `"15m"`).
+- `SPINDLE_DAGGER_PIPELINES_MAX_JOB_MEMORY_MB`: Per-container
+  memory limit in MiB (default: `6144`).
+- `SPINDLE_DAGGER_PIPELINES_MAX_CONCURRENT_WORKFLOWS`: How
+  many workflow containers run at once (default: `4`).
 
 For the microVM engine, the following are also available
 (prefix `SPINDLE_MICROVM_PIPELINES_`):
@@ -2021,8 +2167,8 @@ Spindle is a small CI runner service. Here's a high-level overview of how it ope
 
 ### The engines
 
-Spindle has two execution backends, picked per-workflow with
-the [`engine`](#engine) field:
+Spindle has three execution backends, picked per-workflow
+with the [`engine`](#engine) field:
 
 - **nixery**: executes each step in a fresh Docker container
   (Podman works too, if Docker compatibility is enabled so
@@ -2037,6 +2183,13 @@ the [`engine`](#engine) field:
   See the [engine
   README](https://tangled.org/tangled.org/core/blob/master/spindle/engines/microvm/README.md)
   for the architecture in depth.
+- **dagger**: runs the repository's own
+  [Dagger](https://dagger.io) module. Like nixery it uses a
+  Docker container per workflow, but the steps in it call the
+  module's functions by name rather than running arbitrary
+  build commands, so the pipeline definition lives in the
+  repository as code. See the [engine
+  README](https://tangled.org/tangled.org/core/blob/master/spindle/engines/dagger/README.md).
 
 The pipeline manifest is [specified here](https://docs.tangled.org/spindles.html#pipelines).
 
