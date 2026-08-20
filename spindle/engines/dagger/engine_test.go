@@ -3,6 +3,7 @@ package dagger
 import (
 	"context"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -62,19 +63,19 @@ func TestWorkflowImage(t *testing.T) {
 		{
 			name: "baseline packages",
 			cfg:  config.DaggerPipelines{Nixery: "nixery.tangled.sh"},
-			want: "nixery.tangled.sh/" + arch + "bash/git/coreutils/curl/gnutar/gzip/docker-client",
+			want: "nixery.tangled.sh/" + arch + "bash/git/coreutils/curl/gnutar/gzip/gnused/gnugrep/gawk/docker-client",
 		},
 		{
 			name: "dependencies are appended",
 			cfg:  config.DaggerPipelines{Nixery: "nixery.tangled.sh"},
 			deps: []string{"go", "nodejs"},
-			want: "nixery.tangled.sh/" + arch + "bash/git/coreutils/curl/gnutar/gzip/docker-client/go/nodejs",
+			want: "nixery.tangled.sh/" + arch + "bash/git/coreutils/curl/gnutar/gzip/gnused/gnugrep/gawk/docker-client/go/nodejs",
 		},
 		{
 			name: "a dependency already in the baseline is not repeated",
 			cfg:  config.DaggerPipelines{Nixery: "nixery.tangled.sh"},
 			deps: []string{"git", "go", "go"},
-			want: "nixery.tangled.sh/" + arch + "bash/git/coreutils/curl/gnutar/gzip/docker-client/go",
+			want: "nixery.tangled.sh/" + arch + "bash/git/coreutils/curl/gnutar/gzip/gnused/gnugrep/gawk/docker-client/go",
 		},
 		{
 			name: "an explicit image wins over nixery and dependencies",
@@ -91,6 +92,22 @@ func TestWorkflowImage(t *testing.T) {
 				t.Errorf("workflowImage() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// the installer is a posix script that shells out to these. coreutils provides
+// none of the gnu text tools, which is how a missing `sed` first broke the
+// install step against a real image
+func TestWorkflowImageCarriesTheInstallerToolchain(t *testing.T) {
+	e := testEngine(t, &config.Config{DaggerPipelines: config.DaggerPipelines{Nixery: "nixery.tangled.sh"}})
+
+	img := e.workflowImage(nil)
+	packages := strings.Split(img, "/")
+
+	for _, pkg := range []string{"curl", "gnutar", "gzip", "gnused", "gnugrep", "gawk"} {
+		if !slices.Contains(packages, pkg) {
+			t.Errorf("image %q is missing %q, which dagger's installer needs", img, pkg)
+		}
 	}
 }
 

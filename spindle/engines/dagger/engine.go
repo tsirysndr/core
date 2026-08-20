@@ -41,7 +41,7 @@ const (
 	versionEnv = "TANGLED_DAGGER_VERSION"
 	dirEnv     = "TANGLED_DAGGER_DIR"
 
-	defaultPackages = "bash git coreutils curl gnutar gzip docker-client"
+	defaultPackages = "bash git coreutils curl gnutar gzip gnused gnugrep gawk docker-client"
 )
 
 type cleanupFunc func(context.Context) error
