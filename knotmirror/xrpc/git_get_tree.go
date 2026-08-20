@@ -106,6 +106,7 @@ func (x *Xrpc) getTree(ctx context.Context, repo syntax.DID, ref, treePath strin
 		}
 
 		if len(unHitPaths) > 0 {
+			unHitPaths = withTreePathEntry(unHitPaths)
 			commits, err := gitea.WalkGitLog(ctx, repoPath, headRef, treePath, unHitPaths...)
 			if err != nil {
 				return nil, nil, err
@@ -154,6 +155,9 @@ func (x *Xrpc) getTree(ctx context.Context, repo syntax.DID, ref, treePath strin
 				return nil, nil, fmt.Errorf("unexpected type: %s for commit id: %s", typ, commitId)
 			}
 			c, err := gitea.ReadCommit(plumbing.NewHash(commitId), io.LimitReader(batchReader, size))
+			if err != nil {
+				return nil, nil, fmt.Errorf("read commit %s: %w", commitId, err)
+			}
 			if _, err := batchReader.Discard(1); err != nil {
 				return nil, nil, err
 			}
@@ -185,10 +189,11 @@ func (x *Xrpc) getTree(ctx context.Context, repo syntax.DID, ref, treePath strin
 			entryLastCommit = &tangled.GitTempGetTree_LastCommit{
 				Hash:    commit.Hash.String(),
 				Message: commit.Message,
-				When:    commit.Author.When.Format(time.RFC3339),
+				When:    commit.Committer.When.Format(time.RFC3339),
 				Author: &tangled.GitTempGetTree_Signature{
 					Email: commit.Author.Email,
 					Name:  commit.Author.Name,
+					When:  commit.Author.When.Format(time.RFC3339),
 				},
 			}
 		}
@@ -214,10 +219,11 @@ func (x *Xrpc) getTree(ctx context.Context, repo syntax.DID, ref, treePath strin
 		outLastCommit = &tangled.GitTempGetTree_LastCommit{
 			Hash:    lastCommit.Hash.String(),
 			Message: lastCommit.Message,
-			When:    lastCommit.Author.When.Format(time.RFC3339),
+			When:    lastCommit.Committer.When.Format(time.RFC3339),
 			Author: &tangled.GitTempGetTree_Signature{
 				Email: lastCommit.Author.Email,
 				Name:  lastCommit.Author.Name,
+				When:  lastCommit.Author.When.Format(time.RFC3339),
 			},
 		}
 	}
@@ -263,4 +269,12 @@ func (x *Xrpc) readme(ctx context.Context, repoPath string, entries []object.Tre
 		}
 	}
 	return "", ""
+}
+
+// ensure first entry is ""
+func withTreePathEntry(paths []string) []string {
+	if len(paths) > 0 && paths[0] == "" {
+		return paths
+	}
+	return append([]string{""}, paths...)
 }

@@ -145,7 +145,7 @@ func (g *GitRepo) lastCommitDir(ctx context.Context, parent lastCommitDir) (map[
 		}
 	}
 
-	output, err := g.streamingGitLog(ctx, "--pretty=format:%H,%ad,%s", "--date=unix", "--name-only", "--", pathSpec)
+	output, err := g.streamingGitLog(ctx, "--pretty=format:%H,%cd,%s", "--date=unix", "--name-only", "--", pathSpec)
 	if err != nil {
 		return nil, err
 	}
